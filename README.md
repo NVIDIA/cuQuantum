@@ -1,9 +1,11 @@
 # Welcome to the cuQuantum repository!
 
-This public repository contains two sets of files:
+This public repository contains two sets of files related to the [NVIDIA cuQuantum SDK](https://developer.nvidia.com/cuquantum-sdk):
 
-- `samples`: All C/C++ sample codes for the [NVIDIA cuQuantum SDK](https://developer.nvidia.com/cuquantum-sdk).
-- `python`: The open-sourced cuQuantum Python project (**coming soon**).
+- `samples`: All C/C++ sample codes for the cuQuantum SDK.
+- `python`: The open-sourced cuQuantum Python project.
+
+Other components of the cuQuantum SDK can be accessed following the instruction given in the documentation.
 
 ## Installation
 
