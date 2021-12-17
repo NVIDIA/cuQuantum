@@ -53,8 +53,6 @@ endif()
 # cuStateVec_example dependencies
 # ##########################################
 
-find_package(CUDA 10.1 REQUIRED)
-
 if (NOT CUSTATEVEC_ROOT)
   set(CUSTATEVEC_ROOT ${CUDA_TOOLKIT_ROOT_DIR})
 endif()
@@ -76,6 +74,13 @@ set(CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER})
 set(CMAKE_CUDA_STANDARD 11)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
+
+set(CMAKE_CUDA_FLAGS_ARCH_SM60 "-gencode arch=compute_60,code=sm_60")
+set(CMAKE_CUDA_FLAGS_ARCH_SM70 "-gencode arch=compute_70,code=sm_70")
+set(CMAKE_CUDA_FLAGS_ARCH_SM75 "-gencode arch=compute_75,code=sm_75")
+set(CMAKE_CUDA_FLAGS_ARCH_SM80 "-gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80")
+set(CMAKE_CUDA_FLAGS_ARCH "${CMAKE_CUDA_FLAGS_ARCH_SM60} ${CMAKE_CUDA_FLAGS_ARCH_SM70} ${CMAKE_CUDA_FLAGS_ARCH_SM75} ${CMAKE_CUDA_FLAGS_ARCH_SM80}")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_ARCH}")
 
 # ##########################################
 # cuStateVec_example target
@@ -105,9 +110,14 @@ endfunction()
 
 add_custom_target(custatevec_examples)
 
-add_custatevec_example(custatevec_examples "cuStateVec.example.gate_application"  gate_application.cu)
-add_custatevec_example(custatevec_examples "cuStateVec.example.exponential_pauli" exponential_pauli.cu)
-add_custatevec_example(custatevec_examples "cuStateVec.example.expectation"       expectation.cu)
-add_custatevec_example(custatevec_examples "cuStateVec.example.sampler"           sampler.cu)
-add_custatevec_example(custatevec_examples "cuStateVec.example.measure_zbasis"    measure_zbasis.cu)
-add_custatevec_example(custatevec_examples "cuStateVec.example.batch_measure"     batch_measure.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.gate_application"   gate_application.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.permutation_matrix" permutation_matrix.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.diagonal_matrix"    diagonal_matrix.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.exponential_pauli"  exponential_pauli.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.expectation"        expectation.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.expentation_pauli"  expectation_pauli.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.sampler"            sampler.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.measure_zbasis"     measure_zbasis.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.batch_measure"      batch_measure.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.accessor_get"       accessor_get.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.accessor_set"       accessor_set.cu)

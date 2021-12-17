@@ -97,11 +97,11 @@ int main(void) {
     HANDLE_CUDA_ERROR( cudaFree(d_sv) );
 
     if (correct) {
-        printf("example PASSED\n");
+        printf("batch_measure example PASSED\n");
         return EXIT_SUCCESS;
     }
     else {
-        printf("example FAILED: wrong result\n");
+        printf("batch_measure example FAILED: wrong result\n");
         return EXIT_FAILURE;
     }
 

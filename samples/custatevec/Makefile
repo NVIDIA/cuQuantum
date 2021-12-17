@@ -35,17 +35,27 @@ LIBS            := -L$(CUSTATEVEC_ROOT)/lib64 -lcudart -lcustatevec
 CXX_FLAGS= -std=c++11 $(INC) $(LIBS)
 
 all:
-	nvcc gate_application.cu  -o gate_application  ${CXX_FLAGS}
-	nvcc exponential_pauli.cu -o exponential_pauli ${CXX_FLAGS}
-	nvcc expectation.cu       -o expectation       ${CXX_FLAGS}
-	nvcc sampler.cu           -o sampler           ${CXX_FLAGS}
-	nvcc measure_zbasis.cu    -o measure_zbasis    ${CXX_FLAGS}
-	nvcc batch_measure.cu     -o batch_measure     ${CXX_FLAGS}
+	nvcc gate_application.cu   -o gate_application   ${CXX_FLAGS}
+	nvcc permutation_matrix.cu -o permutation_matrix ${CXX_FLAGS}
+	nvcc diagonal_matrix.cu    -o diagonal_matrix    ${CXX_FLAGS}
+	nvcc exponential_pauli.cu  -o exponential_pauli  ${CXX_FLAGS}
+	nvcc expectation.cu        -o expectation        ${CXX_FLAGS}
+	nvcc expectation_pauli.cu  -o expectation_pauli  ${CXX_FLAGS}
+	nvcc sampler.cu            -o sampler            ${CXX_FLAGS}
+	nvcc measure_zbasis.cu     -o measure_zbasis     ${CXX_FLAGS}
+	nvcc batch_measure.cu      -o batch_measure      ${CXX_FLAGS}
+	nvcc accessor_get.cu       -o accessor_get       ${CXX_FLAGS}
+	nvcc accessor_set.cu       -o accessor_set       ${CXX_FLAGS}
 
 clean:
 	rm -f gate_application \
+		permutation_matrix \
+		diagonal_matrix \
 		exponential_pauli \
 		expectation \
+		expectation_pauli \
 		sampler \
 		measure_zbasis \
-		batch_measure
+		batch_measure \
+		accessor_get \
+		accessor_set
