@@ -110,11 +110,11 @@ int main(void) {
         HANDLE_CUDA_ERROR( cudaFree(extraWorkspace) );
 
     if (correct) {
-        printf("example PASSED\n");
+        printf("sampler example PASSED\n");
         return EXIT_SUCCESS;
     }
     else {
-        printf("example FAILED: wrong result\n");
+        printf("sampler example FAILED: wrong result\n");
         return EXIT_FAILURE;
     }
 }

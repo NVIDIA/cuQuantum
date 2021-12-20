@@ -43,8 +43,8 @@ int main(void) {
 
     const int basisBits[] = {1};
 
-    cuDoubleComplex expect;
-    cuDoubleComplex expect_result = {4.1, 0.0};
+    cuDoubleComplex expectationValue;
+    cuDoubleComplex expectationValueResult = {4.1, 0.0};
 
     cuDoubleComplex h_sv[]        = {{ 0.0, 0.0}, { 0.0, 0.1}, { 0.1, 0.1}, { 0.1, 0.2}, 
                                      { 0.2, 0.2}, { 0.3, 0.3}, { 0.3, 0.4}, { 0.4, 0.5}};
@@ -77,8 +77,8 @@ int main(void) {
 
     // compute expectation
     HANDLE_ERROR( custatevecExpectation(
-                  handle, d_sv, CUDA_C_64F, nIndexBits, &expect, CUDA_C_64F, nullptr, matrix, 
-                  CUDA_C_64F, CUSTATEVEC_MATRIX_LAYOUT_ROW, basisBits, nBasisBits, 
+                  handle, d_sv, CUDA_C_64F, nIndexBits, &expectationValue, CUDA_C_64F, nullptr,
+                  matrix, CUDA_C_64F, CUSTATEVEC_MATRIX_LAYOUT_ROW, basisBits, nBasisBits,
                   CUSTATEVEC_COMPUTE_64F, extraWorkspace, extraWorkspaceSizeInBytes) );
 
     // destroy handle
@@ -90,7 +90,7 @@ int main(void) {
                        cudaMemcpyDeviceToHost) );
 
     bool correct = true;
-    if ( !almost_equal(expect, expect_result) ) {
+    if ( !almost_equal(expectationValue, expectationValueResult) ) {
         correct = false;
     }
 
@@ -99,11 +99,11 @@ int main(void) {
         HANDLE_CUDA_ERROR( cudaFree(extraWorkspace) );
 
     if (correct) {
-        printf("example PASSED\n");
+        printf("expectation example PASSED\n");
         return EXIT_SUCCESS;
     }
     else {
-        printf("example FAILED: wrong result\n");
+        printf("expectation example FAILED: wrong result\n");
         return EXIT_FAILURE;
     }
 

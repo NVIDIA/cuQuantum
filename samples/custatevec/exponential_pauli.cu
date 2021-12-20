@@ -92,11 +92,11 @@ int main(void) {
     HANDLE_CUDA_ERROR( cudaFree(d_sv) );
 
     if (correct) {
-        printf("example PASSED\n");
+        printf("exponential_pauli example PASSED\n");
         return EXIT_SUCCESS;
     }
     else {
-        printf("example FAILED: wrong result\n");
+        printf("exponential_pauli example FAILED: wrong result\n");
         return EXIT_FAILURE;
     }
 

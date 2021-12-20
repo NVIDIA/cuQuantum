@@ -104,11 +104,11 @@ int main(void) {
         HANDLE_CUDA_ERROR( cudaFree(extraWorkspace) );
 
     if (correct) {
-        printf("example PASSED\n");
+        printf("gate_application example PASSED\n");
         return EXIT_SUCCESS;
     }
     else {
-        printf("example FAILED: wrong result\n");
+        printf("gate_application example FAILED: wrong result\n");
         return EXIT_FAILURE;
     }
 
