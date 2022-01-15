@@ -87,8 +87,8 @@ if(NOT TARGET cutensor)
     set(CUTENSOR_LIBRARY_NAME "libcutensor.so")
   endif()
   set_target_properties(cutensor PROPERTIES
-      IMPORTED_LOCATION "${CUTENSOR_ROOT}/lib/${CUTENSOR_LIBRARY_NAME}"
-      IMPORTED_IMPLIB "${CUTENSOR_ROOT}/lib/${CUTENSOR_LIBRARY_DEF}"
+      IMPORTED_LOCATION "${CUTENSOR_ROOT}/lib/11/${CUTENSOR_LIBRARY_NAME}"
+      IMPORTED_IMPLIB "${CUTENSOR_ROOT}/lib/11/${CUTENSOR_LIBRARY_DEF}"
       INTERFACE_INCLUDE_DIRECTORIES "${CUTENSOR_ROOT}/include")
 endif()
 
@@ -128,6 +128,12 @@ set(CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER})
 set(CMAKE_CUDA_STANDARD 11)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
+
+set(CMAKE_CUDA_FLAGS_ARCH_SM70 "-gencode arch=compute_70,code=sm_70")
+set(CMAKE_CUDA_FLAGS_ARCH_SM75 "-gencode arch=compute_75,code=sm_75")
+set(CMAKE_CUDA_FLAGS_ARCH_SM80 "-gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80")
+set(CMAKE_CUDA_FLAGS_ARCH "${CMAKE_CUDA_FLAGS_ARCH_SM70} ${CMAKE_CUDA_FLAGS_ARCH_SM75} ${CMAKE_CUDA_FLAGS_ARCH_SM80}")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_ARCH}")
 
 # ##########################################
 # cuTENSOR_example target

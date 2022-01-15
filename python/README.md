@@ -2,7 +2,7 @@
 
 ## Documentation
 
-Please visit the [NVIDIA cuQuantum SDK documentation](https://docs.nvidia.com/cuda/cuquantum/).
+Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com/cuda/cuquantum/python).
 
 ## Building
 
@@ -22,7 +22,19 @@ If you already have a Conda environment set up, it is the easiest to install cuQ
 ```
 conda install -c conda-forge cuquantum-python
 ```
-The Conda solver will address all dependencies for you.
+The Conda solver will install all required dependencies for you.
+
+### Install cuQuantum Python wheel through `pip`
+
+Alternatively, assuming you already have a Python environment set up (it doesn't matter if it's a Conda env or not),
+you can also install cuQuantum Python this way:
+
+```
+pip install cuquantum-python
+```
+The `pip` solver will install both cuTENSOR and cuQuantum for you.
+
+Note: To properly install the wheels the environment variable `CUQUANTUM_ROOT` must not be set.
 
 ### Install cuQuantum Python from source
 
@@ -56,6 +68,8 @@ Runtime dependencies of the cuQuantum Python package include:
 * PyTorch v1.10+ (optional)
 
 If you install everything from conda-forge, the dependencies are taken care for you (except for the driver).
+
+If you install the pip wheels, cuTENSOR and cuQuantum are installed for you.
 
 If you build cuQuantum Python from source, please make sure the paths to the cuQuantum and cuTENSOR libraries are added
 to your `LD_LIBRARY_PATH` environment variable.

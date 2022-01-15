@@ -32,7 +32,12 @@ CUSTATEVEC_ROOT ?= ${CUDA_TOOLKIT}
 INC             := -I$(CUSTATEVEC_ROOT)/include
 LIBS            := -L$(CUSTATEVEC_ROOT)/lib64 -lcudart -lcustatevec
 
-CXX_FLAGS= -std=c++11 $(INC) $(LIBS)
+ARCH_FLAGS_SM70 = -gencode arch=compute_70,code=sm_70
+ARCH_FLAGS_SM75 = -gencode arch=compute_75,code=sm_75
+ARCH_FLAGS_SM80 = -gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80
+ARCH_FLAGS = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80)
+
+CXX_FLAGS= -std=c++11 $(INC) $(LIBS) $(ARCH_FLAGS)
 
 all:
 	nvcc gate_application.cu   -o gate_application   ${CXX_FLAGS}

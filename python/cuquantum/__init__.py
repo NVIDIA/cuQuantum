@@ -4,6 +4,7 @@ from cuquantum.cutensornet import (
     contract, contract_path, einsum, einsum_path, Network,
     NetworkOptions, OptimizerInfo, OptimizerOptions, PathFinderOptions, ReconfigOptions, SlicerOptions)
 from cuquantum.utils import ComputeType, cudaDataType, libraryPropertyType
+from cuquantum._version import __version__
 
 
 # We patch all enum values so that they have the correct docstrings
