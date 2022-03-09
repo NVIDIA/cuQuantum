@@ -105,8 +105,10 @@ class TestLibHelper:
         assert ver == cutensornet.VERSION
 
     def test_get_cudart_version(self):
+        # CUDA runtime is statically linked, so we can't compare
+        # with the "runtime" version
         ver = cutensornet.get_cudart_version()
-        assert ver == cupy.cuda.runtime.runtimeGetVersion()
+        assert isinstance(ver, int)
 
 
 class TestHandle:

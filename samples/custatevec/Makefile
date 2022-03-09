@@ -1,7 +1,7 @@
-#  
-# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
-# 
-# 
+#
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+#
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -16,7 +16,7 @@
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 # "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
 # A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
 # HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
 # SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
@@ -24,22 +24,24 @@
 # DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-CUDA_TOOLKIT    := $(shell dirname $$(command -v nvcc))/..
-CUSTATEVEC_ROOT ?= ${CUDA_TOOLKIT}
+SHELL           := /bin/bash
+CUDA_TOOLKIT    := $(shell realpath $$(dirname $$(command -v nvcc))/..)
+CUSTATEVEC_ROOT ?= ${CUQUANTUM_ROOT}
 
-INC             := -I$(CUSTATEVEC_ROOT)/include
-LIBS            := -L$(CUSTATEVEC_ROOT)/lib64 -lcudart -lcustatevec
+INCLUDE_DIRS    := -I$(CUSTATEVEC_ROOT)/include
+LIBRARY_DIRS    := -L$(CUSTATEVEC_ROOT)/lib64 -L$(CUSTATEVEC_ROOT)/lib
+LINKER_FLAGS    := -lcudart -lcustatevec
 
 ARCH_FLAGS_SM70 = -gencode arch=compute_70,code=sm_70
 ARCH_FLAGS_SM75 = -gencode arch=compute_75,code=sm_75
 ARCH_FLAGS_SM80 = -gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80
-ARCH_FLAGS = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80)
+ARCH_FLAGS      = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80)
 
-CXX_FLAGS= -std=c++11 $(INC) $(LIBS) $(ARCH_FLAGS)
+CXX_FLAGS       = -std=c++11 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(ARCH_FLAGS) $(LINKER_FLAGS)
 
-all:
+all: check-env
 	nvcc gate_application.cu   -o gate_application   ${CXX_FLAGS}
 	nvcc permutation_matrix.cu -o permutation_matrix ${CXX_FLAGS}
 	nvcc diagonal_matrix.cu    -o diagonal_matrix    ${CXX_FLAGS}
@@ -51,6 +53,18 @@ all:
 	nvcc batch_measure.cu      -o batch_measure      ${CXX_FLAGS}
 	nvcc accessor_get.cu       -o accessor_get       ${CXX_FLAGS}
 	nvcc accessor_set.cu       -o accessor_set       ${CXX_FLAGS}
+
+check-env:
+	@ echo "" && \
+	echo "CUDA_TOOLKIT=${CUDA_TOOLKIT}"; \
+	echo "CUSTATEVEC_ROOT=${CUSTATEVEC_ROOT}"; \
+	echo ""; \
+	if [[ -z "${CUSTATEVEC_ROOT}" ]]; \
+	then \
+		echo "" && \
+		echo "Neither CUSTATEVEC_ROOT nor CUQUANTUM_ROOT is set." && \
+		exit 1; \
+	fi
 
 clean:
 	rm -f gate_application \

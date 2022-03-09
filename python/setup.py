@@ -127,10 +127,10 @@ else:
 def prepare_libs_and_rpaths():
     global cusv_lib_dir, cutn_lib_dir
     # we include both lib64 and lib to accommodate all possible sources
-    cusv_lib_dir = [os.path.join(custatevec_root, 'lib64'),
-                    os.path.join(custatevec_root, 'lib')]
-    cutn_lib_dir = [os.path.join(cutensornet_root, 'lib64'),
-                    os.path.join(cutensornet_root, 'lib'),
+    cusv_lib_dir = [os.path.join(custatevec_root, 'lib'),
+                    os.path.join(custatevec_root, 'lib64')]
+    cutn_lib_dir = [os.path.join(cutensornet_root, 'lib'),
+                    os.path.join(cutensornet_root, 'lib64'),
                     os.path.join(cutensor_root, 'lib', cutensor_ver)]
 
     global cusv_lib, cutn_lib, extra_linker_flags
