@@ -24,18 +24,6 @@ conda install -c conda-forge cuquantum-python
 ```
 The Conda solver will install all required dependencies for you.
 
-### Install cuQuantum Python wheel through `pip`
-
-Alternatively, assuming you already have a Python environment set up (it doesn't matter if it's a Conda env or not),
-you can also install cuQuantum Python this way:
-
-```
-pip install cuquantum-python
-```
-The `pip` solver will install both cuTENSOR and cuQuantum for you.
-
-Note: To properly install the wheels the environment variable `CUQUANTUM_ROOT` must not be set.
-
 ### Install cuQuantum Python from source
 
 To compile and install cuQuantum Python from source, please follow the steps below:
