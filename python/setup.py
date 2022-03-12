@@ -7,6 +7,12 @@ from setuptools import setup, Extension, find_packages
 from Cython.Build import cythonize
 
 
+# Get __version__ variable
+source_root = os.path.abspath(os.path.dirname(__file__))
+with open(os.path.join(source_root, 'cuquantum', '_version.py')) as f:
+    exec(f.read())
+
+
 # search order:
 # 1. installed "cuquantum" package
 # 2. env var
@@ -14,9 +20,11 @@ for path in site.getsitepackages():
     path = os.path.join(path, 'cuquantum')
     if os.path.isdir(path):
         cuquantum_root = path
+        using_cuquantum_wheel = True
         break
 else:
     cuquantum_root = os.environ.get('CUQUANTUM_ROOT')
+    using_cuquantum_wheel = False
 
 
 # We allow setting CUSTATEVEC_ROOT and CUTENSORNET_ROOT separately for the ease
@@ -24,6 +32,7 @@ else:
 # or conda, or set CUQUANTUM_ROOT to the existing installation.
 try:
     custatevec_root = os.environ['CUSTATEVEC_ROOT']
+    using_cuquantum_wheel = False
 except KeyError as e:
     if cuquantum_root is None:
         raise RuntimeError('cuStateVec is not found, please install "cuquantum" '
@@ -32,6 +41,7 @@ except KeyError as e:
         custatevec_root = cuquantum_root
 try:
     cutensornet_root = os.environ['CUTENSORNET_ROOT']
+    using_cuquantum_wheel = False
 except KeyError as e:
     if cuquantum_root is None:
         raise RuntimeError('cuTensorNet is not found, please install "cuquantum" '
@@ -47,9 +57,11 @@ for path in site.getsitepackages():
     path = os.path.join(path, 'cutensor')
     if os.path.isdir(path):
         cutensor_root = path
+        assert using_cuquantum_wheel  # if this raises, the env is corrupted
         break
 else:
     cutensor_root = os.environ.get('CUTENSOR_ROOT')
+    assert not using_cuquantum_wheel
 if cutensor_root is None:
     raise RuntimeError('cuTENSOR is not found, please install "cutensor" '
                        'or set $CUTENSOR_ROOT')
@@ -73,10 +85,12 @@ install_requires = [
     ]
 ignore_cuquantum_dep = bool(os.environ.get('CUQUANTUM_IGNORE_SOLVER', False))
 if not ignore_cuquantum_dep:
-    setup_requires.append('cuquantum==0.0.1.*')
-    setup_requires.append('cutensor>=1.4.*')
-    install_requires.append('cuquantum==0.0.1.*')
-    install_requires.append('cutensor>=1.4.*')
+    assert using_cuquantum_wheel  # if this raises, the env is corrupted
+    # cuTENSOR version is constrained in the cuquantum package, so we don't
+    # need to list it
+    ver = '.'.join(__version__.split('.')[:3])  # remove the Python patch number
+    setup_requires.append('cuquantum=='+ver+'.*')
+    install_requires.append('cuquantum=='+ver+'.*')
 
 
 def check_cuda_version():
@@ -110,12 +124,40 @@ else:
     raise RuntimeError(f"Unsupported CUDA version: {cuda_ver}")
 
 
-print()
-print("****************************************************************")
+def prepare_libs_and_rpaths():
+    global cusv_lib_dir, cutn_lib_dir
+    # we include both lib64 and lib to accommodate all possible sources
+    cusv_lib_dir = [os.path.join(custatevec_root, 'lib'),
+                    os.path.join(custatevec_root, 'lib64')]
+    cutn_lib_dir = [os.path.join(cutensornet_root, 'lib'),
+                    os.path.join(cutensornet_root, 'lib64'),
+                    os.path.join(cutensor_root, 'lib', cutensor_ver)]
+
+    global cusv_lib, cutn_lib, extra_linker_flags
+    if using_cuquantum_wheel:
+        cusv_lib = [':libcustatevec.so.0']
+        cutn_lib = [':libcutensornet.so.0', ':libcutensor.so.1']
+        # The rpaths must be adjusted given the following full-wheel installation:
+        #   cuquantum-python: site-packages/cuquantum/{custatevec, cutensornet}/  [=$ORIGIN]
+        #   cusv & cutn:      site-packages/cuquantum/lib/
+        #   cutensor:         site-packages/cutensor/lib/CUDA_VER/
+        ldflag = "-Wl,--disable-new-dtags,"
+        ldflag += "-rpath,$ORIGIN/../lib,"
+        ldflag += f"-rpath,$ORIGIN/../../cutensor/lib/{cutensor_ver}"
+        extra_linker_flags = [ldflag]
+    else:
+        cusv_lib = ['custatevec']
+        cutn_lib = ['cutensornet', 'cutensor']
+        extra_linker_flags = []
+
+
+prepare_libs_and_rpaths()
+print("\n****************************************************************")
 print("CUDA version:", cuda_ver)
 print("CUDA path:", cuda_path)
 print("cuStateVec path:", custatevec_root)
 print("cuTensorNet path:", cutensornet_root)
+print("cuTENSOR path:", cutensor_root)
 print("****************************************************************\n")
 
 
@@ -124,8 +166,9 @@ custatevec = Extension(
     sources=["cuquantum/custatevec/custatevec.pyx"],
     include_dirs=[os.path.join(cuda_path, 'include'),
                   os.path.join(custatevec_root, 'include')],
-    library_dirs=[os.path.join(custatevec_root, 'lib64')],
-    libraries=['custatevec'],
+    library_dirs=cusv_lib_dir,
+    libraries=cusv_lib,
+    extra_link_args=extra_linker_flags,
 )
 
 
@@ -134,15 +177,15 @@ cutensornet = Extension(
     sources=["cuquantum/cutensornet/cutensornet.pyx"],
     include_dirs=[os.path.join(cuda_path, 'include'),
                   os.path.join(cutensornet_root, 'include')],
-    library_dirs=[os.path.join(cutensornet_root, 'lib64'),
-                  os.path.join(cutensor_root, 'lib', cutensor_ver)],
-    libraries=['cutensornet', 'cutensor'],
+    library_dirs=cutn_lib_dir,
+    libraries=cutn_lib,
+    extra_link_args=extra_linker_flags,
 )
 
 
 setup(
     name="cuquantum-python",
-    version='0.1.0.0',  # the last digit is dedicated to cuQuantum Python
+    version=__version__,
     description="Python APIs for cuQuantum",
     url="https://github.com/NVIDIA/cuQuantum",
     author="NVIDIA Corporation",

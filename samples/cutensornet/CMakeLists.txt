@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
 #
 # 
 # Redistribution and use in source and binary forms, with or without
@@ -25,98 +25,68 @@
 # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-# 
 
 # ---[ Check cmake version.
-cmake_minimum_required(VERSION 3.12.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.13.0 FATAL_ERROR)
+
+# ---[ Project specification.
+project(cutensornet_example LANGUAGES C CXX CUDA)
 
 include(GNUInstallDirs)
 
-# ---[ Project specIFication.
-project(cutensornet_example LANGUAGES C CXX CUDA)
-
 # ##########################################
-# cuTENSOR_example build mode
+# cutensornet_example build mode
 # ##########################################
 
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    message(STATUS "Setting build type to 'Debug' as none was specified.")
-    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build." FORCE)
-    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "" "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
-else()
-    message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-endif()
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to 'Debug' as none was specified.")
+  set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build.")
+  set_property(
+    CACHE
+    CMAKE_BUILD_TYPE
+    PROPERTY
+      STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo"
+  )
+else ()
+  message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+endif ()
 
 # ##########################################
-# cuTENSOR_example dependencies
+# custatevec_example check-env utilities
 # ##########################################
 
-find_package(CUDA 10.1 REQUIRED)
-include_directories("${CUDA_INCLUDE_DIRS}")
-
-if(NOT DEFINED ENV{CUTENSOR_ROOT} AND NOT DEFINED CUTENSOR_ROOT)
-  message(FATAL_ERROR "CUTENSOR_ROOT not set!")
-else()
-  if(DEFINED ENV{CUTENSOR_ROOT})
-    set(CUTENSOR_ROOT "$ENV{CUTENSOR_ROOT}")
-  endif()
-  message("-- Looking for cuTENSOR in ${CUTENSOR_ROOT}")
-  if(NOT EXISTS ${CUTENSOR_ROOT})
-    message(FATAL_ERROR "Cannot find CUTENSOR_ROOT")
-  endif()
-endif()
-
-if(NOT DEFINED ENV{CUTENSORNET_ROOT} AND NOT DEFINED CUTENSORNET_ROOT)
-    message(FATAL_ERROR "CUTENSORNET_ROOT not set!")
-else()
-  if(DEFINED ENV{CUTENSORNET_ROOT})
-      set(CUTENSORNET_ROOT "$ENV{CUTENSORNET_ROOT}")
-  endif()
-  message("-- Looking for cuTENSORNet in ${CUTENSORNET_ROOT}")
-  if(NOT EXISTS ${CUTENSORNET_ROOT})
-      message(FATAL_ERROR "Cannot find CUTENSORNET_ROOT")
-  endif()
-endif()
-
-if(NOT TARGET cutensor)
-  add_library(cutensor SHARED IMPORTED)
-  if(WIN32)
-    set(CUTENSOR_LIBRARY_NAME "cutensor.dll")
-    set(CUTENSOR_LIBRARY_DEF "cutensor.lib")
-  else()
-    set(CUTENSOR_LIBRARY_NAME "libcutensor.so")
-  endif()
-  set_target_properties(cutensor PROPERTIES
-      IMPORTED_LOCATION "${CUTENSOR_ROOT}/lib/${CUTENSOR_LIBRARY_NAME}"
-      IMPORTED_IMPLIB "${CUTENSOR_ROOT}/lib/${CUTENSOR_LIBRARY_DEF}"
-      INTERFACE_INCLUDE_DIRECTORIES "${CUTENSOR_ROOT}/include")
-endif()
-
-if(NOT TARGET cutensornet)
-  add_library(cutensornet SHARED IMPORTED)
-  if(WIN32)
-  set(CUTENSORNET_LIBRARY_NAME "cutensornet.dll")
-    set(CUTENSORNET_LIBRARY_DEF "cutensornet.lib")
-  else()
-    set(CUTENSORNET_LIBRARY_NAME "libcutensornet.so")
-  endif()
-  set_target_properties(cutensornet PROPERTIES
-    IMPORTED_LOCATION "${CUTENSORNET_ROOT}/lib/${CUTENSORNET_LIBRARY_NAME}"
-    IMPORTED_IMPLIB "${CUTENSORNET_ROOT}/lib/${CUTENSORNET_LIBRARY_DEF}"
-    INTERFACE_INCLUDE_DIRECTORIES "${CUTENSORNET_ROOT}/include")
-endif()
-
-# Installation directories
-if(NOT DEFINED CUTENSORNET_EXAMPLE_BINARY_INSTALL_DIR)
-    message(WARNING "CUTENSORNET_EXAMPLE_BINARY_INSTALL_DIR not set, setting to cutensornet_example/bin")
-    set(CUTENSORNET_EXAMPLE_BINARY_INSTALL_DIR "cutensornet_example/bin")
-endif()
+function(set_with_fallback VARIABLE FALLBACK)
+  if (NOT DEFINED ${VARIABLE} OR ${VARIABLE} STREQUAL "")
+    set(${VARIABLE} $ENV{${VARIABLE}} CACHE INTERNAL ${VARIABLE})
+    if (${VARIABLE} STREQUAL "")
+      if (NOT ${FALLBACK} STREQUAL "")
+        set(${VARIABLE} $ENV{${FALLBACK}} CACHE INTERNAL ${VARIABLE})
+      endif ()
+    endif ()
+  endif ()
+endfunction()
 
 # ##########################################
-# cuTENSOR_example building flags
+# cutensornet_example dependencies
 # ##########################################
 
-# Global CXX/CUDA flags
+set_with_fallback(CUTENSOR_ROOT NONE)
+
+if (CUTENSOR_ROOT STREQUAL "")
+    message(FATAL_ERROR "Please set the environment variables CUTENSOR_ROOT to the path of the cuTENSOR installation.")
+endif ()
+
+set_with_fallback(CUTENSORNET_ROOT CUQUANTUM_ROOT)
+
+if (CUTENSORNET_ROOT STREQUAL "")
+    message(FATAL_ERROR "Please set the environment variables CUTENSORNET_ROOT or CUQUANTUM_ROOT to the path of the cuQuantum installation.")
+endif ()
+
+message(STATUS "Using CUTENSORNET_ROOT = ${CUTENSORNET_ROOT}")
+
+# ##########################################
+# cutensornet_example global flags
+# ##########################################
 
 # Global CXX flags/options
 set(CMAKE_CXX_STANDARD 11)
@@ -130,57 +100,57 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 
 # ##########################################
-# cuTENSOR_example target
+# cutensornet_example utility function
 # ##########################################
 
 function(add_cutensornet_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
-    list(GET EXAMPLE_SOURCES 0 EXAMPLE_MAIN_SOURCE)
-    get_filename_component(EXAMPLE_TARGET ${EXAMPLE_MAIN_SOURCE} NAME_WE)
-    add_executable(${EXAMPLE_TARGET} ${EXAMPLE_SOURCES})
-    target_include_directories(${EXAMPLE_TARGET}
-        PUBLIC
-            ${CUDA_INCLUDE_DIRS}
-            ${CUTENSOR_ROOT}/include
-            ${CUTENSORNET_ROOT}/include
-    )
-    target_link_libraries(${EXAMPLE_TARGET}
-        PUBLIC
-            cutensornet
-            cutensor
-            cudart
-            cublasLt
-    )
-    set_target_properties(${EXAMPLE_TARGET} PROPERTIES
+  list(GET EXAMPLE_SOURCES 0 EXAMPLE_MAIN_SOURCE)
+  get_filename_component(EXAMPLE_TARGET ${EXAMPLE_MAIN_SOURCE} NAME_WE)
+  add_executable(${EXAMPLE_TARGET} ${EXAMPLE_SOURCES})
+  target_include_directories(
+    ${EXAMPLE_TARGET}
+      PUBLIC
+        ${CUDA_INCLUDE_DIRS}
+        ${CUTENSOR_ROOT}/include
+        ${CUTENSORNET_ROOT}/include
+  )
+  target_link_directories(
+    ${EXAMPLE_TARGET}
+      PUBLIC
+        ${CUTENSOR_ROOT}/lib/11
+        ${CUTENSORNET_ROOT}/lib
+        ${CUTENSORNET_ROOT}/lib64
+  )
+  target_link_libraries(
+    ${EXAMPLE_TARGET}
+      PUBLIC
+        cutensornet
+        cutensor
+        cudart
+        cublasLt
+  )
+  set_target_properties(
+    ${EXAMPLE_TARGET}
+      PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         CUDA_SEPARABLE_COMPILATION ON
-    )
-
-    # Install example
-    install(
-        TARGETS ${EXAMPLE_TARGET}
-        RUNTIME
-        DESTINATION ${CUTENSORNET_EXAMPLE_BINARY_INSTALL_DIR}
-        PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
-    )
-
-    add_dependencies(${GROUP_TARGET} ${EXAMPLE_TARGET})
+        CUDA_ARCHITECTURES
+          "70;75;80"
+  )
+  # Install example
+  install(
+      TARGETS ${EXAMPLE_TARGET}
+      RUNTIME
+      DESTINATION ${CUTENSORNET_EXAMPLE_BINARY_INSTALL_DIR}
+      PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
+  )
+  add_dependencies(${GROUP_TARGET} ${EXAMPLE_TARGET})
 endfunction()
+
+# ##########################################
+# cutensornet_example add all targets
+# ##########################################
 
 add_custom_target(cutensornet_examples)
 
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example.cu)
-
-# ##########################################
-# cuTENSOR_example directories
-# ##########################################
-
-# By default put binaries in build/bin (pre-install)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
-# ##########################################
-# Install examples
-# ##########################################
-
-IF(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  SET(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "" FORCE)
-ENDIF()
