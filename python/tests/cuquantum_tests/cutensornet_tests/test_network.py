@@ -89,6 +89,7 @@ class NetworkProxyFixture(ProxyFixtureBase):
         )
 
         for stream_name in stream_names:
+            if stream_name is not None and stream_name != self.tensor_package: continue
             network_einsum.autotune(iterations=self.iterations, stream=streams[stream_name])  # if iterations=0, autotune is skipped
             stream_name_sync_dispatcher(stream_name, skip=skip_sync)
             cutensornet_contract = network_einsum.contract(stream=streams[stream_name])
@@ -98,6 +99,7 @@ class NetworkProxyFixture(ProxyFixtureBase):
         network_einsum.free()
 
         for stream_name in stream_names:
+            if stream_name is not None and stream_name != self.tensor_package: continue
             network_interleaved.autotune(iterations=self.iterations, stream=streams[stream_name])  # if iterations=0, autotune is skipped
             stream_name_sync_dispatcher(stream_name, skip=skip_sync)
             cutensornet_contract = network_interleaved.contract(stream=streams[stream_name])

@@ -2,33 +2,100 @@
 A collection of functions for parsing Einsum expressions.
 """
 
+from collections import Counter
+from itertools import chain
+
 import numpy as np
 
+from . import formatters
 from .tensor_wrapper import wrap_operands
+
+
+native_to_str = lambda native : "'" + ''.join(s if s is not Ellipsis else '...' for s in native) + "'"
+
+def select_morpher(interleaved, mapper=None):
+    """
+    Select appropriate function for mode label representation based on string or interleaved format.
+    """
+    if mapper is None:
+        return (lambda s : tuple(s)) if interleaved else native_to_str
+
+    return (lambda s : tuple(mapper(s))) if interleaved else lambda s : native_to_str(mapper(s))
+
+
+class ModeLabelMapper(object):
+    """
+    Map mode labels, with special treatment for Ellipsis characters.
+    """
+    def __init__(self, _map):
+        """
+        Args:
+            _map = dict-like object to map mode labels.
+        """
+        self._map = _map
+
+    def __call__(self, sequence):
+        return tuple(s if s is Ellipsis else self._map[s] for s in sequence)
 
 
 def parse_einsum_str(expr):
     """
-    Parse einsum expression. Note that no validity checks are performed.
+    Parse einsum expression in string format, retaining ellipses if present.
 
-    Return operand as well as output indices if explicit mode or None for implicit mode.
+    Return operand as well as output mode labels if explicit form or None for implicit form.
     """
-    inputs, output = expr.split('->') if "->" in expr else (expr, None)
+    disallowed_labels = set(['.', '-', '>'])
 
-    ellipses = '...' in inputs
-    if ellipses:
-        raise ValueError("Ellipsis broadcasting is not supported.")
+    inputs, output, *rest = expr.split('->') if "->" in expr else (expr, None)
+    if rest:
+        raise ValueError("""Invalid expression.
+It is not permitted to specify more than one '->' in the Einstein summation expression.""")
 
-    inputs = tuple(tuple(_input) for _input in inputs.split(","))
+    def parse_single(single):
+        """
+        Parse single operand mode labels considering ellipsis. Leading or trailing whitespace, if present, is removed.
+        """
+        subexpr = single.strip().split('...')
+        n = len(subexpr)
+        expr = [[Ellipsis]] * (2*n - 1)
+        expr[::2] = subexpr
+
+        return tuple(chain(*expr))
+
+    def check_single(single):
+        """
+        Check for disallowed characters used as mode labels for a single operand.
+        """
+        for s in single:
+            if s is Ellipsis:
+                continue
+            if s.isspace() or s in disallowed_labels:
+                return False
+
+        return True
+
+    inputs = list(parse_single(_input) for _input in inputs.split(","))
+    if output is not None:
+        output = parse_single(output)
+
+    checks = [check_single(_input) for _input in inputs]
+    if not all(checks):
+        incorrect = [f"{location}: {native_to_str(inputs[location])}"
+                        for location, predicate in enumerate(checks) if predicate is False]
+        incorrect = formatters.array2string(incorrect)
+        message = f"""Incorrect term.
+Whitespace characters and characters from the set {disallowed_labels} cannot be used as mode labels in a summation expression.
+The incorrectly specified terms as a sequence of "position: term" are: \n{incorrect}"""
+        raise ValueError(message)
 
     return inputs, output
 
 
 def parse_einsum_interleaved(operand_sublists):
     """
-    Parse einsum expression in interleaved format. Note that no validity checks are performed.
+    Parse einsum expression in interleaved format, retaining ellipses if present.
 
-    Return operands as well as output indices if explicit mode or None for implicit mode.
+    Return operands as well as output mode labels if explicit form or None for implicit form.
     """
     inputs   = list()
     operands = list()
@@ -37,22 +104,67 @@ def parse_einsum_interleaved(operand_sublists):
     for i in range(N):
         operands.append(operand_sublists[2*i])
         inputs.append(operand_sublists[2*i + 1])
-    
+
     N = len(operand_sublists)
     output = operand_sublists[N-1] if N % 2 == 1 else None
-
-    ellipses = [Ellipsis in _input for _input in inputs]
-    if any(ellipses):
-        raise ValueError("Ellipsis broadcasting is not supported.")
 
     return operands, inputs, output
 
 
-def map_modes(user_inputs, user_output):
+def check_ellipses(user_inputs, morpher):
     """
-    Map modes in user-defined inputs and output to ordinals. Create the forward as well as inverse maps.
+    Check ellipsis specification for validity.
 
-    Return mapped inputs and output along with the forward and reverse maps.
+    Args:
+        user_inputs: Einsum expression in "neutral format" (sequence of sequences) before mapping.
+        morpher: A callable that transforms a term in neutral format (sequence) to string or interleaved format.
+    """
+
+    checks = [user_input.count(Ellipsis) <= 1 for user_input in user_inputs]
+    if not all(checks):
+        incorrect = [f"{location}: {morpher(user_inputs[location])}"
+                        for location, predicate in enumerate(checks) if predicate is False]
+        incorrect = formatters.array2string(incorrect)
+        message = f"""Incorrect ellipsis use.
+There must not be more than one ellipsis present in each term.
+The incorrectly specified terms as a sequence of "position: term" are: \n{incorrect}"""
+        raise ValueError(message)
+
+
+def check_einsum_with_operands(user_inputs, operands, morpher):
+    """
+    Check that the number of modes in each Einsum term is consistent with the shape of the corresponding operand.
+
+    Args:
+        operands: Wrapped operands.
+        user_inputs: Einsum expression in "neutral format" (sequence of sequences) before mapping.
+        morpher: A callable that transforms a term in neutral format (sequence) to string or interleaved format.
+    """
+
+    checks = [len(i) - 1 <= len(o.shape) if Ellipsis in i else len(i) == len(o.shape) for i, o in zip(user_inputs, operands)]
+    if not all(checks):
+        mismatch = [f"{location}: {morpher(user_inputs[location])} <=> {operands[location].shape}"
+                        for location, predicate in enumerate(checks) if predicate is False]
+        mismatch = formatters.array2string(mismatch)
+        message = f"""Term-operand shape mismatch.
+The number of mode labels in each term of the expression must match the shape of the corresponding operand.
+The mismatch as a sequence of "position: mode labels in term <=> operand shape" is: \n{mismatch}"""
+        raise ValueError(message)
+
+
+def map_modes(user_inputs, user_output, num_extra_labels, morpher):
+    """
+    Map modes in user-defined inputs and output to ordinals, leaving ellipsis for later processing. Create extra mode labels
+    in anticipation of ellipsis replacement. Create the forward as well as inverse maps.
+
+    Args:
+        user_inputs: Einsum expression in "neutral format" (sequence of sequences) before mapping.
+        user_output: The output mode labels before mapping as a sequence or None.
+        num_extra_labels: The number of extra mode labels to generate to use in ellipsis expansion later.
+        morpher: A callable that transforms a term in neutral format (sequence) to string or interleaved format.
+
+    Returns:
+        tuple:  A 5-tuple containing (mapped input, mapped output, forward map, reverse map, largest label).
     """
 
     ordinal = 0
@@ -63,46 +175,36 @@ def map_modes(user_inputs, user_output):
                 mode_map_user_to_ord[mode] = ordinal
                 ordinal += 1
 
-    mode_map_ord_to_user = { v : k for k, v in mode_map_user_to_ord.items() }
+    mode_map_user_to_ord.update((f'__{i}__', i) for i in range(ordinal, ordinal+num_extra_labels))
+    label_end = ordinal + num_extra_labels
 
-    inputs = tuple(tuple(mode_map_user_to_ord[m] for m in modes) for modes in user_inputs)
+    mode_map_ord_to_user = {v : k for k, v in mode_map_user_to_ord.items()}
+
+    inputs = list(tuple(m if m is Ellipsis else mode_map_user_to_ord[m] for m in modes) for modes in user_inputs)
 
     output = None
     if user_output is not None:
-        extra = set(user_output) - set(mode_map_user_to_ord.keys())
+        extra = set(user_output) - set(mode_map_user_to_ord.keys()) - set([Ellipsis])
         if extra:
-            output_modes = "'{}'".format(user_output) if isinstance(user_output, str) else user_output
+            output_modes = morpher(user_output)
             message = f"""Extra modes in output.
 The specified output modes {output_modes} contain the extra modes: {extra}"""
             raise ValueError(message)
-        output = tuple(mode_map_user_to_ord[m] for m in user_output) 
+        output = tuple(m if m is Ellipsis else mode_map_user_to_ord[m] for m in user_output)
 
-    return inputs, output, mode_map_user_to_ord, mode_map_ord_to_user
-
-
-def check_einsum_with_operands(user_inputs, operands, interleaved):
-    """
-    Check that the number of modes in each Einsum term is consistent with the shape of the corresponding operand.
-    operands == wrapped
-    user_inputs = *before* mapping
-    """
-
-    checks = [len(i) == len(o.shape) for i, o in zip(user_inputs, operands)]
-    if not all(checks):
-        morpher =  (lambda s : tuple(s)) if interleaved else lambda s : "'" + ''.join(s) + "'"
-        mismatch = [f"{location}: {morpher(user_inputs[location])} <=> {operands[location].shape}" 
-                        for location, predicate in enumerate(checks) if predicate is False]
-        mismatch = np.array2string(np.array(mismatch, dtype='object'), separator=', ', formatter={'object': lambda s: s})
-        message = f"""Term-operand shape mismatch.
-The number of modes in each term of the expression must match the shape of the corresponding operand.
-The mismatch in the number of modes as a sequence of "operand position: modes in term <=> operand shape" is: \n{mismatch}"""
-        raise ValueError(message)
+    return inputs, output, mode_map_user_to_ord, mode_map_ord_to_user, label_end
 
 
 def create_size_dict(inputs, operands):
     """
-    Create size dictionary capturing the extent of each mode.
-    inputs = based on renumbered modes.
+    Create size dictionary (mode label to extent map) capturing the extent of each mode.
+
+    Args:
+        inputs: Einsum expression in "neutral format" (sequence of sequences) after relabelling modes.
+        operands: Wrapped operands.
+
+    Returns:
+        size_dict: size dictionary.
     """
 
     size_dict = dict()
@@ -112,7 +214,7 @@ def create_size_dict(inputs, operands):
             if mode in size_dict:
                 if size_dict[mode] == 1:    # Handle broadcasting
                     size_dict[mode] = shape[m]
-                elif size_dict[mode] != shape[m]:
+                elif size_dict[mode] != shape[m] and shape[m] != 1:
                     message = f"""Extent mismatch.
 The extent ({shape[m]}) of mode {m} for operand {i} does not match the extent ({size_dict[mode]}) of the same mode found
 in previous operand(s)."""
@@ -123,76 +225,85 @@ in previous operand(s)."""
     return size_dict
 
 
-def calculate_mode_frequency(inputs):
+def infer_output_mode_labels(inputs):
     """
-    Calculate the number of times a mode appears in the operand list.
+    Infer output mode labels (those that appear exactly once).
+
+    Args:
+        inputs: Einsum expression in "neutral format" (sequence of sequences) after relabelling modes.
     """
-    from collections import defaultdict
-    mode_frequency = defaultdict(int)
+    mode_label_freq = Counter(chain(*inputs))
+    del mode_label_freq[Ellipsis]
 
-    for index, modes in enumerate(inputs):
-        for mode in modes:
-            mode_frequency[mode] += 1
-
-    return mode_frequency
+    return tuple(sorted(m for m, c in mode_label_freq.items() if c == 1))
 
 
-def check_classical_einsum(mode_frequency, output, mode_map_user_to_ord, mode_map_ord_to_user):
+def process_ellipses(inputs, output, operands, label_end, mapping_morpher):
     """
-    Check if classical Einsum. Also infer output indices (all the modes that appear exactly once).
+    Replace ellipses by generated mode labels, using 'label_end' and aligning shapes from the right. Infer or update
+    output mode labels.
+
+    Args:
+        inputs: Einsum expression in "neutral format" (sequence of sequences) after relabelling modes.
+        output: The output mode labels after relabelling as a sequence or None.
+        operands: Wrapped operands.
+        label_end: One past the largest mode label (int), including modes resulting from Ellipsis expansion.
+        mapping_morpher: A callable that transforms a term in neutral format (sequence) to string or interleaved format,
+            while converting internal labels to user labels.
+
+    Returns:
+        tuple: a 2-tuple (inputs, output) after ellipsis expansion and inferring output mode labels if needed.
     """
 
-    single_modes = set()
-    double_modes = set()
-    rest = set()
-    for mode, frequency in mode_frequency.items():
-        if frequency == 1:
-            single_modes.add(mode)
-        elif frequency == 2:
-            double_modes.add(mode)
-        else:
-            rest.add(mode)
-
-    if rest:
-        rest = tuple(mode_map_ord_to_user[r] for r in rest)
-        message = f"""No generalized Einsum support.
-These modes appear more than twice: {rest}"""
-        raise ValueError(message)
-
+    inferred = False
     if output is None:
-        # Implicit mode: lexical sort based on user mode labels.
-        output = sorted(mode_map_ord_to_user[m] for m in single_modes)
-        output = tuple(mode_map_user_to_ord[m] for m in output)
-        return output
+        output = infer_output_mode_labels(inputs)
+        inferred = True
 
-    output_set = set(output)
+    shortest, longest = label_end, 0
+    for i, _input in enumerate(inputs):
+        if Ellipsis not in _input:
+            continue
 
-    missing = set(mode_map_ord_to_user[m] for m in single_modes - output_set)
-    if missing:
-        message = f"""No generalized Einsum support.
-These single modes must appear in the output: {missing}"""
-        raise ValueError(message)
+        n = len(operands[i].shape) - (len(_input) - 1)
+        assert n >= 0, "Internal error"
 
-    common = set(mode_map_ord_to_user[c] for c in output_set & double_modes)
-    if common:
-        message = f"""No generalized Einsum support.
-These double modes must not appear in the output: {common}"""
-        raise ValueError(message)
+        s = _input.index(Ellipsis)
+        shortest, longest = min(shortest, n), max(longest, n)
+        inputs[i] = _input[:s] + tuple(range(label_end-n, label_end)) + _input[s+1:]
 
-    return output
+    if not inferred:
+        count = output.count(Ellipsis)
+        if count > 1:
+            message = f"""Incorrect ellipsis use.
+The output term cannot have more than one ellipsis. Specified term = {mapping_morpher(output)}"""
+            raise ValueError(message)
+        if count == 1:    # Replace ellipsis by the longest sequence of labels.
+            s = output.index(Ellipsis)
+            output = output[:s] + tuple(range(label_end-longest, label_end)) + output[s+1:]
+        else:    # If all ellipses expand to the same number of mode labels, the latter are reduced.
+            if shortest != longest:
+                message = f"""Ellipsis length mismatch for reduction.
+The ellipses specified in the expression do not expand to the same number of mode labels and thus cannot be reduced. The
+expanded number of dimensions ranges from {shortest} to {longest}."""
+                raise ValueError(message)
+    else:  #  The mode labels corresponding to ellipsis expansion followed by the inferred mode labels.
+        output = tuple(range(label_end-longest, label_end)) + output
+
+    return inputs, output
 
 
 def parse_einsum(*operands):
     """
-    Classical Einsum definition: modes that appear twice are summed over and those that appear once must appear in the output.
-    Recognizes both string and interleaved formats. Any hashable type is accepted in interleaved format for mode specification, 
-    and unicode strings are accepted. If the output is not provided (implicit form or missing output sublist), it will be 
-    inferred from the expression.
+    Parse the generalized Einstein summation expression in both string and interleaved formats. Any hashable and comparable
+    object is accepted in the interleaved format for mode label specification, and unicode strings are accepted. If the
+    output is not provided (implicit form or missing output sublist), it will be inferred from the expression.
 
-    Returns wrapped operands, mapped inputs and output, size dictionary based on internal mode numbers, and the forward as 
+    Returns wrapped operands, mapped inputs and output, size dictionary based on internal mode numbers, and the forward as
     well as the reverse mode maps.
     """
 
+    # Parse einsum keeping ellipses.
     interleaved = False
     if isinstance(operands[0], str):
         inputs, output = parse_einsum_str(operands[0])
@@ -207,28 +318,49 @@ def parse_einsum(*operands):
 The number of operands ({num_operand}) must match the number of inputs ({num_input}) specified in the Einsum expression."""
         raise ValueError(message)
 
-    if num_operand < 2:
-        message = "The network must consist of at least two tensors."
+    morpher = select_morpher(interleaved)
+
+    if num_operand < 1:
+        message = "The network must consist of at least one tensor."
         raise ValueError(message)
 
     # First wrap operands.
     operands = wrap_operands(operands)
 
-    # Basic check to ensure that the number of modes is consistent with the operand shape.
-    check_einsum_with_operands(inputs, operands, interleaved)
+    # Preliminary checks, before mode label remapping.
+
+    ellipses = any(Ellipsis in _input for _input in inputs)
+
+    # Ensure at most one ellipsis per operand.
+    if ellipses:
+        check_ellipses(inputs, morpher)
+
+    # Ensure that ellipsis is not present only in the output.
+    if not ellipses and output is not None and Ellipsis in output:
+        message = f"""Invalid ellipsis specification.
+The output term {morpher(output)} contains ellipsis while none of the input terms do."""
+        raise ValueError(message)
+
+    # Ensure that the number of modes is consistent with the operand shape.
+    check_einsum_with_operands(inputs, operands, morpher)
+
+    # Calculate the maximum number of extra mode labels that will be needed.
+    num_extra_labels = max(len(o.shape) for o in operands) if ellipses else 0
 
     # Map data to ordinals for cutensornet.
-    inputs, output, mode_map_user_to_ord, mode_map_ord_to_user = map_modes(inputs, output)
+    inputs, output, mode_map_user_to_ord, mode_map_ord_to_user, label_end = map_modes(inputs, output, num_extra_labels, morpher)
+
+    mapper = ModeLabelMapper(mode_map_ord_to_user)
+    mapping_morpher = select_morpher(interleaved, mapper)
+
+    # Ellipsis expansion.
+    if ellipses:
+        inputs, output = process_ellipses(inputs, output, operands, label_end, mapping_morpher)
+    elif output is None:
+        output = infer_output_mode_labels(inputs)
 
     # Create mode-extent map based on internal mode numbers.
     size_dict = create_size_dict(inputs, operands)
 
-    # Create output modes if not specified.
-    mode_frequency = calculate_mode_frequency(inputs)
-
-    # Finally, check if the expression is a classical Einsum. Calculate output indices in implicit mode (output=None).
-    output = check_classical_einsum(mode_frequency, output, mode_map_user_to_ord, mode_map_ord_to_user)
-
     return operands, inputs, output, size_dict, mode_map_user_to_ord, mode_map_ord_to_user
-
 

@@ -34,7 +34,7 @@ d_sv = cp.asarray(h_sv)
 
 # cuStateVec handle initialization
 handle = cusv.create()
-workspaceSize = cusv.apply_matrix_buffer_size(
+workspaceSize = cusv.apply_matrix_get_workspace_size(
     handle, cuquantum.cudaDataType.CUDA_C_32F, nIndexBits, matrix_ptr, cuquantum.cudaDataType.CUDA_C_32F,
     cusv.MatrixLayout.ROW, adjoint, nTargets, nControls, cuquantum.ComputeType.COMPUTE_32F)
 
@@ -48,8 +48,8 @@ else:
 # apply gate
 cusv.apply_matrix(
     handle, d_sv.data.ptr, cuquantum.cudaDataType.CUDA_C_32F, nIndexBits, matrix_ptr, cuquantum.cudaDataType.CUDA_C_32F,
-    cusv.MatrixLayout.ROW, adjoint, targets.ctypes.data, nTargets, controls.ctypes.data, nControls,
-    0, cuquantum.ComputeType.COMPUTE_32F, workspace_ptr, workspaceSize)
+    cusv.MatrixLayout.ROW, adjoint, targets.ctypes.data, nTargets, controls.ctypes.data, 0, nControls,
+    cuquantum.ComputeType.COMPUTE_32F, workspace_ptr, workspaceSize)
 
 # destroy handle
 cusv.destroy(handle)

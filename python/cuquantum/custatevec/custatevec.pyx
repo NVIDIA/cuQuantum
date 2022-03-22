@@ -4,9 +4,11 @@ cimport cython
 from libc.stdio cimport FILE
 from libcpp.vector cimport vector
 cimport cpython
-from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 from cuquantum.utils cimport is_nested_sequence
+from cuquantum.utils cimport cuqnt_alloc_wrapper
+from cuquantum.utils cimport cuqnt_free_wrapper
+from cuquantum.utils cimport logger_callback_with_data
 
 from enum import IntEnum
 
@@ -15,10 +17,11 @@ import numpy as _numpy
 
 cdef extern from * nogil:
     # from CUDA
-    ctypedef int Stream 'cudaStream_t'
     ctypedef enum DataType 'cudaDataType_t':
         pass
     ctypedef enum LibPropType 'libraryPropertyType':
+        pass
+    ctypedef struct int2 'int2':
         pass
 
     # cuStateVec functions
@@ -33,11 +36,12 @@ cdef extern from * nogil:
     int custatevecSetStream(_Handle, Stream)
     int custatevecGetStream(_Handle, Stream*)
     # int custatevecLoggerSetCallback(LoggerCallback)
+    int custatevecLoggerSetCallbackData(LoggerCallbackData, void*)
     # int custatevecLoggerSetFile(FILE*)
-    # int custatevecLoggerOpenFile(const char*)
-    # int custatevecLoggerSetLevel(int32_t)
-    # int custatevecLoggerSetMask(int32_t)
-    # int custatevecLoggerForceDisable()
+    int custatevecLoggerOpenFile(const char*)
+    int custatevecLoggerSetLevel(int32_t)
+    int custatevecLoggerSetMask(int32_t)
+    int custatevecLoggerForceDisable()
     int custatevecAbs2SumOnZBasis(
         _Handle, const void*, DataType, const uint32_t, double*, double*,
         const int32_t*, const uint32_t)
@@ -56,58 +60,77 @@ cdef extern from * nogil:
     int custatevecBatchMeasure(
         _Handle, void*, DataType, const uint32_t, int32_t*, const int32_t*,
         const uint32_t, const double, _CollapseOp)
-    int custatevecApplyExp(
+    int custatevecBatchMeasureWithOffset(
+        _Handle, void*, DataType, const uint32_t, int32_t*, const int32_t*,
+        const uint32_t, const double, _CollapseOp, const double, const double)
+    int custatevecApplyPauliRotation(
         _Handle, void*, DataType, const uint32_t, double, const _Pauli*,
         const int32_t*, const uint32_t, const int32_t*, const int32_t*,
         const uint32_t)
-    int custatevecApplyMatrix_bufferSize(
+    int custatevecApplyMatrixGetWorkspaceSize(
         _Handle, DataType, const uint32_t, const void*, DataType,
         _MatrixLayout, const int32_t, const uint32_t, const uint32_t,
         _ComputeType, size_t*)
     int custatevecApplyMatrix(
         _Handle, void*, DataType, const uint32_t, const void*,
         DataType, _MatrixLayout, const int32_t, const int32_t*,
-        const uint32_t, const int32_t*, const uint32_t, const int32_t*,
+        const uint32_t, const int32_t*, const int32_t*, const uint32_t,
         _ComputeType, void*, size_t)
-    int custatevecExpectation_bufferSize(
+    int custatevecComputeExpectationGetWorkspaceSize(
         _Handle, DataType, const uint32_t, const void*, DataType, _MatrixLayout,
         const uint32_t, _ComputeType, size_t*)
-    int custatevecExpectation(
+    int custatevecComputeExpectation(
         _Handle, const void*, DataType, const uint32_t, void*, DataType, double*,
         const void*, DataType, _MatrixLayout, const int32_t*,
         const uint32_t, _ComputeType, void*, size_t)
-    int custatevecSampler_create(
+    int custatevecSamplerCreate(
         _Handle, const void*, DataType, const uint32_t, _SamplerDescriptor*,
         uint32_t, size_t*)
-    int custatevecSampler_preprocess(
-        _Handle, _SamplerDescriptor*, void*, const size_t)
-    int custatevecSampler_sample(
-        _Handle, _SamplerDescriptor*, _Index*, const int32_t*, const uint32_t,
+    int custatevecSamplerDestroy(_SamplerDescriptor)
+    int custatevecSamplerPreprocess(
+        _Handle, _SamplerDescriptor, void*, const size_t)
+    int custatevecSamplerSample(
+        _Handle, _SamplerDescriptor, _Index*, const int32_t*, const uint32_t,
         const double*, const uint32_t, _SamplerOutput)
-    int custatevecApplyGeneralizedPermutationMatrix_bufferSize(
+    int custatevecSamplerGetSquaredNorm(_Handle, _SamplerDescriptor, double*)
+    int custatevecSamplerApplySubSVOffset(
+        _Handle, _SamplerDescriptor, int32_t, uint32_t, double, double)
+    int custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize(
         _Handle, DataType, const uint32_t, const _Index*, void*, DataType,
         const int32_t*, const uint32_t, const uint32_t, size_t*)
     int custatevecApplyGeneralizedPermutationMatrix(
         _Handle, void*, DataType, const uint32_t, _Index*, const void*,
         DataType, const int32_t, const int32_t*, const uint32_t,
         const int32_t*, const int32_t*, const uint32_t, void*, size_t)
-    int custatevecExpectationsOnPauliBasis(
-        _Handle, void*, DataType, const uint32_t, double*, const _Pauli**,
-        const int32_t**, const uint32_t*, const uint32_t)
-    int custatevecAccessor_create(
+    int custatevecComputeExpectationsOnPauliBasis(
+        _Handle, void*, DataType, const uint32_t, double*, const _Pauli**, const uint32_t,
+        const int32_t**, const uint32_t*)
+    int custatevecAccessorCreate(
         _Handle, void*, DataType, const uint32_t,
         _AccessorDescriptor*, const int32_t*, const uint32_t, const int32_t*,
         const int32_t*, const uint32_t, size_t*)
-    int custatevecAccessor_createReadOnly(
+    int custatevecAccessorCreateView(
         _Handle, const void*, DataType, const uint32_t,
-        _AccessorDescriptor*, const int32_t*, const uint32_t, const int32_t*,
+        _AccessorDescriptor, const int32_t*, const uint32_t, const int32_t*,
         const int32_t*, const uint32_t, size_t*)
-    int custatevecAccessor_setExtraWorkspace(
-        _Handle, _AccessorDescriptor*, void*, size_t)
-    int custatevecAccessor_get(
-        _Handle, _AccessorDescriptor*, void*, const _Index, const _Index)
-    int custatevecAccessor_set(
-        _Handle, _AccessorDescriptor*, const void*, const _Index, const _Index)
+    int custatevecAccessorDestroy(_AccessorDescriptor)
+    int custatevecAccessorSetExtraWorkspace(
+        _Handle, _AccessorDescriptor, void*, size_t)
+    int custatevecAccessorGet(
+        _Handle, _AccessorDescriptor, void*, const _Index, const _Index)
+    int custatevecAccessorSet(
+        _Handle, _AccessorDescriptor, const void*, const _Index, const _Index)
+    int custatevecSwapIndexBits(
+        _Handle, void*, DataType, const uint32_t, const int2*, const uint32_t,
+        const int32_t*, const int32_t*, const uint32_t)
+    int custatevecTestMatrixTypeGetWorkspaceSize(
+        _Handle, _MatrixType, const void*, DataType, _MatrixLayout,
+        const uint32_t, const int32_t, _ComputeType, size_t*)
+    int custatevecTestMatrixType(
+        _Handle, double*, _MatrixType, const void*, DataType, _MatrixLayout,
+        const uint32_t, const int32_t, _ComputeType, void*, size_t)
+    int custatevecGetDeviceMemHandler(_Handle, _DeviceMemHandler*)
+    int custatevecSetDeviceMemHandler(_Handle, const _DeviceMemHandler*)
 
 
 class cuStateVecError(RuntimeError):
@@ -133,7 +156,7 @@ cpdef intptr_t create() except*:
     """Initialize the cuStateVec library and create a handle.
 
     Returns:
-        intptr_t: The opaque library handle (as Python `int`).
+        intptr_t: The opaque library handle (as Python :class:`int`).
 
     .. note:: The returned handle should be tied to the current device.
 
@@ -155,6 +178,12 @@ cpdef destroy(intptr_t handle):
 
     .. seealso:: `custatevecDestroy`
     """
+    # reduce the ref counts of user-provided Python objects:
+    # if Python callables are attached to the handle as the handler,
+    # we need to decrease the ref count to avoid leaking
+    if handle in owner_pyobj:
+        del owner_pyobj[handle]
+
     with nogil:
         status = custatevecDestroy(<_Handle>handle)
     check_status(status)
@@ -184,7 +213,7 @@ cpdef set_workspace(intptr_t handle, intptr_t workspace, size_t workspace_size):
 
     Args:
         handle (intptr_t): The library handle.
-        workspace (intptr_t): The pointer address (as Python `int`) to the
+        workspace (intptr_t): The pointer address (as Python :class:`int`) to the
             workspace (on device).
         workspace_size (size_t): The workspace size (in bytes).
 
@@ -231,7 +260,7 @@ cpdef set_stream(intptr_t handle, intptr_t stream):
     Args:
         handle (intptr_t): The library handle.
         stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
-            `int`).
+            :class:`int`).
 
     .. seealso:: `custatevecSetStream`
     """
@@ -249,7 +278,7 @@ cpdef intptr_t get_stream(intptr_t handle):
 
     Returns:
         intptr_t:
-            The CUDA stream handle (``cudaStream_t`` as Python `int`).
+            The CUDA stream handle (``cudaStream_t`` as Python :class:`int`).
 
     .. seealso:: `custatevecGetStream`
     """
@@ -261,9 +290,6 @@ cpdef intptr_t get_stream(intptr_t handle):
     return stream
 
 
-# TODO(leofang): add logger callback APIs
-
-
 cpdef tuple abs2sum_on_z_basis(
         intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
         bint get_parity0, bint get_parity1,
@@ -272,7 +298,7 @@ cpdef tuple abs2sum_on_z_basis(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
@@ -282,7 +308,7 @@ cpdef tuple abs2sum_on_z_basis(
             for parity 1.
         basis_bits: A host array of Z-basis index bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bits
 
         n_basis_bits (uint32_t): the number of basis bits.
@@ -335,27 +361,27 @@ cpdef abs2sum_array(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
-        abs2sum (intptr_t): The pointer address (as Python `int`) to the array
+        abs2sum (intptr_t): The pointer address (as Python :class:`int`) to the array
             (on either host or device) that would hold the sums.
         bit_ordering: A host array of index bit ordering. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bit ordering
 
         bit_ordering_len (uint32_t): The length of ``bit_ordering``.
         mask_bit_string: A host array for a bit string to specify mask. It can
             be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bit ordering
 
         mask_ordering: A host array of mask ordering. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bit ordering
 
         mask_len (uint32_t): The length of ``mask_ordering``.
@@ -405,14 +431,14 @@ cpdef collapse_on_z_basis(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
         parity (int32_t): The parity, 0 or 1.
         basis_bits: A host array of Z-basis index bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bits
 
         n_basis_bits (uint32_t): the number of basis bits.
@@ -444,18 +470,18 @@ cpdef collapse_by_bitstring(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
         bit_string: A host array of a bit string. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of bits
 
         bit_ordering: A host array of bit string ordering. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of bit ordering
 
         bit_string_len (uint32_t): The length of ``bit_string``.
@@ -498,13 +524,13 @@ cpdef int measure_on_z_basis(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
         basis_bits: A host array of Z-basis index bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bits
 
         n_basis_bits (uint32_t): The number of basis bits.
@@ -543,15 +569,15 @@ cpdef batch_measure(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
-        bit_string (intptr_t): The pointer address (as Python `int`) to a host
+        bit_string (intptr_t): The pointer address (as Python :class:`int`) to a host
             array of measured bit string.
         bit_ordering: A host array of bit string ordering. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of bit ordering
 
         bit_string_len (uint32_t): The length of ``bit_string``.
@@ -577,7 +603,53 @@ cpdef batch_measure(
     check_status(status)
 
 
-cpdef apply_exp(
+cpdef batch_measure_with_offset(
+        intptr_t handle, intptr_t sv, int sv_data_type,
+        uint32_t n_index_bits, intptr_t bit_string, bit_ordering,
+        const uint32_t bit_string_len, double rand_num, int collapse,
+        double offset, double abs2sum):
+    """Performs measurement (on a partial statevector) of arbitrary number of
+    single qubits.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the partial
+            statevector (on device).
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
+        n_index_bits (uint32_t): The number of index bits.
+        bit_string (intptr_t): The pointer address (as Python :class:`int`) to a host
+            array of measured bit string.
+        bit_ordering: A host array of bit string ordering. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of bit ordering
+
+        bit_string_len (uint32_t): The length of ``bit_string``.
+        rand_num (double): A random number in [0, 1).
+        collapse (Collapse): Indicate the collapse operation.
+        offset (double): partial sum of squared absolute values.
+        abs2sum (double): sum of squared absolute values for the entire statevector.
+
+    .. seealso:: `custatevecBatchMeasureWithOffset`
+    """
+    # bit_ordering can be a pointer address, or a Python sequence
+    cdef vector[int32_t] bitOrderingData
+    cdef int32_t* bitOrderingPtr
+    if cpython.PySequence_Check(bit_ordering):
+        bitOrderingData = bit_ordering
+        bitOrderingPtr = bitOrderingData.data()
+    else:  # a pointer address
+        bitOrderingPtr = <int32_t*><intptr_t>bit_ordering
+
+    with nogil:
+        status = custatevecBatchMeasureWithOffset(
+            <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
+            <int32_t*>bit_string, bitOrderingPtr, bit_string_len,
+            rand_num, <_CollapseOp>collapse, offset, abs2sum)
+    check_status(status)
+
+
+cpdef apply_pauli_rotation(
         intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
         double theta, paulis,
         targets, uint32_t n_targets,
@@ -586,35 +658,35 @@ cpdef apply_exp(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
         theta (double): The rotation angle.
         paulis: A host array of :data:`Pauli` operators. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of :data:`Pauli`
 
         targets: A host array of target bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of target bits
 
         n_targets (uint32_t): The length of ``targets``.
         controls: A host array of control bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of control bits
 
         control_bit_values: A host array of control bit values. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of control bit values
 
         n_controls (uint32_t): The length of ``controls``.
 
-    .. seealso:: `custatevecApplyExp`
+    .. seealso:: `custatevecApplyPauliRotation`
     """
     # paulis can be a pointer address, or a Python sequence
     cdef vector[_Pauli] paulisData
@@ -653,7 +725,7 @@ cpdef apply_exp(
         controlBitValuesPtr = <int32_t*><intptr_t>control_bit_values
 
     with nogil:
-        status = custatevecApplyExp(
+        status = custatevecApplyPauliRotation(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
             theta, paulisPtr,
             targetsPtr, n_targets,
@@ -661,7 +733,7 @@ cpdef apply_exp(
     check_status(status)
 
 
-cpdef size_t apply_matrix_buffer_size(
+cpdef size_t apply_matrix_get_workspace_size(
         intptr_t handle, int sv_data_type, uint32_t n_index_bits, intptr_t matrix,
         int matrix_data_type, int layout, int32_t adjoint, uint32_t n_targets,
         uint32_t n_controls, int compute_type) except*:
@@ -671,7 +743,7 @@ cpdef size_t apply_matrix_buffer_size(
         handle (intptr_t): The library handle.
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
-        matrix (intptr_t): The pointer address (as Python `int`) to a matrix
+        matrix (intptr_t): The pointer address (as Python :class:`int`) to a matrix
             (on either host or device).
         matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
         layout (MatrixLayout): The memory layout the the matrix.
@@ -684,11 +756,11 @@ cpdef size_t apply_matrix_buffer_size(
     Returns:
         size_t: The required workspace size (in bytes).
 
-    .. seealso:: `custatevecApplyMatrix_bufferSize`
+    .. seealso:: `custatevecApplyMatrixGetWorkspaceSize`
     """
     cdef size_t extraWorkspaceSizeInBytes
     with nogil:
-        status = custatevecApplyMatrix_bufferSize(
+        status = custatevecApplyMatrixGetWorkspaceSize(
             <_Handle>handle, <DataType>sv_data_type, n_index_bits, <void*>matrix,
             <DataType>matrix_data_type, <_MatrixLayout>layout, adjoint, n_targets,
             n_controls, <_ComputeType>compute_type, &extraWorkspaceSizeInBytes)
@@ -700,41 +772,41 @@ cpdef apply_matrix(
         intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
         intptr_t matrix, int matrix_data_type, int layout, int32_t adjoint,
         targets, uint32_t n_targets,
-        controls, uint32_t n_controls, control_bit_values,
+        controls, control_bit_values, uint32_t n_controls,
         int compute_type, intptr_t workspace, size_t workspace_size):
     """Apply the specified gate matrix.
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
-        matrix (intptr_t): The pointer address (as Python `int`) to a matrix
+        matrix (intptr_t): The pointer address (as Python :class:`int`) to a matrix
             (on either host or device).
         matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
         layout (MatrixLayout): The memory layout the the matrix.
         adjoint (int32_t): Whether the adjoint of the matrix would be applied.
         targets: A host array of target bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of target bits
 
         n_targets (uint32_t): The length of ``targets``.
         controls: A host array of control bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of control bits
 
-        n_controls (uint32_t): The length of ``controls``.
         control_bit_values: A host array of control bit values. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of control bit values
 
+        n_controls (uint32_t): The length of ``controls``.
         compute_type (cuquantum.ComputeType): The compute type of matrix
             multiplication.
-        workspace (intptr_t): The pointer address (as Python `int`) to the
+        workspace (intptr_t): The pointer address (as Python :class:`int`) to the
             workspace (on device).
         workspace_size (size_t): The workspace size (in bytes).
 
@@ -773,22 +845,21 @@ cpdef apply_matrix(
             <void*>matrix, <DataType>matrix_data_type,
             <_MatrixLayout>layout, adjoint,
             targetsPtr, n_targets,
-            controlsPtr, n_controls,
-            controlBitValuesPtr, <_ComputeType>compute_type,
-            <void*>workspace, workspace_size)
+            controlsPtr, controlBitValuesPtr, n_controls,
+            <_ComputeType>compute_type, <void*>workspace, workspace_size)
     check_status(status)
 
 
-cpdef size_t expectation_buffer_size(
+cpdef size_t compute_expectation_get_workspace_size(
         intptr_t handle, int sv_data_type, uint32_t n_index_bits, intptr_t matrix,
         int matrix_data_type, int layout, uint32_t n_basis_bits, int compute_type) except*:
-    """Computes the required workspace size for :func:`expectation`.
+    """Computes the required workspace size for :func:`compute_expectation`.
 
     Args:
         handle (intptr_t): The library handle.
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
-        matrix (intptr_t): The pointer address (as Python `int`) to a matrix
+        matrix (intptr_t): The pointer address (as Python :class:`int`) to a matrix
             (on either host or device).
         matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
         layout (MatrixLayout): The memory layout the the matrix.
@@ -799,11 +870,11 @@ cpdef size_t expectation_buffer_size(
     Returns:
         size_t: The required workspace size (in bytes).
 
-    .. seealso:: `custatevecExpectation_bufferSize`
+    .. seealso:: `custatevecComputeExpectationGetWorkspaceSize`
     """
     cdef size_t extraWorkspaceSizeInBytes
     with nogil:
-        status = custatevecExpectation_bufferSize(
+        status = custatevecComputeExpectationGetWorkspaceSize(
             <_Handle>handle, <DataType>sv_data_type, n_index_bits, <void*>matrix,
             <DataType>matrix_data_type, <_MatrixLayout>layout, n_basis_bits,
             <_ComputeType>compute_type, &extraWorkspaceSizeInBytes)
@@ -811,7 +882,7 @@ cpdef size_t expectation_buffer_size(
     return extraWorkspaceSizeInBytes
 
 
-cpdef expectation(
+cpdef compute_expectation(
         intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
         intptr_t expect, int expect_data_type,
         intptr_t matrix, int matrix_data_type, int layout,
@@ -822,30 +893,30 @@ cpdef expectation(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
-        expect (intptr_t): The pointer address (as Python `int`) for storing the
+        expect (intptr_t): The pointer address (as Python :class:`int`) for storing the
             expectation value (on host).
         expect_data_type (cuquantum.cudaDataType): The data type of ``expect``.
-        matrix (intptr_t): The pointer address (as Python `int`) to a matrix
+        matrix (intptr_t): The pointer address (as Python :class:`int`) to a matrix
             (on either host or device).
         matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
         layout (MatrixLayout): The memory layout the the matrix.
         basis_bits: A host array of basis index bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of basis bits
 
         n_basis_bits (uint32_t): The length of ``basis_bits``.
         compute_type (cuquantum.ComputeType): The compute type of matrix
             multiplication.
-        workspace (intptr_t): The pointer address (as Python `int`) to the
+        workspace (intptr_t): The pointer address (as Python :class:`int`) to the
             workspace (on device).
         workspace_size (size_t): The workspace size (in bytes).
 
-    .. seealso:: `custatevecExpectation`
+    .. seealso:: `custatevecComputeExpectation`
     """
     # basis_bits can be a pointer address, or a Python sequence
     cdef vector[int32_t] basisBitsData
@@ -860,7 +931,7 @@ cpdef expectation(
     # TODO(leofang): check for beta 2
     cdef double residualNorm
     with nogil:
-        status = custatevecExpectation(
+        status = custatevecComputeExpectation(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
             <void*>expect, <DataType>expect_data_type, &residualNorm,
             <void*>matrix, <DataType>matrix_data_type,
@@ -878,7 +949,7 @@ cpdef tuple sampler_create(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
@@ -888,41 +959,33 @@ cpdef tuple sampler_create(
     Returns:
         tuple:
             A 2-tuple. The first element is the pointer address (as Python
-            `int`) to the sampler descriptor, and the second element is the
+            :class:`int`) to the sampler descriptor, and the second element is the
             amount of required workspace size (in bytes).
 
-    .. note:: Unlike its C counterpart, the returned sampler descriptor must
-        be explicitly cleaned up using :func:`sampler_destroy` when the work
-        is done.
-
-    .. seealso:: `custatevecSampler_create`
+    .. seealso:: `custatevecSamplerCreate`
     """
-    cdef _SamplerDescriptor* sampler = <_SamplerDescriptor*>(
-        PyMem_Malloc(sizeof(_SamplerDescriptor)))
+    cdef _SamplerDescriptor sampler
     cdef size_t extraWorkspaceSizeInBytes
     with nogil:
-        status = custatevecSampler_create(
+        status = custatevecSamplerCreate(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
-            sampler, n_max_shots, &extraWorkspaceSizeInBytes)
+            &sampler, n_max_shots, &extraWorkspaceSizeInBytes)
     check_status(status)
     return (<intptr_t>sampler, extraWorkspaceSizeInBytes)
 
 
-# TODO(leofang): fix this when the beta 2 (?) APIs are up
 cpdef sampler_destroy(intptr_t sampler):
     """Destroy the sampler descriptor.
 
     Args:
-        sampler (intptr_t): The pointer address (as Python `int`) to the
+        sampler (intptr_t): The pointer address (as Python :class:`int`) to the
             sampler descriptor.
 
-    .. note:: This function has no C counterpart in the current release.
-
-    .. seealso:: :func:`sampler_create`
+    .. seealso:: `custatevecSamplerDestroy`
     """
-    # This API is unique in Python as we can't pass around structs
-    # allocated on stack
-    PyMem_Free(<void*>sampler)
+    with nogil:
+        status = custatevecSamplerDestroy(<_SamplerDescriptor>sampler)
+    check_status(status)
 
 
 cpdef sampler_preprocess(
@@ -932,17 +995,17 @@ cpdef sampler_preprocess(
 
     Args:
         handle (intptr_t): The library handle.
-        sampler (intptr_t): The pointer address (as Python `int`) to the
+        sampler (intptr_t): The pointer address (as Python :class:`int`) to the
             sampler descriptor.
-        workspace (intptr_t): The pointer address (as Python `int`) to the
+        workspace (intptr_t): The pointer address (as Python :class:`int`) to the
             workspace (on device).
         workspace_size (size_t): The workspace size (in bytes).
 
-    .. seealso:: `custatevecSampler_preprocess`
+    .. seealso:: `custatevecSamplerPreprocess`
     """
     with nogil:
-        status = custatevecSampler_preprocess(
-            <_Handle>handle, <_SamplerDescriptor*>sampler,
+        status = custatevecSamplerPreprocess(
+            <_Handle>handle, <_SamplerDescriptor>sampler,
             <void*>workspace, workspace_size)
     check_status(status)
 
@@ -955,25 +1018,25 @@ cpdef sampler_sample(
 
     Args:
         handle (intptr_t): The library handle.
-        sampler (intptr_t): The pointer address (as Python `int`) to the
+        sampler (intptr_t): The pointer address (as Python :class:`int`) to the
             sampler descriptor.
-        bit_strings (intptr_t): The pointer address (as Python `int`) for
+        bit_strings (intptr_t): The pointer address (as Python :class:`int`) for
             storing the sampled bit strings (on host).
         bit_ordering: A host array of bit string ordering. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of bit ordering
 
         bit_string_len (uint32_t): The number of bits in ``bit_ordering``.
         rand_nums: A host array of random numbers in [0, 1). It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of random numbers
 
         n_shots (uint32_t): The number of shots.
         order (SamplerOutput): The order of sampled bit strings.
 
-    .. seealso:: `custatevecSampler_sample`
+    .. seealso:: `custatevecSamplerSample`
     """
     # bit_ordering can be a pointer address, or a Python sequence
     cdef vector[int32_t] bitOrderingData
@@ -994,17 +1057,62 @@ cpdef sampler_sample(
         randNumsPtr = <double*><intptr_t>rand_nums
 
     with nogil:
-        status = custatevecSampler_sample(
-            <_Handle>handle, <_SamplerDescriptor*>sampler, <_Index*>bit_strings,
+        status = custatevecSamplerSample(
+            <_Handle>handle, <_SamplerDescriptor>sampler, <_Index*>bit_strings,
             bitOrderingPtr, bit_string_len, randNumsPtr, n_shots,
             <_SamplerOutput>order)
     check_status(status)
 
 
-cpdef size_t apply_generalized_permutation_matrix_buffer_size(
+cpdef double sampler_get_squared_norm(
+        intptr_t handle, intptr_t sampler) except*:
+    """Get the squared norm of the statevetor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sampler (intptr_t): The pointer address (as Python :class:`int`) to the
+            sampler descriptor.
+
+    Returns:
+        double: The squared norm of the statevector.
+
+    .. seealso:: `custatevecSamplerGetSquaredNorm`
+    """
+    cdef double sq_norm
+    with nogil:
+        status = custatevecSamplerGetSquaredNorm(
+            <_Handle>handle, <_SamplerDescriptor>sampler, &sq_norm)
+    check_status(status)
+    return sq_norm
+
+
+cpdef sampler_apply_sub_sv_offset(
+        intptr_t handle, intptr_t sampler, int32_t sub_sv_id,
+        uint32_t n_sub_sv, double offset, double sq_norm):
+    """Apply the partial norm and norm to the statevector.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sampler (intptr_t): The pointer address (as Python :class:`int`) to the
+            sampler descriptor.
+        sub_sv_id (int32_t): The ordinal of the sub-statevector.
+        n_sub_sv (uint32_t): The number of sub-statevectors.
+        offset (double): The cumulative sum for the sub-statevector.
+        sq_norm (double): The squared norm for all sub-statevectors.
+
+    .. seealso:: `custatevecSamplerApplySubSVOffset`
+    """
+    with nogil:
+        status = custatevecSamplerApplySubSVOffset(
+            <_Handle>handle, <_SamplerDescriptor>sampler, sub_sv_id,
+            n_sub_sv, offset, sq_norm)
+    check_status(status)
+
+
+cpdef size_t apply_generalized_permutation_matrix_get_workspace_size(
         intptr_t handle, int sv_data_type, uint32_t n_index_bits,
         permutation, intptr_t diagonals, int diagonals_data_type,
-        basis_bits, uint32_t n_basis_bits, uint32_t mask_len) except*:
+        targets, uint32_t n_targets, uint32_t n_controls) except*:
     """Computes the required workspace size for :func:`apply_generalized_permutation_matrix`.
 
     Args:
@@ -1013,24 +1121,24 @@ cpdef size_t apply_generalized_permutation_matrix_buffer_size(
         n_index_bits (uint32_t): The number of index bits.
         permutation: A host or device array for the permutation table. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of permutation elements
 
-        diagonals (intptr_t): The pointer address (as Python `int`) to a matrix
+        diagonals (intptr_t): The pointer address (as Python :class:`int`) to a matrix
             (on either host or device).
         diagonals_data_type (cuquantum.cudaDataType): The data type of the matrix.
-        basis_bits: A host array of permutation matrix basis bits. It can be
+        targets: A host array of permutation matrix target bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of basis bits
 
-        n_basis_bits (uint32_t): The length of ``basis_bits``.
-        mask_len (uint32_t): The length of ``mask_ordering``.
+        n_targets (uint32_t): The length of ``targets``.
+        n_controls (uint32_t): The length of ``controls`` and ``control_bit_values``.
 
     Returns:
         size_t: The required workspace size (in bytes).
 
-    .. seealso:: `custatevecApplyGeneralizedPermutationMatrix_bufferSize`
+    .. seealso:: `custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize`
     """
     cdef size_t extraWorkspaceSize
 
@@ -1044,20 +1152,20 @@ cpdef size_t apply_generalized_permutation_matrix_buffer_size(
     else:  # a pointer address
         permutationPtr = <_Index*><intptr_t>permutation
 
-    # basis_bits can be a pointer address, or a Python sequence
-    cdef vector[int32_t] basisBitsData
-    cdef int32_t* basisBitsPtr
-    if cpython.PySequence_Check(basis_bits):
-        basisBitsData = basis_bits
-        basisBitsPtr = basisBitsData.data()
+    # targets can be a pointer address, or a Python sequence
+    cdef vector[int32_t] targetsData
+    cdef int32_t* targetsPtr
+    if cpython.PySequence_Check(targets):
+        targetsData = targets
+        targetsPtr = targetsData.data()
     else:  # a pointer address
-        basisBitsPtr = <int32_t*><intptr_t>basis_bits
+        targetsPtr = <int32_t*><intptr_t>targets
 
     with nogil:
-        status = custatevecApplyGeneralizedPermutationMatrix_bufferSize(
+        status = custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize(
             <_Handle>handle, <DataType>sv_data_type, n_index_bits,
             permutationPtr, <void*>diagonals, <DataType>diagonals_data_type,
-            basisBitsPtr, n_basis_bits, mask_len, &extraWorkspaceSize)
+            targetsPtr, n_targets, n_controls, &extraWorkspaceSize)
     check_status(status)
     return extraWorkspaceSize
 
@@ -1065,45 +1173,44 @@ cpdef size_t apply_generalized_permutation_matrix_buffer_size(
 cpdef apply_generalized_permutation_matrix(
         intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
         permutation, intptr_t diagonals, int diagonals_data_type,
-        int32_t adjoint, basis_bits, uint32_t n_basis_bits,
-        mask_bit_string, mask_ordering, uint32_t mask_len,
+        int32_t adjoint, targets, uint32_t n_targets,
+        controls, control_bit_values, uint32_t n_controls,
         intptr_t workspace, size_t workspace_size):
     """Apply a generalized permutation matrix.
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
         permutation: A host or device array for the permutation table. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of permutation elements
 
-        diagonals (intptr_t): The pointer address (as Python `int`) to a matrix
+        diagonals (intptr_t): The pointer address (as Python :class:`int`) to a matrix
             (on either host or device).
         diagonals_data_type (cuquantum.cudaDataType): The data type of the matrix.
         adjoint (int32_t): Whether the adjoint of the matrix would be applied.
-        basis_bits: A host array of permutation matrix basis bits. It can be
+        targets: A host array of permutation matrix target bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of basis bits
 
-        n_basis_bits (uint32_t): The length of ``basis_bits``.
-        mask_bit_string: A host array for a bit string to specify mask. It can
-            be
+        n_targets (uint32_t): The length of ``targets``.
+        controls: A host array for control bits. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bit ordering
 
-        mask_ordering: A host array of mask ordering. It can be
+        control_bit_values: A host array of control bit values. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bit ordering
 
-        mask_len (uint32_t): The length of ``mask_ordering``.
-        workspace (intptr_t): The pointer address (as Python `int`) to the
+        n_controls (uint32_t): The length of ``controls`` and ``control_bit_values``.
+        workspace (intptr_t): The pointer address (as Python :class:`int`) to the
             workspace (on device).
         workspace_size (size_t): The workspace size (in bytes).
 
@@ -1119,81 +1226,80 @@ cpdef apply_generalized_permutation_matrix(
     else:  # a pointer address
         permutationPtr = <_Index*><intptr_t>permutation
 
-    # basis_bits can be a pointer address, or a Python sequence
-    cdef vector[int32_t] basisBitsData
-    cdef int32_t* basisBitsPtr
-    if cpython.PySequence_Check(basis_bits):
-        basisBitsData = basis_bits
-        basisBitsPtr = basisBitsData.data()
+    # targets can be a pointer address, or a Python sequence
+    cdef vector[int32_t] targetsData
+    cdef int32_t* targetsPtr
+    if cpython.PySequence_Check(targets):
+        targetsData = targets
+        targetsPtr = targetsData.data()
     else:  # a pointer address
-        basisBitsPtr = <int32_t*><intptr_t>basis_bits
+        targetsPtr = <int32_t*><intptr_t>targets
 
-    # mask_bit_string can be a pointer address, or a Python sequence
-    cdef vector[int32_t] maskBitStringData
-    cdef int32_t* maskBitStringPtr
-    if cpython.PySequence_Check(mask_bit_string):
-        maskBitStringData = mask_bit_string
-        maskBitStringPtr = maskBitStringData.data()
+    # controls can be a pointer address, or a Python sequence
+    cdef vector[int32_t] controlsData
+    cdef int32_t* controlsPtr
+    if cpython.PySequence_Check(controls):
+        controlsData = controls
+        controlsPtr = controlsData.data()
     else:  # a pointer address
-        maskBitStringPtr = <int32_t*><intptr_t>mask_bit_string
+        controlsPtr = <int32_t*><intptr_t>controls
 
-    # mask_ordering can be a pointer address, or a Python sequence
-    cdef vector[int32_t] maskOrderingData
-    cdef int32_t* maskOrderingPtr
-    if cpython.PySequence_Check(mask_ordering):
-        maskOrderingData = mask_ordering
-        maskOrderingPtr = maskOrderingData.data()
+    # control_bit_values can be a pointer address, or a Python sequence
+    cdef vector[int32_t] control_bit_valuesData
+    cdef int32_t* control_bit_valuesPtr
+    if cpython.PySequence_Check(control_bit_values):
+        control_bit_valuesData = control_bit_values
+        control_bit_valuesPtr = control_bit_valuesData.data()
     else:  # a pointer address
-        maskOrderingPtr = <int32_t*><intptr_t>mask_ordering
+        control_bit_valuesPtr = <int32_t*><intptr_t>control_bit_values
 
     with nogil:
         status = custatevecApplyGeneralizedPermutationMatrix(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
             permutationPtr, <void*>diagonals, <DataType>diagonals_data_type,
-            adjoint, basisBitsPtr, n_basis_bits,
-            maskBitStringPtr, maskOrderingPtr, mask_len,
+            adjoint, targetsPtr, n_targets,
+            controlsPtr, control_bit_valuesPtr, n_controls,
             <void*>workspace, workspace_size)
     check_status(status)
 
 
-cpdef expectations_on_pauli_basis(
+cpdef compute_expectations_on_pauli_basis(
         intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
-        intptr_t expectations, pauli_ops,
-        basis_bits, n_basis_bits, uint32_t n_pauli_op_arrays):
+        intptr_t expectations, pauli_ops, uint32_t n_pauli_op_arrays,
+        basis_bits, n_basis_bits):
     """Compute expectation values for multiple multi-qubit Pauli strings.
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
-        expectations (intptr_t): The pointer address (as Python `int`) to store
+        expectations (intptr_t): The pointer address (as Python :class:`int`) to store
             the corresponding expectation values on host. The returned values
             are stored in double (float64).
         pauli_ops: A host array of :data:`Pauli` operators. It can be
 
-            - an `int` as the pointer address to the nested sequence
-            - a Python sequence of `int`, each of which is a pointer address
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
               to the corresponding Pauli string
             - a nested Python sequence of :data:`Pauli`
 
+        n_pauli_op_arrays (uint32_t): The number of Pauli operator arrays.
         basis_bits: A host array of basis index bits. It can be
 
-            - an `int` as the pointer address to the nested sequence
-            - a Python sequence of `int`, each of which is a pointer address
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
               to the corresponding basis bits
             - a nested Python sequence of basis bits
 
         n_basis_bits: A host array of the length of each array in
             ``basis_bits``. It can be
 
-            - an `int` as the pointer address to the array
-            - a Python sequence of `int`
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
 
-        n_pauli_op_arrays (uint32_t): The number of Pauli operator arrays.
-
-    .. seealso:: `custatevecExpectationsOnPauliBasis`
+    .. seealso:: `custatevecComputeExpectationsOnPauliBasis`
     """
     # pauli_ops can be:
     #   - a plain pointer address
@@ -1257,10 +1363,10 @@ cpdef expectations_on_pauli_basis(
         nBasisBitsPtr = <uint32_t*><intptr_t>n_basis_bits
 
     with nogil:
-        status = custatevecExpectationsOnPauliBasis(
+        status = custatevecComputeExpectationsOnPauliBasis(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
-            <double*>expectations, <const _Pauli**>pauliOpsPtr,
-            <const int32_t**>basisBitsPtr, nBasisBitsPtr, n_pauli_op_arrays)
+            <double*>expectations, <const _Pauli**>pauliOpsPtr, n_pauli_op_arrays,
+            <const int32_t**>basisBitsPtr, nBasisBitsPtr)
     check_status(status)
 
 
@@ -1273,24 +1379,24 @@ cpdef (intptr_t, size_t) accessor_create(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device).
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
         bit_ordering: A host array of basis bits for the external buffer. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of basis bits
 
         bit_ordering_len (uint32_t): The length of ``bit_ordering``.
         mask_bit_string: A host array for specifying mask values. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of mask values
 
         mask_ordering: A host array of mask ordering. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bit ordering
 
         mask_len (uint32_t): The length of ``mask_ordering``.
@@ -1298,17 +1404,12 @@ cpdef (intptr_t, size_t) accessor_create(
     Returns:
         tuple:
             A 2-tuple. The first element is the accessor descriptor (as Python
-            `int`), and the second element is the required workspace size (in
+            :class:`int`), and the second element is the required workspace size (in
             bytes).
 
-    .. note:: Unlike its C counterpart, the returned accessor descriptor must
-        be explicitly cleaned up using :func:`accessor_destroy` when the work
-        is done.
-
-    .. seealso:: `custatevecAccessor_create`
+    .. seealso:: `custatevecAccessorCreate`
     """
-    cdef _AccessorDescriptor* accessor = <_AccessorDescriptor*>(
-        PyMem_Malloc(sizeof(_AccessorDescriptor)))
+    cdef _AccessorDescriptor accessor
     cdef size_t workspace_size
 
     # bit_ordering can be a pointer address, or a Python sequence
@@ -1339,15 +1440,15 @@ cpdef (intptr_t, size_t) accessor_create(
         maskOrderingPtr = <int32_t*><intptr_t>mask_ordering
 
     with nogil:
-        status = custatevecAccessor_create(
+        status = custatevecAccessorCreate(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
-            accessor, bitOrderingPtr, bit_ordering_len,
+            &accessor, bitOrderingPtr, bit_ordering_len,
             maskBitStringPtr, maskOrderingPtr, mask_len, &workspace_size)
     check_status(status)
     return (<intptr_t>accessor, workspace_size)
 
 
-cpdef (intptr_t, size_t) accessor_create_readonly(
+cpdef (intptr_t, size_t) accessor_create_view(
         intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
         bit_ordering, uint32_t bit_ordering_len,
         mask_bit_string, mask_ordering, uint32_t mask_len):
@@ -1355,24 +1456,24 @@ cpdef (intptr_t, size_t) accessor_create_readonly(
 
     Args:
         handle (intptr_t): The library handle.
-        sv (intptr_t): The pointer address (as Python `int`) to the statevector
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
             (on device). The statevector is read-only.
         sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
         n_index_bits (uint32_t): The number of index bits.
         bit_ordering: A host array of basis bits for the external buffer. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of basis bits
 
         bit_ordering_len (uint32_t): The length of ``bit_ordering``.
         mask_bit_string: A host array for specifying mask values. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of mask values
 
         mask_ordering: A host array of mask ordering. It can be
 
-            - an `int` as the pointer address to the array
+            - an :class:`int` as the pointer address to the array
             - a Python sequence of index bit ordering
 
         mask_len (uint32_t): The length of ``mask_ordering``.
@@ -1380,17 +1481,12 @@ cpdef (intptr_t, size_t) accessor_create_readonly(
     Returns:
         tuple:
             A 2-tuple. The first element is the accessor descriptor (as Python
-            `int`), and the second element is the required workspace size (in
+            :class:`int`), and the second element is the required workspace size (in
             bytes).
 
-    .. note:: Unlike its C counterpart, the returned accessor descriptor must
-        be explicitly cleaned up using :func:`accessor_destroy` when the work
-        is done.
-
-    .. seealso:: `custatevecAccessor_createReadOnly`
+    .. seealso:: `custatevecAccessorCreateView`
     """
-    cdef _AccessorDescriptor* accessor = <_AccessorDescriptor*>(
-        PyMem_Malloc(sizeof(_AccessorDescriptor)))
+    cdef _AccessorDescriptor accessor
     cdef size_t workspace_size
 
     # bit_ordering can be a pointer address, or a Python sequence
@@ -1421,9 +1517,9 @@ cpdef (intptr_t, size_t) accessor_create_readonly(
         maskOrderingPtr = <int32_t*><intptr_t>mask_ordering
 
     with nogil:
-        status = custatevecAccessor_createReadOnly(
+        status = custatevecAccessorCreateView(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
-            accessor, bitOrderingPtr, bit_ordering_len,
+            &accessor, bitOrderingPtr, bit_ordering_len,
             maskBitStringPtr, maskOrderingPtr, mask_len, &workspace_size)
     check_status(status)
     return (<intptr_t>accessor, workspace_size)
@@ -1435,13 +1531,11 @@ cpdef accessor_destroy(intptr_t accessor):
     Args:
         accessor (intptr_t): The accessor descriptor.
 
-    .. note:: This function has no C counterpart in the current release.
-
-    .. seealso:: :func:`accessor_create`
+    .. seealso:: :func:`custatevecAccessorDestroy`
     """
-    # This API is unique in Python as we can't pass around structs
-    # allocated on stack
-    PyMem_Free(<void*>accessor)
+    with nogil:
+        status = custatevecAccessorDestroy(<_AccessorDescriptor>accessor)
+    check_status(status)
 
 
 cpdef accessor_set_extra_workspace(
@@ -1455,11 +1549,11 @@ cpdef accessor_set_extra_workspace(
         workspace (intptr_t): The pointer address to the workspace (on device).
         workspace_size (size_t): The size of workspace (in bytes).
 
-    .. seealso:: `custatevecAccessor_setExtraWorkspace`
+    .. seealso:: `custatevecAccessorSetExtraWorkspace`
     """
     with nogil:
-        status = custatevecAccessor_setExtraWorkspace(
-            <_Handle>handle, <_AccessorDescriptor*>accessor,
+        status = custatevecAccessorSetExtraWorkspace(
+            <_Handle>handle, <_AccessorDescriptor>accessor,
             <void*>workspace, workspace_size)
     check_status(status)
 
@@ -1476,11 +1570,11 @@ cpdef accessor_get(
         begin (int): The beginning index.
         end (int): The end index.
 
-    .. seealso:: `custatevecAccessor_get`
+    .. seealso:: `custatevecAccessorGet`
     """
     with nogil:
-        status = custatevecAccessor_get(
-            <_Handle>handle, <_AccessorDescriptor*>accessor, <void*>buf,
+        status = custatevecAccessorGet(
+            <_Handle>handle, <_AccessorDescriptor>accessor, <void*>buf,
             begin, end)
     check_status(status)
 
@@ -1497,12 +1591,357 @@ cpdef accessor_set(
         begin (int): The beginning index.
         end (int): The end index.
 
-    .. seealso:: `custatevecAccessor_set`
+    .. seealso:: `custatevecAccessorSet`
     """
     with nogil:
-        status = custatevecAccessor_set(
-            <_Handle>handle, <_AccessorDescriptor*>accessor, <void*>buf,
+        status = custatevecAccessorSet(
+            <_Handle>handle, <_AccessorDescriptor>accessor, <void*>buf,
             begin, end)
+    check_status(status)
+
+
+cpdef swap_index_bits(
+        intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
+        swapped_bits, uint32_t n_swapped_bits,
+        mask_bit_string, mask_ordering, uint32_t mask_len):
+    """Swap index bits and reorder statevector elements on the device.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the statevector
+            (on device).
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
+        n_index_bits (uint32_t): The number of index bits.
+        swapped_bits: A host array of pairs of swapped index bits. It can be
+
+            - an :class:`int` as the pointer address to the nested sequence
+            - a nested Python sequence of swapped index bits
+
+        n_swapped_bits (uint32_t): The number of pairs of swapped index bits.
+        mask_bit_string: A host array for a bit string to specify mask. It can
+            be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of index bit ordering
+
+        mask_ordering: A host array of mask ordering. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of index bit ordering
+
+        mask_len (uint32_t): The length of ``mask_ordering``.
+
+    .. seealso:: `custatevecSwapIndexBits`
+    """
+    # swapped_bits can be:
+    #   - a plain pointer address
+    #   - a nested Python sequence (ex: a list of 2-tuples)
+    # Note: it cannot be a mix of sequences and ints. It also cannot be a
+    # 1D sequence (of ints), because it's inefficient.
+    cdef vector[intptr_t] swappedBitsCData
+    cdef int2* swappedBitsPtr
+    if is_nested_sequence(swapped_bits):
+        try:
+            # direct conversion
+            data = _numpy.asarray(swapped_bits, dtype=_numpy.int32)
+            data = data.reshape(-1)
+        except:
+            # unlikely, but let's do it in the stupid way
+            data = _numpy.empty(2*n_swapped_bits, dtype=_numpy.int32)
+            for i, (first, second) in enumerate(swapped_bits):
+                data[2*i] = first
+                data[2*i+1] = second
+        assert data.size == 2*n_swapped_bits
+        swappedBitsPtr = <int2*>(<intptr_t>data.ctypes.data)
+    elif isinstance(swapped_bits, int):
+        # a pointer address, take it as is
+        swappedBitsPtr = <int2*><intptr_t>swapped_bits
+    else:
+        raise ValueError("swapped_bits is provided in an "
+                         "un-recognized format")
+
+    # mask_bit_string can be a pointer address, or a Python sequence
+    cdef vector[int32_t] maskBitStringData
+    cdef int32_t* maskBitStringPtr
+    if cpython.PySequence_Check(mask_bit_string):
+        maskBitStringData = mask_bit_string
+        maskBitStringPtr = maskBitStringData.data()
+    else:  # a pointer address
+        maskBitStringPtr = <int32_t*><intptr_t>mask_bit_string
+
+    # mask_ordering can be a pointer address, or a Python sequence
+    cdef vector[int32_t] maskOrderingData
+    cdef int32_t* maskOrderingPtr
+    if cpython.PySequence_Check(mask_ordering):
+        maskOrderingData = mask_ordering
+        maskOrderingPtr = maskOrderingData.data()
+    else:  # a pointer address
+        maskOrderingPtr = <int32_t*><intptr_t>mask_ordering
+
+    with nogil:
+        status = custatevecSwapIndexBits(
+            <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
+            swappedBitsPtr, n_swapped_bits,
+            maskBitStringPtr, maskOrderingPtr, mask_len)
+    check_status(status)
+
+
+cpdef size_t test_matrix_type_get_workspace_size(
+        intptr_t handle, int matrix_type,
+        intptr_t matrix, int matrix_data_type, int layout, uint32_t n_targets,
+        int32_t adjoint, int compute_type) except*:
+    """Computes the required workspace size for :func:`test_matrix_type`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        matrix_type (cuquantum.MatrixType): The matrix type of the gate matrix.
+        matrix (intptr_t): The pointer address (as Python :class:`int`) to a matrix
+            (on either host or device).
+        matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
+        layout (MatrixLayout): The memory layout the the matrix.
+        n_targets (uint32_t): The length of ``targets``.
+        adjoint (int32_t): Whether the adjoint of the matrix would be applied.
+        compute_type (cuquantum.ComputeType): The compute type of matrix
+            multiplication.
+
+    Returns:
+        size_t: The required workspace size (in bytes).
+
+    .. seealso:: `custatevecTestMatrixTypeGetWorkspaceSize`
+    """
+    cdef size_t extraWorkspaceSizeInBytes
+    with nogil:
+        status = custatevecTestMatrixTypeGetWorkspaceSize(
+            <_Handle>handle, <_MatrixType>matrix_type, <void*>matrix,
+            <DataType>matrix_data_type, <_MatrixLayout>layout, n_targets,
+            adjoint, <_ComputeType>compute_type, &extraWorkspaceSizeInBytes)
+    check_status(status)
+    return extraWorkspaceSizeInBytes
+
+
+cpdef double test_matrix_type(
+        intptr_t handle, int matrix_type,
+        intptr_t matrix, int matrix_data_type, int layout, uint32_t n_targets,
+        int32_t adjoint, int compute_type, intptr_t workspace,
+        size_t workspace_size) except*:
+    """Test the deviation of a given matrix from a certain matrix type
+    (Hermitian or unitary).
+
+    Args:
+        handle (intptr_t): The library handle.
+        matrix_type (cuquantum.MatrixType): The matrix type of the gate matrix.
+        matrix (intptr_t): The pointer address (as Python :class:`int`) to a matrix
+            (on either host or device).
+        matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
+        layout (MatrixLayout): The memory layout the the matrix.
+        n_targets (uint32_t): The length of ``targets``.
+        adjoint (int32_t): Whether the adjoint of the matrix would be applied.
+        compute_type (cuquantum.ComputeType): The compute type of matrix
+            multiplication.
+        workspace (intptr_t): The pointer address (as Python :class:`int`) to the
+            workspace (on device).
+        workspace_size (size_t): The workspace size (in bytes).
+
+    Returns:
+        double: The residual norm for the deviation from certain matrix type.
+
+    .. seealso:: `custatevecTestMatrixType`
+    """
+    cdef double residualNorm
+    with nogil:
+        status = custatevecTestMatrixType(
+            <_Handle>handle, &residualNorm, <_MatrixType>matrix_type,
+            <void*>matrix, <DataType>matrix_data_type, <_MatrixLayout>layout,
+            n_targets, adjoint, <_ComputeType>compute_type,
+            <void*>workspace, workspace_size)
+    check_status(status)
+    return residualNorm
+
+
+cpdef set_device_mem_handler(intptr_t handle, handler):
+    """ Set the device memory handler for cuTensorNet.
+
+    The ``handler`` object can be passed in multiple ways:
+
+      - If ``handler`` is an :class:`int`, it refers to the address of a fully
+        initialized `custatevecDeviceMemHandler_t` struct.
+      - If ``handler`` is a Python sequence:
+
+        - If ``handler`` is a sequence of length 4, it is interpreted as ``(ctx, device_alloc,
+          device_free, name)``, where the first three elements are the pointer
+          addresses (:class:`int`) of the corresponding members. ``name`` is a
+          :class:`str` as the name of the handler.
+        - If ``handler`` is a sequence of length 3, it is interpreted as ``(malloc, free,
+          name)``, where the first two objects are Python *callables* with the
+          following calling convention:
+
+            - ``ptr = malloc(size, stream)``
+            - ``free(ptr, size, stream)``
+
+          with all arguments and return value (``ptr``) being Python :class:`int`.
+          ``name`` is the same as above.
+
+    .. note:: Only when ``handler`` is a length-3 sequence will the GIL be
+        held whenever a routine requires memory allocation and deallocation,
+        so for all other cases be sure your ``handler`` does not manipulate
+        any Python objects.
+
+    Args:
+        handle (intptr_t): The library handle.
+        handler: The memory handler object, see above.
+
+    .. seealso:: `custatevecSetDeviceMemHandler`
+    """
+    cdef bytes name
+    cdef _DeviceMemHandler our_handler
+    cdef _DeviceMemHandler* handlerPtr = &our_handler
+
+    if isinstance(handler, int):
+        handlerPtr = <_DeviceMemHandler*><intptr_t>handler
+    elif cpython.PySequence_Check(handler):
+        name = handler[-1].encode('ascii')
+        if len(name) > CUSTATEVEC_ALLOCATOR_NAME_LEN:
+            raise ValueError("the handler name is too long")
+        our_handler.name[:len(name)] = name
+        our_handler.name[len(name)] = 0
+
+        if len(handler) == 4:
+            # handler = (ctx_ptr, malloc_ptr, free_ptr, name)
+            assert (isinstance(handler[1], int) and isinstance(handler[2], int))
+            our_handler.ctx = <void*><intptr_t>(handler[0])
+            our_handler.device_alloc = <DeviceAllocType><intptr_t>(handler[1])
+            our_handler.device_free = <DeviceFreeType><intptr_t>(handler[2])
+        elif len(handler) == 3:
+            # handler = (malloc, free, name)
+            assert (callable(handler[0]) and callable(handler[1]))
+            ctx = (handler[0], handler[1])
+            owner_pyobj[handle] = ctx  # keep it alive
+            our_handler.ctx = <void*>ctx
+            our_handler.device_alloc = cuqnt_alloc_wrapper
+            our_handler.device_free = cuqnt_free_wrapper
+        else:
+            raise ValueError("handler must be a sequence of length 3 or 4, "
+                             "see the documentation for detail")
+    else:
+        raise NotImplementedError("handler format not recognized")
+
+    with nogil:
+        status = custatevecSetDeviceMemHandler(<_Handle>handle, handlerPtr)
+    check_status(status)
+
+
+cpdef tuple get_device_mem_handler(intptr_t handle):
+    """ Get the device memory handler for cuTensorNet.
+
+    Args:
+        handle (intptr_t): The library handle.
+
+    Returns:
+        tuple:
+            The ``handler`` object, which has two forms:
+
+              - If ``handler`` is a 3-tuple, it is interpreted as ``(malloc, free,
+                name)``, where the first two objects are Python *callables*, and ``name``
+                is the name of the handler. This 3-tuple handler would be compared equal
+                (elementwisely) to the one previously passed to :func:`set_device_mem_handler`.
+              - If ``handler`` is a 4-tuple, it is interpreted as ``(ctx, device_alloc,
+                device_free, name)``, where the first three elements are the pointer
+                addresses (:class:`int`) of the corresponding members. ``name`` is the
+                same as above.
+
+    .. seealso:: `custatevecGetDeviceMemHandler`
+    """
+    cdef _DeviceMemHandler handler
+    with nogil:
+        status = custatevecGetDeviceMemHandler(<_Handle>handle, &handler)
+    check_status(status)
+
+    cdef tuple ctx
+    cdef bytes name = handler.name
+    if (handler.device_alloc == cuqnt_alloc_wrapper and
+            handler.device_free == cuqnt_free_wrapper):
+        ctx = <object>(handler.ctx)
+        return (ctx[0], ctx[1], name.decode('ascii'))
+    else:
+        # TODO: consider other possibilities?
+        return (<intptr_t>handler.ctx,
+                <intptr_t>handler.device_alloc,
+                <intptr_t>handler.device_free,
+                name.decode('ascii'))
+
+
+# can't be cpdef because args & kwargs can't be handled in a C signature
+def logger_set_callback_data(callback, *args, **kwargs):
+    """Set the logger callback along with arguments.
+
+    Args:
+        callback: A Python callable with the following signature (no return):
+
+          - ``callback(log_level, func_name, message, *args, **kwargs)``
+
+          where ``log_level`` (:class:`int`), ``func_name`` (`str`), and
+          ``message`` (`str`) are provided by the logger API.
+
+    .. seealso:: `custatevecLoggerSetCallbackData`
+    """
+    func_arg = (callback, args, kwargs)
+    # if only set once, the callback lifetime should be as long as this module,
+    # because we don't know when the logger is done using it
+    owner_pyobj['callback'] = func_arg
+    with nogil:
+        status = custatevecLoggerSetCallbackData(
+            <LoggerCallbackData>logger_callback_with_data, <void*>(func_arg))
+    check_status(status)
+
+
+cpdef logger_open_file(filename):
+    """Set the filename for the logger to write to.
+
+    Args:
+        filename (str): The log filename.
+
+    .. seealso:: `custatevecLoggerOpenFile`
+    """
+    cdef bytes name = filename.encode()
+    cdef char* name_ptr = name
+    with nogil:
+        status = custatevecLoggerOpenFile(name_ptr)
+    check_status(status)
+
+
+cpdef logger_set_level(int level):
+    """Set the logging level.
+
+    Args:
+        level (int): The logging level.
+
+    .. seealso:: `custatevecLoggerSetLevel`
+    """
+    with nogil:
+        status = custatevecLoggerSetLevel(level)
+    check_status(status)
+
+
+cpdef logger_set_mask(int mask):
+    """Set the logging mask.
+
+    Args:
+        level (int): The logging mask.
+
+    .. seealso:: `custatevecLoggerSetMask`
+    """
+    with nogil:
+        status = custatevecLoggerSetMask(mask)
+    check_status(status)
+
+
+cpdef logger_force_disable():
+    """Disable the logger.
+
+    .. seealso:: `custatevecLoggerForceDisable`
+    """
+    with nogil:
+        status = custatevecLoggerForceDisable()
     check_status(status)
 
 
@@ -1518,7 +1957,6 @@ class MatrixLayout(IntEnum):
     COL = CUSTATEVEC_MATRIX_LAYOUT_COL
     ROW = CUSTATEVEC_MATRIX_LAYOUT_ROW
 
-# unused in beta 1
 class MatrixType(IntEnum):
     """See `custatevecMatrixType_t`."""
     GENERAL = CUSTATEVEC_MATRIX_TYPE_GENERAL
@@ -1544,3 +1982,7 @@ MAJOR_VER = CUSTATEVEC_VER_MAJOR
 MINOR_VER = CUSTATEVEC_VER_MINOR
 PATCH_VER = CUSTATEVEC_VER_PATCH
 VERSION = CUSTATEVEC_VERSION
+
+
+# who owns a reference to user-provided Python objects (k: owner, v: object)
+cdef dict owner_pyobj = {}

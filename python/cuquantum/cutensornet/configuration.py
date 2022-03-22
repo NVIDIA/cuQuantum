@@ -1,4 +1,4 @@
-""" 
+"""
 A collection of types for defining options to cutensornet.
 """
 
@@ -7,13 +7,16 @@ __all__ = ['NetworkOptions', 'OptimizerInfo', 'OptimizerOptions', 'PathFinderOpt
 import collections
 from dataclasses import dataclass
 from logging import Logger
-from typing import Dict, Hashable, Iterable, Mapping, Optional, Tuple, Type, Union
+from typing import Dict, Hashable, Iterable, Mapping, Optional, Tuple, Union
 
 import cupy as cp
 
+import cuquantum
 from cuquantum import cutensornet as cutn
 from ._internal import enum_utils
+from ._internal import formatters
 from ._internal.mem_limit import MEM_LIMIT_RE_PCT, MEM_LIMIT_RE_VAL, MEM_LIMIT_DOC
+from .memory import BaseCUDAMemoryManager
 
 
 @dataclass
@@ -25,17 +28,24 @@ class NetworkOptions(object):
         device_id: CUDA device ordinal (used if the tensor network resides on the CPU). Device 0 will be used if not specified.
         handle: cuTensorNet library handle. A handle will be created if one is not provided.
         logger (logging.Logger): Python Logger object. The root logger will be used if a logger object is not provided.
-        memory_limit: Maximum memory available to cuTensorNet. It can be specified as a value (with optional suffix like 
+        memory_limit: Maximum memory available to cuTensorNet. It can be specified as a value (with optional suffix like
             K[iB], M[iB], G[iB]) or as a percentage. The default is 80%.
+        allocator: An object that supports the :class:`BaseCUDAMemoryManager` protocol, used to draw device memory. If an
+            allocator is not provided, a memory allocator from the library package will be used
+            (:func:`torch.cuda.caching_allocator_alloc` for PyTorch operands, :func:`cupy.cuda.alloc` otherwise).
     """
     compute_type : Optional[int] = None
     device_id : Optional[int] = None
     handle : Optional[int] = None
-    logger : Optional[Type[Logger]] = None
+    logger : Optional[Logger] = None
     memory_limit : Optional[Union[int, str]] = r'80%'
+    allocator : Optional[BaseCUDAMemoryManager] = None
 
     def __post_init__(self):
         #  Defer creating handle as well as computing the memory limit till we know the device the network is on.
+
+        if self.compute_type is not None:
+            self.compute_type = cuquantum.ComputeType(self.compute_type)
 
         if self.device_id is None:
             self.device_id = 0
@@ -50,6 +60,8 @@ class NetworkOptions(object):
             if not (m1 or m2):
                 raise ValueError(MEM_LIMIT_DOC % self.memory_limit)
 
+        if self.allocator is not None and not isinstance(self.allocator, BaseCUDAMemoryManager):
+            raise TypeError("The allocator must be an object of type that fulfils the BaseCUDAMemoryManager protocol.")
 
 # Generate the options dataclasses from ContractionOptimizerConfigAttributes.
 
@@ -77,20 +89,22 @@ class OptimizerOptions(object):
 
     Attributes:
         samples: Number of samples for hyperoptimization. See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES`.
+        threads: Number of threads for the hyperoptimizer. See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS`.
         path: Options for the path finder (:class:`~cuquantum.PathFinderOptions` object or dict containing the ``(parameter, value)``
             items for ``PathFinderOptions``). Alternatively, the path can be provided as a sequence of pairs in the
             :func:`numpy.einsum_path` format.
-        slicing: Options for the slicer (:class:`~cuquantum.SlicerOptions` object or dict containing the ``(parameter, value)`` items for 
-            ``SlicerOptions``). Alternatively, a sequence of sliced modes or sequence of ``(sliced mode, sliced extent)`` pairs 
+        slicing: Options for the slicer (:class:`~cuquantum.SlicerOptions` object or dict containing the ``(parameter, value)`` items for
+            ``SlicerOptions``). Alternatively, a sequence of sliced modes or sequence of ``(sliced mode, sliced extent)`` pairs
             can be directly provided.
-        reconfiguration: Options for the reconfiguration algorithm as a :class:`~cuquantum.ReconfigOptions` object or dict containing the 
+        reconfiguration: Options for the reconfiguration algorithm as a :class:`~cuquantum.ReconfigOptions` object or dict containing the
             ``(parameter, value)`` items for ``ReconfigOptions``.
         seed: Optional seed for the random number generator. See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED`.
     """
     samples : Optional[int] = None
-    path : Optional[Union[Type[PathFinderOptions], PathType]] = None
-    slicing : Optional[Union[Type[SlicerOptions], ModeSequenceType, ModeExtentSequenceType]] = None
-    reconfiguration : Optional[Type[ReconfigOptions]] = None
+    threads : Optional[int] = None
+    path : Optional[Union[PathFinderOptions, PathType]] = None
+    slicing : Optional[Union[SlicerOptions, ModeSequenceType, ModeExtentSequenceType]] = None
+    reconfiguration : Optional[ReconfigOptions] = None
     seed : Optional[int] = None
 
     def _check_option(self, option, option_class, checker=None):
@@ -129,7 +143,7 @@ class OptimizerOptions(object):
                 raise TypeError("Slicing must be specified as a sequence of modes or as a sequence of (mode, extent) pairs.")
 
     def _check_int(self, attribute, name):
-        message = f"Invalid value ({attribute}) for '{name}'. Expect positive integer or None."  
+        message = f"Invalid value ({attribute}) for '{name}'. Expect positive integer or None."
         if not isinstance(attribute, (type(None), int)):
             raise ValueError(message)
         if isinstance(attribute, int) and attribute < 0:
@@ -154,8 +168,23 @@ class OptimizerInfo(object):
         slices: A sequence of ``(sliced mode, sliced extent)`` pairs.
     """
     largest_intermediate : float
-    opt_cost : float  
+    opt_cost : float
     path : PathType
     slices : ModeExtentSequenceType
 
+    def __str__(self):
+        path = [str(p) for p in self.path]
+        slices = [str(s) for s in self.slices]
+        s = f"""Optimizer Information:
+    Largest intermediate = {formatters.MemoryStr(self.largest_intermediate, base_unit='Elements')}
+    Optimized cost = {self.opt_cost:.3e} FLOPS
+    Path = {formatters.array2string(path)}"""
+        if len(slices):
+            s += """
+    Number of slices = {len(slices)}
+    Slices = {formatters.array2string(slices)}"""
+        else:
+            s += """
+    Slicing not needed."""
 
+        return s

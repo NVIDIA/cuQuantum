@@ -69,7 +69,7 @@ int main(void) {
     HANDLE_ERROR( custatevecCreate(&handle) );
 
     // apply Pauli operator
-    HANDLE_ERROR( custatevecApplyExp(
+    HANDLE_ERROR( custatevecApplyPauliRotation(
                   handle, d_sv, CUDA_C_64F, nIndexBits, pi / 2.0, paulis, targets, nTargets, 
                   controls, controlBitValues, nControls) );
 

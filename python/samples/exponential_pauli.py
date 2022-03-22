@@ -27,7 +27,7 @@ d_sv = cp.asarray(h_sv)
 handle = cusv.create()
 
 # apply Pauli operator
-cusv.apply_exp(
+cusv.apply_pauli_rotation(
     handle, d_sv.data.ptr, cuquantum.cudaDataType.CUDA_C_32F, nIndexBits, np.pi/2, paulis.ctypes.data,
     targets.ctypes.data, nTargets, controls.ctypes.data, controlBitValues.ctypes.data, nControls)
 

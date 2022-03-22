@@ -136,8 +136,20 @@ print("Find an optimized contraction path with cuTensorNet optimizer.")
 # Initialize all pair-wise contraction plans (for cuTENSOR)
 ###########################################################
 
+workDesc = cutn.create_workspace_descriptor(handle)
+cutn.workspace_compute_sizes(handle, descNet, optimizerInfo, workDesc)
+requiredWorkspaceSize = cutn.workspace_get_size(
+    handle, workDesc,
+    cutn.WorksizePref.MIN,
+    cutn.Memspace.DEVICE)
+if worksize < requiredWorkspaceSize:
+    raise MemoryError("Not enough workspace memory is available.")
+cutn.workspace_set(
+    handle, workDesc,
+    cutn.Memspace.DEVICE,
+    work.ptr, worksize)
 plan = cutn.create_contraction_plan(
-    handle, descNet, optimizerInfo, worksize)
+    handle, descNet, optimizerInfo, workDesc)
 
 ###################################################################################
 # Optional: Auto-tune cuTENSOR's cutensorContractionPlan to pick the fastest kernel
@@ -145,10 +157,10 @@ plan = cutn.create_contraction_plan(
 
 pref = cutn.create_contraction_autotune_preference(handle)
 
-# may be 0
+numAutotuningIterations = 5  # may be 0
 n_iter_dtype = cutn.contraction_autotune_preference_get_attribute_dtype(
     cutn.ContractionAutotunePreferenceAttribute.MAX_ITERATIONS)
-numAutotuningIterations = np.asarray([5], dtype=n_iter_dtype)
+numAutotuningIterations = np.asarray([numAutotuningIterations], dtype=n_iter_dtype)
 cutn.contraction_autotune_preference_set_attribute(
     handle, pref,
     cutn.ContractionAutotunePreferenceAttribute.MAX_ITERATIONS,
@@ -157,7 +169,7 @@ cutn.contraction_autotune_preference_set_attribute(
 # modify the plan again to find the best pair-wise contractions
 cutn.contraction_autotune(
     handle, plan, rawDataIn_d, D_d.data.ptr,
-    work.ptr, worksize, pref, stream.ptr)
+    workDesc, pref, stream.ptr)
 
 cutn.destroy_contraction_autotune_preference(pref)
  
@@ -182,7 +194,7 @@ for i in range(numRuns):
         e1.record()
         cutn.contraction(
             handle, plan, rawDataIn_d, D_d.data.ptr,
-            work.ptr, worksize, sliceId, stream.ptr)
+            workDesc, sliceId, stream.ptr)
         e2.record()
 
         # Synchronize and measure timing
@@ -210,6 +222,7 @@ cutn.destroy_contraction_plan(plan)
 cutn.destroy_contraction_optimizer_info(optimizerInfo)
 cutn.destroy_contraction_optimizer_config(optimizerConfig)
 cutn.destroy_network_descriptor(descNet)
+cutn.destroy_workspace_descriptor(workDesc)
 cutn.destroy(handle)
 
 print("Free resource and exit.")

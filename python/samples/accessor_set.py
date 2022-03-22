@@ -41,6 +41,9 @@ cusv.accessor_set_extra_workspace(
 cusv.accessor_set(
     handle, accessor, h_buf.ctypes.data, 0, nSvSize)
 
+# destroy accessor
+cusv.accessor_destroy(accessor)
+
 # destroy handle
 cusv.destroy(handle)
 

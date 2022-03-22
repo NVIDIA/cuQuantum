@@ -11,10 +11,11 @@ Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com
 Build-time dependencies of the cuQuantum Python package and some versions that
 are known to work are as follows:
 
-* CUDA Toolkit 11.4+
-* cuQuantum 0.1.0
-* cuTENSOR 1.4.0+
+* CUDA Toolkit 11.x
+* cuQuantum 22.03
+* cuTENSOR 1.5.0+
 * Cython - e.g. 0.29.21
+* [packaging](https://packaging.pypa.io/en/latest/)
 
 ### Install cuQuantum Python from conda-forge
 
@@ -23,6 +24,18 @@ If you already have a Conda environment set up, it is the easiest to install cuQ
 conda install -c conda-forge cuquantum-python
 ```
 The Conda solver will install all required dependencies for you.
+
+### Install cuQuantum Python from PyPI
+
+Alternatively, assuming you already have a Python environment set up (it doesn't matter if it's a Conda env or not),
+you can also install cuQuantum Python this way:
+
+```
+pip install cuquantum-python
+```
+The `pip` solver will also install both cuTENSOR and cuQuantum for you.
+
+Note: To properly install the wheels the environment variable `CUQUANTUM_ROOT` must not be set.
 
 ### Install cuQuantum Python from source
 
@@ -48,9 +61,9 @@ Runtime dependencies of the cuQuantum Python package include:
 
 * An NVIDIA GPU with compute capability 7.0+
 * Driver: Linux (450.80.02+)
-* CUDA Toolkit 11.4+
-* cuQuantum 0.1.0
-* cuTENSOR 1.4.0+
+* CUDA Toolkit 11.x
+* cuQuantum 22.03
+* cuTENSOR 1.5.0+
 * NumPy v1.17+
 * CuPy v9.5.0+
 * PyTorch v1.10+ (optional)
@@ -77,4 +90,5 @@ library in Python.
 ## Testing
 
 If pytest is installed, run `pytest tests` in the Python source root directory would
-run all tests.
+run all tests. Some tests would be skipped if `cffi` is not installed or if the environment
+variable `CUDA_PATH` is not set.

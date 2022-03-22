@@ -23,9 +23,9 @@ d_sv       = cp.asarray([0.0+0.0j, 0.0+0.1j, 0.1+0.1j, 0.1+0.2j,
 handle = cusv.create()
 
 # apply Pauli operator
-cusv.expectations_on_pauli_basis(
+cusv.compute_expectations_on_pauli_basis(
     handle, d_sv.data.ptr, cuquantum.cudaDataType.CUDA_C_32F, nIndexBits, exp_values.ctypes.data,
-    paulis, basisBits, nBasisBits, len(paulis))
+    paulis, len(paulis), basisBits, nBasisBits)
 
 # destroy handle
 cusv.destroy(handle)

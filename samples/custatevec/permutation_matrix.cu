@@ -70,7 +70,7 @@ int main(void) {
     size_t extraWorkspaceSizeInBytes = 0;
 
     // check the size of external workspace
-    HANDLE_ERROR( custatevecApplyGeneralizedPermutationMatrix_bufferSize(
+    HANDLE_ERROR( custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize(
                   handle, CUDA_C_64F, nIndexBits, permutation, diagonals, CUDA_C_64F, basisBits,
                   nBasisBits, maskLen, &extraWorkspaceSizeInBytes) );
 
@@ -81,7 +81,7 @@ int main(void) {
     // apply matrix
     HANDLE_ERROR( custatevecApplyGeneralizedPermutationMatrix(
                   handle, d_sv, CUDA_C_64F, nIndexBits, permutation, diagonals, CUDA_C_64F,
-                  adjoint, basisBits, nBasisBits, maskBitString, maskOrdering, maskLen,
+                  adjoint, basisBits, nBasisBits, maskOrdering, maskBitString, maskLen,
                   extraWorkspace, extraWorkspaceSizeInBytes) );
 
     // destroy handle

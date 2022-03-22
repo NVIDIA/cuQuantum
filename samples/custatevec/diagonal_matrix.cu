@@ -67,7 +67,7 @@ int main(void) {
     size_t extraWorkspaceSizeInBytes = 0;
 
     // check the size of external workspace
-    HANDLE_ERROR( custatevecApplyGeneralizedPermutationMatrix_bufferSize(
+    HANDLE_ERROR( custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize(
                   handle, CUDA_C_64F, nIndexBits, nullptr, diagonals, CUDA_C_64F, basisBits,
                   nBasisBits, maskLen, &extraWorkspaceSizeInBytes) );
 

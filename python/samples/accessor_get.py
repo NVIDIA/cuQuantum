@@ -29,7 +29,7 @@ h_buf_res  = np.asarray([0.3+0.3j, 0.1+0.2j, 0.4+0.5j], dtype=np.complex64)
 handle = cusv.create()
 
 # create accessor and check the size of external workspace
-accessor, workspace_size = cusv.accessor_create_readonly(
+accessor, workspace_size = cusv.accessor_create_view(
     handle, d_sv.data.ptr, cuquantum.cudaDataType.CUDA_C_32F, nIndexBits, bitOrdering, len(bitOrdering),
     maskBitString, maskOrdering, maskLen)
 
@@ -46,6 +46,9 @@ cusv.accessor_set_extra_workspace(
 # get state vector components
 cusv.accessor_get(
     handle, accessor, h_buf.ctypes.data, accessBegin, accessEnd)
+
+# destroy accessor
+cusv.accessor_destroy(accessor)
 
 # destroy handle
 cusv.destroy(handle)

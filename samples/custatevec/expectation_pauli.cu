@@ -69,9 +69,9 @@ int main(void) {
     HANDLE_ERROR( custatevecCreate(&handle) );
 
     // apply Pauli operator
-    HANDLE_ERROR( custatevecExpectationsOnPauliBasis(
-                  handle, d_sv, CUDA_C_64F, nIndexBits, expectationValues, pauliOperatorsArray,
-                  basisBitsArray, nBasisBitsArray, nPauliOperatorArrays) );
+    HANDLE_ERROR( custatevecComputeExpectationsOnPauliBasis(
+                  handle, d_sv, CUDA_C_64F, nIndexBits, expectationValues,
+                  pauliOperatorsArray, nPauliOperatorArrays, basisBitsArray, nBasisBitsArray) );
 
     // destroy handle
     HANDLE_ERROR( custatevecDestroy(handle) );
