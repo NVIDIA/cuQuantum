@@ -1,4 +1,8 @@
 import itertools
+try:
+    import torch
+except ImportError:
+    torch = None
 
 
 # TODO: investigate test parallelism across cartesian product
@@ -6,8 +10,9 @@ import itertools
 sources = [
     "numpy",
     "cupy",
-    "torch"
 ]
+if torch:
+    sources.append("torch")
 
 devices = [
     "cpu",
@@ -59,8 +64,8 @@ device_ids = [None]
 handles = [None]
 loggers = [None]
 memory_limits = [
-    int(1e6),
-    "1 MiB",
+    int(1e8),
+    "100 MiB",
     "80%"
 ]
 

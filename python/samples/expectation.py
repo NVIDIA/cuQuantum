@@ -34,7 +34,7 @@ expect_expected = np.asarray([4.1, 0.0], dtype=np.float64)
 handle = cusv.create()
 
 # check the size of external workspace
-workspaceSize = cusv.expectation_buffer_size(
+workspaceSize = cusv.compute_expectation_get_workspace_size(
     handle, cuquantum.cudaDataType.CUDA_C_32F, nIndexBits, matrix_ptr, cuquantum.cudaDataType.CUDA_C_32F,
     cusv.MatrixLayout.ROW, nBasisBits, cuquantum.ComputeType.COMPUTE_32F)
 if workspaceSize > 0:
@@ -44,7 +44,7 @@ else:
     workspace_ptr = 0
 
 # apply gate
-cusv.expectation(
+cusv.compute_expectation(
     handle, d_sv.data.ptr, cuquantum.cudaDataType.CUDA_C_32F, nIndexBits,
     expect.ctypes.data, cuquantum.cudaDataType.CUDA_C_64F,
     matrix_ptr, cuquantum.cudaDataType.CUDA_C_32F, cusv.MatrixLayout.ROW,

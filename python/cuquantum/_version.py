@@ -1,2 +1,4 @@
-# TODO: find a better approach to sync the version string with the C libs
-__version__ = '.'.join(['0.1.0', '1'])  # the last digit is for cuQuantum Python only
+# Note: cuQuantum Python follows the cuQuantum SDK version, which is now
+# switched to YY.MM and is different from individual libraries' (semantic)
+# versioning scheme.
+__version__ = '22.03.0'  # the last digit is for cuQuantum Python only

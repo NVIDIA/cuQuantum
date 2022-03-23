@@ -72,7 +72,7 @@ int main(void) {
     size_t extraWorkspaceSizeInBytes = 0;
 
     // create sampler and check the size of external workspace
-    HANDLE_ERROR( custatevecSampler_create(
+    HANDLE_ERROR( custatevecSamplerCreate(
                   handle, d_sv, CUDA_C_64F, nIndexBits, &sampler, nMaxShots, 
                   &extraWorkspaceSizeInBytes) );
     
@@ -81,15 +81,16 @@ int main(void) {
         HANDLE_CUDA_ERROR( cudaMalloc(&extraWorkspace, extraWorkspaceSizeInBytes) );
     
     // sample preprocess
-    HANDLE_ERROR( custatevecSampler_preprocess(
-                  handle, &sampler, extraWorkspace, extraWorkspaceSizeInBytes) );
+    HANDLE_ERROR( custatevecSamplerPreprocess(
+                  handle, sampler, extraWorkspace, extraWorkspaceSizeInBytes) );
     
     // sample bit strings
-    HANDLE_ERROR( custatevecSampler_sample(
-                  handle, &sampler, bitStrings, bitOrdering, bitStringLen, randnums, nShots, 
+    HANDLE_ERROR( custatevecSamplerSample(
+                  handle, sampler, bitStrings, bitOrdering, bitStringLen, randnums, nShots, 
                   CUSTATEVEC_SAMPLER_OUTPUT_ASCENDING_ORDER) );
 
-    // destroy handle
+    // destroy descriptor and handle
+    HANDLE_ERROR( custatevecSamplerDestroy(sampler) );
     HANDLE_ERROR( custatevecDestroy(handle) );
 
     //----------------------------------------------------------------------------------------------

@@ -8,8 +8,10 @@ from typing import Callable, Dict, Optional
 import cupy as cp
 import numpy as np
 
-from . import tensor_wrapper
+from . import formatters
 from . import mem_limit
+from . import package_wrapper
+from . import tensor_wrapper
 
 def infer_object_package(obj):
     """
@@ -37,38 +39,54 @@ def check_or_create_options(cls, options, options_description):
     return options
 
 
-def get_or_create_stream(device, stream):
+def _create_stream_ctx_ptr_cupy_stream(package_ifc, stream):
     """
-    Create a stream object from a stream pointer or extract the stream pointer from a stream object.
-    Return the stream object as well as the stream pointer.
+    Utility function to create a stream context as a "package-native" object, get stream pointer as well as
+    create a cupy stream object.
+    """
+    stream_ctx = package_ifc.to_stream_context(stream)
+    stream_ptr = package_ifc.to_stream_pointer(stream)
+    stream = cp.cuda.ExternalStream(stream_ptr)
+
+    return stream, stream_ctx, stream_ptr
+
+
+def get_or_create_stream(device, stream, op_package):
+    """
+    Create a stream object from a stream pointer or extract the stream pointer from a stream object, or
+    use the current stream.
+
+    Args:
+        device: The device (CuPy object) for the stream.
+        stream: A stream object, stream pointer, or None.
+        op_package: The package the tensor network operands belong to.
+
+    Returns:
+        tuple: CuPy stream object, package stream context, stream pointer.
     """
 
+    device_id  = device.id
+    op_package_ifc = package_wrapper.PACKAGE[op_package]
     if stream is None:
-        with device: 
-            stream = cp.cuda.get_current_stream()
-            stream_ptr = stream.ptr
-        return stream, stream_ptr
+        stream = op_package_ifc.get_current_stream(device_id)
+        return _create_stream_ctx_ptr_cupy_stream(op_package_ifc, stream)
 
     if isinstance(stream, int):
         stream_ptr = stream
+        if op_package == 'torch':
+            message = "A stream object must be provided for PyTorch operands, not stream pointer."
+            raise TypeError(message)
+        stream_ctx = op_package_ifc.to_stream_context(stream)
         stream = cp.cuda.ExternalStream(stream_ptr)
 
-        return stream, stream_ptr
+        return stream, stream_ctx, stream_ptr
 
-    module = infer_object_package(stream)
+    stream_package = infer_object_package(stream)
+    if stream_package != op_package:
+            message = "The stream object must belong to the same package as the tensor network operands."
+            raise TypeError(message)
 
-    if module not in ['cupy', 'torch']:
-        raise TypeError("The CUDA stream must be specified as a CuPy or Torch stream object. "
-                        "Alternatively, the stream pointer can be directly provided as an int.")
-
-    if module == 'cupy':
-        stream_ptr = stream.ptr
-
-    if module == 'torch':
-        stream_ptr = stream.cuda_stream
-        stream = cp.cuda.ExternalStream(stream_ptr)
-
-    return stream, stream_ptr
+    return _create_stream_ctx_ptr_cupy_stream(op_package_ifc, stream)
 
 
 def get_memory_limit(memory_limit, device):
@@ -119,24 +137,39 @@ def get_operands_data(operands):
     return op_data, alignments
 
 
-def create_empty_tensor(cls, extents, dtype, device):
+def create_empty_tensor(cls, extents, dtype, device_id, stream_ctx):
     """
     Create a wrapped tensor of the same type as (the wrapped) cls on the specified device having the 
     specified extents and dtype.
+
+    The tensor is created within a stream context to allow for asynchronous memory allocators like 
+    CuPy's MemoryAsyncPool.
     """
-    tensor = cls.empty(extents, dtype=dtype, device=device)
+    with stream_ctx:
+        tensor = cls.empty(extents, dtype=dtype, device=device_id)
     tensor = tensor_wrapper.wrap_operand(tensor)
     return tensor
 
 
-def create_output_tensor(cls, output, size_dict, device_id, data_type):
+def create_output_tensor(cls, package, output, size_dict, device, data_type):
     """
-    Create output tensor and associated data (modes, extents, strides, alignment)
+    Create output tensor and associated data (modes, extents, strides, alignment). This operation is
+    blocking and is safe to use with asynchronous memory pools.
     """
     modes = tuple(m for m in output)
     extents = tuple(size_dict[m] for m in output)
 
-    output = create_empty_tensor(cls, extents, data_type, device_id)
+    package_ifc = package_wrapper.PACKAGE[package]
+    device_id = device.id
+
+    stream = package_ifc.create_stream(device_id)
+    stream, stream_ctx, _ = _create_stream_ctx_ptr_cupy_stream(package_ifc, stream)
+
+    with device:
+        start = stream.record()
+        output = create_empty_tensor(cls, extents, data_type, device_id, stream_ctx)
+        end = stream.record()
+        end.synchronize()
 
     strides = output.strides
     alignment = get_maximal_alignment(output.data_ptr)
@@ -178,6 +211,17 @@ def get_maximal_alignment(address):
     return alignment
 
 
+def get_operands_package(operands):
+    """
+    Return the package name of the tensors.
+    """
+    package = infer_object_package(operands[0].tensor)
+    if not all (infer_object_package(operand.tensor) == package for operand in operands):
+        packages = set(infer_object_package(operand.tensor) for operand in operands)
+        raise TypeError(f"All tensors in the network must be from the same library package. Packages found = {packages}.")
+    return package
+
+
 def check_operands_match(orig_operands, new_operands, attribute, description):
     """
     Check if the specified attribute matches between the corresponding new and old operands, and raise an exception if it 
@@ -188,9 +232,9 @@ def check_operands_match(orig_operands, new_operands, attribute, description):
     if not all(checks): 
         mismatch = [f"{location}: {getattr(orig_operands[location], attribute)} => {getattr(new_operands[location], attribute)}"
                         for location, predicate in enumerate(checks) if predicate is False]
-        mismatch = np.array2string(np.array(mismatch, dtype='object'), separator=', ', formatter={'object': lambda s: s})
+        mismatch = formatters.array2string(mismatch)
         message = f"""The {description} of each new operand must match the {description} of the corresponding original operand.
-The mismatch in {description} as a sequence of "operand position: original {description} => new {description}" is: \n{mismatch}"""
+The mismatch in {description} as a sequence of "position: original {description} => new {description}" is: \n{mismatch}"""
         raise ValueError(message)
 
 
@@ -203,28 +247,10 @@ def check_alignments_match(orig_alignments, new_alignments):
     if not all(checks): 
         mismatch = [f"{location}: {orig_alignments[location]} => {new_alignments[location]}" 
                         for location, predicate in enumerate(checks) if predicate is False] 
-        mismatch = np.array2string(np.array(mismatch, dtype='object'), separator=', ', formatter={'object': lambda s: s})
+        mismatch = formatters.array2string(mismatch)
         message = f"""The data alignment of each new operand must match the data alignment of the corresponding original operand.
-The mismatch in data alignment as a sequence of "operand position: original alignment => new alignment" is: \n{mismatch}"""
+The mismatch in data alignment as a sequence of "position: original alignment => new alignment" is: \n{mismatch}"""
         raise ValueError(message)
-
-
-def convert_memory_with_units(memory):
-    """
-    Convert the provided memory value into a form suitable for printing.
-    """
-    base = 1024
-
-    if memory < base:
-        value, unit = memory, 'B'
-    elif memory < base**2:
-        value, unit = memory/base, 'KiB'
-    elif memory < base**3:
-        value, unit = memory/base**2, 'MiB'
-    else:
-        value, unit = memory/base**3, 'GiB'
-
-    return value, unit
 
 
 def check_autotune_params(iterations):
@@ -240,6 +266,19 @@ def check_autotune_params(iterations):
     message = f"Autotuning parameters: iterations = {iterations}."
 
     return message
+
+
+def get_ptr_from_memory_pointer(mem_ptr):
+    """
+    Access the value associated with one of the attributes 'device_ptr', 'device_pointer', 'ptr'.
+    """
+    attributes = ('device_ptr', 'device_pointer', 'ptr')
+    for attr in attributes:
+        if hasattr(mem_ptr, attr):
+            return getattr(mem_ptr, attr)
+
+    message = f"Memory pointer objects should have one of the following attributes specifying the device pointer: {attributes}"
+    raise AttributeError(message)
 
 
 # Decorator definitions

@@ -1,7 +1,13 @@
 import contextlib
 from collections import abc
 import functools
+import os
+import tempfile
 
+try:
+    import cffi
+except ImportError:
+    cffi = None
 import cupy
 from cupy import testing
 import numpy
@@ -9,7 +15,7 @@ import pytest
 
 import cuquantum
 from cuquantum import ComputeType, cudaDataType
-from cuquantum import cutensornet
+from cuquantum import cutensornet as cutn
 
 
 ###################################################################
@@ -45,7 +51,7 @@ def manage_resource(name):
         def test_func(self, *args, **kwargs):
             try:
                 if name == 'handle':
-                    h = cutensornet.create()
+                    h = cutn.create()
                 elif name == 'dscr':
                     tn, dtype, input_form, output_form = self.tn, self.dtype, self.input_form, self.output_form
                     einsum, shapes = tn  # unpack
@@ -54,7 +60,7 @@ def manage_resource(name):
                         tn.get_input_metadata(**input_form)
                     o_n_modes, o_extents, o_strides, o_modes, o_alignments = \
                         tn.get_output_metadata(**output_form)
-                    h = cutensornet.create_network_descriptor(
+                    h = cutn.create_network_descriptor(
                         self.handle,
                         i_n_inputs, i_n_modes, i_extents, i_strides, i_modes, i_alignments,
                         o_n_modes, o_extents, o_strides, o_modes, o_alignments,
@@ -62,12 +68,14 @@ def manage_resource(name):
                     # we also need to keep the tn data alive
                     self.tn = tn
                 elif name == 'config':
-                    h = cutensornet.create_contraction_optimizer_config(self.handle)
+                    h = cutn.create_contraction_optimizer_config(self.handle)
                 elif name == 'info':
-                    h = cutensornet.create_contraction_optimizer_info(
+                    h = cutn.create_contraction_optimizer_info(
                         self.handle, self.dscr)
                 elif name == 'autotune':
-                    h = cutensornet.create_contraction_autotune_preference(self.handle)
+                    h = cutn.create_contraction_autotune_preference(self.handle)
+                elif name == 'workspace':
+                    h = cutn.create_workspace_descriptor(self.handle)
                 else:
                     assert False, f'name "{name}" not recognized'
                 setattr(self, name, h)
@@ -77,38 +85,188 @@ def manage_resource(name):
                 raise
             finally:
                 if name == 'handle' and hasattr(self, name):
-                    cutensornet.destroy(self.handle)
+                    cutn.destroy(self.handle)
                     del self.handle
                 elif name == 'dscr' and hasattr(self, name):
-                    cutensornet.destroy_network_descriptor(self.dscr)
+                    cutn.destroy_network_descriptor(self.dscr)
                     del self.dscr
                 elif name == 'config' and hasattr(self, name):
-                    cutensornet.destroy_contraction_optimizer_config(self.config)
+                    cutn.destroy_contraction_optimizer_config(self.config)
                     del self.config
                 elif name == 'info' and hasattr(self, name):
-                    cutensornet.destroy_contraction_optimizer_info(self.info)
+                    cutn.destroy_contraction_optimizer_info(self.info)
                     del self.info
                 elif name == 'autotune' and hasattr(self, name):
-                    cutensornet.destroy_contraction_autotune_preference(self.autotune)
+                    cutn.destroy_contraction_autotune_preference(self.autotune)
                     del self.autotune
+                elif name == 'workspace' and hasattr(self, name):
+                    h = cutn.destroy_workspace_descriptor(self.workspace)
+                    del self.workspace
         return test_func
     return decorator
+
+
+# we don't wanna recompile for every test case...
+_cffi_mod1 = None
+_cffi_mod2 = None
+
+def _can_use_cffi():
+    if cffi is None or os.environ.get('CUDA_PATH') is None:
+        return False
+    else:
+        return True
+
+
+class MemoryResourceFactory:
+
+    def __init__(self, source, name=None):
+        self.source = source
+        self.name = source if name is None else name
+
+    def get_dev_mem_handler(self):
+        if self.source == "py-callable":
+            return (*self._get_cuda_callable(), self.name)
+        elif self.source == "cffi":
+            # ctx is not needed, so set to NULL
+            return (0, *self._get_functor_address(), self.name)
+        elif self.source == "cffi_struct":
+            return self._get_handler_address()
+        # TODO: add more different memory sources
+        else:
+            raise NotImplementedError
+
+    def _get_cuda_callable(self):
+        def alloc(size, stream):
+            return cupy.cuda.runtime.mallocAsync(size, stream)
+
+        def free(ptr, size, stream):
+            cupy.cuda.runtime.freeAsync(ptr, stream)
+
+        return alloc, free
+
+    def _get_functor_address(self):
+        if not _can_use_cffi():
+            raise RuntimeError
+
+        global _cffi_mod1
+        if _cffi_mod1 is None:
+            import importlib
+            mod_name = f"cutn_test_{self.source}"
+            ffi = cffi.FFI()
+            ffi.set_source(mod_name, """
+                #include <cuda_runtime.h>
+
+                // cffi limitation: we can't use the actual type cudaStream_t because
+                // it's considered an "incomplete" type and we can't get the functor
+                // address by doing so...
+
+                int my_alloc(void* ctx, void** ptr, size_t size, void* stream) {
+                    return (int)cudaMallocAsync(ptr, size, stream);
+                }
+
+                int my_free(void* ctx, void* ptr, size_t size, void* stream) {
+                    return (int)cudaFreeAsync(ptr, stream);
+                }
+                """,
+                include_dirs=[os.environ['CUDA_PATH']+'/include'],
+                library_dirs=[os.environ['CUDA_PATH']+'/lib64'],
+                libraries=['cudart'],
+            )
+            ffi.cdef("""
+                int my_alloc(void* ctx, void** ptr, size_t size, void* stream);
+                int my_free(void* ctx, void* ptr, size_t size, void* stream);
+            """)
+            ffi.compile(verbose=True)
+            self.ffi = ffi
+            _cffi_mod1 = importlib.import_module(mod_name)
+        self.ffi_mod = _cffi_mod1
+
+        alloc_addr = self._get_address("my_alloc")
+        free_addr = self._get_address("my_free")
+        return alloc_addr, free_addr
+
+    def _get_handler_address(self):
+        if not _can_use_cffi():
+            raise RuntimeError
+
+        global _cffi_mod2
+        if _cffi_mod2 is None:
+            import importlib
+            mod_name = f"cutn_test_{self.source}"
+            ffi = cffi.FFI()
+            ffi.set_source(mod_name, """
+                #include <cuda_runtime.h>
+
+                // cffi limitation: we can't use the actual type cudaStream_t because
+                // it's considered an "incomplete" type and we can't get the functor
+                // address by doing so...
+
+                int my_alloc(void* ctx, void** ptr, size_t size, void* stream) {
+                    return (int)cudaMallocAsync(ptr, size, stream);
+                }
+
+                int my_free(void* ctx, void* ptr, size_t size, void* stream) {
+                    return (int)cudaFreeAsync(ptr, stream);
+                }
+
+                typedef struct {
+                    void* ctx;
+                    int (*device_alloc)(void* ctx, void** ptr, size_t size, void* stream);
+                    int (*device_free)(void* ctx, void* ptr, size_t size, void* stream);
+                    char name[64];
+                } myHandler;
+
+                myHandler* init_myHandler(myHandler* h, const char* name) {
+                    h->ctx = NULL;
+                    h->device_alloc = my_alloc;
+                    h->device_free = my_free;
+                    memcpy(h->name, name, 64);
+                    return h;
+                }
+                """,
+                include_dirs=[os.environ['CUDA_PATH']+'/include'],
+                library_dirs=[os.environ['CUDA_PATH']+'/lib64'],
+                libraries=['cudart'],
+            )
+            ffi.cdef("""
+                typedef struct {
+                    ...;
+                } myHandler;
+
+                myHandler* init_myHandler(myHandler* h, const char* name);
+            """)
+            ffi.compile(verbose=True)
+            self.ffi = ffi
+            _cffi_mod2 = importlib.import_module(mod_name)
+        self.ffi_mod = _cffi_mod2
+
+        h = self.handler = self.ffi_mod.ffi.new("myHandler*")
+        self.ffi_mod.lib.init_myHandler(h, self.name.encode())
+        return self._get_address(h)
+
+    def _get_address(self, func_name_or_ptr):
+        if isinstance(func_name_or_ptr, str):
+            func_name = func_name_or_ptr
+            data = str(self.ffi_mod.ffi.addressof(self.ffi_mod.lib, func_name))
+        else:
+            ptr = func_name_or_ptr  # ptr to struct
+            data = str(self.ffi_mod.ffi.addressof(ptr[0]))
+        # data has this format: "<cdata 'int(*)(void *, void * *, size_t, void *)' 0x7f6c5da37300>"
+        return int(data.split()[-1][:-1], base=16)
 
 
 class TestLibHelper:
 
     def test_get_version(self):
-        ver = cutensornet.get_version()
-        assert ver == (cutensornet.MAJOR_VER * 10000
-            + cutensornet.MINOR_VER * 100
-            + cutensornet.PATCH_VER)
-        assert ver == cutensornet.VERSION
+        ver = cutn.get_version()
+        assert ver == (cutn.MAJOR_VER * 10000
+            + cutn.MINOR_VER * 100
+            + cutn.PATCH_VER)
+        assert ver == cutn.VERSION
 
     def test_get_cudart_version(self):
-        # CUDA runtime is statically linked, so we can't compare
-        # with the "runtime" version
-        ver = cutensornet.get_cudart_version()
-        assert isinstance(ver, int)
+        ver = cutn.get_cudart_version()
+        assert ver == cupy.cuda.runtime.runtimeGetVersion()
 
 
 class TestHandle:
@@ -274,8 +432,14 @@ class TestTensorNetworkDescriptor(TestTensorNetworkBase):
     @manage_resource('handle')
     @manage_resource('dscr')
     def test_descriptor_create_destroy(self):
-        # simple round-trip test
-        pass
+        # we could just do a simple round-trip test, but let's also get
+        # this helper API tested
+        handle, dscr = self.handle, self.dscr
+        num_modes, modes, extents, strides = cutn.get_output_tensor_details(handle, dscr)
+        assert num_modes == self.tn.output_n_modes
+        assert (modes == numpy.asarray(self.tn.output_mode, dtype=numpy.int32)).all()
+        assert (extents == numpy.asarray(self.tn.output_extent, dtype=numpy.int64)).all()
+        assert (strides == numpy.asarray(self.tn.output_stride, dtype=numpy.int64)).all()
 
 
 class TestOptimizerInfo(TestTensorNetworkBase):
@@ -288,36 +452,36 @@ class TestOptimizerInfo(TestTensorNetworkBase):
         pass
 
     @pytest.mark.parametrize(
-        'attr', [val for val in cutensornet.ContractionOptimizerInfoAttribute]
+        'attr', [val for val in cutn.ContractionOptimizerInfoAttribute]
     )
     @manage_resource('handle')
     @manage_resource('dscr')
     @manage_resource('info')
     def test_optimizer_info_get_set_attribute(self, attr):
         if attr in (
-                cutensornet.ContractionOptimizerInfoAttribute.NUM_SLICES,
-                cutensornet.ContractionOptimizerInfoAttribute.PHASE1_FLOP_COUNT,
-                cutensornet.ContractionOptimizerInfoAttribute.FLOP_COUNT,
-                cutensornet.ContractionOptimizerInfoAttribute.LARGEST_TENSOR,
-                cutensornet.ContractionOptimizerInfoAttribute.SLICING_OVERHEAD,
+                cutn.ContractionOptimizerInfoAttribute.NUM_SLICES,
+                cutn.ContractionOptimizerInfoAttribute.PHASE1_FLOP_COUNT,
+                cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
+                cutn.ContractionOptimizerInfoAttribute.LARGEST_TENSOR,
+                cutn.ContractionOptimizerInfoAttribute.SLICING_OVERHEAD,
                 ):
             pytest.skip("setter not supported")
         elif attr in (
-                cutensornet.ContractionOptimizerInfoAttribute.PATH,
-                cutensornet.ContractionOptimizerInfoAttribute.SLICED_MODE,
-                cutensornet.ContractionOptimizerInfoAttribute.SLICED_EXTENT,
+                cutn.ContractionOptimizerInfoAttribute.PATH,
+                cutn.ContractionOptimizerInfoAttribute.SLICED_MODE,
+                cutn.ContractionOptimizerInfoAttribute.SLICED_EXTENT,
                 ):
             pytest.skip("TODO")
         handle, info = self.handle, self.info
-        dtype = cutensornet.contraction_optimizer_info_get_attribute_dtype(attr)
+        dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
         # Hack: assume this is a valid value for all attrs
         factor = numpy.asarray([30], dtype=dtype)
-        cutensornet.contraction_optimizer_info_set_attribute(
+        cutn.contraction_optimizer_info_set_attribute(
             handle, info, attr,
             factor.ctypes.data, factor.dtype.itemsize)
         # do a round-trip test as a sanity check
         factor2 = numpy.zeros_like(factor)
-        cutensornet.contraction_optimizer_info_get_attribute(
+        cutn.contraction_optimizer_info_get_attribute(
             handle, info, attr,
             factor2.ctypes.data, factor2.dtype.itemsize)
         assert factor == factor2
@@ -333,29 +497,29 @@ class TestOptimizerConfig:
 
     @pytest.mark.parametrize(
         # TODO(leofang): enable this when the getter bug is fixed
-        'attr', [val for val in cutensornet.ContractionOptimizerConfigAttribute]
-        #'attr', [cutensornet.ContractionOptimizerConfigAttribute.GRAPH_IMBALANCE_FACTOR]
+        'attr', [val for val in cutn.ContractionOptimizerConfigAttribute]
+        #'attr', [cutn.ContractionOptimizerConfigAttribute.GRAPH_IMBALANCE_FACTOR]
     )
     @manage_resource('handle')
     @manage_resource('config')
     def test_optimizer_config_get_set_attribute(self, attr):
-        if attr == cutensornet.ContractionOptimizerConfigAttribute.SIMPLIFICATION_DISABLE_DR:
+        if attr == cutn.ContractionOptimizerConfigAttribute.SIMPLIFICATION_DISABLE_DR:
             pytest.skip("pending on MR 275")
         handle, config = self.handle, self.config
-        dtype = cutensornet.contraction_optimizer_config_get_attribute_dtype(attr)
+        dtype = cutn.contraction_optimizer_config_get_attribute_dtype(attr)
         # Hack: assume this is a valid value for all attrs
-        if attr in (cutensornet.ContractionOptimizerConfigAttribute.GRAPH_ALGORITHM,
-                    cutensornet.ContractionOptimizerConfigAttribute.SLICER_MEMORY_MODEL,
-                    cutensornet.ContractionOptimizerConfigAttribute.SLICER_DISABLE_SLICING):
+        if attr in (cutn.ContractionOptimizerConfigAttribute.GRAPH_ALGORITHM,
+                    cutn.ContractionOptimizerConfigAttribute.SLICER_MEMORY_MODEL,
+                    cutn.ContractionOptimizerConfigAttribute.SLICER_DISABLE_SLICING):
             factor = numpy.asarray([1], dtype=dtype)
         else:
             factor = numpy.asarray([30], dtype=dtype)
-        cutensornet.contraction_optimizer_config_set_attribute(
+        cutn.contraction_optimizer_config_set_attribute(
             handle, config, attr,
             factor.ctypes.data, factor.dtype.itemsize)
         # do a round-trip test as a sanity check
         factor2 = numpy.zeros_like(factor)
-        cutensornet.contraction_optimizer_config_get_attribute(
+        cutn.contraction_optimizer_config_get_attribute(
             handle, config, attr,
             factor2.ctypes.data, factor2.dtype.itemsize)
         assert factor == factor2
@@ -370,28 +534,31 @@ class TestAutotunePreference:
         pass
 
     @pytest.mark.parametrize(
-        'attr', [val for val in cutensornet.ContractionAutotunePreferenceAttribute]
+        'attr', [val for val in cutn.ContractionAutotunePreferenceAttribute]
     )
     @manage_resource('handle')
     @manage_resource('autotune')
     def test_autotune_preference_get_set_attribute(self, attr):
         handle, pref = self.handle, self.autotune
-        dtype = cutensornet.contraction_autotune_preference_get_attribute_dtype(attr)
+        dtype = cutn.contraction_autotune_preference_get_attribute_dtype(attr)
         # Hack: assume this is a valid value for all attrs
         factor = numpy.asarray([10], dtype=dtype)
-        cutensornet.contraction_autotune_preference_set_attribute(
+        cutn.contraction_autotune_preference_set_attribute(
             handle, pref, attr,
             factor.ctypes.data, factor.dtype.itemsize)
         # do a round-trip test as a sanity check
         factor2 = numpy.zeros_like(factor)
-        cutensornet.contraction_autotune_preference_get_attribute(
+        cutn.contraction_autotune_preference_get_attribute(
             handle, pref, attr,
             factor2.ctypes.data, factor2.dtype.itemsize)
         assert factor == factor2
 
 
 @pytest.mark.parametrize(
-    'get_workspace_size', (True, False)
+    'mempool', (None, 'py-callable', 'cffi', 'cffi_struct')
+)
+@pytest.mark.parametrize(
+    'workspace_pref', ("min", "recommended", "max")
 )
 @pytest.mark.parametrize(
     'autotune', (True, False)
@@ -411,40 +578,153 @@ class TestContraction(TestTensorNetworkBase):
     @manage_resource('info')
     @manage_resource('config')
     @manage_resource('autotune')
+    @manage_resource('workspace')
     def test_contraction_workflow(
-            self, get_workspace_size, autotune, contract, stream):
+            self, mempool, workspace_pref, autotune, contract, stream):
+        if (isinstance(mempool, str) and mempool.startswith('cffi')
+                and not _can_use_cffi()):
+            pytest.skip("cannot run cffi tests")
+
         # unpack
         handle, dscr, info, config, pref = self.handle, self.dscr, self.info, self.config, self.autotune
+        workspace = self.workspace
         tn, input_form, output_form = self.tn, self.input_form, self.output_form
 
-        workspace_size = 4*1024**2  # large enough for our test cases
+        if mempool:
+            mr = MemoryResourceFactory(mempool)
+            handler = mr.get_dev_mem_handler()
+            cutn.set_device_mem_handler(handle, handler)
+
+        workspace_size = 32*1024**2  # large enough for our test cases
         # we have to run this API in any case in order to create a path
-        cutensornet.contraction_optimize(
+        cutn.contraction_optimize(
             handle, dscr, config, workspace_size, info)
-        if get_workspace_size:
-            workspace_size = cutensornet.contraction_get_workspace_size(
-                handle, dscr, info)
-        workspace = cupy.cuda.alloc(workspace_size)
+
+        # manage workspace
+        if mempool is None:
+            cutn.workspace_compute_sizes(handle, dscr, info, workspace)
+            required_size = cutn.workspace_get_size(
+                handle, workspace,
+                getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
+                cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+            if workspace_size < required_size:
+                assert False, \
+                    f"wrong assumption on the workspace size " \
+                    f"(given: {workspace_size}, needed: {required_size})"
+            workspace_ptr = cupy.cuda.alloc(workspace_size)
+            cutn.workspace_set(
+                handle, workspace,
+                cutn.Memspace.DEVICE,
+                workspace_ptr.ptr, workspace_size)
+            # round-trip check
+            assert (workspace_ptr.ptr, workspace_size) == cutn.workspace_get(
+                handle, workspace,
+                cutn.Memspace.DEVICE)
+        else:
+            cutn.workspace_set(
+                handle, workspace,
+                cutn.Memspace.DEVICE,
+                0, 0)  # TODO: check custom workspace size?
 
         plan = None
         try:
-            plan = cutensornet.create_contraction_plan(
-                handle, dscr, info, workspace_size)
+            plan = cutn.create_contraction_plan(
+                handle, dscr, info, workspace)
             if autotune:
-                cutensornet.contraction_autotune(
+                cutn.contraction_autotune(
                     handle, plan,
                     tn.get_input_tensors(**input_form),
                     tn.get_output_tensor(),
-                    workspace.ptr, workspace_size, pref, stream.ptr)
+                    workspace, pref, stream.ptr)
             if contract:
                 # assume no slicing for simple test cases!
-                cutensornet.contraction(
+                cutn.contraction(
                     handle, plan,
                     tn.get_input_tensors(**input_form),
                     tn.get_output_tensor(),
-                    workspace.ptr, workspace_size, 0, stream.ptr)
+                    workspace, 0, stream.ptr)
                 # TODO(leofang): check correctness?
             stream.synchronize()
         finally:
             if plan is not None:
-                cutensornet.destroy_contraction_plan(plan)
+                cutn.destroy_contraction_plan(plan)
+
+
+# TODO: add more different memory sources
+@pytest.mark.parametrize(
+    'source', (None, "py-callable", 'cffi', 'cffi_struct')
+)
+class TestMemHandler:
+
+    @manage_resource('handle')
+    def test_set_get_device_mem_handler(self, source):
+        if (isinstance(source, str) and source.startswith('cffi')
+                and not _can_use_cffi()):
+            pytest.skip("cannot run cffi tests")
+
+        handle = self.handle
+        if source is not None:
+            mr = MemoryResourceFactory(source)
+            handler = mr.get_dev_mem_handler()
+            cutn.set_device_mem_handler(handle, handler)
+            # round-trip test
+            queried_handler = cutn.get_device_mem_handler(handle)
+            if source == 'cffi_struct':
+                # I'm lazy, otherwise I'd also fetch the functor addresses here...
+                assert queried_handler[0] == 0  # ctx is NULL
+                assert queried_handler[-1] == source
+            else:
+                assert queried_handler == handler
+        else:
+            with pytest.raises(cutn.cuTensorNetError) as e:
+                queried_handler = cutn.get_device_mem_handler(handle)
+            assert 'CUTENSORNET_STATUS_NO_DEVICE_ALLOCATOR' in str(e.value)
+
+
+class TestLogger:
+
+    def test_logger_set_level(self):
+        cutn.logger_set_level(6)  # on
+        cutn.logger_set_level(0)  # off
+
+    def test_logger_set_mask(self):
+        cutn.logger_set_mask(16)  # should not raise
+
+    def test_logger_set_callback_data(self):
+        # we also test logger_open_file() here to avoid polluting stdout
+
+        def callback(level, name, message, my_data, is_ok=False):
+            log = f"{level}, {name}, {message} (is_ok={is_ok}) -> logged\n"
+            my_data.append(log)
+
+        handle = None
+        my_data = []
+        is_ok = True
+
+        with tempfile.TemporaryDirectory() as temp:
+            file_name = os.path.join(temp, "cutn_test")
+            cutn.logger_open_file(file_name)
+            cutn.logger_set_callback_data(callback, my_data, is_ok=is_ok)
+            cutn.logger_set_level(6)
+
+            try:
+                handle = cutn.create()
+                cutn.destroy(handle)
+            except:
+                if handle:
+                    cutn.destroy(handle)
+                raise
+            finally:
+                cutn.logger_force_disable()  # to not affect the rest of tests
+
+            with open(file_name) as f:
+                log_from_f = f.read()
+
+        # check the log file
+        assert '[cutensornetCreate]' in log_from_f
+        assert '[cutensornetDestroy]' in log_from_f
+
+        # check the captured data (note we log 2 APIs)
+        log = ''.join(my_data)
+        assert log.count("-> logged") >= 2
+        assert log.count("is_ok=True") >= 2

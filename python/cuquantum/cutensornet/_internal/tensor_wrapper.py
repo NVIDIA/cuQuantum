@@ -6,8 +6,9 @@ __all__ = [ 'infer_tensor_package', 'wrap_operands', 'wrap_operands', 'to', 'cop
 
 import numpy as np
 
-from .cupy_ifc import CupyTensor
-from .numpy_ifc import NumpyTensor
+from . import formatters
+from .tensor_ifc_cupy import CupyTensor
+from .tensor_ifc_numpy import NumpyTensor
 
 
 _TENSOR_TYPES = {
@@ -18,7 +19,7 @@ _TENSOR_TYPES = {
 # Optional modules
 try:
     import torch
-    from .torch_ifc import TorchTensor
+    from .tensor_ifc_torch import TorchTensor
     _TENSOR_TYPES['torch']  = TorchTensor
 except ImportError as e:
     pass
@@ -51,9 +52,9 @@ def check_valid_package(native_operands):
     checks = [p in _SUPPORTED_PACKAGES for p in operands_pkg]
     if not all(checks):
         unknown = [f"{location}: {operands_pkg[location]}" for location, predicate in enumerate(checks) if predicate is False]
-        unknown = np.array2string(np.array(unknown, dtype='object'), separator=', ', formatter={'object': lambda s: s})
+        unknown = formatters.array2string(unknown)
         message = f"""The operands should be ndarray-like objects from one of {_SUPPORTED_PACKAGES} packages.
-The unsupported operands as a sequence of "zero-based operand ordinal: package" is: \n{unknown}"""
+The unsupported operands as a sequence of "position: package" is: \n{unknown}"""
         raise ValueError(message)
 
     return operands_pkg
@@ -66,9 +67,9 @@ def check_valid_operand_type(wrapped_operands):
     if not all(istensor):
         unknown = [f"{location}: {type(wrapped_operands[location].tensor)}" 
                     for location, predicate in enumerate(istensor) if predicate is False]
-        unknown = np.array2string(np.array(unknown, dtype='object'), separator=', ', formatter={'object': lambda s: s})
+        unknown = formatters.array2string(unknown)
         message = f"""The operands should be ndarray-like objects from one of {_SUPPORTED_PACKAGES} packages.
-The unsupported operands as a sequence of "zero-based operand ordinal: type" is: \n{unknown}"""
+The unsupported operands as a sequence of "position: type" is: \n{unknown}"""
         raise ValueError(message)
 
 

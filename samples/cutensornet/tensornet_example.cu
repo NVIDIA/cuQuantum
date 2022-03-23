@@ -233,7 +233,7 @@ int main()
    const int32_t nmodeD = modesD.size();
 
    /*******************************
-   * Create Contraction Descriptor
+   * Create Network Descriptor
    *******************************/
 
    const int32_t* modesIn[] = {modesA.data(), modesB.data(), modesC.data()};
@@ -277,9 +277,9 @@ int main()
    cutensornetContractionOptimizerConfig_t optimizerConfig;
    HANDLE_ERROR (cutensornetCreateContractionOptimizerConfig(handle, &optimizerConfig));
 
-    // Set the value of the partitioner imbalance factor, if desired
-    int imbalance_factor = 30;
-    HANDLE_ERROR(cutensornetContractionOptimizerConfigSetAttribute(
+   // Set the value of the partitioner imbalance factor, if desired
+   int imbalance_factor = 30;
+   HANDLE_ERROR(cutensornetContractionOptimizerConfigSetAttribute(
                                                                handle,
                                                                optimizerConfig,
                                                                CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GRAPH_IMBALANCE_FACTOR,
@@ -311,95 +311,123 @@ int main()
    * Initialize all pair-wise contraction plans (for cuTENSOR)
    *******************************/
    cutensornetContractionPlan_t plan;
-   HANDLE_ERROR( cutensornetCreateContractionPlan(handle,
-                                                descNet,
-                                                optimizerInfo,
-                                                worksize,
-                                                &plan) );
 
+   cutensornetWorkspaceDescriptor_t workDesc;
+   HANDLE_ERROR(cutensornetCreateWorkspaceDescriptor(handle, &workDesc));
 
-   /*******************************
-   * Optional: Auto-tune cuTENSOR's cutensorContractionPlan to pick the fastest kernel
-   *******************************/
-   cutensornetContractionAutotunePreference_t autotunePref;
-   HANDLE_ERROR(cutensornetCreateContractionAutotunePreference(handle,
-                           &autotunePref));
+   uint64_t requiredWorkspaceSize = 0;
+   HANDLE_ERROR(cutensornetWorkspaceComputeSizes(handle,
+                                          descNet,
+                                          optimizerInfo,
+                                          workDesc));
 
-   const int numAutotuningIterations = 5; // may be 0
-   HANDLE_ERROR(cutensornetContractionAutotunePreferenceSetAttribute(
-                           handle,
-                           autotunePref,
-                           CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS,
-                           &numAutotuningIterations,
-                           sizeof(numAutotuningIterations)));
-
-   // modify the plan again to find the best pair-wise contractions
-   HANDLE_ERROR(cutensornetContractionAutotune(handle,
-                           plan,
-                           rawDataIn_d,
-                           D_d,
-                           work, worksize,
-                           autotunePref,
-                           stream));
-
-   HANDLE_ERROR(cutensornetDestroyContractionAutotunePreference(autotunePref));
-
-   printf("Create a contraction plan for cuTENSOR and optionally auto-tune it.\n");
-
-   /**********************
-   * Run
-   **********************/
-   GPUTimer timer;
-   double minTimeCUTENSOR = 1e100;
-   const int numRuns = 3; // to get stable perf results
-   for (int i=0; i < numRuns; ++i)
+   HANDLE_ERROR(cutensornetWorkspaceGetSize(handle,
+                                         workDesc,
+                                         CUTENSORNET_WORKSIZE_PREF_MIN,
+                                         CUTENSORNET_MEMSPACE_DEVICE,
+                                         &requiredWorkspaceSize));
+   if (worksize < requiredWorkspaceSize)
    {
-      cudaMemcpy(D_d, D, sizeD, cudaMemcpyHostToDevice); // restore output
-      cudaDeviceSynchronize();
-
-      /*
-      * Contract over all slices.
-      *
-      * A user may choose to parallelize this loop across multiple devices.
-      */
-      for(int64_t sliceId=0; sliceId < numSlices; ++sliceId)
-      {
-         timer.start();
-
-         HANDLE_ERROR(cutensornetContraction(handle,
-                                 plan,
-                                 rawDataIn_d,
-                                 D_d,
-                                 work, worksize, sliceId, stream));
-
-         // Synchronize and measure timing
-         auto time = timer.seconds();
-         minTimeCUTENSOR = (minTimeCUTENSOR < time) ? minTimeCUTENSOR : time;
-      }
+      printf("Not enough workspace memory is available.");
    }
+   else
+   {
+      HANDLE_ERROR (cutensornetWorkspaceSet(handle,
+                                            workDesc,
+                                            CUTENSORNET_MEMSPACE_DEVICE,
+                                            work,
+                                            worksize));
+                                          
+      HANDLE_ERROR( cutensornetCreateContractionPlan(handle,
+                                                     descNet,
+                                                     optimizerInfo,
+                                                     workDesc,
+                                                     &plan) );
 
-   printf("Contract the network, each slice uses the same contraction plan.\n");
+      /*******************************
+      * Optional: Auto-tune cuTENSOR's cutensorContractionPlan to pick the fastest kernel
+      *******************************/
+      cutensornetContractionAutotunePreference_t autotunePref;
+      HANDLE_ERROR(cutensornetCreateContractionAutotunePreference(handle,
+                              &autotunePref));
 
-   /*************************/
+      const int numAutotuningIterations = 5; // may be 0
+      HANDLE_ERROR(cutensornetContractionAutotunePreferenceSetAttribute(
+                              handle,
+                              autotunePref,
+                              CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS,
+                              &numAutotuningIterations,
+                              sizeof(numAutotuningIterations)));
 
-   double flops = -1;
+      // modify the plan again to find the best pair-wise contractions
+      HANDLE_ERROR(cutensornetContractionAutotune(handle,
+                              plan,
+                              rawDataIn_d,
+                              D_d,
+                              workDesc,
+                              autotunePref,
+                              stream));
 
-   HANDLE_ERROR( cutensornetContractionOptimizerInfoGetAttribute(
-               handle,
-               optimizerInfo,
-               CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT,
-               &flops,
-               sizeof(flops)));
+      HANDLE_ERROR(cutensornetDestroyContractionAutotunePreference(autotunePref));
 
-   printf("numSlices: %ld\n", numSlices);
-   printf("%.2f ms / slice\n", minTimeCUTENSOR * 1000.f);
-   printf("%.2f GFLOPS/s\n", flops/1e9/minTimeCUTENSOR );
+      printf("Create a contraction plan for cuTENSOR and optionally auto-tune it.\n");
+
+      /**********************
+      * Run
+      **********************/
+      GPUTimer timer;
+      double minTimeCUTENSOR = 1e100;
+      const int numRuns = 3; // to get stable perf results
+      for (int i=0; i < numRuns; ++i)
+      {
+         cudaMemcpy(D_d, D, sizeD, cudaMemcpyHostToDevice); // restore output
+         cudaDeviceSynchronize();
+
+         /*
+         * Contract over all slices.
+         *
+         * A user may choose to parallelize this loop across multiple devices.
+         */
+         for(int64_t sliceId=0; sliceId < numSlices; ++sliceId)
+         {
+            timer.start();
+
+            HANDLE_ERROR(cutensornetContraction(handle,
+                                    plan,
+                                    rawDataIn_d,
+                                    D_d,
+                                    workDesc, sliceId, stream));
+
+            // Synchronize and measure timing
+            auto time = timer.seconds();
+            minTimeCUTENSOR = (minTimeCUTENSOR < time) ? minTimeCUTENSOR : time;
+         }
+      }
+
+      printf("Contract the network, each slice uses the same contraction plan.\n");
+
+      /*************************/
+
+      double flops = -1;
+
+      HANDLE_ERROR( cutensornetContractionOptimizerInfoGetAttribute(
+                  handle,
+                  optimizerInfo,
+                  CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT,
+                  &flops,
+                  sizeof(flops)));
+
+      printf("numSlices: %ld\n", numSlices);
+      printf("%.2f ms / slice\n", minTimeCUTENSOR * 1000.f);
+      printf("%.2f GFLOPS/s\n", flops/1e9/minTimeCUTENSOR );
+   }
 
    HANDLE_ERROR(cutensornetDestroy(handle));
    HANDLE_ERROR(cutensornetDestroyNetworkDescriptor(descNet));
    HANDLE_ERROR(cutensornetDestroyContractionPlan(plan));
    HANDLE_ERROR(cutensornetDestroyContractionOptimizerConfig(optimizerConfig));
    HANDLE_ERROR(cutensornetDestroyContractionOptimizerInfo(optimizerInfo));
+   HANDLE_ERROR(cutensornetDestroyWorkspaceDescriptor(workDesc));
 
    if (A) free(A);
    if (B) free(B);

@@ -53,6 +53,11 @@ all: check-env
 	nvcc batch_measure.cu      -o batch_measure      ${CXX_FLAGS}
 	nvcc accessor_get.cu       -o accessor_get       ${CXX_FLAGS}
 	nvcc accessor_set.cu       -o accessor_set       ${CXX_FLAGS}
+	nvcc test_matrix_type.cu   -o test_matrix_type   ${CXX_FLAGS}
+	nvcc memory_handler.cu     -o memory_handler     ${CXX_FLAGS}
+	nvcc swap_index_bits.cu    -o swap_index_bits    ${CXX_FLAGS}
+	nvcc mgpu_batch_measure.cu -o mgpu_batch_measure ${CXX_FLAGS}
+	nvcc mgpu_sampler.cu       -o mgpu_sampler       ${CXX_FLAGS}
 
 check-env:
 	@ echo "" && \
@@ -77,4 +82,9 @@ clean:
 		measure_zbasis \
 		batch_measure \
 		accessor_get \
-		accessor_set
+		accessor_set \
+		test_matrix_type \
+		memory_handler \
+		swap_index_bits \
+		mgpu_batch_measure \
+		mgpu_sampler

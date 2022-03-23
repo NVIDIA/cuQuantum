@@ -69,7 +69,7 @@ int main(void) {
     size_t extraWorkspaceSizeInBytes = 0;
 
     // check the size of external workspace
-    HANDLE_ERROR( custatevecApplyMatrix_bufferSize(
+    HANDLE_ERROR( custatevecApplyMatrixGetWorkspaceSize(
                   handle, CUDA_C_64F, nIndexBits, matrix, CUDA_C_64F, CUSTATEVEC_MATRIX_LAYOUT_ROW,
                   adjoint, nTargets, nControls, CUSTATEVEC_COMPUTE_64F, &extraWorkspaceSizeInBytes) );
 
@@ -80,8 +80,8 @@ int main(void) {
     // apply gate
     HANDLE_ERROR( custatevecApplyMatrix(
                   handle, d_sv, CUDA_C_64F, nIndexBits, matrix, CUDA_C_64F,
-                  CUSTATEVEC_MATRIX_LAYOUT_ROW, adjoint, targets, nTargets, controls, nControls, 
-                  nullptr, CUSTATEVEC_COMPUTE_64F, extraWorkspace, extraWorkspaceSizeInBytes) );
+                  CUSTATEVEC_MATRIX_LAYOUT_ROW, adjoint, targets, nTargets, controls, nullptr,
+                  nControls, CUSTATEVEC_COMPUTE_64F, extraWorkspace, extraWorkspaceSizeInBytes) );
 
     // destroy handle
     HANDLE_ERROR( custatevecDestroy(handle) );

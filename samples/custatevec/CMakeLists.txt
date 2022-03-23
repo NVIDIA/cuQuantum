@@ -93,6 +93,12 @@ set(CMAKE_CUDA_STANDARD 11)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 
+set(CMAKE_CUDA_FLAGS_ARCH_SM70 "-gencode arch=compute_70,code=sm_70")
+set(CMAKE_CUDA_FLAGS_ARCH_SM75 "-gencode arch=compute_75,code=sm_75")
+set(CMAKE_CUDA_FLAGS_ARCH_SM80 "-gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80")
+set(CMAKE_CUDA_FLAGS_ARCH "${CMAKE_CUDA_FLAGS_ARCH_SM70} ${CMAKE_CUDA_FLAGS_ARCH_SM75} ${CMAKE_CUDA_FLAGS_ARCH_SM80}")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_ARCH}")
+
 # ##########################################
 # custatevec_example utility function
 # ##########################################
@@ -154,3 +160,8 @@ add_custatevec_example(custatevec_examples "cuStateVec.example.measure_zbasis"  
 add_custatevec_example(custatevec_examples "cuStateVec.example.batch_measure"      batch_measure.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.accessor_get"       accessor_get.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.accessor_set"       accessor_set.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.test_matrix_type"   test_matrix_type.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.memory_handler"     memory_handler.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.swap_index_bits"    swap_index_bits.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.mgpu_sampler"       mgpu_sampler.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.mgpu_batch_measure" mgpu_batch_measure.cu)

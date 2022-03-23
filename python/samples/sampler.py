@@ -45,7 +45,7 @@ cusv.sampler_sample(
     handle, sampler, bitStrings.ctypes.data, bitOrdering.ctypes.data, bitStringLen,
     randnums.ctypes.data, nShots, cusv.SamplerOutput.ASCENDING_ORDER)
 
-# destroy sampler (only required in Python)
+# destroy sampler
 cusv.sampler_destroy(sampler)
 
 # destroy handle

@@ -1,31 +1,42 @@
-import cupy
-import torch
-import numpy
 import functools
+
+import cupy
+import numpy
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from cuquantum import Network
 from cuquantum import NetworkOptions, OptimizerOptions
 
 from .data import *
 
-torch.backends.cuda.matmul.allow_tf32 = False
-torch.backends.cudnn.allow_tf32 = False
 
+def infer_object_package(name):
+    return name.split('.')[0]
 
 def dtype_name_dispatcher(source, dtype_name):
     import sys
     return getattr(sys.modules[source], dtype_name)
 
+
 stream_names = [
     "default",
     "cupy",
-    "torch"
 ]
 
 streams = dict(zip(
     stream_names,
-    [None, cupy.cuda.Stream(), torch.cuda.Stream()]
+    [None, cupy.cuda.Stream()]
 ))
+
+if torch:
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    stream_names.append("torch")
+    streams["torch"] = torch.cuda.Stream()
+
 
 def stream_name_sync_dispatcher(stream_name, skip=False):
     stream = streams[stream_name]
@@ -53,7 +64,7 @@ def generate_data_dispatcher(source, device, shape, dtype_name, array_order):
                     1.j * cupy.random.random(shape)).astype(dtype, order=array_order)
         else:
             data = cupy.random.random(shape).astype(dtype, order=array_order)
-    elif source == "torch":
+    elif torch and source == "torch":
         if "int" in dtype_name:
             data = torch.randint(-1, 2, shape, dtype=dtype, device=device)
         else:
@@ -73,7 +84,7 @@ def data_to_numpy(source, data):
         return data
     elif source == "cupy":
         return cupy.asnumpy(data)
-    elif source == "torch":
+    elif torch and source == "torch":
         return data.cpu().numpy()
 
 def data_operands_to_numpy(source, data_operands):
@@ -93,7 +104,7 @@ def einsum_dispatcher(source, einsum_expr, data_operands):
         return numpy.einsum(einsum_expr, *data_operands, optimize="optimal")
     elif source == "cupy":
         return cupy.einsum(einsum_expr, *data_operands)
-    elif source == "torch":
+    elif torch and source == "torch":
         return torch.einsum(einsum_expr, *data_operands)
 
 def network_options_dispatcher(network_options, mode=None):
@@ -152,7 +163,7 @@ def allclose_dispatcher(source, dtype_name):
             cupy.allclose, rtol=rtol_mapper[dtype_name],
             atol=atol_mapper[dtype_name]
         )
-    elif source == "torch":
+    elif torch and source == "torch":
         return functools.partial(
             torch.allclose, rtol=rtol_mapper[dtype_name],
             atol=atol_mapper[dtype_name]
@@ -212,6 +223,7 @@ class ProxyFixtureBase(NetworkRuntimeOptions):
             self.data_operands
         )
         self.tensor_class = tensor_class_dispatcher(self.data_operands)
+        self.tensor_package = infer_object_package(self.tensor_class.__module__)
         self.interleaved_inputs = interleaved_format_from_einsum(self.einsum_expr, self.data_operands)
         self.numpy_einsum_path = numpy.einsum_path(self.einsum_expr, *self.numpy_data_operands)
         self.einsum = einsum_dispatcher(self.source, self.einsum_expr, self.data_operands)

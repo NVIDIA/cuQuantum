@@ -70,7 +70,7 @@ int main(void) {
     size_t extraWorkspaceSizeInBytes = 0;
 
     // create accessor and check the size of external workspace
-    HANDLE_ERROR( custatevecAccessor_create(
+    HANDLE_ERROR( custatevecAccessorCreate(
                   handle, d_sv, CUDA_C_64F, nIndexBits, &accessor, bitOrdering, bitOrderingLen,
                   nullptr, nullptr, maskLen, &extraWorkspaceSizeInBytes) );
 
@@ -79,14 +79,15 @@ int main(void) {
         HANDLE_CUDA_ERROR( cudaMalloc(&extraWorkspace, extraWorkspaceSizeInBytes) );
 
     // set external workspace
-    HANDLE_ERROR( custatevecAccessor_setExtraWorkspace(
-                  handle, &accessor, extraWorkspace, extraWorkspaceSizeInBytes) );
+    HANDLE_ERROR( custatevecAccessorSetExtraWorkspace(
+                  handle, accessor, extraWorkspace, extraWorkspaceSizeInBytes) );
 
     // set state vector components
-    HANDLE_ERROR( custatevecAccessor_set(
-                  handle, &accessor, buffer, 0, nSvSize) );
+    HANDLE_ERROR( custatevecAccessorSet(
+                  handle, accessor, buffer, 0, nSvSize) );
 
-    // destroy handle
+    // destroy descriptor and handle
+    HANDLE_ERROR( custatevecAccessorDestroy(accessor) );
     HANDLE_ERROR( custatevecDestroy(handle) );
 
     //----------------------------------------------------------------------------------------------

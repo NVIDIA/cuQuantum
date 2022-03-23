@@ -18,6 +18,7 @@ class ContractProxyFixture(ProxyFixtureBase):
         use_numpy_einsum_path
     ):
         for stream_name in stream_names:
+            if stream_name is not None and stream_name != self.tensor_package: continue
             optimize = deepcopy(self.optimize)
 
             if use_numpy_einsum_path:

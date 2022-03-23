@@ -52,7 +52,7 @@ else ()
 endif ()
 
 # ##########################################
-# custatevec_example check-env utilities
+# cutensornet_example check-env utilities
 # ##########################################
 
 function(set_with_fallback VARIABLE FALLBACK)

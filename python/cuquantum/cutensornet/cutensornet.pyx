@@ -7,6 +7,9 @@ from libc.stdint cimport intptr_t, int32_t, uint32_t, int64_t, uint64_t, uintptr
 from libcpp.vector cimport vector
 
 from cuquantum.utils cimport is_nested_sequence
+from cuquantum.utils cimport cuqnt_alloc_wrapper
+from cuquantum.utils cimport cuqnt_free_wrapper
+from cuquantum.utils cimport logger_callback_with_data
 
 from enum import IntEnum
 import warnings
@@ -15,11 +18,6 @@ import numpy as _numpy
 
 
 cdef extern from * nogil:
-    # from CUDA
-    ctypedef int Stream 'cudaStream_t'
-    ctypedef enum DataType 'cudaDataType_t':
-        pass
-
     # cuTensorNet functions
     # library
     int cutensornetCreate(_Handle*)
@@ -35,6 +33,26 @@ cdef extern from * nogil:
         int32_t, const int64_t[], const int64_t[], const int32_t[],
         uint32_t, DataType, _ComputeType, _NetworkDescriptor*)
     int cutensornetDestroyNetworkDescriptor(_NetworkDescriptor)
+    int cutensornetGetOutputTensorDetails(
+        const _Handle, const _NetworkDescriptor,
+        int32_t*, size_t*, int32_t*, int64_t*, int64_t*)
+
+    # workspace descriptor
+    int cutensornetCreateWorkspaceDescriptor(
+        const _Handle, _WorkspaceDescriptor*)
+    int cutensornetWorkspaceComputeSizes(
+        const _Handle, const _NetworkDescriptor,
+        const _ContractionOptimizerInfo, _WorkspaceDescriptor)
+    int cutensornetWorkspaceGetSize(
+        const _Handle, const _WorkspaceDescriptor,
+        _WorksizePref, _Memspace, uint64_t*)
+    int cutensornetWorkspaceSet(
+        const _Handle, _WorkspaceDescriptor, _Memspace,
+        void* const, uint64_t)
+    int cutensornetWorkspaceGet(
+        const _Handle, const _WorkspaceDescriptor, _Memspace,
+        void**, uint64_t*)
+    int cutensornetDestroyWorkspaceDescriptor(_WorkspaceDescriptor)
 
     # optimizer info
     int cutensornetCreateContractionOptimizerInfo(
@@ -61,23 +79,28 @@ cdef extern from * nogil:
         const _Handle, _ContractionOptimizerConfig,
         _ContractionOptimizerConfigAttribute, const void*, size_t)
 
-    # contraction
-    int cutensornetContractionGetWorkspaceSize(
-        const _Handle, const _NetworkDescriptor,
-        const _ContractionOptimizerInfo,
-        uint64_t* workspaceSize)
+    # pathfinder
     int cutensornetContractionOptimize(
         const _Handle, const _NetworkDescriptor,
         const _ContractionOptimizerConfig,
         uint64_t, _ContractionOptimizerInfo)
+
+    # contraction plan
     int cutensornetCreateContractionPlan(
         const _Handle, const _NetworkDescriptor,
         const _ContractionOptimizerInfo,
-        const uint64_t, _ContractionPlan)
+        const _WorkspaceDescriptor, _ContractionPlan)
     int cutensornetDestroyContractionPlan(_ContractionPlan)
     int cutensornetContractionAutotune(
         const _Handle, _ContractionPlan, const void* const[],
-        void*, void*, uint64_t, _ContractionAutotunePreference, Stream)
+        void*, const _WorkspaceDescriptor,
+        _ContractionAutotunePreference, Stream)
+    int cutensornetContraction(
+        const _Handle, const _ContractionPlan, const void* const[],
+        void*, const _WorkspaceDescriptor,
+        int64_t, Stream)
+
+    # autotune pref
     int cutensornetCreateContractionAutotunePreference(
         const _Handle, _ContractionAutotunePreference*)
     int cutensornetDestroyContractionAutotunePreference(
@@ -88,9 +111,19 @@ cdef extern from * nogil:
     int cutensornetContractionAutotunePreferenceSetAttribute(
         const _Handle, _ContractionAutotunePreference,
         _ContractionAutotunePreferenceAttribute, const void*, size_t)
-    int cutensornetContraction(
-        const _Handle, const _ContractionPlan, const void* const[],
-        void*, void*, uint64_t, int64_t, Stream)
+
+    # memory handlers
+    int cutensornetGetDeviceMemHandler(const _Handle, _DeviceMemHandler*)
+    int cutensornetSetDeviceMemHandler(_Handle, const _DeviceMemHandler*)
+
+    # logger
+    #int cutensornetLoggerSetCallback(LoggerCallback)
+    int cutensornetLoggerSetCallbackData(LoggerCallbackData, void*)
+    #int cutensornetLoggerSetFile(FILE*)
+    int cutensornetLoggerOpenFile(const char*)
+    int cutensornetLoggerSetLevel(int32_t)
+    int cutensornetLoggerSetMask(int32_t)
+    int cutensornetLoggerForceDisable()
 
 
 class cuTensorNetError(RuntimeError):
@@ -112,7 +145,7 @@ cpdef intptr_t create() except*:
     """Create a cuTensorNet handle.
 
     Returns:
-        intptr_t: the opaque library handle (as Python `int`).
+        intptr_t: the opaque library handle (as Python :class:`int`).
 
     .. seealso:: `cutensornetCreate`
     """
@@ -129,6 +162,12 @@ cpdef destroy(intptr_t handle):
 
     .. seealso:: `cutensornetDestroy`
     """
+    # reduce the ref counts of user-provided Python objects:
+    # if Python callables are attached to the handle as the handler,
+    # we need to decrease the ref count to avoid leaking
+    if handle in owner_pyobj:
+        del owner_pyobj[handle]
+
     with nogil:
         status = cutensornetDestroy(<_Handle>handle)
     check_status(status)
@@ -147,7 +186,7 @@ cpdef size_t get_version() except*:
 
 
 cpdef size_t get_cudart_version() except*:
-    """Query the version of the CUDA runtime.
+    """Query the version of the CUDA runtime used to build cuTensorNet.
 
     Returns:
         size_t: the CUDA runtime version (ex: 11040 for CUDA 11.4).
@@ -173,51 +212,54 @@ cpdef intptr_t create_network_descriptor(
         n_modes_in: A host array of the number of modes for each input tensor.
             It can be
 
-            - an `int` as the pointer address to the array
-            - a Python sequence of `int`
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
 
         extents_in: A host array of extents for each input tensor. It can be
 
-            - an `int` as the pointer address to the nested sequence
-            - a Python sequence of `int`, each of which is a pointer address
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
               to the corresponding tensor's extents
-            - a nested Python sequence of `int`
+            - a nested Python sequence of :class:`int`
 
         strides_in: A host array of strides for each input tensor. It can be
 
-            - an `int` as the pointer address to the nested sequence
-            - a Python sequence of `int`, each of which is a pointer address
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
               to the corresponding tensor's strides
-            - a nested Python sequence of `int`
+            - a nested Python sequence of :class:`int`
 
         modes_in: A host array of modes for each input tensor. It can be
 
-            - an `int` as the pointer address to the nested sequence
-            - a Python sequence of `int`, each of which is a pointer address
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
               to the corresponding tensor's modes
-            - a nested Python sequence of `int`
+            - a nested Python sequence of :class:`int`
 
         alignments_in: A host array of alignments for each input tensor. It can
             be
 
-            - an `int` as the pointer address to the array
-            - a Python sequence of `int`
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
 
-        n_modes_out (int32_t): The number of modes of the output tensor.
+        n_modes_out (int32_t): The number of modes of the output tensor. If
+            this is set to -1 and ``modes_out`` is set to 0 (not provided),
+            the output modes will be inferred. If this is set to 0, the
+            network is force reduced.
         extents_out: The extents of the output tensor (on host). It can be
 
-            - an `int` as the pointer address to the array
-            - a Python sequence of `int`
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
 
         strides_out: The strides of the output tensor (on host). It can be
 
-            - an `int` as the pointer address to the array
-            - a Python sequence of `int`
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
 
         modes_out: The modes of the output tensor (on host). It can be
 
-            - an `int` as the pointer address to the array
-            - a Python sequence of `int`
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
 
         alignment_out (uint32_t): The alignment for the output tensor.
         data_type (cuquantum.cudaDataType): The data type of the input and
@@ -226,7 +268,7 @@ cpdef intptr_t create_network_descriptor(
             contraction.
 
     Returns:
-        intptr_t: An opaque descriptor handle (as Python `int`).
+        intptr_t: An opaque descriptor handle (as Python :class:`int`).
 
     .. note::
         If ``strides_in`` (``strides_out``) is set to 0 (`NULL`), it means
@@ -380,16 +422,184 @@ cpdef destroy_network_descriptor(intptr_t tn_desc):
     check_status(status)
 
 
+cpdef tuple get_output_tensor_details(intptr_t handle, intptr_t tn_desc):
+    """Get the output tensor's metadata.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tn_desc (intptr_t): The tensor network descriptor.
+
+    Returns:
+        tuple:
+            The metadata of the output tensor: ``(num_modes, modes, extents,
+            strides)``.
+
+    .. seealso:: `cutensornetGetOutputTensorDetails`
+    """
+    cdef int32_t numModesOut = 0
+    with nogil:
+        status = cutensornetGetOutputTensorDetails(
+            <_Handle>handle, <_NetworkDescriptor>tn_desc,
+            &numModesOut, NULL, NULL, NULL, NULL)
+    check_status(status)
+    modes = _numpy.empty(numModesOut, dtype=_numpy.int32)
+    extents = _numpy.empty(numModesOut, dtype=_numpy.int64)
+    strides = _numpy.empty(numModesOut, dtype=_numpy.int64)
+    cdef int32_t* mPtr = <int32_t*><intptr_t>modes.ctypes.data
+    cdef int64_t* ePtr = <int64_t*><intptr_t>extents.ctypes.data
+    cdef int64_t* sPtr = <int64_t*><intptr_t>strides.ctypes.data
+    with nogil:
+        status = cutensornetGetOutputTensorDetails(
+            <_Handle>handle, <_NetworkDescriptor>tn_desc,
+            &numModesOut, NULL, mPtr, ePtr, sPtr)
+    check_status(status)
+    return (numModesOut, modes, extents, strides)
+
+
+cpdef intptr_t create_workspace_descriptor(intptr_t handle) except*:
+    """Create a workspace descriptor.
+
+    Args:
+        handle (intptr_t): The library handle.
+
+    Returns:
+        intptr_t: An opaque workspace descriptor (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateWorkspaceDescriptor`
+    """
+    cdef _WorkspaceDescriptor workspace
+    with nogil:
+        status = cutensornetCreateWorkspaceDescriptor(
+            <_Handle>handle, <_WorkspaceDescriptor*>&workspace)
+    check_status(status)
+    return <intptr_t>workspace
+
+
+cpdef destroy_workspace_descriptor(intptr_t workspace):
+    """Destroy a workspace descriptor.
+
+    Args:
+        workspace (intptr_t): The workspace descriptor.
+
+    .. seealso:: `cutensornetDestroyWorkspaceDescriptor`
+    """
+    with nogil:
+        status = cutensornetDestroyWorkspaceDescriptor(
+            <_WorkspaceDescriptor>workspace)
+    check_status(status)
+
+
+cpdef workspace_compute_sizes(
+        intptr_t handle, intptr_t tn_desc, intptr_t info, intptr_t workspace):
+    """Compute the required workspace sizes.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tn_desc (intptr_t): The tensor network descriptor.
+        info (intptr_t): The optimizer info handle.
+        workspace (intptr_t): The workspace descriptor.
+
+    .. seealso:: `cutensornetWorkspaceComputeSizes`
+    """
+    with nogil:
+        status = cutensornetWorkspaceComputeSizes(
+            <_Handle>handle, <_NetworkDescriptor>tn_desc,
+            <_ContractionOptimizerInfo>info,
+            <_WorkspaceDescriptor>workspace)
+    check_status(status)
+
+
+cpdef uint64_t workspace_get_size(
+        intptr_t handle, intptr_t workspace, int pref, int mem_space) except*:
+    """Get the workspace size for the corresponding preference and memory
+    space. Must be called after :func:`workspace_compute_sizes`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        workspace (intptr_t): The workspace descriptor.
+        pref (WorksizePref): The preference for the workspace size.
+        mem_space (Memspace): The memory space for the workspace being
+            queried.
+ 
+    Returns:
+        uint64_t: The computed workspace size.
+
+    .. seealso:: `cutensornetWorkspaceGetSize`.
+    """
+    cdef uint64_t workspaceSize
+    with nogil:
+        status = cutensornetWorkspaceGetSize(
+            <_Handle>handle, <_WorkspaceDescriptor>workspace,
+            <_WorksizePref>pref, <_Memspace>mem_space,
+            &workspaceSize)
+    check_status(status)
+    return workspaceSize
+
+
+cpdef workspace_set(
+        intptr_t handle, intptr_t workspace, int mem_space,
+        intptr_t workspace_ptr, uint64_t workspace_size):
+    """Set the workspace pointer and size for the corresponding memory space
+    in the workspace descriptor for later use.
+
+    Args:
+        handle (intptr_t): The library handle.
+        workspace (intptr_t): The workspace descriptor.
+        mem_space (Memspace): The memory space for the workspace being
+            queried.
+        workspace_ptr (intptr_t): The pointer address to the workspace.
+        workspace_size (uint64_t): The size of the workspace.
+
+    .. seealso:: `cutensornetWorkspaceSet`
+    """
+    with nogil:
+        status = cutensornetWorkspaceSet(
+            <_Handle>handle, <_WorkspaceDescriptor>workspace,
+            <_Memspace>mem_space,
+            <void*>workspace_ptr, <uint64_t>workspace_size)
+    check_status(status)
+
+
+cpdef tuple workspace_get(
+        intptr_t handle, intptr_t workspace, int mem_space):
+    """Get the workspace pointer and size for the corresponding memory space
+    that are set in a workspace descriptor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        workspace (intptr_t): The workspace descriptor.
+        mem_space (Memspace): The memory space for the workspace being
+            queried.
+
+    Returns:
+        tuple:
+            A 2-tuple ``(workspace_ptr, workspace_size)`` for the pointer
+            address to the workspace and the size of it.
+
+    .. seealso:: `cutensornetWorkspaceSet`
+    """
+    cdef void* workspace_ptr
+    cdef uint64_t workspace_size
+
+    with nogil:
+        status = cutensornetWorkspaceGet(
+            <_Handle>handle, <_WorkspaceDescriptor>workspace,
+            <_Memspace>mem_space,
+            &workspace_ptr, &workspace_size)
+    check_status(status)
+    return (<intptr_t>workspace_ptr, workspace_size)
+
+
 cpdef intptr_t create_contraction_optimizer_info(
         intptr_t handle, intptr_t tn_desc) except*:
     """Create a contraction optimizer info object.
 
     Args:
         handle (intptr_t): The library handle.
-        tn_desc (intptr_t): the tensor network descriptor.
+        tn_desc (intptr_t): The tensor network descriptor.
 
     Returns:
-        intptr_t: An opaque optimizer info handle (as Python `int`).
+        intptr_t: An opaque optimizer info handle (as Python :class:`int`).
 
     .. seealso:: `cutensornetCreateContractionOptimizerInfo`
     """
@@ -482,7 +692,7 @@ cpdef contraction_optimizer_info_get_attribute(
         handle (intptr_t): The library handle.
         info (intptr_t): The optimizer info handle.
         attr (ContractionOptimizerInfoAttribute): The attribute to query.
-        buf (intptr_t): The pointer address (as Python `int`) for storing
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
             the returned attribute value.
         size (size_t): The size of ``buf`` (in bytes).
 
@@ -511,7 +721,7 @@ cpdef contraction_optimizer_info_set_attribute(
         handle (intptr_t): The library handle.
         info (intptr_t): The optimizer info handle.
         attr (ContractionOptimizerInfoAttribute): The attribute to set.
-        buf (intptr_t): The pointer address (as Python `int`) to the attribute data.
+        buf (intptr_t): The pointer address (as Python :class:`int`) to the attribute data.
         size (size_t): The size of ``buf`` (in bytes).
 
     .. note:: To compute ``size``, use the itemsize of the corresponding data
@@ -538,7 +748,7 @@ cpdef intptr_t create_contraction_optimizer_config(
         handle (intptr_t): The library handle.
 
     Returns:
-        intptr_t: An opaque optimizer config handle (as Python `int`).
+        intptr_t: An opaque optimizer config handle (as Python :class:`int`).
 
     .. seealso:: `cutensornetCreateContractionOptimizerConfig`
     """
@@ -583,6 +793,7 @@ cdef dict contract_opti_cfg_sizes = {
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SIMPLIFICATION_DISABLE_DR: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED: _numpy.int32,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS: _numpy.int32,
 }
 
 cpdef contraction_optimizer_config_get_attribute_dtype(int attr):
@@ -619,7 +830,7 @@ cpdef contraction_optimizer_config_get_attribute(
         handle (intptr_t): The library handle.
         config (intptr_t): The optimizer config handle.
         attr (ContractionOptimizerConfigAttribute): The attribute to set.
-        buf (intptr_t): The pointer address (as Python `int`) for storing
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
             the returned attribute value.
         size (size_t): The size of ``buf`` (in bytes).
 
@@ -645,7 +856,7 @@ cpdef contraction_optimizer_config_set_attribute(
         handle (intptr_t): The library handle.
         config (intptr_t): The optimizer config handle.
         attr (ContractionOptimizerConfigAttribute): The attribute to set.
-        buf (intptr_t): The pointer address (as Python `int`) to the attribute data.
+        buf (intptr_t): The pointer address (as Python :class:`int`) to the attribute data.
         size (size_t): The size of ``buf`` (in bytes).
 
     .. note:: To compute ``size``, use the itemsize of the corresponding data
@@ -661,35 +872,6 @@ cpdef contraction_optimizer_config_set_attribute(
     check_status(status)
 
 
-cpdef uint64_t contraction_get_workspace_size(
-        intptr_t handle, intptr_t tn_desc, intptr_t info) except*:
-    """Compute the required workspace size for contracting the input tensor
-    network.
-
-    Args:
-        handle (intptr_t): The library handle.
-        tn_desc (intptr_t): the tensor network descriptor.
-        info (intptr_t): The optimizer info handle.
-
-    Returns:
-        uint64_t: The workspace size (in bytes).
-
-    .. note:: This function should be called either after a contraction path
-        is manually set, or after :func:`contraction_optimize` is called.
-
-    .. seealso:: `cutensornetContractionGetWorkspaceSize`
-    """
-    # TODO(leofang): note in the docstring that the API name deviates
-    # from its C counterpart in beta 2
-    cdef uint64_t workspaceSize
-    with nogil:
-        status = cutensornetContractionGetWorkspaceSize(
-            <_Handle>handle, <_NetworkDescriptor>tn_desc,
-            <_ContractionOptimizerInfo>info, &workspaceSize)
-    check_status(status)
-    return workspaceSize
-
-
 cpdef contraction_optimize(
         intptr_t handle, intptr_t tn_desc, intptr_t config,
         uint64_t size_limit, intptr_t info):
@@ -697,7 +879,7 @@ cpdef contraction_optimize(
 
     Args:
         handle (intptr_t): The library handle.
-        tn_desc (intptr_t): the tensor network descriptor.
+        tn_desc (intptr_t): The tensor network descriptor.
         config (intptr_t): The optimizer config handle.
         size_limit (uint64_t): Maximal device memory that is available to the
             user.
@@ -720,7 +902,7 @@ cpdef contraction_optimize(
 
 cpdef intptr_t create_contraction_plan(
         intptr_t handle, intptr_t tn_desc, intptr_t info,
-        uint64_t workspace_size) except*:
+        intptr_t workspace) except*:
     """Create a contraction plan for the given tensor network and the
     associated path.
 
@@ -729,21 +911,23 @@ cpdef intptr_t create_contraction_plan(
 
     Args:
         handle (intptr_t): The library handle.
-        tn_desc (intptr_t): the tensor network descriptor.
+        tn_desc (intptr_t): The tensor network descriptor.
         info (intptr_t): The optimizer info handle.
-        workspace_size (uint64_t): The workspace size (in bytes).
+        workspace (intptr_t): The workspace descriptor.
 
     Returns:
-        intptr_t: An opaque contraction plan handle (as Python `int`).
+        intptr_t: An opaque contraction plan handle (as Python :class:`int`).
 
     .. seealso:: `cutensornetCreateContractionPlan`
     """
     cdef _ContractionPlan plan
+    # we always release gil here, because we don't need to allocate
+    # memory at this point yet
     with nogil:
         status = cutensornetCreateContractionPlan(
             <_Handle>handle, <_NetworkDescriptor>tn_desc,
             <_ContractionOptimizerInfo>info,
-            workspace_size, &plan)
+            <_WorkspaceDescriptor>workspace, &plan)
     check_status(status)
     return <intptr_t>plan
 
@@ -764,7 +948,7 @@ cpdef destroy_contraction_plan(intptr_t plan):
 cpdef contraction_autotune(
         intptr_t handle, intptr_t plan,
         raw_data_in, intptr_t raw_data_out, intptr_t workspace,
-        uint64_t workspace_size, intptr_t pref, intptr_t stream):
+        intptr_t pref, intptr_t stream):
     """Autotune the contraction plan to find the best kernels for each pairwise
     tensor contraction.
 
@@ -774,20 +958,18 @@ cpdef contraction_autotune(
     Args:
         handle (intptr_t): The library handle.
         plan (intptr_t): The contraction plan handle.
-        raw_data_in: A host array of pointer addresses (as Python `int`) for
+        raw_data_in: A host array of pointer addresses (as Python :class:`int`) for
             each input tensor (on device). It can be
 
-            - an `int` as the pointer address to the array
-            - a Python sequence of `int`
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
 
-        raw_data_out (intptr_t): The pointer address (as Python `int`) to the
+        raw_data_out (intptr_t): The pointer address (as Python :class:`int`) to the
             output tensor (on device).
-        workspace (intptr_t): The pointer address (as Python `int`) to the
-            workspace (on device).
-        workspace_size (uint64_t): The workspace size (in bytes).
+        workspace (intptr_t): The workspace descriptor.
         pref (intptr_t): The autotune preference handle.
         stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
-            `int`).
+            :class:`int`).
 
     .. seealso:: `cutensornetContractionAutotune`
     """
@@ -803,8 +985,9 @@ cpdef contraction_autotune(
     with nogil:
         status = cutensornetContractionAutotune(
             <_Handle>handle, <_ContractionPlan>plan,
-            rawDataInPtr, <void*>raw_data_out, <void*>workspace,
-            workspace_size, <_ContractionAutotunePreference>pref,
+            rawDataInPtr, <void*>raw_data_out,
+            <_WorkspaceDescriptor>workspace,
+            <_ContractionAutotunePreference>pref,
             <Stream>stream)
     check_status(status)
 
@@ -876,7 +1059,7 @@ cpdef contraction_autotune_preference_get_attribute(
         handle (intptr_t): The library handle.
         autotune_preference (intptr_t): The autotune preference handle.
         attr (ContractionAutotunePreferenceAttribute): The attribute to query.
-        buf (intptr_t): The pointer address (as Python `int`) for storing
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
             the returned attribute value.
         size (size_t): The size of ``buf`` (in bytes).
 
@@ -899,7 +1082,7 @@ cpdef contraction_autotune_preference_set_attribute(
         handle (intptr_t): The library handle.
         autotune_preference (intptr_t): The autotune preference handle.
         attr (ContractionAutotunePreferenceAttribute): The attribute to query.
-        buf (intptr_t): The pointer address (as Python `int`) to the attribute data.
+        buf (intptr_t): The pointer address (as Python :class:`int`) to the attribute data.
         size (size_t): The size of ``buf`` (in bytes).
 
     .. note:: To compute ``size``, use the itemsize of the corresponding data
@@ -918,7 +1101,7 @@ cpdef contraction_autotune_preference_set_attribute(
 cpdef contraction(
         intptr_t handle, intptr_t plan,
         raw_data_in, intptr_t raw_data_out, intptr_t workspace,
-        uint64_t workspace_size, int64_t slice_id, intptr_t stream):
+        int64_t slice_id, intptr_t stream):
     """Perform the contraction of the input tensors.
 
     The input tensors should form a tensor network that is prescribed by the
@@ -927,20 +1110,18 @@ cpdef contraction(
     Args:
         handle (intptr_t): The library handle.
         plan (intptr_t): The contraction plan handle.
-        raw_data_in: A host array of pointer addresses (as Python `int`) for
+        raw_data_in: A host array of pointer addresses (as Python :class:`int`) for
             each input tensor (on device). It can be
 
-            - an `int` as the pointer address to the array
-            - a Python sequence of `int`
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
 
-        raw_data_out (intptr_t): The pointer address (as Python `int`) to the
+        raw_data_out (intptr_t): The pointer address (as Python :class:`int`) to the
             output tensor (on device).
-        workspace (intptr_t): The pointer address (as Python `int`) to the
-            workspace (on device).
-        workspace_size (uint64_t): The workspace size (in bytes).
+        workspace (intptr_t): The workspace descriptor.
         slice_id (int64_t): The slice ID.
         stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
-            `int`).
+            :class:`int`).
 
     .. note:: The number of slices can be queried by :func:`contraction_optimizer_info_get_attribute`.
 
@@ -958,8 +1139,197 @@ cpdef contraction(
     with nogil:
         status = cutensornetContraction(
             <_Handle>handle, <_ContractionPlan>plan,
-            rawDataInPtr, <void*>raw_data_out, <void*>workspace,
-            workspace_size, slice_id, <Stream>stream)
+            rawDataInPtr, <void*>raw_data_out,
+            <_WorkspaceDescriptor>workspace,
+            slice_id, <Stream>stream)
+    check_status(status)
+
+
+cpdef set_device_mem_handler(intptr_t handle, handler):
+    """ Set the device memory handler for cuTensorNet.
+
+    The ``handler`` object can be passed in multiple ways:
+
+      - If ``handler`` is an :class:`int`, it refers to the address of a fully
+        initialized `cutensornetDeviceMemHandler_t` struct.
+      - If ``handler`` is a Python sequence:
+
+        - If ``handler`` is a sequence of length 4, it is interpreted as ``(ctx, device_alloc,
+          device_free, name)``, where the first three elements are the pointer
+          addresses (:class:`int`) of the corresponding members. ``name`` is a
+          :class:`str` as the name of the handler.
+        - If ``handler`` is a sequence of length 3, it is interpreted as ``(malloc, free,
+          name)``, where the first two objects are Python *callables* with the
+          following calling convention:
+
+            - ``ptr = malloc(size, stream)``
+            - ``free(ptr, size, stream)``
+
+          with all arguments and return value (``ptr``) being Python :class:`int`.
+          ``name`` is the same as above.
+
+    .. note:: Only when ``handler`` is a length-3 sequence will the GIL be
+        held whenever a routine requires memory allocation and deallocation,
+        so for all other cases be sure your ``handler`` does not manipulate
+        any Python objects.
+
+    Args:
+        handle (intptr_t): The library handle.
+        handler: The memory handler object, see above.
+
+    .. seealso:: `cutensornetSetDeviceMemHandler`
+    """
+    cdef bytes name
+    cdef _DeviceMemHandler our_handler
+    cdef _DeviceMemHandler* handlerPtr = &our_handler
+
+    if isinstance(handler, int):
+        handlerPtr = <_DeviceMemHandler*><intptr_t>handler
+    elif cpython.PySequence_Check(handler):
+        name = handler[-1].encode('ascii')
+        if len(name) > CUTENSORNET_ALLOCATOR_NAME_LEN:
+            raise ValueError("the handler name is too long")
+        our_handler.name[:len(name)] = name
+        our_handler.name[len(name)] = 0
+
+        if len(handler) == 4:
+            # handler = (ctx_ptr, malloc_ptr, free_ptr, name)
+            assert (isinstance(handler[1], int) and isinstance(handler[2], int))
+            our_handler.ctx = <void*><intptr_t>(handler[0])
+            our_handler.device_alloc = <DeviceAllocType><intptr_t>(handler[1])
+            our_handler.device_free = <DeviceFreeType><intptr_t>(handler[2])
+        elif len(handler) == 3:
+            # handler = (malloc, free, name)
+            assert (callable(handler[0]) and callable(handler[1]))
+            ctx = (handler[0], handler[1])
+            owner_pyobj[handle] = ctx  # keep it alive
+            our_handler.ctx = <void*>ctx
+            our_handler.device_alloc = cuqnt_alloc_wrapper
+            our_handler.device_free = cuqnt_free_wrapper
+        else:
+            raise ValueError("handler must be a sequence of length 3 or 4, "
+                             "see the documentation for detail")
+    else:
+        raise NotImplementedError("handler format not recognized")
+
+    with nogil:
+        status = cutensornetSetDeviceMemHandler(<_Handle>handle, handlerPtr)
+    check_status(status)
+
+
+cpdef tuple get_device_mem_handler(intptr_t handle):
+    """ Get the device memory handler for cuTensorNet.
+
+    Args:
+        handle (intptr_t): The library handle.
+
+    Returns:
+        tuple:
+            The ``handler`` object, which has two forms:
+
+              - If ``handler`` is a 3-tuple, it is interpreted as ``(malloc, free,
+                name)``, where the first two objects are Python *callables*, and ``name``
+                is the name of the handler. This 3-tuple handler would be compared equal
+                (elementwisely) to the one previously passed to :func:`set_device_mem_handler`.
+              - If ``handler`` is a 4-tuple, it is interpreted as ``(ctx, device_alloc,
+                device_free, name)``, where the first three elements are the pointer
+                addresses (:class:`int`) of the corresponding members. ``name`` is the
+                same as above.
+
+    .. seealso:: `cutensornetGetDeviceMemHandler`
+    """
+    cdef _DeviceMemHandler handler
+    with nogil:
+        status = cutensornetGetDeviceMemHandler(<_Handle>handle, &handler)
+    check_status(status)
+
+    cdef tuple ctx
+    cdef bytes name = handler.name
+    if (handler.device_alloc == cuqnt_alloc_wrapper and
+            handler.device_free == cuqnt_free_wrapper):
+        ctx = <object>(handler.ctx)
+        return (ctx[0], ctx[1], name.decode('ascii'))
+    else:
+        # TODO: consider other possibilities?
+        return (<intptr_t>handler.ctx,
+                <intptr_t>handler.device_alloc,
+                <intptr_t>handler.device_free,
+                name.decode('ascii'))
+
+
+# can't be cpdef because args & kwargs can't be handled in a C signature
+def logger_set_callback_data(callback, *args, **kwargs):
+    """Set the logger callback along with arguments.
+
+    Args:
+        callback: A Python callable with the following signature (no return):
+
+          - ``callback(log_level, func_name, message, *args, **kwargs)``
+
+          where ``log_level`` (:py:`int`), ``func_name`` (`str`), and
+          ``message`` (`str`) are provided by the logger API.
+
+    .. seealso:: `cutensornetLoggerSetCallbackData`
+    """
+    func_arg = (callback, args, kwargs)
+    # if only set once, the callback lifetime should be as long as this module,
+    # because we don't know when the logger is done using it
+    global logger_callback_holder
+    logger_callback_holder = func_arg
+    with nogil:
+        status = cutensornetLoggerSetCallbackData(
+            <LoggerCallbackData>logger_callback_with_data, <void*>(func_arg))
+    check_status(status)
+
+
+cpdef logger_open_file(filename):
+    """Set the filename for the logger to write to.
+
+    Args:
+        filename (str): The log filename.
+
+    .. seealso:: `cutensornetLoggerOpenFile`
+    """
+    cdef bytes name = filename.encode()
+    cdef char* name_ptr = name
+    with nogil:
+        status = cutensornetLoggerOpenFile(name_ptr)
+    check_status(status)
+
+
+cpdef logger_set_level(int level):
+    """Set the logging level.
+
+    Args:
+        level (int): The logging level.
+
+    .. seealso:: `cutensornetLoggerSetLevel`
+    """
+    with nogil:
+        status = cutensornetLoggerSetLevel(level)
+    check_status(status)
+
+
+cpdef logger_set_mask(int mask):
+    """Set the logging mask.
+
+    Args:
+        level (int): The logging mask.
+
+    .. seealso:: `cutensornetLoggerSetMask`
+    """
+    with nogil:
+        status = cutensornetLoggerSetMask(mask)
+    check_status(status)
+
+
+cpdef logger_force_disable():
+    """Disable the logger.
+
+    .. seealso:: `cutensornetLoggerForceDisable`
+    """
+    with nogil:
+        status = cutensornetLoggerForceDisable()
     check_status(status)
 
 
@@ -987,7 +1357,7 @@ cdef class ContractionPath:
 
     Args:
         num_contractions (int): The number of contractions in the provided path.
-        data (uintptr_t): The pointer address (as Python `int`) to the provided path.
+        data (uintptr_t): The pointer address (as Python :class:`int`) to the provided path.
 
     .. note::
         Users are responsible for managing the lifetime of the underlying path data
@@ -1029,15 +1399,15 @@ cdef class ContractionPath:
         return sizeof(_ContractionPath)
 
 
-class GraphAlgorithm(IntEnum):
+class GraphAlgo(IntEnum):
     """See `cutensornetGraphAlgo_t`."""
-    RB = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GRAPH_ALGORITHM_RB
-    KWAY = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GRAPH_ALGORITHM_KWAY
+    RB = CUTENSORNET_GRAPH_ALGO_RB
+    KWAY = CUTENSORNET_GRAPH_ALGO_KWAY
 
 class MemoryModel(IntEnum):
     """See `cutensornetMemoryModel_t`."""
-    SLICER_HEURISTIC = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_MEMORY_MODEL_HEURISTIC
-    SLICER_CUTENSOR = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_MEMORY_MODEL_CUTENSOR
+    HEURISTIC = CUTENSORNET_MEMORY_MODEL_HEURISTIC
+    CUTENSOR = CUTENSORNET_MEMORY_MODEL_CUTENSOR
 
 class ContractionOptimizerConfigAttribute(IntEnum):
     """See `cutensornetContractionOptimizerConfigAttributes_t`."""
@@ -1057,6 +1427,7 @@ class ContractionOptimizerConfigAttribute(IntEnum):
     HYPER_NUM_SAMPLES = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES
     SIMPLIFICATION_DISABLE_DR = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SIMPLIFICATION_DISABLE_DR
     SEED = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED
+    HYPER_NUM_THREADS = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS
 
 class ContractionOptimizerInfoAttribute(IntEnum):
     """See `cutensornetContractionOptimizerInfoAttributes_t`."""
@@ -1074,6 +1445,16 @@ class ContractionAutotunePreferenceAttribute(IntEnum):
     """See `cutensornetContractionAutotunePreferenceAttributes_t`."""
     MAX_ITERATIONS = CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS
 
+class WorksizePref(IntEnum):
+    """See `cutensornetWorksizePref_t`."""
+    MIN = CUTENSORNET_WORKSIZE_PREF_MIN
+    RECOMMENDED = CUTENSORNET_WORKSIZE_PREF_RECOMMENDED
+    MAX = CUTENSORNET_WORKSIZE_PREF_MAX
+
+class Memspace(IntEnum):
+    """See `cutensornetMemspace_t`."""
+    DEVICE = CUTENSORNET_MEMSPACE_DEVICE
+
 del IntEnum
 
 
@@ -1082,3 +1463,7 @@ MAJOR_VER = CUTENSORNET_MAJOR
 MINOR_VER = CUTENSORNET_MINOR
 PATCH_VER = CUTENSORNET_PATCH
 VERSION = CUTENSORNET_VERSION
+
+
+# who owns a reference to user-provided Python objects (k: owner, v: object)
+cdef dict owner_pyobj = {}

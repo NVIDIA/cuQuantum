@@ -2,36 +2,50 @@
 
 * [Documentation](https://docs.nvidia.com/cuda/cutensornet/index.html)
 
-# Install
+## Install
 
-## Linux
+### Linux
 
-You can use make to compile the cuTensorNet samples. The option CUTENSORNET_ROOT need to be defined if cuTensorNet is not the CUDA installation folder.
+You can use make to compile the cuTensorNet samples. The environment variables `CUTENSOR_ROOT` and `CUTENSORNET_ROOT` need to be defined if cuTENSOR and cuTensorNet is not the CUDA installation folder.
 
-With make
-
+Using `make`:
 ```
-export CUTENSORNET_ROOT=<path_to_custatevec_root>
+export CUTENSOR_ROOT=<path_to_cutensor_root>
+export CUTENSORNET_ROOT=<path_to_cutensornet_root>
 make -j8
 ```
+or `cmake`:
+```
+export CUTENSOR_ROOT=<path_to_cutensor_root>
+export CUTENSORNET_ROOT=<path_to_cutensornet_root>
+cmake . && make
+```
 
-# Support
+## Run
+
+To execute the sample, simply run:
+```
+./tensornet_example
+```
+
+## Support
 
 * **Supported SM Architectures:** SM 7.0, SM 7.5, SM 8.0, SM 8.6
 * **Supported OSes:** Linux
-* **Supported CPU Architectures**: x86_64, arm64
-* **Language**: `C++11`
+* **Supported CPU Architectures**: x86_64, aarch64-sbsa, ppc64le
+* **Language**: C++11 or above
 
-# Prerequisites
+## Prerequisites
 
-* [CUDA 1X.X toolkit](https://developer.nvidia.com/cuda-downloads) (or above) and compatible driver (see [CUDA Driver Release Notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#cuda-major-component-versions)).
+* [CUDA Toolkit 11.x](https://developer.nvidia.com/cuda-downloads) and compatible driver (see [CUDA Driver Release Notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#cuda-major-component-versions)).
 
-# Description
-This sample helps users get familiar with cuTensorNet.
-It provides an example of calling cuTensorNet to find a contraction path and as well as performing the contraction.
+## Description
+This sample helps users get familiar with cuTensorNet. It provides an example of calling cuTensorNet to find a contraction path and as well as performing the contraction.
+
 The sample consists of:
-* Defining a Tensor Network (Create Contraction Descriptor using "cutensornetCreateNetworkDescriptor").
-* Find a close-to-optimal order of contraction via "cutensornetContractionOptimize". Users can control some parameters of the cutensornetContractionOptimize (e.g., path finder) using the "cutensornetContractionOptimizerConfigSetAttribute" function. Users also can provide their own path and use the SetAttribute tool to set the Info structure to their own path.
-* Create a planning to performs the contraction using "cutensornetCreateContractionPlan". This step will prepare a planning for the execution of list of the pairwise contractions provided by the path.
-* Users can optionally call "cutensornetContractionAutotune" to perform autotuning and choose the best performing kernel for the corresponding path such that the winner kernels will be called for all subsequent calls to performs the contraction "cutensornetContraction". The autotuning could bring improvement in particular when "cutensornetContraction" is called multiple times.
-* Performs the computation of the contraction using "cutensornetContraction".
+* Define a tensor network using `cutensornetCreateNetworkDescriptor`.
+* Find a close-to-optimal order of contraction (i.e., a contraction path) via `cutensornetContractionOptimize`. Users can control the parameters of `cutensornetContractionOptimize` (e.g., the pathfinder) using the `cutensornetContractionOptimizerConfigSetAttribute` function. Users also can provide their own path and use the `cutensornetContractionOptimizerInfoSetAttribute` API to set the `cutensornetContractionOptimizerInfo_t` structure to their own path.
+* Create a contraction plan for performing the contraction using `cutensornetCreateContractionPlan`. This step will prepare a plan for the execution of a list of the pairwise contractions provided by the path.
+* Optionally, call `cutensornetContractionAutotune` to perform autotuning, which chooses the best performant kernels for the corresponding path such that the winner kernels will be called for all subsequent calls of `cutensornetContraction` to perform the contraction of the tensor network. The autotuning could bring improvement in particular when `cutensornetContraction` is called multiple times with the same plan/network.
+* Perform the computation of the contraction using `cutensornetContraction`.
+* Free the cuTensorNet resources.

@@ -67,7 +67,7 @@ int main(void) {
     size_t extraWorkspaceSizeInBytes = 0;
 
     // check the size of external workspace
-    HANDLE_ERROR( custatevecExpectation_bufferSize(
+    HANDLE_ERROR( custatevecComputeExpectationGetWorkspaceSize(
                   handle, CUDA_C_64F, nIndexBits, matrix, CUDA_C_64F, CUSTATEVEC_MATRIX_LAYOUT_ROW,
                   nBasisBits, CUSTATEVEC_COMPUTE_64F, &extraWorkspaceSizeInBytes) );
 
@@ -76,7 +76,7 @@ int main(void) {
         HANDLE_CUDA_ERROR( cudaMalloc(&extraWorkspace, extraWorkspaceSizeInBytes) );
 
     // compute expectation
-    HANDLE_ERROR( custatevecExpectation(
+    HANDLE_ERROR( custatevecComputeExpectation(
                   handle, d_sv, CUDA_C_64F, nIndexBits, &expectationValue, CUDA_C_64F, nullptr,
                   matrix, CUDA_C_64F, CUSTATEVEC_MATRIX_LAYOUT_ROW, basisBits, nBasisBits,
                   CUSTATEVEC_COMPUTE_64F, extraWorkspace, extraWorkspaceSizeInBytes) );
