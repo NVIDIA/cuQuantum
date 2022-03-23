@@ -8,7 +8,7 @@ This public repository contains two sets of files related to the [NVIDIA cuQuant
 - `python`: The open-sourced cuQuantum Python project.
   - Available for download on
     - conda-forge: `cuquantum` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum.svg)](https://anaconda.org/conda-forge/cuquantum), `cuquantum-python` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum-python.svg)](https://anaconda.org/conda-forge/cuquantum-python)
-    - PyPI: *coming soon!*
+    - PyPI: `cuquantum` [![pypi](https://img.shields.io/pypi/v/cuquantum.svg)](https://pypi.python.org/pypi/cuquantum), `cuquantum-python` [![pypi](https://img.shields.io/pypi/v/cuquantum-python.svg)](https://pypi.python.org/pypi/cuquantum-python)
 
 Other components of the cuQuantum SDK can be accessed following the instruction given in the documentation.
 
