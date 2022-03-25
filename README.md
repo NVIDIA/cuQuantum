@@ -20,3 +20,10 @@ the [cuQuantum documentation](https://docs.nvidia.com/cuda/cuquantum/index.html)
 ## License
 
 All files hosted in this repository are subject to the [BSD-3-Clause](./LICENSE) license.
+
+## Citing cuQuantum
+
+cuQuantum-python is uploaded to Zenodo automatically. Click the badge below to see citation formats.
+
+[![DOI](https://zenodo.org/badge/435003852.svg)](https://zenodo.org/badge/latestdoi/435003852)
+
