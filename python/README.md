@@ -65,12 +65,13 @@ Runtime dependencies of the cuQuantum Python package include:
 * cuQuantum 22.03
 * cuTENSOR 1.5.0+
 * NumPy v1.17+
-* CuPy v9.5.0+
-* PyTorch v1.10+ (optional)
+* CuPy v9.5.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
+* PyTorch v1.10+ (optional, see [installation guide](https://pytorch.org/get-started/locally/))
+* [typing-extensions](https://pypi.org/project/typing-extensions/)
 
 If you install everything from conda-forge, the dependencies are taken care for you (except for the driver).
 
-If you install the pip wheels, cuTENSOR and cuQuantum are installed for you.
+If you install the pip wheels, cuTENSOR and cuQuantum are installed for you (but not CUDA Toolkit or the driver).
 
 If you build cuQuantum Python from source, please make sure the paths to the cuQuantum and cuTENSOR libraries are added
 to your `LD_LIBRARY_PATH` environment variable.
