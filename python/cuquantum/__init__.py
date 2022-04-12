@@ -1,3 +1,7 @@
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 from cuquantum import custatevec
 from cuquantum import cutensornet
 from cuquantum.cutensornet import (

@@ -1,5 +1,6 @@
-# TODO: Ultimately, everything should be auto-generated using
-# the scripts from the CUDA Python team
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+#
+# SPDX-License-Identifier: BSD-3-Clause
 
 from libc.stdint cimport intptr_t, int32_t, uint32_t, int64_t
 

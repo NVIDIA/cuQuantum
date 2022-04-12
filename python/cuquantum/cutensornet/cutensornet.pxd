@@ -1,5 +1,6 @@
-# TODO: Ultimately, everything should be auto-generated using
-# the scripts from the CUDA Python team
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+#
+# SPDX-License-Identifier: BSD-3-Clause
 
 # The C types are prefixed with an underscore because we are not
 # yet protected by the module namespaces as done in CUDA Python.

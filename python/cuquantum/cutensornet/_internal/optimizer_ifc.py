@@ -1,3 +1,7 @@
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 """
 Interface class to encapsulate low-level calls to get or set optimizer information.
 """
