@@ -92,6 +92,7 @@ install_requires = [
     'numpy',
     # 'cupy', # <-- can't be listed here as on PyPI this is the name for source build, not for wheel
     # 'torch', # <-- PyTorch is optional; also, it does not live on PyPI...
+    'typing_extensions',
     ]
 ignore_cuquantum_dep = bool(os.environ.get('CUQUANTUM_IGNORE_SOLVER', False))
 if not ignore_cuquantum_dep:

@@ -27,6 +27,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */  
 
+// Sphinx: #1
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -52,11 +53,10 @@ if( err != CUTENSORNET_STATUS_SUCCESS )                                \
 
 struct GPUTimer
 {
-   GPUTimer()
+   GPUTimer(cudaStream_t stream): stream_(stream)
    {
       cudaEventCreate(&start_);
       cudaEventCreate(&stop_);
-      cudaEventRecord(start_, 0);
    }
 
    ~GPUTimer()
@@ -67,19 +67,21 @@ struct GPUTimer
 
    void start()
    {
-      cudaEventRecord(start_, 0);
+      cudaEventRecord(start_, stream_);
    }
 
    float seconds()
    {
-      cudaEventRecord(stop_, 0);
+      cudaEventRecord(stop_, stream_);
       cudaEventSynchronize(stop_);
       float time;
       cudaEventElapsedTime(&time, start_, stop_);
       return time * 1e-3;
    }
+
    private:
    cudaEvent_t start_, stop_;
+   cudaStream_t stream_;
 };
 
 
@@ -103,12 +105,12 @@ int main()
    printf("========================\n");
 
    typedef float floatType;
-
    cudaDataType_t typeData = CUDA_R_32F;
    cutensornetComputeType_t typeCompute = CUTENSORNET_COMPUTE_32F;
 
    printf("Include headers and define data types\n");
 
+   // Sphinx: #2
    /**********************
    * Computing: D_{m,x,n,y} = A_{m,h,k,n} B_{u,k,h} C_{x,u,y}
    **********************/
@@ -147,6 +149,7 @@ int main()
 
    printf("Define network, modes, and extents\n");
 
+   // Sphinx: #3
    /**********************
    * Allocating data
    **********************/
@@ -205,11 +208,12 @@ int main()
    *******************/
 
    for (uint64_t i = 0; i < elementsA; i++)
-      A[i] = (((float) rand())/RAND_MAX - 0.5)*100;
+      A[i] = ((float) rand())/RAND_MAX;
    for (uint64_t i = 0; i < elementsB; i++)
-      B[i] = (((float) rand())/RAND_MAX - 0.5)*100;
+      B[i] = ((float) rand())/RAND_MAX;
    for (uint64_t i = 0; i < elementsC; i++)
-      C[i] = (((float) rand())/RAND_MAX - 0.5)*100;
+      C[i] = ((float) rand())/RAND_MAX;
+   memset(D, 0, sizeof(floatType) * elementsD);
 
    HANDLE_CUDA_ERROR(cudaMemcpy(rawDataIn_d[0], A, sizeA, cudaMemcpyHostToDevice));
    HANDLE_CUDA_ERROR(cudaMemcpy(rawDataIn_d[1], B, sizeB, cudaMemcpyHostToDevice));
@@ -217,6 +221,7 @@ int main()
 
    printf("Allocate memory for data and workspace, and initialize data.\n");
 
+   // Sphinx: #4
    /*************************
    * cuTensorNet
    *************************/
@@ -270,6 +275,7 @@ int main()
 
    printf("Initialize the cuTensorNet library and create a network descriptor.\n");
 
+   // Sphinx: #5
    /*******************************
    * Find "optimal" contraction order and slicing
    *******************************/
@@ -307,6 +313,7 @@ int main()
 
    printf("Find an optimized contraction path with cuTensorNet optimizer.\n");
 
+   // Sphinx: #6
    /*******************************
    * Initialize all pair-wise contraction plans (for cuTENSOR)
    *******************************/
@@ -372,10 +379,11 @@ int main()
 
       printf("Create a contraction plan for cuTENSOR and optionally auto-tune it.\n");
 
+      // Sphinx: #7
       /**********************
       * Run
       **********************/
-      GPUTimer timer;
+      GPUTimer timer{stream};
       double minTimeCUTENSOR = 1e100;
       const int numRuns = 3; // to get stable perf results
       for (int i=0; i < numRuns; ++i)
@@ -387,6 +395,9 @@ int main()
          * Contract over all slices.
          *
          * A user may choose to parallelize this loop across multiple devices.
+         * (Note, however, that as of cuTensorNet v1.0.0 the contraction must
+         * start from slice 0, see the cutensornetContraction documentation at
+         * https://docs.nvidia.com/cuda/cuquantum/cutensornet/api/functions.html#cutensornetcontraction )
          */
          for(int64_t sliceId=0; sliceId < numSlices; ++sliceId)
          {
