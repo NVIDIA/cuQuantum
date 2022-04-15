@@ -71,7 +71,8 @@ Runtime dependencies of the cuQuantum Python package include:
 
 If you install everything from conda-forge, the dependencies are taken care for you (except for the driver).
 
-If you install the pip wheels, cuTENSOR and cuQuantum are installed for you (but not CUDA Toolkit or the driver).
+If you install the pip wheels, cuTENSOR and cuQuantum (but not CUDA Toolkit or the driver,
+please make sure the CUDA libraries are discoverable through your `LD_LIBRARY_PATH`) are installed for you.
 
 If you build cuQuantum Python from source, please make sure the paths to the cuQuantum and cuTENSOR libraries are added
 to your `LD_LIBRARY_PATH` environment variable.

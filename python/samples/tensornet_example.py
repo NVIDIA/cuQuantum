@@ -204,6 +204,16 @@ for i in range(numRuns):
 
 print("Contract the network, each slice uses the same contraction plan.")
 
+# recall that we set strides to null (0), so the data are in F-contiguous layout
+A_d = A_d.reshape(extentA, order='F')
+B_d = B_d.reshape(extentB, order='F')
+C_d = C_d.reshape(extentC, order='F')
+D_d = D_d.reshape(extentD, order='F')
+out = cp.einsum("mhkn,ukh,xuy->mxny", A_d, B_d, C_d)
+if not cp.allclose(out, D_d):
+    raise RuntimeError("result is incorrect")
+print("Check cuTensorNet result against that of cupy.einsum().")
+
 #######################################################
 
 flops_dtype = cutn.contraction_optimizer_info_get_attribute_dtype(
