@@ -1,3 +1,7 @@
+# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 """
 Factories for create options dataclasses, as well as utilities to add docstring to enum classes.
 """
