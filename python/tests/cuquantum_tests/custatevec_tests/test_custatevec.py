@@ -4,6 +4,7 @@
 
 import copy
 import os
+import sys
 import tempfile
 
 try:
@@ -28,6 +29,11 @@ from cuquantum import custatevec as cusv
 # This decision will be revisited in the future.
 #
 ###################################################################
+
+if cffi:
+    # if the Python binding is not installed in the editable mode (pip install
+    # -e .), the cffi tests would fail as the modules cannot be imported
+    sys.path.append(os.getcwd())
 
 dtype_to_data_type = {
     numpy.dtype(numpy.complex64): cudaDataType.CUDA_C_32F,

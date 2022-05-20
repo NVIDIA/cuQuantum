@@ -6,6 +6,7 @@ import contextlib
 from collections import abc
 import functools
 import os
+import sys
 import tempfile
 
 try:
@@ -30,6 +31,11 @@ from cuquantum import cutensornet as cutn
 # This decision will be revisited in the future.
 #
 ###################################################################
+
+if cffi:
+    # if the Python binding is not installed in the editable mode (pip install
+    # -e .), the cffi tests would fail as the modules cannot be imported
+    sys.path.append(os.getcwd())
 
 dtype_to_data_type = {
     numpy.float16: cudaDataType.CUDA_R_16F,
@@ -269,8 +275,10 @@ class TestLibHelper:
         assert ver == cutn.VERSION
 
     def test_get_cudart_version(self):
+        # CUDA runtime is statically linked, so we can't compare
+        # with the "runtime" version
         ver = cutn.get_cudart_version()
-        assert ver == cupy.cuda.runtime.runtimeGetVersion()
+        assert isinstance(ver, int)
 
 
 class TestHandle:
