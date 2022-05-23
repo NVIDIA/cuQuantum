@@ -22,7 +22,10 @@ with open(os.path.join(source_root, 'cuquantum', '_version.py')) as f:
 # 22.3 by setuptools, so we must follow the same practice in the constraints;
 # also, we don't need the Python patch number here
 cuqnt_py_ver = Version(__version__)
-cuqnt_ver_major_minor = f"{cuqnt_py_ver.major}.{cuqnt_py_ver.minor}"
+# WAR: restore this line when releasing 22.06, for now we pin at 22.03 to
+# enable binary compatibility
+#cuqnt_ver_major_minor = f"{cuqnt_py_ver.major}.{cuqnt_py_ver.minor}"
+cuqnt_ver_major_minor = '22.3'
 
 
 # search order:
@@ -94,17 +97,20 @@ setup_requires = [
     ]
 install_requires = [
     'numpy',
-    # 'cupy', # <-- can't be listed here as on PyPI this is the name for source build, not for wheel
-    # 'torch', # <-- PyTorch is optional; also, it does not live on PyPI...
+    # 'cupy', # TODO: use "cupy-wheel" once it's stablized, see https://github.com/cupy/cupy/issues/6688
+    # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
     'typing_extensions',
     ]
 ignore_cuquantum_dep = bool(os.environ.get('CUQUANTUM_IGNORE_SOLVER', False))
 if not ignore_cuquantum_dep:
     assert using_cuquantum_wheel  # if this raises, the env is corrupted
-    # cuTENSOR version is constrained in the cuquantum package, so we don't
-    # need to list it
-    setup_requires.append(f'cuquantum=={cuqnt_ver_major_minor}.*')
-    install_requires.append(f'cuquantum=={cuqnt_ver_major_minor}.*')
+    # - cuTENSOR version is constrained in the cuquantum package, so we don't
+    #   need to list it
+    # - here we assume no API breaking across releases, if there's any we must
+    #   bump the lowest supported version; we can't cap the highest supported
+    #   version as we don't use semantic versioning, unfortunately...
+    setup_requires.append(f'cuquantum>={cuqnt_ver_major_minor}.*')
+    install_requires.append(f'cuquantum>={cuqnt_ver_major_minor}.*')
 
 
 def check_cuda_version():
@@ -225,7 +231,7 @@ setup(
         "Environment :: GPU :: NVIDIA CUDA :: 11.3",
         "Environment :: GPU :: NVIDIA CUDA :: 11.4",
         "Environment :: GPU :: NVIDIA CUDA :: 11.5",
-        #"Environment :: GPU :: NVIDIA CUDA :: 11.6",  # PyPI has not added it yet
+        "Environment :: GPU :: NVIDIA CUDA :: 11.6",
     ],
     ext_modules=cythonize([
         custatevec,

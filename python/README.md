@@ -12,7 +12,7 @@ Build-time dependencies of the cuQuantum Python package and some versions that
 are known to work are as follows:
 
 * CUDA Toolkit 11.x
-* cuQuantum 22.03
+* cuQuantum 22.03+
 * cuTENSOR 1.5.0+
 * Cython - e.g. 0.29.21
 * [packaging](https://packaging.pypa.io/en/latest/)
@@ -62,7 +62,7 @@ Runtime dependencies of the cuQuantum Python package include:
 * An NVIDIA GPU with compute capability 7.0+
 * Driver: Linux (450.80.02+)
 * CUDA Toolkit 11.x
-* cuQuantum 22.03
+* cuQuantum 22.03+
 * cuTENSOR 1.5.0+
 * NumPy v1.17+
 * CuPy v9.5.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
