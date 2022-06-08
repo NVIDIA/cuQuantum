@@ -8,6 +8,8 @@ Entry point to using tensors from different libraries seamlessly.
 
 __all__ = [ 'infer_tensor_package', 'wrap_operands', 'wrap_operands', 'to', 'copy_']
 
+import functools
+
 import numpy as np
 
 from . import formatters
@@ -25,8 +27,10 @@ try:
     import torch
     from .tensor_ifc_torch import TorchTensor
     _TENSOR_TYPES['torch']  = TorchTensor
+    torch_asarray = functools.partial(torch.as_tensor, device='cuda')
 except ImportError as e:
-    pass
+    torch = None
+    torch_asarray = None
 
 _SUPPORTED_PACKAGES = tuple(_TENSOR_TYPES.keys())
 
@@ -39,6 +43,14 @@ def infer_tensor_package(tensor):
     module = tensor.__class__.__module__
     return module.split('.')[0]
 
+def _get_backend_asarray_func(backend):
+    """
+    Infer the package that defines this tensor.
+    """
+    if backend is torch:
+        return torch_asarray
+    else:
+        return backend.asarray
 
 def wrap_operand(native_operand):
     """
