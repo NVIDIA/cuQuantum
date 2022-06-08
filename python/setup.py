@@ -219,7 +219,6 @@ setup(
         "Topic :: Education",
         "Topic :: Scientific/Engineering",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
@@ -232,6 +231,7 @@ setup(
         "Environment :: GPU :: NVIDIA CUDA :: 11.4",
         "Environment :: GPU :: NVIDIA CUDA :: 11.5",
         "Environment :: GPU :: NVIDIA CUDA :: 11.6",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.7",
     ],
     ext_modules=cythonize([
         custatevec,
@@ -241,12 +241,16 @@ setup(
     packages=find_packages(include=['cuquantum', 'cuquantum.*']),
     package_data={"": ["*.pxd", "*.pyx", "*.py"],},
     zip_safe=False,
-    python_requires='>=3.7',
+    python_requires='>=3.8',
     setup_requires=setup_requires,
     install_requires=install_requires,
     tests_require=install_requires + [
         # pytest < 6.2 is slow in collecting tests
         'pytest>=6.2',
-        #'cffi>=1.0.0',  # optional
+        # optional test deps
+        #'cffi>=1.0.0',
+        #'nbmake>=1.3.0',  # for testing notebooks
+        #'cirq>=0.6.0',
+        #'qiskit>=0.24.0',
     ]
 )

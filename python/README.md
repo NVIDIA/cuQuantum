@@ -67,6 +67,8 @@ Runtime dependencies of the cuQuantum Python package include:
 * NumPy v1.17+
 * CuPy v9.5.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
 * PyTorch v1.10+ (optional, see [installation guide](https://pytorch.org/get-started/locally/))
+* qiskit v0.24.0+ (optional, see [installation guide](https://qiskit.org/documentation/getting_started.html))
+* cirq v0.6.0+ (optional, see [installation guide](https://quantumai.google/cirq/install))
 * [typing-extensions](https://pypi.org/project/typing-extensions/)
 
 If you install everything from conda-forge, the dependencies are taken care for you (except for the driver).
