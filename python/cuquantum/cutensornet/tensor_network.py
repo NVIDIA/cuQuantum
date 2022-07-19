@@ -182,7 +182,7 @@ class Network:
         self.logger.info("Beginning network creation...")
 
         # Parse Einsum expression.
-        self.operands, self.inputs, self.output, self.size_dict, self.mode_map_user_to_ord, self.mode_map_ord_to_user = einsum_parser.parse_einsum(*operands)
+        self.operands, self.inputs, self.output, self.size_dict, self.mode_map_user_to_ord, self.mode_map_ord_to_user, self.is_interleaved = einsum_parser.parse_einsum(*operands)
 
         # Copy operands to device if needed.
         self.network_location = 'cuda'
@@ -515,9 +515,13 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         opt_cost = opt_info_ifc.flop_count
         path = opt_info_ifc.path
         slices = opt_info_ifc.sliced_mode_extent
+        aux_modes = opt_info_ifc.intermediate_modes
+        opt_info = configuration.OptimizerInfo(
+            largest_intermediate, opt_cost, path, slices, self.num_slices, aux_modes)
 
-        opt_info = configuration.OptimizerInfo(largest_intermediate, opt_cost, path, slices)
-        self.logger.info(f"{opt_info}")
+        # If we are not logging, avoid the overhead of creating the string representation of opt_info.
+        if self.logger.handlers:
+           self.logger.info(f"{opt_info}")
 
         self.optimized = True
 
@@ -630,13 +634,13 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         utils.check_operands_match(self.operands, operands, 'dtype', "data type")
         utils.check_operands_match(self.operands, operands, 'shape', 'shape')
-        utils.check_operands_match(self.operands, operands, 'strides', 'strides')
 
         device_id = utils.get_network_device_id(operands)
         if device_id is None:
             # Copy to existing device pointers because the new operands are on the CPU.
             tensor_wrapper.copy_(operands, self.operands)
         else:
+            utils.check_operands_match(self.operands, operands, 'strides', 'strides')
             package = utils.get_operands_package(operands)
             if self.package != package:
                 message = f"Library package mismatch: '{self.package}' => '{package}'"
@@ -656,11 +660,13 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Contraction")
-    def contract(self, *, stream=None):
+    def contract(self, *, slices=None, stream=None):
         """Contract the network and return the result.
 
         Args:
-            stream: Provide the CUDA stream to use for the autotuning operation. Acceptable inputs include ``cudaStream_t``
+            slices: Specify the slices to be contracted as Python :class:`range` for contiguous slice IDs or as a Python sequence
+                object for arbitrary slice IDs. If not specified, all slices will be contracted.
+            stream: Provide the CUDA stream to use for the contraction operation. Acceptable inputs include ``cudaStream_t``
                 (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
                 the current stream will be used.
 
@@ -676,23 +682,42 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         if self.contraction is None:
             self.contraction = utils.create_empty_tensor(self.output_class, self.extents_out, self.data_type, self.device_id, stream_ctx)
 
+        # Create a slice group for contraction.
+        slice_group = None
+        if slices is None:
+           slice_group = 0
+           self.logger.info(f"All the available slices ({self.num_slices}) will be contracted.")
+        elif isinstance(slices, range):
+           slice_group = cutn.create_slice_group_from_id_range(self.handle, slices.start, slices.stop, slices.step)
+           self.logger.info(f"A slice group has been created with start={slices.start}, stop={slices.stop}, and step={slices.step}.")
+        elif isinstance(slices, collections.abc.Sequence):
+           slice_group = cutn.create_slice_group_from_ids(self.handle, slices, len(slices))
+           self.logger.info(f"A slice group has been created from the specified sequence: {formatters.array2string([str(s) for s in slices])}")
+        else:
+            message = f"The provided 'slices' must be a range object or a sequence object. The object type is {type(slices)}."
+            raise TypeError(message)
+
         self.logger.info("Starting network contraction...")
         with self.device:
             start = stream.record()
-            for s in range(self.num_slices):
-                cutn.contraction(self.handle, self.plan, self.operands_data, self.contraction.data_ptr,
-                    self.workspace_desc, s, stream_ptr)
+            cutn.contract_slices(self.handle, self.plan, self.operands_data, self.contraction.data_ptr, False,
+                    self.workspace_desc, slice_group, stream_ptr)
             end = stream.record()
             end.synchronize()
             elapsed = cp.cuda.get_elapsed_time(start, end)
 
         self.logger.info(f"The contraction took {elapsed:.3f} ms to complete.")
 
+        # Destroy slice group, if created.
+        if slice_group != 0:
+           cutn.destroy_slice_group(slice_group)
+           self.logger.debug(f"Slice group ({slice_group}) has been destroyed.")
+
         if self.network_location == 'cpu':
             out = self.contraction.to('cpu')
         else:
             out = self.contraction.tensor
-        self.contraction = None  # We cannot overwrite what we've already handed to users.
+        self.contraction = None    # We cannot overwrite what we've already handed to users.
         return out
 
     def free(self):
@@ -735,7 +760,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
 
 def contract(*operands, options=None, optimize=None, stream=None, return_info=False):
-    """
+    r"""
     contract(subscripts, *operands, options=None, optimize=None, stream=None, return_info=False)
 
     Evaluate the Einstein summation convention on the operands.
@@ -1021,7 +1046,7 @@ def einsum(*operands, out=None, dtype=None, order='K', casting='safe', optimize=
         else:
             if optimize is False:
                 # Use canonical path.
-                path = [(0, 1)] * (network.num_inputs - 1)
+                path = [(0, 1)] * (len(network.inputs) - 1)
             else:
                 # Use specified path.
                 path = optimize

@@ -47,7 +47,7 @@ class NumpyTensor(Tensor):
 
     @property
     def strides(self):
-        return tuple(stride_in_bytes / self.tensor.itemsize for stride_in_bytes in self.tensor.strides)
+        return tuple(stride_in_bytes // self.tensor.itemsize for stride_in_bytes in self.tensor.strides)
 
     def numpy(self):
         return self.tensor

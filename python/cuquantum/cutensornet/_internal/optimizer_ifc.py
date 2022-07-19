@@ -33,6 +33,12 @@ def _parse_and_map_sliced_modes(sliced_modes, mode_map_user_to_ord, size_dict, d
     else:
         sliced_extents = np.ones((num_sliced_modes,), dtype=dtype_extent)
 
+    # Check for invalid mode labels.
+    invalid_modes = tuple(filter(lambda k: k not in mode_map_user_to_ord, sliced_modes))
+    if invalid_modes:
+       message = f"Invalid sliced mode labels: {invalid_modes}"
+       raise ValueError(message)
+
     sliced_modes = np.asarray([mode_map_user_to_ord[m] for m in sliced_modes], dtype=dtype_mode)
     remainder = tuple(size_dict[m] % e for m, e in zip(sliced_modes, sliced_extents))
     if any(remainder):
@@ -138,7 +144,7 @@ class OptimizerInfoInterface(object):
         size = path_wrapper.get_size()
         cutn.contraction_optimizer_info_get_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.PATH, path_wrapper.get_path(), size)
 
-        path = tuple(zip(*[iter(self._path)]*2))
+        path = list(zip(*[iter(self._path)]*2))
 
         return path
 
@@ -223,3 +229,26 @@ class OptimizerInfoInterface(object):
         size = num_sliced_modes * sliced_extents.dtype.itemsize
         cutn.contraction_optimizer_info_set_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.SLICED_EXTENT, sliced_extents.ctypes.data, size)
 
+    @property
+    def intermediate_modes(self):
+        """
+        Return a sequence of mode labels for all the intermediate tensors.
+        """
+        get_dtype = cutn.contraction_optimizer_info_get_attribute_dtype
+        network = self.network
+
+        num_intermediate_modes = np.zeros((max(1, self.num_contraction),), dtype=get_dtype(InfoEnum.NUM_INTERMEDIATE_MODES))    # Output modes included
+        size = num_intermediate_modes.nbytes
+        cutn.contraction_optimizer_info_get_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.NUM_INTERMEDIATE_MODES, num_intermediate_modes.ctypes.data, size)
+
+        intermediate_modes = np.zeros((num_intermediate_modes.sum(),), dtype=get_dtype(InfoEnum.INTERMEDIATE_MODES))
+        size = intermediate_modes.nbytes
+        cutn.contraction_optimizer_info_get_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.INTERMEDIATE_MODES, intermediate_modes.ctypes.data, size)
+
+        count, out = 0, list()
+        mode_type = tuple if network.is_interleaved else ''.join
+        for n in num_intermediate_modes:
+            out.append(mode_type(map(lambda m: network.mode_map_ord_to_user[m], intermediate_modes[count:count+n])))    # Convert to user mode labels
+            count += n
+        assert count == num_intermediate_modes.sum()
+        return tuple(out)

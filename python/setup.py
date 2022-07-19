@@ -4,7 +4,6 @@
 
 import os
 import site
-import subprocess
 import sys
 
 from packaging.version import Version
@@ -18,14 +17,16 @@ with open(os.path.join(source_root, 'cuquantum', '_version.py')) as f:
     exec(f.read())
 
 
+# Use README for the project long description
+with open("README.md") as f:
+    long_description = f.read()
+
+
 # set up version constraints: note that CalVer like 22.03 is normalized to
 # 22.3 by setuptools, so we must follow the same practice in the constraints;
 # also, we don't need the Python patch number here
 cuqnt_py_ver = Version(__version__)
-# WAR: restore this line when releasing 22.06, for now we pin at 22.03 to
-# enable binary compatibility
-#cuqnt_ver_major_minor = f"{cuqnt_py_ver.major}.{cuqnt_py_ver.minor}"
-cuqnt_ver_major_minor = '22.3'
+cuqnt_ver_major_minor = f"{cuqnt_py_ver.major}.{cuqnt_py_ver.minor}"
 
 
 # search order:
@@ -99,7 +100,6 @@ install_requires = [
     'numpy',
     # 'cupy', # TODO: use "cupy-wheel" once it's stablized, see https://github.com/cupy/cupy/issues/6688
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    'typing_extensions',
     ]
 ignore_cuquantum_dep = bool(os.environ.get('CUQUANTUM_IGNORE_SOLVER', False))
 if not ignore_cuquantum_dep:
@@ -119,6 +119,7 @@ def check_cuda_version():
         # requires GPUs. We also do not want to rely on the compiler utility
         # provided in distutils (deprecated) or setuptools, as this is a very
         # simple string parsing task.
+        # TODO: switch to cudaRuntimeGetVersion once it's fixed (nvbugs 3624208)
         cuda_h = os.path.join(cuda_path, 'include', 'cuda.h')
         with open(cuda_h, 'r') as f:
             cuda_h = f.read().split('\n')
@@ -203,10 +204,19 @@ cutensornet = Extension(
 )
 
 
+utils = Extension(
+    "cuquantum.utils",
+    sources=["cuquantum/utils.pyx"],
+    include_dirs=[os.path.join(cuda_path, 'include')],
+)
+
+
 setup(
     name="cuquantum-python",
     version=__version__,
-    description="Python APIs for cuQuantum",
+    description="NVIDIA cuQuantum Python",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     url="https://github.com/NVIDIA/cuQuantum",
     author="NVIDIA Corporation",
     author_email="cuquantum-python@nvidia.com",
@@ -233,10 +243,8 @@ setup(
         "Environment :: GPU :: NVIDIA CUDA :: 11.6",
         "Environment :: GPU :: NVIDIA CUDA :: 11.7",
     ],
-    ext_modules=cythonize([
-        custatevec,
-        cutensornet,
-        ], verbose=True, language_level=3,
+    ext_modules=cythonize([custatevec, cutensornet, utils,],
+        verbose=True, language_level=3,
         compiler_directives={'embedsignature': True}),
     packages=find_packages(include=['cuquantum', 'cuquantum.*']),
     package_data={"": ["*.pxd", "*.pyx", "*.py"],},
@@ -247,6 +255,7 @@ setup(
     tests_require=install_requires + [
         # pytest < 6.2 is slow in collecting tests
         'pytest>=6.2',
+        'opt_einsum',
         # optional test deps
         #'cffi>=1.0.0',
         #'nbmake>=1.3.0',  # for testing notebooks

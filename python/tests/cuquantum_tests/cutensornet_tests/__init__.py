@@ -3,7 +3,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import cupy as cp
-
+try:
+    import torch
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+except ImportError:
+    pass
 
 # This is future proof: In the future when CuPy enables cuQuantum Python
 # as an optional backend, we don't want to create a circular dependency

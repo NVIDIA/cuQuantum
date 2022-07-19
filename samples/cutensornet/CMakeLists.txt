@@ -101,6 +101,7 @@ function(add_cutensornet_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
         cutensor
         cudart
         cublasLt
+        $<$<BOOL:${MPI_FOUND}>:MPI::MPI_CXX>
   )
   set_target_properties(
     ${EXAMPLE_TARGET}
@@ -127,3 +128,10 @@ endfunction()
 add_custom_target(cutensornet_examples)
 
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example.cu)
+
+find_package(MPI)
+if (MPI_FOUND)
+  add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi" tensornet_example_mpi.cu)
+else ()
+  message(WARNING "An MPI installation was not detected. Please install MPI if you would like to build the distributed example(s).")
+endif ()

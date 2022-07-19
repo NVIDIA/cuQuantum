@@ -156,7 +156,7 @@ class CircuitToEinsum:
         return expression, operands 
     
     def reduced_density_matrix(self, where, fixed=EMPTY_DICT, lightcone=True):
-        """
+        r"""
         reduced_density_matrix(where, fixed=None, lightcone=True)
 
         Generate the Einstein summation expression and tensor operands to compute the reduced density matrix for

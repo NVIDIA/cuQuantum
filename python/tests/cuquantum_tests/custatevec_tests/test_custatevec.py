@@ -85,21 +85,42 @@ class TestSV:
 
 
 @pytest.fixture()
-def multi_gpu_handles():
+def multi_gpu_handles(request):
     # TODO: consider making this class more flexible
     # (ex: arbitrary number of qubits and/or devices, etc)
     n_devices = 2  # should be power of 2
     handles = []
+    p2p_required = request.param
 
     for dev in range(n_devices):
         with cupy.cuda.Device(dev):
             h = cusv.create()
             handles.append(h)
+            if p2p_required:
+                for peer in range(n_devices):
+                    if dev == peer: continue
+                    try:
+                        cupy.cuda.runtime.deviceEnablePeerAccess(peer)
+                    except Exception as e:
+                        if 'PeerAccessUnsupported' in str(e):
+                            pytest.skip("P2P unsupported")
+                        if 'PeerAccessAlreadyEnabled' not in str(e):
+                            raise
+
     yield handles
+
     for dev in range(n_devices):
         with cupy.cuda.Device(dev):
             h = handles.pop(0)
             cusv.destroy(h)
+            if p2p_required:
+                for peer in range(n_devices):
+                    if dev == peer: continue
+                    try:
+                        cupy.cuda.runtime.deviceDisablePeerAccess(peer)
+                    except Exception as e:
+                        if 'PeerAccessNotEnabled' not in str(e):
+                            raise
 
 
 def get_exponent(n):
@@ -1142,6 +1163,9 @@ class TestBatchMeasureWithSubSV(TestMultiGpuSV):
             {'bit_ordering': (numpy.int32, 'seq'),},
         )
     )
+    @pytest.mark.parametrize(
+        'multi_gpu_handles', (False,), indirect=True  # no need for P2P
+    )
     def test_batch_measure_with_offset(
             self, multi_gpu_handles, rand, collapse, input_form):
         handles = multi_gpu_handles
@@ -1263,6 +1287,82 @@ class TestSwap:
         assert (sv != orig_sv).any()
         assert sv[6] == 0
         assert sv[9] == 1
+
+
+@pytest.mark.parametrize(
+    'topology', [t for t in cusv.DeviceNetworkType]
+)
+@pytest.mark.skipif(
+    cupy.cuda.runtime.getDeviceCount() < 2, reason='not enough GPUs')
+class TestMultiGPUSwap(TestMultiGpuSV):
+
+    @pytest.mark.parametrize(
+        'input_form', (
+            {'handles': (numpy.intp, 'int'), 'sub_svs': (numpy.intp, 'int'),
+             'swapped_bits': (numpy.int32, 'int'),
+             'mask_bitstring': (numpy.int32, 'int'), 'mask_ordering': (numpy.int32, 'int')},
+            {'handles': (numpy.intp, 'seq'), 'sub_svs': (numpy.intp, 'seq'),
+             'swapped_bits': (numpy.int32, 'seq'),
+             'mask_bitstring': (numpy.int32, 'seq'), 'mask_ordering': (numpy.int32, 'seq')},
+        )
+    )
+    @pytest.mark.parametrize(
+        'multi_gpu_handles', (True,), indirect=True  # need P2P
+    )
+    def test_multi_device_swap_index_bits(
+            self, multi_gpu_handles, input_form, topology):
+        # currently the test class sets the following:
+        #  - n_global_qubits = 1
+        #  - n_local_qubits = 3
+        handles = multi_gpu_handles
+        n_handles = len(handles)
+        sub_sv = self.get_sv()
+        data_type = dtype_to_data_type[sub_sv[0].dtype]
+
+        # set sv to |0110> (up to normalization)
+        with cupy.cuda.Device(0):
+            sub_sv[0][0] = 0
+            sub_sv[0][-2] = 1
+
+        if input_form['handles'][1] == 'int':
+            handles_data = numpy.asarray(
+                handles, dtype=input_form['handles'][0])
+            handles = handles_data.ctypes.data
+        sub_sv_data = sub_sv
+        sub_sv_ptr_data = [arr.data.ptr for arr in sub_sv]
+        sub_sv = sub_sv_ptr_data
+        if input_form['sub_svs'][1] == 'int':
+            sub_sv_ptr_data = numpy.asarray(
+                sub_sv_ptr_data, dtype=input_form['sub_svs'][0])
+            sub_sv = sub_sv_ptr_data.ctypes.data
+        else:
+            sub_sv = sub_sv_ptr_data
+
+        swapped_bits = [(3, 1)]
+        n_swapped_bits = len(swapped_bits)
+        if input_form['swapped_bits'][1] == 'int':
+            swapped_bits_data = numpy.asarray(
+                swapped_bits, dtype=input_form['swapped_bits'][0])
+            swapped_bits = swapped_bits_data.ctypes.data
+
+        # TODO: test mask
+        mask_bitstring = 0
+        mask_ordering = 0
+        mask_len = 0
+
+        cusv.multi_device_swap_index_bits(
+            handles, n_handles, sub_sv, data_type,
+            self.n_global_bits, self.n_local_bits,
+            swapped_bits, n_swapped_bits,
+            mask_bitstring, mask_ordering, mask_len,
+            topology)
+
+        # now we should get |1100>
+        sub_sv = sub_sv_data
+        with cupy.cuda.Device(0):
+            assert sub_sv[0][-2] == 0
+        with cupy.cuda.Device(1):
+            assert sub_sv[1][4] == 1
 
 
 class TestMemHandler:

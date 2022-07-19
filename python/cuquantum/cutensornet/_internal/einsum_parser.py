@@ -107,10 +107,16 @@ def parse_einsum_interleaved(operand_sublists):
     N = len(operand_sublists) // 2
     for i in range(N):
         operands.append(operand_sublists[2*i])
-        inputs.append(operand_sublists[2*i + 1])
+        _input = operand_sublists[2*i + 1]
+        if isinstance(_input, str):
+          [_input], _ = parse_einsum_str(_input)
+        inputs.append(_input)
 
     N = len(operand_sublists)
+
     output = operand_sublists[N-1] if N % 2 == 1 else None
+    if isinstance(output, str):
+      [output], _ = parse_einsum_str(output)
 
     return operands, inputs, output
 
@@ -366,5 +372,4 @@ The output term {morpher(output)} contains ellipsis while none of the input term
     # Create mode-extent map based on internal mode numbers.
     size_dict = create_size_dict(inputs, operands)
 
-    return operands, inputs, output, size_dict, mode_map_user_to_ord, mode_map_ord_to_user
-
+    return operands, inputs, output, size_dict, mode_map_user_to_ord, mode_map_ord_to_user, interleaved or ellipses

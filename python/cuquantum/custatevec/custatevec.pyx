@@ -20,13 +20,6 @@ import numpy as _numpy
 
 
 cdef extern from * nogil:
-    # from CUDA
-    ctypedef enum DataType 'cudaDataType_t':
-        pass
-    ctypedef enum LibPropType 'libraryPropertyType':
-        pass
-    ctypedef struct int2 'int2':
-        pass
 
     # cuStateVec functions
     int custatevecCreate(_Handle*)
@@ -127,6 +120,11 @@ cdef extern from * nogil:
     int custatevecSwapIndexBits(
         _Handle, void*, DataType, const uint32_t, const int2*, const uint32_t,
         const int32_t*, const int32_t*, const uint32_t)
+    int custatevecMultiDeviceSwapIndexBits(
+        _Handle*, const uint32_t, void**, const DataType, const uint32_t,
+        const uint32_t, const int2*, const uint32_t,
+        const int32_t*, const int32_t*, const uint32_t,
+        const _DeviceNetworkType)
     int custatevecTestMatrixTypeGetWorkspaceSize(
         _Handle, _MatrixType, const void*, DataType, _MatrixLayout,
         const uint32_t, const int32_t, _ComputeType, size_t*)
@@ -377,11 +375,10 @@ cpdef abs2sum_array(
             - a Python sequence of index bit ordering
 
         bit_ordering_len (uint32_t): The length of ``bit_ordering``.
-        mask_bit_string: A host array for a bit string to specify mask. It can
-            be
+        mask_bit_string: A host array for specifying mask values. It can be
 
             - an :class:`int` as the pointer address to the array
-            - a Python sequence of index bit ordering
+            - a Python sequence of mask values
 
         mask_ordering: A host array of mask ordering. It can be
 
@@ -1622,11 +1619,10 @@ cpdef swap_index_bits(
             - a nested Python sequence of swapped index bits
 
         n_swapped_bits (uint32_t): The number of pairs of swapped index bits.
-        mask_bit_string: A host array for a bit string to specify mask. It can
-            be
+        mask_bit_string: A host array for specifying mask values. It can be
 
             - an :class:`int` as the pointer address to the array
-            - a Python sequence of index bit ordering
+            - a Python sequence of mask values
 
         mask_ordering: A host array of mask ordering. It can be
 
@@ -1690,6 +1686,125 @@ cpdef swap_index_bits(
     check_status(status)
 
 
+cpdef multi_device_swap_index_bits(
+        handles, uint32_t n_handles, sub_svs, int sv_data_type,
+        uint32_t n_global_index_bits, uint32_t n_local_index_bits,
+        swapped_bits, uint32_t n_swapped_bits,
+        mask_bit_string, mask_ordering, uint32_t mask_len,
+        int device_network_type):
+    """Swap index bits and reorder statevector elements on multiple devices.
+
+    Args:
+        handles: A host array of the library handles. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`, each of which is a valid
+              library handle
+
+        n_handles (uint32_t): The number of handles.
+        sub_svs: A host array of the sub-statevector pointers. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`, each of which is a valid
+              sub-statevector pointer (on device)
+
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevectors.
+        n_global_index_bits (uint32_t): The number of the global index bits.
+        n_local_index_bits (uint32_t): The number of the local index bits.
+        swapped_bits: A host array of pairs of swapped index bits. It can be
+
+            - an :class:`int` as the pointer address to the nested sequence
+            - a nested Python sequence of swapped index bits
+
+        n_swapped_bits (uint32_t): The number of pairs of swapped index bits.
+        mask_bit_string: A host array for specifying mask values. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of mask values
+
+        mask_ordering: A host array of mask ordering. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of index bit ordering
+
+        mask_len (uint32_t): The length of ``mask_ordering``.
+        device_network_type (DeviceNetworkType): The device network topology.
+
+    .. seealso:: `custatevecMultiDeviceSwapIndexBits`
+    """
+    # handles can be a pointer address, or a Python sequence
+    cdef vector[intptr_t] handlesData
+    cdef _Handle* handlesPtr
+    if cpython.PySequence_Check(handles):
+        handlesData = handles
+        handlesPtr = <_Handle*>handlesData.data()
+    else:  # a pointer address
+        handlesPtr = <_Handle*><intptr_t>handles
+
+    # sub_svs can be a pointer address, or a Python sequence
+    cdef vector[intptr_t] subSVsData
+    cdef void** subSVsPtr
+    if cpython.PySequence_Check(sub_svs):
+        subSVsData = sub_svs
+        subSVsPtr = <void**>subSVsData.data()
+    else:  # a pointer address
+        subSVsPtr = <void**><intptr_t>sub_svs
+
+    # swapped_bits can be:
+    #   - a plain pointer address
+    #   - a nested Python sequence (ex: a list of 2-tuples)
+    # Note: it cannot be a mix of sequences and ints. It also cannot be a
+    # 1D sequence (of ints), because it's inefficient.
+    cdef vector[intptr_t] swappedBitsCData
+    cdef int2* swappedBitsPtr
+    if is_nested_sequence(swapped_bits):
+        try:
+            # direct conversion
+            data = _numpy.asarray(swapped_bits, dtype=_numpy.int32)
+            data = data.reshape(-1)
+        except:
+            # unlikely, but let's do it in the stupid way
+            data = _numpy.empty(2*n_swapped_bits, dtype=_numpy.int32)
+            for i, (first, second) in enumerate(swapped_bits):
+                data[2*i] = first
+                data[2*i+1] = second
+        assert data.size == 2*n_swapped_bits
+        swappedBitsPtr = <int2*>(<intptr_t>data.ctypes.data)
+    elif isinstance(swapped_bits, int):
+        # a pointer address, take it as is
+        swappedBitsPtr = <int2*><intptr_t>swapped_bits
+    else:
+        raise ValueError("swapped_bits is provided in an "
+                         "un-recognized format")
+
+    # mask_bit_string can be a pointer address, or a Python sequence
+    cdef vector[int32_t] maskBitStringData
+    cdef int32_t* maskBitStringPtr
+    if cpython.PySequence_Check(mask_bit_string):
+        maskBitStringData = mask_bit_string
+        maskBitStringPtr = maskBitStringData.data()
+    else:  # a pointer address
+        maskBitStringPtr = <int32_t*><intptr_t>mask_bit_string
+
+    # mask_ordering can be a pointer address, or a Python sequence
+    cdef vector[int32_t] maskOrderingData
+    cdef int32_t* maskOrderingPtr
+    if cpython.PySequence_Check(mask_ordering):
+        maskOrderingData = mask_ordering
+        maskOrderingPtr = maskOrderingData.data()
+    else:  # a pointer address
+        maskOrderingPtr = <int32_t*><intptr_t>mask_ordering
+
+    with nogil:
+        status = custatevecMultiDeviceSwapIndexBits(
+            handlesPtr, n_handles, subSVsPtr, <DataType>sv_data_type,
+            n_global_index_bits, n_local_index_bits,
+            swappedBitsPtr, n_swapped_bits,
+            maskBitStringPtr, maskOrderingPtr, mask_len,
+            <_DeviceNetworkType>device_network_type)
+    check_status(status)
+
+
 cpdef size_t test_matrix_type_get_workspace_size(
         intptr_t handle, int matrix_type,
         intptr_t matrix, int matrix_data_type, int layout, uint32_t n_targets,
@@ -1698,9 +1813,9 @@ cpdef size_t test_matrix_type_get_workspace_size(
 
     Args:
         handle (intptr_t): The library handle.
-        matrix_type (cuquantum.MatrixType): The matrix type of the gate matrix.
-        matrix (intptr_t): The pointer address (as Python :class:`int`) to a matrix
-            (on either host or device).
+        matrix_type (MatrixType): The matrix type of the gate matrix.
+        matrix (intptr_t): The pointer address (as Python :class:`int`) to a
+            matrix (on either host or device).
         matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
         layout (MatrixLayout): The memory layout the the matrix.
         n_targets (uint32_t): The length of ``targets``.
@@ -1733,9 +1848,9 @@ cpdef double test_matrix_type(
 
     Args:
         handle (intptr_t): The library handle.
-        matrix_type (cuquantum.MatrixType): The matrix type of the gate matrix.
-        matrix (intptr_t): The pointer address (as Python :class:`int`) to a matrix
-            (on either host or device).
+        matrix_type (MatrixType): The matrix type of the gate matrix.
+        matrix (intptr_t): The pointer address (as Python :class:`int`) to a
+            matrix (on either host or device).
         matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
         layout (MatrixLayout): The memory layout the the matrix.
         n_targets (uint32_t): The length of ``targets``.
@@ -1976,6 +2091,11 @@ class SamplerOutput(IntEnum):
     """See `custatevecSamplerOutput_t`."""
     RANDNUM_ORDER = CUSTATEVEC_SAMPLER_OUTPUT_RANDNUM_ORDER
     ASCENDING_ORDER = CUSTATEVEC_SAMPLER_OUTPUT_ASCENDING_ORDER
+
+class DeviceNetworkType(IntEnum):
+    """See `custatevecDeviceNetworkType_t`."""
+    SWITCH = CUSTATEVEC_DEVICE_NETWORK_TYPE_SWITCH
+    FULLMESH = CUSTATEVEC_DEVICE_NETWORK_TYPE_FULLMESH
 
 
 del IntEnum
