@@ -9,16 +9,7 @@
 
 from libc.stdint cimport int32_t
 
-cdef extern from * nogil:
-    # from CUDA
-    ctypedef int Stream 'cudaStream_t'
-    ctypedef enum DataType 'cudaDataType_t':
-        pass
-
-
-# Cython limitation: need standalone typedef if we wanna use it for casting
-ctypedef int (*DeviceAllocType)(void*, void**, size_t, Stream)
-ctypedef int (*DeviceFreeType)(void*, void*, size_t, Stream)
+from cuquantum.utils cimport DataType, DeviceAllocType, DeviceFreeType, Stream
 
 
 cdef extern from '<cutensornet.h>' nogil:
@@ -31,8 +22,7 @@ cdef extern from '<cutensornet.h>' nogil:
     ctypedef void* _ContractionOptimizerInfo 'cutensornetContractionOptimizerInfo_t'
     ctypedef void* _ContractionAutotunePreference 'cutensornetContractionAutotunePreference_t'
     ctypedef void* _WorkspaceDescriptor 'cutensornetWorkspaceDescriptor_t'
-    ctypedef enum _ComputeType 'cutensornetComputeType_t':
-        pass
+    ctypedef void* _SliceGroup 'cutensornetSliceGroup_t'
 
     # cuTensorNet structs
     ctypedef struct _NodePair 'cutensornetNodePair_t':
@@ -55,6 +45,9 @@ cdef extern from '<cutensornet.h>' nogil:
         void* userData)
 
     # cuTensorNet enums
+    ctypedef enum _ComputeType 'cutensornetComputeType_t':
+        pass
+
     ctypedef enum _GraphAlgo 'cutensornetGraphAlgo_t':
         CUTENSORNET_GRAPH_ALGO_RB
         CUTENSORNET_GRAPH_ALGO_KWAY
@@ -62,6 +55,11 @@ cdef extern from '<cutensornet.h>' nogil:
     ctypedef enum _MemoryModel 'cutensornetMemoryModel_t':
         CUTENSORNET_MEMORY_MODEL_HEURISTIC
         CUTENSORNET_MEMORY_MODEL_CUTENSOR
+
+    ctypedef enum _OptimizerCost 'cutensornetOptimizerCost_t':
+        CUTENSORNET_OPTIMIZER_COST_FLOPS
+        CUTENSORNET_OPTIMIZER_COST_TIME
+        CUTENSORNET_OPTIMIZER_COST_TIME_TUNED
 
     ctypedef enum _ContractionOptimizerConfigAttribute 'cutensornetContractionOptimizerConfigAttributes_t':
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GRAPH_NUM_PARTITIONS
@@ -78,9 +76,10 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_MIN_SLICES
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_SLICE_FACTOR
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES
+        CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SIMPLIFICATION_DISABLE_DR
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED
-        CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS
+        CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE
 
     ctypedef enum _ContractionOptimizerInfoAttribute 'cutensornetContractionOptimizerInfoAttributes_t':
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_SLICES
@@ -92,9 +91,14 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_LARGEST_TENSOR
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_SLICING_OVERHEAD
+        CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_INTERMEDIATE_MODES
+        CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_INTERMEDIATE_MODES
+        CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_EFFECTIVE_FLOPS_EST
+        CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_RUNTIME_EST
 
     ctypedef enum _ContractionAutotunePreferenceAttribute 'cutensornetContractionAutotunePreferenceAttributes_t':
         CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS
+        CUTENSORNET_CONTRACTION_AUTOTUNE_INTERMEDIATE_MODES
 
     ctypedef enum _WorksizePref 'cutensornetWorksizePref_t':
         CUTENSORNET_WORKSIZE_PREF_MIN

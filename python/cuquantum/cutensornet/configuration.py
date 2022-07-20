@@ -83,6 +83,7 @@ del _create_options, _opt_conf_enum, _get_dtype
 
 PathType = Iterable[Tuple[int, int]]
 ModeSequenceType = Iterable[Hashable]
+ModesSequenceType = Iterable[ModeSequenceType]
 ModeExtentSequenceType = Iterable[Tuple[Hashable, int]]
 KeywordArgType = Dict
 
@@ -126,11 +127,11 @@ class OptimizerOptions(object):
 
     def _check_specified_path(self):
         if not isinstance(self.path, collections.abc.Sequence):
-            raise TypeError("The path must be a sequence of pairs in Numpy Einsum format.")
+            raise TypeError("The path must be a sequence of pairs in the linear format accepted by numpy.einsum_path.")
 
         for pair in self.path:
             if not isinstance(pair, collections.abc.Sequence) or len(pair) != 2:
-                raise TypeError("The path must be a sequence of pairs in Numpy Einsum format.")
+                raise TypeError("The path must be a sequence of pairs in the linear format accepted by numpy.einsum_path.")
 
     def _check_specified_slices(self):
         if not isinstance(self.slicing, collections.abc.Sequence):
@@ -167,28 +168,35 @@ class OptimizerInfo(object):
 
     Attributes:
         largest_intermediate: The number of elements in the largest intermediate tensor. See `CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_LARGEST_TENSOR`.
-        opt_cost: The FLOP count of the optimized contraction path per slice. See `CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT`.
+        opt_cost: The FLOP count of the optimized contraction path. See `CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT`.
         path: The contraction path as a sequence of pairs in the :func:`numpy.einsum_path` format.
         slices: A sequence of ``(sliced mode, sliced extent)`` pairs.
+        num_slices : The number of slices.
+        intermediate_modes: A sequence of mode labels for all intermediate tensors
     """
     largest_intermediate : float
     opt_cost : float
     path : PathType
     slices : ModeExtentSequenceType
+    num_slices : int
+    intermediate_modes : ModesSequenceType
 
     def __str__(self):
         path = [str(p) for p in self.path]
         slices = [str(s) for s in self.slices]
+        intermediate_modes = [str(m) for m in self.intermediate_modes]
         s = f"""Optimizer Information:
     Largest intermediate = {formatters.MemoryStr(self.largest_intermediate, base_unit='Elements')}
-    Optimized cost = {self.opt_cost:.3e} FLOPS
+    Optimized cost = {self.opt_cost:.3e} FLOPs
     Path = {formatters.array2string(path)}"""
         if len(slices):
-            s += """
-    Number of slices = {len(slices)}
+            s += f"""
+    Number of slices = {self.num_slices}
     Slices = {formatters.array2string(slices)}"""
         else:
             s += """
     Slicing not needed."""
+        s += f"""
+    Intermediate tensor mode labels = {formatters.array2string(intermediate_modes)}"""
 
         return s

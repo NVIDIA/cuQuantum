@@ -2,104 +2,130 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import copy
+import sys
+
+import cupy
+import numpy
+import opt_einsum
 import pytest
-import itertools
-from copy import deepcopy
 
-from cuquantum import contract, einsum
+import cuquantum
+from cuquantum import cutensornet as cutn
+from cuquantum.cutensornet._internal.utils import infer_object_package
 
-from .testutils import *
+from .data import backend_names, dtype_names, einsum_expressions
+from .testutils import atol_mapper, EinsumFactory, rtol_mapper
+from .testutils import compute_and_normalize_numpy_path
+from .testutils import set_path_to_optimizer_options
 
 
-class ContractProxyFixture(ProxyFixtureBase):
-    def __init__(self, network_options_pack):
-        super().__init__(network_options_pack)
-    def _test_contract(
-        self,
-        options_constructor_mode,
-        optimize_constructor_mode,
-        skip_sync,
-        use_numpy_einsum_path
-    ):
-        for stream_name in stream_names:
-            if stream_name is not None and stream_name != self.tensor_package: continue
-            optimize = deepcopy(self.optimize)
-
-            if use_numpy_einsum_path:
-                optimize["path"] = self.numpy_einsum_path[0][1:]
-
-            self.cutensornet_einsum = einsum(
-                self.einsum_expr,
-                *self.data_operands
-            )
-
-            self.cutensornet_interleaved_einsum = einsum(
-                *self.interleaved_inputs
-            )
-
-            self.cutensornet_contract = contract(
-                self.einsum_expr,
-                *self.data_operands,
-                options=network_options_dispatcher(self.options, mode=options_constructor_mode),
-                optimize=optimizer_options_dispatcher(optimize, mode=optimize_constructor_mode),
-                stream=streams[stream_name]
-            )
-            
-            self.cutensornet_interleaved_contract = contract(
-                *self.interleaved_inputs,
-                options=network_options_dispatcher(self.options, mode=options_constructor_mode),
-                optimize=optimizer_options_dispatcher(optimize, mode=optimize_constructor_mode),
-                stream=streams[stream_name]
-            )
-
-            stream_name_sync_dispatcher(stream_name, skip=skip_sync)
-            allclose(self.source, self.dtype_name, self.cutensornet_interleaved_einsum, self.cutensornet_einsum)
-            allclose(self.source, self.dtype_name, self.cutensornet_interleaved_contract, self.cutensornet_contract)
-            allclose(self.source, self.dtype_name, self.cutensornet_einsum, self.einsum)
-            allclose(self.source, self.dtype_name, self.cutensornet_contract, self.einsum)
-            
-            tensor_class_equal(self.tensor_class, self.data_operands, self.cutensornet_einsum)
-            tensor_class_equal(self.tensor_class, self.data_operands, self.cutensornet_interleaved_einsum)
-            tensor_class_equal(self.tensor_class, self.data_operands, self.cutensornet_contract)
-            tensor_class_equal(self.tensor_class, self.data_operands, self.cutensornet_interleaved_contract)
-
-            dtypes_equal(self.dtype, self.data_operands, self.cutensornet_einsum)
-            dtypes_equal(self.dtype, self.data_operands, self.cutensornet_interleaved_einsum)
-            dtypes_equal(self.dtype, self.data_operands, self.cutensornet_contract)
-            dtypes_equal(self.dtype, self.data_operands, self.cutensornet_interleaved_contract)
-            
-    def test_contract(self, skip_sync, use_numpy_einsum_path):
-        self._test_contract(
-            self.options_cmode,
-            self.optimize_cmode,
-            skip_sync,
-            use_numpy_einsum_path
-        )
-
-    def run_tests(self):
-        self.test_contract(False, False)
-        self.test_contract(False, True)
-        self.test_contract(True, True)
-        self.test_contract(True, False)
-
-@pytest.fixture
-def ContractFixture(request):
-    return ContractProxyFixture(request.param)
-
+# TODO: parametrize compute type?
+@pytest.mark.parametrize(
+    "use_numpy_path", (False, True)
+)
+@pytest.mark.parametrize(
+    "stream", (None, True)
+)
+@pytest.mark.parametrize(
+    "order", ("C", "F")
+)
+@pytest.mark.parametrize(
+    "dtype", dtype_names
+)
+@pytest.mark.parametrize(
+    "xp", backend_names
+)
+@pytest.mark.parametrize(
+    "einsum_expr_pack", einsum_expressions
+)
 class TestContract:
+
+    def _test_runner(
+            self, func, einsum_expr_pack, xp, dtype, order,
+            stream, use_numpy_path, **kwargs):
+        einsum_expr = copy.deepcopy(einsum_expr_pack)
+        if isinstance(einsum_expr, list):
+            einsum_expr, network_opts, optimizer_opts, overwrite_dtype = einsum_expr
+            if dtype != overwrite_dtype:
+                pytest.skip(f"skipping {dtype} is requested")
+        else:
+            network_opts = optimizer_opts = None
+        assert isinstance(einsum_expr, (str, tuple))
+
+        factory = EinsumFactory(einsum_expr)
+        operands = factory.generate_operands(
+            factory.input_shapes, xp, dtype, order)
+        backend = sys.modules[infer_object_package(operands[0])]
+        if stream:
+            if backend is numpy:
+                stream = cupy.cuda.Stream()  # implementation detail
+            else:
+                stream = backend.cuda.Stream()
+
+        path = None
+        if use_numpy_path:
+            try:
+                path = compute_and_normalize_numpy_path(
+                    factory.convert_by_format(operands, dummy=True),
+                    len(operands))
+            except NotImplementedError:
+                # we can't support the returned NumPy path, just skip
+                pytest.skip("NumPy path is either not found or invalid")
+
+        data = factory.convert_by_format(operands)
+        if func is cuquantum.contract:
+            return_info = kwargs.pop('return_info')
+            if path is not None:
+                optimizer_opts = set_path_to_optimizer_options(
+                    optimizer_opts, path)
+            out = func(
+                *data, options=network_opts, optimize=optimizer_opts,
+                stream=stream, return_info=return_info)
+            if return_info:
+                out, info = out
+                assert isinstance(info[0], list)  # path
+                assert isinstance(info[1], cuquantum.OptimizerInfo)
+        else:  # cuquantum.einsum()
+            optimize = kwargs.pop('optimize')
+            if optimize == 'path':
+                optimize = path if path is not None else False
+            try:
+                out = func(*data, optimize=optimize)
+            except cutn.cuTensorNetError as e:
+                if (optimize is not True
+                        and "CUTENSORNET_STATUS_NOT_SUPPORTED" in str(e)):
+                    pytest.skip("cuquantum.einsum() fail -- TN too large?")
+                else:
+                    raise
+
+        if stream:
+            stream.synchronize()
+        backend_out = sys.modules[infer_object_package(out)]
+        assert backend_out is backend
+        assert out.dtype == operands[0].dtype
+
+        out_ref = opt_einsum.contract(
+            *data, backend="torch" if "torch" in xp else xp)
+        assert backend.allclose(
+            out, out_ref, atol=atol_mapper[dtype], rtol=rtol_mapper[dtype])
+
     @pytest.mark.parametrize(
-        "ContractFixture",
-        itertools.product(
-            sources_devices_dtype_names,
-            array_orders,
-            einsum_expressions,
-            network_options,
-            optimizer_options,
-            opt_cmodes,  # cmodes for network options
-            opt_cmodes,  # cmodes for optimizer options
-            [None]  # ignore iterations, autotune is not used
-        ),
-        indirect=["ContractFixture"]
+        "return_info", (False, True)
     )
-    def test_contract(self, ContractFixture):
-        ContractFixture.run_tests()
+    def test_contract(
+            self, einsum_expr_pack, xp, dtype, order,
+            stream, use_numpy_path, return_info):
+        self._test_runner(
+            cuquantum.contract, einsum_expr_pack, xp, dtype, order,
+            stream, use_numpy_path, return_info=return_info)
+
+    @pytest.mark.parametrize(
+        "optimize", (False, True, "path")
+    )
+    def test_einsum(
+            self, einsum_expr_pack, xp, dtype, order,
+            stream, use_numpy_path, optimize):
+        self._test_runner(
+            cuquantum.einsum, einsum_expr_pack, xp, dtype, order,
+            stream, use_numpy_path, optimize=optimize)

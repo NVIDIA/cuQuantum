@@ -20,7 +20,7 @@ class TorchTensor(Tensor):
     """
     name = 'torch'
     module = torch
-    name_to_dtype = Tensor.create_name_dtype_map(conversion_function=lambda name: eval('torch.'+name), exception_type=AttributeError)
+    name_to_dtype = Tensor.create_name_dtype_map(conversion_function=lambda name: getattr(torch, name), exception_type=AttributeError)
 
     def __init__(self, tensor):
         super().__init__(tensor)

@@ -2,8 +2,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-__all__ = ['backends', 'dtypes', 'cirq', 'cirq_circuits', 'qiskit', 'qiskit_circuits', 'CirqTester', 'QiskitTester']
-
 from types import MappingProxyType
 
 try:
@@ -14,42 +12,46 @@ import cupy as cp
 import numpy as np
 try:
     import torch
-except:
+except ImportError:
     torch = None
 try:
     import qiskit
-except:
+except ImportError:
     qiskit = None
 
 from cuquantum import contract, CircuitToEinsum
-from .testutils import allclose
+from cuquantum.cutensornet._internal.circuit_converter_utils import EINSUM_SYMBOLS_BASE
+from .testutils import atol_mapper, rtol_mapper
 
-np.random.seed(3)
 
-dtypes = ['complex64', 
-          'complex128']
+# note: this implementation would cause pytorch tests being silently skipped
+# if pytorch is not available, which is the desired effect since otherwise
+# it'd be too noisy
+backends = [np, cp]
 if torch:
-    backends = [np, cp, torch]
-else:
-    backends = [np, cp, 'torch'] # marked as string to be skipped
+    backends.append(torch)
+
 
 cirq_circuits = []
 qiskit_circuits = []
 
-BASE_SYMBOLS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 EMPTY_DICT = MappingProxyType(dict())
+
+
 def gen_qubits_map(qubits):
     n_qubits = len(qubits)
-    if n_qubits > len(BASE_SYMBOLS):
-        raise NotImplementedError(f'small test only support up to {len(BASE_SYMBOLS)} qubits')
-    qubits_map = dict(zip(qubits, BASE_SYMBOLS[:n_qubits]))
+    if n_qubits > len(EINSUM_SYMBOLS_BASE):
+        raise NotImplementedError(f'test suite only supports up to {len(EINSUM_SYMBOLS_BASE)} qubits')
+    qubits_map = dict(zip(qubits, EINSUM_SYMBOLS_BASE[:n_qubits]))
     return qubits_map
+
 
 def bitstring_generator(n_qubits, nsample=1):
     for _ in range(nsample):
         bitstring = ''.join(np.random.choice(('0', '1'), n_qubits))
         yield bitstring
-        
+
+
 def where_fixed_generator(qubits, nfix_max, nsite_max=None):
     indices = np.arange(len(qubits))
     for nfix in range(nfix_max):
@@ -64,6 +66,7 @@ def where_fixed_generator(qubits, nfix_max, nsite_max=None):
                 where = [qubits[indices[ix]] for ix in range(nfix, nfix+nsite)]
                 yield where, fixed
 
+
 def get_partial_indices(qubits, fixed):
     partial_indices = [slice(None)] * len(qubits)
     index_map = {'0': slice(0, 1),
@@ -72,6 +75,7 @@ def get_partial_indices(qubits, fixed):
         if q in fixed:
             partial_indices[ix] = index_map[fixed[q]]
     return partial_indices
+
 
 ################################################
 # functions to generate cirq.Circuit for testing
@@ -89,8 +93,10 @@ def get_cirq_qft_circuit(n_qubits):
     circuit = cirq.Circuit(operations)
     return circuit
 
+
 def get_cirq_random_circuit(n_qubits, n_moments, op_density=0.9, seed=3):
     return cirq.testing.random_circuit(n_qubits, n_moments, op_density, random_state=seed)
+
 
 N_QUBITS_RANGE = range(7, 9)
 N_MOMENTS_RANGE = DEPTH_RANGE = range(5, 7)
@@ -101,6 +107,7 @@ if cirq:
         for n_moments in N_MOMENTS_RANGE:
             cirq_circuits.append(get_cirq_random_circuit(n_qubits, n_moments))
 
+
 #########################################################
 # functions to generate qiskit.QuantumCircuit for testing
 #########################################################
@@ -108,10 +115,12 @@ if cirq:
 def get_qiskit_qft_circuit(n_qubits):
     return qiskit.circuit.library.QFT(n_qubits, do_swaps=False).decompose()
 
+
 def get_qiskit_random_circuit(n_qubits, depth):
     from qiskit.circuit.random import random_circuit
     circuit = random_circuit(n_qubits, depth, max_operands=3)
     return circuit
+
 
 def get_qiskit_composite_circuit():
     sub_q = qiskit.QuantumRegister(2)
@@ -135,6 +144,7 @@ def get_qiskit_composite_circuit():
     circ.append(sub_inst, [qr[0], qr[1]])
     return circ
 
+
 def get_qiskit_nested_circuit():
     qr = qiskit.QuantumRegister(6, 'q')
     circ = qiskit.QuantumCircuit(qr)
@@ -146,6 +156,7 @@ def get_qiskit_nested_circuit():
     circ.cx(qr[2], qr[5])
     return circ
 
+
 if qiskit:
     qiskit_circuits.append(get_qiskit_composite_circuit())
     qiskit_circuits.append(get_qiskit_nested_circuit())
@@ -153,6 +164,7 @@ if qiskit:
         qiskit_circuits.append(get_qiskit_qft_circuit(n_qubits))
         for depth in DEPTH_RANGE:
             qiskit_circuits.append(get_qiskit_random_circuit(n_qubits, depth))
+
 
 ###################################################################
 #
@@ -163,7 +175,6 @@ if qiskit:
 # `QiskitTest._get_state_vector_from_simulator`
 #
 ###################################################################
-
 
 class BaseTester:
     def __init__(self, circuit, dtype, backend, nsample, nsite_max, nfix_max):
@@ -227,14 +238,16 @@ class BaseTester:
             expression, operands = self.converter.state_vector(fixed=fixed)
             sv1 = contract(expression, *operands)
             sv2 = self.get_state_vector_from_simulator(fixed=fixed)
-            allclose(self.backend.__name__, self.dtype, sv1, sv2)
+            self.backend.allclose(
+                sv1, sv2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
     
     def test_bitstrings(self):
         for bitstring in bitstring_generator(self.n_qubits, self.nsample):    
             expression, operands = self.converter.amplitude(bitstring)
             amp1 = contract(expression, *operands)
             amp2 = self.get_amplitude_from_simulator(bitstring)
-            allclose(self.backend.__name__, self.dtype, amp1, amp2)
+            self.backend.allclose(
+                amp1, amp2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
     
     def test_reduced_density_matrices(self):
         for where, fixed in where_fixed_generator(self.qubits, self.nfix_max, nsite_max=self.nsite_max):
@@ -245,8 +258,10 @@ class BaseTester:
             rdm2 = contract(expression2, *operands2)
             rdm3 = self.get_reduced_density_matrix_from_simulator(where, fixed=fixed)
 
-            allclose(self.backend.__name__, self.dtype, rdm1, rdm3)
-            allclose(self.backend.__name__, self.dtype, rdm2, rdm3)
+            self.backend.allclose(
+                rdm1, rdm2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
+            self.backend.allclose(
+                rdm1, rdm3, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
 
     def run_tests(self):
         self.test_state_vector()
@@ -292,4 +307,3 @@ class QiskitTester(BaseTester):
         else:
             sv = self.backend.asarray(sv, dtype=self.dtype)
         return sv
-

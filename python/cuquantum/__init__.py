@@ -18,6 +18,7 @@ for enum in (
         custatevec.MatrixType,
         custatevec.Collapse,
         custatevec.SamplerOutput,
+        custatevec.DeviceNetworkType,
         cutensornet.ContractionOptimizerInfoAttribute,
         cutensornet.ContractionOptimizerConfigAttribute,
         cutensornet.ContractionAutotunePreferenceAttribute,
@@ -25,6 +26,7 @@ for enum in (
         cutensornet.Memspace,
         cutensornet.GraphAlgo,
         cutensornet.MemoryModel,
+        cutensornet.OptimizerCost,
         ):
     cutensornet._internal.enum_utils.add_enum_class_doc(enum, chomp="_ATTRIBUTE|_PREFERENCE_ATTRIBUTE")
 

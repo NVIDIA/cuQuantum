@@ -4,18 +4,20 @@
 
 import glob
 import os
-import subprocess
+import re
 import sys
 
 try:
     import nbmake
 except ImportError:
     nbmake = None
-import pytest
-
 # we could use packaging.version.Version too, but NumPy is our required
 # dependency, packaging is not.
 from numpy.lib import NumpyVersion as Version
+import pytest
+
+from ..test_utils import cuQuantumSampleTestError, run_sample
+
 
 circuit_versions = dict()
 try:
@@ -47,39 +49,22 @@ for circuit_type, current_version in circuit_versions.items():
         )
 
 
-class cuQuantumSampleTestError(Exception):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
 samples_path = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'samples')
+    os.path.dirname(__file__), '..', '..', '..', 'samples', 'cutensornet')
 sample_files = glob.glob(samples_path+'/**/*.py', recursive=True)
 
-
-def run_sample(path, *args):
-    fullpath = os.path.join(samples_path, path)
-    result = subprocess.run(
-        (sys.executable, fullpath) + args, capture_output=True, env=os.environ)
-    if result.returncode:
-        msg = f'Got error:\n'
-        msg += f'{result.stderr.decode()}'
-        if "ModuleNotFoundError: No module named 'torch'" in msg:
-            pytest.skip('PyTorch uninstalled, skipping related tests')
-        else:
-            raise cuQuantumSampleTestError(msg)
-    else:
-        print(result.stdout.decode())
+# Handle MPI tests separately.
+mpi_re = r".*_mpi[_]?.*\.py"
+sample_files = list(filter(lambda f: not re.search(mpi_re, f), sample_files))
 
 
 @pytest.mark.parametrize(
     'sample', sample_files
 )
-class TestSamples:
+class TestcuTensorNetSamples:
 
     def test_sample(self, sample):
-        run_sample(sample)
+        run_sample(samples_path, sample)
 
 
 notebook_files = glob.glob(samples_path+'/**/*.ipynb', recursive=True)

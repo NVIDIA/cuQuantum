@@ -44,5 +44,8 @@ def array2string(array_like):
     The NumPy function "set_printoptions" can be used to control the display of the array.
     """
 
-    return np.array2string(np.asanyarray(array_like, dtype='object'), separator=', ', formatter={'object': lambda s: s})
-
+    return np.array2string(
+        np.asanyarray(array_like, dtype=object),
+        separator=', ',
+        # NumPy hates empty strings so we print 'None' instead.
+        formatter={'object': lambda s: s if s != '' else 'None'})

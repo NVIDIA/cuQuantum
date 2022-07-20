@@ -6,63 +6,29 @@ from libc.stdint cimport intptr_t
 cimport cpython
 
 
-cdef extern from * nogil:
-    # from CUDA
+cdef extern from "driver_types.h" nogil:
     ctypedef int Stream 'cudaStream_t'
 
+cdef extern from "library_types.h" nogil:
+    ctypedef enum DataType 'cudaDataType_t':
+        pass
+    ctypedef enum LibPropType 'libraryPropertyType':
+        pass
 
-cdef inline bint is_nested_sequence(data):
-    if not cpython.PySequence_Check(data):
-        return False
-    else:
-        for i in data:
-            if not cpython.PySequence_Check(i):
-                return False
-        else:
-            return True
-
-
-cdef inline int cuqnt_alloc_wrapper(void* ctx, void** ptr, size_t size, Stream stream) with gil:
-    """Assuming the user provides an alloc routine: ptr = alloc(size, stream).
-
-    Note: this function holds the Python GIL.
-    """
-    cdef tuple pairs
-
-    try:
-        pairs = <object>(ctx)
-        user_alloc = pairs[0]
-        ptr[0] = <void*>(<intptr_t>user_alloc(size, stream))
-    except:
-        # TODO: logging?
-        return 1
-    else:
-        return 0
+cdef extern from "vector_types.h" nogil:
+    ctypedef struct int2 'int2':
+        pass
 
 
-cdef inline int cuqnt_free_wrapper(void* ctx, void* ptr, size_t size, Stream stream) with gil:
-    """Assuming the user provides a free routine: free(ptr, size, stream).
-
-    Note: this function holds the Python GIL.
-    """
-    cdef tuple pairs
-
-    try:
-        pairs = <object>(ctx)
-        user_free = pairs[1]
-        user_free(<intptr_t>ptr, size, stream)
-    except:
-        # TODO: logging?
-        return 1
-    else:
-        return 0
+# Cython limitation: need standalone typedef if we wanna use it for casting
+ctypedef int (*DeviceAllocType)(void*, void**, size_t, Stream)
+ctypedef int (*DeviceFreeType)(void*, void*, size_t, Stream)
 
 
-cdef inline void logger_callback_with_data(
+cdef bint is_nested_sequence(data)
+cdef int cuqnt_alloc_wrapper(void* ctx, void** ptr, size_t size, Stream stream) with gil
+cdef int cuqnt_free_wrapper(void* ctx, void* ptr, size_t size, Stream stream) with gil
+cdef void logger_callback_with_data(
         int log_level, const char* func_name, const char* message,
-        void* func_arg) with gil:
-    func, args, kwargs = <object>func_arg
-    cdef bytes function_name = func_name
-    cdef bytes function_message = message
-    func(log_level, function_name.decode(), function_message.decode(),
-         *args, **kwargs)
+        void* func_arg) with gil
+cdef void* get_buffer_pointer(buf, Py_ssize_t size) except*

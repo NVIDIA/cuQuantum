@@ -8,7 +8,7 @@
 __all__ = ['BaseCUDAMemoryManager', 'MemoryPointer']
 
 from abc import abstractmethod
-from typing_extensions import Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 import weakref
 
 import cupy as cp

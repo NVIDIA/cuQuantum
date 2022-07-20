@@ -2,12 +2,24 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import numpy as np
 import cupy as cp
+import numpy as np
 
 import cuquantum
 from cuquantum import cutensornet as cutn
 
+
+print("cuTensorNet-vers:", cutn.get_version())
+dev = cp.cuda.Device()  # get current device
+props = cp.cuda.runtime.getDeviceProperties(dev.id)
+print("===== device info ======")
+print("GPU-name:", props["name"].decode())
+print("GPU-clock:", props["clockRate"])
+print("GPU-memoryClock:", props["memoryClockRate"])
+print("GPU-nSM:", props["multiProcessorCount"])
+print("GPU-major:", props["major"])
+print("GPU-minor:", props["minor"])
+print("========================")
 
 ##########################################################
 # Computing: D_{m,x,n,y} = A_{m,h,k,n} B_{u,k,h} C_{x,u,y}
@@ -52,9 +64,13 @@ D = np.empty(D_d.shape, dtype=np.float32)
 # Allocate workspace
 ####################
 
-dev = cp.cuda.Device()  # get current device
-freeMem, totalMem = dev.mem_info
-worksize = int(freeMem * 0.5)
+# this is one way to proceed: query the currently available memory on the
+# device, and allocate a big fraction of it...
+#freeMem, totalMem = dev.mem_info
+#worksize = int(freeMem * 0.9)
+# ...but in this case we can set a much tighter upper bound, since we know
+# the rough answer already
+worksize = 128*1024**2  # = 128 MB, can be smaller
 work = cp.cuda.alloc(worksize)
 
 print("Allocate memory for data and workspace, and initialize data.")
@@ -187,24 +203,26 @@ minTimeCUTENSOR = 1e100
 numRuns = 3  # to get stable perf results
 e1 = cp.cuda.Event()
 e2 = cp.cuda.Event()
+sliceGroup = cutn.create_slice_group_from_id_range(handle, 0, numSlices, 1)
 
 for i in range(numRuns):
     # restore output
     D_d.data.copy_from(D.ctypes.data, D.size * D.dtype.itemsize)
+    dev.synchronize()
 
     # Contract over all slices.
-    # A user may choose to parallelize this loop across multiple devices.
-    for sliceId in range(numSlices):
-        e1.record()
-        cutn.contraction(
-            handle, plan, rawDataIn_d, D_d.data.ptr,
-            workDesc, sliceId, stream.ptr)
-        e2.record()
+    # A user may choose to parallelize over the slices across multiple devices.
+    e1.record()
+    cutn.contract_slices(
+        handle, plan, rawDataIn_d, D_d.data.ptr, False,
+        workDesc, sliceGroup, stream.ptr)
+    e2.record()
 
-        # Synchronize and measure timing
-        e2.synchronize()
-        time = cp.cuda.get_elapsed_time(e1, e2) / 1000  # ms -> s
-        minTimeCUTENSOR = minTimeCUTENSOR if minTimeCUTENSOR < time else time
+    # Synchronize and measure timing
+    e2.synchronize()
+    time = cp.cuda.get_elapsed_time(e1, e2) / 1000  # ms -> s
+    minTimeCUTENSOR = minTimeCUTENSOR if minTimeCUTENSOR < time else time
+
 
 print("Contract the network, each slice uses the same contraction plan.")
 
@@ -229,9 +247,10 @@ cutn.contraction_optimizer_info_get_attribute(
 flops = float(flops)
 
 print(f"numSlices: {numSlices}")
-print(f"{minTimeCUTENSOR * 1000} ms / slice")
+print(f"{minTimeCUTENSOR * 1000 / numSlices} ms / slice")
 print(f"{flops/1e9/minTimeCUTENSOR} GFLOPS/s")
 
+cutn.destroy_slice_group(sliceGroup)
 cutn.destroy_contraction_plan(plan)
 cutn.destroy_contraction_optimizer_info(optimizerInfo)
 cutn.destroy_contraction_optimizer_config(optimizerConfig)

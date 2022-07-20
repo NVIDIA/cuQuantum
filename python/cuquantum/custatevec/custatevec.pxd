@@ -2,20 +2,15 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from libc.stdint cimport intptr_t, int32_t, uint32_t, int64_t
-
-from cuquantum.utils cimport Stream
-
-
 # The C types are prefixed with an underscore because we are not
 # yet protected by the module namespaces as done in CUDA Python.
 # Once we switch over the names would be prettier (in the Cython
 # layer).
 
+from libc.stdint cimport intptr_t, int32_t, uint32_t, int64_t
 
-# Cython limitation: need standalone typedef if we wanna use it for casting
-ctypedef int (*DeviceAllocType)(void*, void**, size_t, Stream)
-ctypedef int (*DeviceFreeType)(void*, void*, size_t, Stream)
+from cuquantum.utils cimport (DataType, DeviceAllocType, DeviceFreeType, int2,
+                              LibPropType, Stream)
 
 
 cdef extern from '<custatevec.h>' nogil:
@@ -25,8 +20,6 @@ cdef extern from '<custatevec.h>' nogil:
     ctypedef int _Status 'custatevecStatus_t'
     ctypedef void* _SamplerDescriptor 'custatevecSamplerDescriptor_t'
     ctypedef void* _AccessorDescriptor 'custatevecAccessorDescriptor_t'
-    ctypedef enum _ComputeType 'custatevecComputeType_t':
-        pass
     ctypedef struct _DeviceMemHandler 'custatevecDeviceMemHandler_t':
         void* ctx
         DeviceAllocType device_alloc
@@ -42,6 +35,9 @@ cdef extern from '<custatevec.h>' nogil:
         void* userData)
 
     # cuStateVec enums
+    ctypedef enum _ComputeType 'custatevecComputeType_t':
+        pass
+
     ctypedef enum _Pauli 'custatevecPauli_t':
         CUSTATEVEC_PAULI_I
         CUSTATEVEC_PAULI_X
@@ -64,6 +60,10 @@ cdef extern from '<custatevec.h>' nogil:
     ctypedef enum _SamplerOutput 'custatevecSamplerOutput_t':
         CUSTATEVEC_SAMPLER_OUTPUT_RANDNUM_ORDER
         CUSTATEVEC_SAMPLER_OUTPUT_ASCENDING_ORDER
+
+    ctypedef enum _DeviceNetworkType 'custatevecDeviceNetworkType_t':
+        CUSTATEVEC_DEVICE_NETWORK_TYPE_SWITCH
+        CUSTATEVEC_DEVICE_NETWORK_TYPE_FULLMESH
 
     # cuStateVec consts
     int CUSTATEVEC_VER_MAJOR

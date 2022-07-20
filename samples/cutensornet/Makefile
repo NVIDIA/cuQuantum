@@ -3,28 +3,34 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 SHELL            := /bin/bash
-CUDA_TOOLKIT     := $(shell realpath $$(dirname $$(command -v nvcc))/..)
+CUDA_PATH        := ${CUDA_PATH}
+CUTENSOR_ROOT    := ${CUTENSOR_ROOT}
 CUTENSORNET_ROOT ?= ${CUQUANTUM_ROOT}
+MPI_ROOT         := ${MPI_ROOT}
 
-INCLUDE_DIRS     := -I${CUTENSORNET_ROOT}/include -I${CUTENSOR_ROOT}/include
+INCLUDE_DIRS     := -I${CUTENSORNET_ROOT}/include -I${CUTENSOR_ROOT}/include -I${MPI_ROOT}/include
 LIBRARY_DIRS     := -L${CUTENSORNET_ROOT}/lib -L${CUTENSORNET_ROOT}/lib64 -L${CUTENSOR_ROOT}/lib/11
-LINKER_FLAGS     := -lcutensornet -lcutensor -lcudart -lstdc++
+LINKER_FLAGS     := -lcutensornet -lcutensor -lcudart
 
 ARCH_FLAGS_SM70  = -gencode arch=compute_70,code=sm_70
 ARCH_FLAGS_SM75  = -gencode arch=compute_75,code=sm_75
 ARCH_FLAGS_SM80  = -gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80
 ARCH_FLAGS       = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80)
 
-CXX_FLAGS        =-std=c++11 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(LINKER_FLAGS) $(ARCH_FLAGS)
+CXX_FLAGS        = -std=c++11 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(LINKER_FLAGS) $(ARCH_FLAGS)
 
 all: check-env
-	nvcc tensornet_example.cu -o tensornet_example ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc tensornet_example.cu -o tensornet_example ${CXX_FLAGS}
+    ifdef MPI_ROOT
+	${CUDA_PATH}/bin/nvcc tensornet_example_mpi.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi ${CXX_FLAGS} -lmpi
+    endif
 
 check-env:
 	@ echo "" && \
-	echo "CUDA_TOOLKIT=${CUDA_TOOLKIT}"; \
+	echo "CUDA_PATH=${CUDA_PATH}"; \
 	echo "CUTENSOR_ROOT=${CUTENSOR_ROOT}"; \
 	echo "CUTENSORNET_ROOT=${CUTENSORNET_ROOT}"; \
+    echo "MPI_ROOT=${MPI_ROOT}"; \
 	echo ""; \
 	if [[ -z "${CUTENSOR_ROOT}" ]]; \
 	then \
@@ -37,7 +43,13 @@ check-env:
 		echo "" && \
 		echo "Neither CUTENSORNET_ROOT nor CUQUANTUM_ROOT is set." && \
 		exit 1; \
+	fi; \
+	if [[ -z "${MPI_ROOT}" ]]; \
+	then \
+		echo "" && \
+		echo "MPI_ROOT is not set. Please set MPI_ROOT if you would like to build the distributed example(s)." && \
+        echo ""; \
 	fi
 
 clean:
-	rm -f tensornet_example tensornet_example.o
+	rm -f tensornet_example tensornet_example.o tensornet_example_mpi tensornet_example_mpi.o

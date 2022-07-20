@@ -4,6 +4,7 @@
 
 Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com/cuda/cuquantum/python).
 
+
 ## Building
 
 ### Requirements
@@ -12,8 +13,9 @@ Build-time dependencies of the cuQuantum Python package and some versions that
 are known to work are as follows:
 
 * CUDA Toolkit 11.x
-* cuQuantum 22.03+
+* cuQuantum 22.07+
 * cuTENSOR 1.5.0+
+* Python 3.8+
 * Cython - e.g. 0.29.21
 * [packaging](https://packaging.pypa.io/en/latest/)
 
@@ -62,14 +64,14 @@ Runtime dependencies of the cuQuantum Python package include:
 * An NVIDIA GPU with compute capability 7.0+
 * Driver: Linux (450.80.02+)
 * CUDA Toolkit 11.x
-* cuQuantum 22.03+
+* cuQuantum 22.07+
 * cuTENSOR 1.5.0+
-* NumPy v1.17+
+* Python 3.8+
+* NumPy v1.19+
 * CuPy v9.5.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
 * PyTorch v1.10+ (optional, see [installation guide](https://pytorch.org/get-started/locally/))
-* qiskit v0.24.0+ (optional, see [installation guide](https://qiskit.org/documentation/getting_started.html))
-* cirq v0.6.0+ (optional, see [installation guide](https://quantumai.google/cirq/install))
-* [typing-extensions](https://pypi.org/project/typing-extensions/)
+* Qiskit v0.24.0+ (optional, see [installation guide](https://qiskit.org/documentation/getting_started.html))
+* Cirq v0.6.0+ (optional, see [installation guide](https://quantumai.google/cirq/install))
 
 If you install everything from conda-forge, the dependencies are taken care for you (except for the driver).
 
@@ -93,6 +95,11 @@ library in Python.
 
 ## Testing
 
-If pytest is installed, run `pytest tests` in the Python source root directory would
+If pytest is installed, typing `pytest tests` at the command prompt in the Python source root directory will
 run all tests. Some tests would be skipped if `cffi` is not installed or if the environment
 variable `CUDA_PATH` is not set.
+
+
+## Citing cuQuantum
+
+Pleae click this Zenodo badge to see the citation format: [![DOI](https://zenodo.org/badge/435003852.svg)](https://zenodo.org/badge/latestdoi/435003852)

@@ -13,6 +13,7 @@ from libcpp.vector cimport vector
 from cuquantum.utils cimport is_nested_sequence
 from cuquantum.utils cimport cuqnt_alloc_wrapper
 from cuquantum.utils cimport cuqnt_free_wrapper
+from cuquantum.utils cimport get_buffer_pointer
 from cuquantum.utils cimport logger_callback_with_data
 
 from enum import IntEnum
@@ -62,6 +63,11 @@ cdef extern from * nogil:
     int cutensornetCreateContractionOptimizerInfo(
         const _Handle, const _NetworkDescriptor,
         _ContractionOptimizerInfo*)
+    int cutensornetCreateContractionOptimizerInfoFromPackedData(
+        const _Handle, const _NetworkDescriptor,
+        const void*, size_t, _ContractionOptimizerInfo*)
+    int cutensornetUpdateContractionOptimizerInfoFromPackedData(
+        const _Handle, const void*, size_t, _ContractionOptimizerInfo)
     int cutensornetDestroyContractionOptimizerInfo(
         _ContractionOptimizerInfo)
     int cutensornetContractionOptimizerInfoGetAttribute(
@@ -70,6 +76,10 @@ cdef extern from * nogil:
     int cutensornetContractionOptimizerInfoSetAttribute(
         const _Handle, _ContractionOptimizerInfo,
         _ContractionOptimizerInfoAttribute, const void*, size_t)
+    int cutensornetContractionOptimizerInfoGetPackedSize(
+        const _Handle, const _ContractionOptimizerInfo, size_t*)
+    int cutensornetContractionOptimizerInfoPackData(
+        const _Handle, const _ContractionOptimizerInfo, void*, size_t)
 
     # optimizer config
     int cutensornetCreateContractionOptimizerConfig(
@@ -103,6 +113,17 @@ cdef extern from * nogil:
         const _Handle, const _ContractionPlan, const void* const[],
         void*, const _WorkspaceDescriptor,
         int64_t, Stream)
+    int cutensornetContractSlices(
+        const _Handle, const _ContractionPlan, const void* const[],
+        void*, int32_t, const _WorkspaceDescriptor, const _SliceGroup,
+        Stream)
+
+    # slice group
+    int cutensornetCreateSliceGroupFromIDRange(
+        const _Handle, int64_t, int64_t, int64_t, _SliceGroup*)
+    int cutensornetCreateSliceGroupFromIDs(
+        const _Handle, int64_t*, int64_t*, _SliceGroup*)
+    int cutensornetDestroySliceGroup(_SliceGroup)
 
     # autotune pref
     int cutensornetCreateContractionAutotunePreference(
@@ -615,6 +636,67 @@ cpdef intptr_t create_contraction_optimizer_info(
     return <intptr_t>info
 
 
+cpdef intptr_t create_contraction_optimizer_info_from_packed_data(
+        intptr_t handle, intptr_t tn_desc, buf, size_t size) except*:
+    """Create a contraction optimizer info object from the packed data.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tn_desc (intptr_t): The tensor network descriptor.
+        buf: A contiguous host buffer holding the packed optimizer info. It can
+            be
+
+            - an :class:`int` as the pointer address to the buffer
+            - any Python object supporting the Python buffer protocol. In
+              this case, it must be 1D and writable; the format would be
+              ignored.
+
+        size (size_t): The buffer size in bytes.
+
+    Returns:
+        intptr_t: An opaque optimizer info handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateContractionOptimizerInfoFromPackedData`
+    """
+    cdef _ContractionOptimizerInfo info
+    cdef void* bufPtr = get_buffer_pointer(buf, size)
+    with nogil:
+        status = cutensornetCreateContractionOptimizerInfoFromPackedData(
+            <_Handle>handle, <_NetworkDescriptor>tn_desc, bufPtr, size, &info)
+    check_status(status)
+    return <intptr_t>info
+
+
+cpdef update_contraction_optimizer_info_from_packed_data(
+        intptr_t handle, buf, size_t size, intptr_t info):
+    """Update an existing contraction optimizer info object from the packed
+    data.
+
+    Args:
+        handle (intptr_t): The library handle.
+        buf: A contiguous host buffer holding the packed optimizer info. It can
+            be
+
+            - an :class:`int` as the pointer address to the buffer
+            - any Python object supporting the Python buffer protocol. In
+              this case, it must be 1D and writable; the format would be
+              ignored.
+
+        size (size_t): The buffer size in bytes.
+        info (intptr_t): An opaque optimizer info handle (as Python
+            :class:`int`). It must already be in a valid state (i.e.,
+            initialized). Upon completion of this function, the ``info``
+            is updated (in place).
+
+    .. seealso:: `cutensornetUpdateContractionOptimizerInfoFromPackedData`
+    """
+    cdef void* bufPtr = get_buffer_pointer(buf, size)
+    with nogil:
+        status = cutensornetUpdateContractionOptimizerInfoFromPackedData(
+            <_Handle>handle, bufPtr, size, <_ContractionOptimizerInfo>info)
+    check_status(status)
+
+
 cpdef destroy_contraction_optimizer_info(intptr_t info):
     """Destroy a contraction optimizer info object.
 
@@ -641,6 +723,10 @@ cdef dict contract_opti_info_sizes = {
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT: _numpy.float64,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_LARGEST_TENSOR: _numpy.float64,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_SLICING_OVERHEAD: _numpy.float64,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_INTERMEDIATE_MODES: _numpy.int32,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_INTERMEDIATE_MODES: _numpy.int32,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_EFFECTIVE_FLOPS_EST: _numpy.float64,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_RUNTIME_EST: _numpy.float64,
 }
 
 cpdef contraction_optimizer_info_get_attribute_dtype(int attr):
@@ -744,6 +830,60 @@ cpdef contraction_optimizer_info_set_attribute(
     check_status(status)
 
 
+cpdef size_t contraction_optimizer_info_get_packed_size(
+        intptr_t handle, intptr_t info) except*:
+    """Get the required buffer size for packing the optimizer info object.
+
+    Args:
+        handle (intptr_t): The library handle.
+        info (intptr_t): An opaque optimizer info handle (as Python
+            :class:`int`). It must already be in a valid state (i.e.,
+            initialized).
+
+    Returns:
+        size_t: The buffer size.
+
+    .. seealso:: `cutensornetContractionOptimizerInfoGetPackedSize`
+    """
+    cdef size_t size
+    with nogil:
+        status = cutensornetContractionOptimizerInfoGetPackedSize(
+            <_Handle>handle, <_ContractionOptimizerInfo>info, &size)
+    check_status(status)
+    return size
+
+
+cpdef contraction_optimizer_info_pack_data(
+        intptr_t handle, intptr_t info, buf, size_t size):
+    """Pack the contraction optimizer info data into a contiguous buffer.
+
+    Args:
+        handle (intptr_t): The library handle.
+        info (intptr_t): An opaque optimizer info handle (as Python
+            :class:`int`). It must already be in a valid state (i.e.,
+            initialized).
+        buf: A contiguous host buffer of ``size`` bytes for holding the packed
+            optimizer info. It can be
+
+            - an :class:`int` as the pointer address to the buffer
+            - any Python object supporting the Python buffer protocol. In
+              this case, it must be 1D and writable; the format would be
+              ignored.
+
+        size (size_t): The buffer size in bytes as returned by
+            :func:`contraction_optimizer_info_get_packed_size`.
+
+    .. seealso:: `cutensornetContractionOptimizerInfoPackData`
+    """
+    cdef void* bufPtr = get_buffer_pointer(buf, size)
+
+    with nogil:
+        status = cutensornetContractionOptimizerInfoPackData(
+            <_Handle>handle, <_ContractionOptimizerInfo>info,
+            bufPtr, size)
+    check_status(status)
+
+
 cpdef intptr_t create_contraction_optimizer_config(
         intptr_t handle) except*:
     """Create a contraction optimizer config object.
@@ -795,9 +935,10 @@ cdef dict contract_opti_cfg_sizes = {
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_MIN_SLICES: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_SLICE_FACTOR: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES: _numpy.int32,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SIMPLIFICATION_DISABLE_DR: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED: _numpy.int32,
-    CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS: _numpy.int32,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE: _numpy.int32,  # = sizeof(enum value)
 }
 
 cpdef contraction_optimizer_config_get_attribute_dtype(int attr):
@@ -819,6 +960,9 @@ cpdef contraction_optimizer_config_get_attribute_dtype(int attr):
             warnings.warn("binary size may be incompatible")
     elif attr == CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_MEMORY_MODEL:
         if _numpy.dtype(dtype).itemsize != sizeof(_MemoryModel):
+            warnings.warn("binary size may be incompatible")
+    elif attr == CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE:
+        if _numpy.dtype(dtype).itemsize != sizeof(_OptimizerCost):
             warnings.warn("binary size may be incompatible")
     return dtype
 
@@ -996,7 +1140,7 @@ cpdef contraction_autotune(
     check_status(status)
 
 
-cpdef intptr_t create_contraction_autotune_preference(intptr_t handle):
+cpdef intptr_t create_contraction_autotune_preference(intptr_t handle) except*:
     """Create a handle to hold all autotune parameters.
 
     Args:
@@ -1015,7 +1159,7 @@ cpdef intptr_t create_contraction_autotune_preference(intptr_t handle):
     return <intptr_t>pref
 
 
-cpdef intptr_t destroy_contraction_autotune_preference(intptr_t pref):
+cpdef destroy_contraction_autotune_preference(intptr_t pref):
     """Destroy the autotue preference handle.
 
     Args:
@@ -1033,6 +1177,7 @@ cpdef intptr_t destroy_contraction_autotune_preference(intptr_t pref):
 
 cdef dict contract_autotune_pref_sizes = {
     CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS: _numpy.int32,
+    CUTENSORNET_CONTRACTION_AUTOTUNE_INTERMEDIATE_MODES: _numpy.int32,
 }
 
 cpdef contraction_autotune_preference_get_attribute_dtype(int attr):
@@ -1127,6 +1272,11 @@ cpdef contraction(
         stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
             :class:`int`).
 
+    .. note::
+
+       This function is deprecated and will be removed in a future release.
+       Use :func:`contract_slices` instead.
+
     .. note:: The number of slices can be queried by :func:`contraction_optimizer_info_get_attribute`.
 
     .. seealso:: `cutensornetContraction`
@@ -1139,6 +1289,10 @@ cpdef contraction(
         rawDataInPtr = <void**>(rawDataInData.data())
     else:  # a pointer address
         rawDataInPtr = <void**><intptr_t>raw_data_in
+    warnings.warn("cuquantum.cutensornet.contraction() is deprecated and will "
+                  "be removed in the future; please switch to "
+                  "cuquantum.cutensornet.contract_slices() instead",
+                  DeprecationWarning, 2)
 
     with nogil:
         status = cutensornetContraction(
@@ -1146,6 +1300,138 @@ cpdef contraction(
             rawDataInPtr, <void*>raw_data_out,
             <_WorkspaceDescriptor>workspace,
             slice_id, <Stream>stream)
+    check_status(status)
+
+
+cpdef contract_slices(
+        intptr_t handle, intptr_t plan,
+        raw_data_in, intptr_t raw_data_out, bint accumulate_output,
+        intptr_t workspace, intptr_t slice_group, intptr_t stream):
+    """Perform the contraction of the input tensors.
+
+    The input tensors should form a tensor network that is prescribed by the
+    tensor network descriptor that was used to create the contraction plan.
+
+    This version of the contraction API takes a group of slices instead of
+    a single slice.
+
+    Args:
+        handle (intptr_t): The library handle.
+        plan (intptr_t): The contraction plan handle.
+        raw_data_in: A host array of pointer addresses (as Python :class:`int`) for
+            each input tensor (on device). It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        raw_data_out (intptr_t): The pointer address (as Python :class:`int`)
+            to the output tensor (on device).
+        accumulate_output (bool): Whether to accumulate the data in
+            ``raw_data_out``.
+        workspace (intptr_t): The workspace descriptor.
+        slice_group (intptr_t): The slice group descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetContractSlices`
+    """
+    # raw_data_in can be a pointer address, or a Python sequence
+    cdef vector[intptr_t] rawDataInData
+    cdef void** rawDataInPtr
+    if cpython.PySequence_Check(raw_data_in):
+        rawDataInData = raw_data_in
+        rawDataInPtr = <void**>(rawDataInData.data())
+    else:  # a pointer address
+        rawDataInPtr = <void**><intptr_t>raw_data_in
+
+    with nogil:
+        status = cutensornetContractSlices(
+            <_Handle>handle, <_ContractionPlan>plan,
+            rawDataInPtr, <void*>raw_data_out, <int32_t>accumulate_output,
+            <_WorkspaceDescriptor>workspace,
+            <_SliceGroup>slice_group,
+            <Stream>stream)
+    check_status(status)
+
+
+cpdef intptr_t create_slice_group_from_id_range(
+        intptr_t handle, int64_t slice_start, int64_t slice_stop,
+        int64_t slice_step) except*:
+    """Create a slice group that contains a sequence of slice IDs from
+    ``slice_start`` (inclusive) to ``slice_stop`` (exclusive) by
+    ``slice_step``.
+
+    This version of the slice group constructor works similarly to the
+    Python :class:`range`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        slice_start (int64_t): The start of the ID sequence (inclusive).
+        slice_stop (int64_t): The stop value of the ID sequence (exclusive).
+        slice_step (int64_t): The step size of the ID sequence.
+
+    Returns:
+        intptr_t: An opaque slice group descriptor.
+
+    .. seealso:: `cutensornetCreateSliceGroupFromIDRange`
+    """
+    cdef _SliceGroup slice_group
+    with nogil:
+        status = cutensornetCreateSliceGroupFromIDRange(
+            <_Handle>handle, slice_start, slice_stop, slice_step, &slice_group)
+    check_status(status)
+    return <intptr_t>slice_group
+
+
+cpdef intptr_t create_slice_group_from_ids(
+        intptr_t handle, ids, size_t ids_size) except*:
+    """Create a slice group from a sequence of slice IDs.
+
+    Args:
+        handle (intptr_t): The library handle.
+        ids: A host sequence of slice IDs (as Python :class:`int`). It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        ids_size (size_t): the length of the ID sequence.
+
+    Returns:
+        intptr_t: An opaque slice group descriptor.
+
+    .. seealso:: `cutensornetCreateSliceGroupFromIDs`
+    """
+    # ids can be a pointer address, or a Python sequence
+    cdef vector[int64_t] IDsData
+    cdef int64_t* IdsPtr
+    cdef size_t size
+    if cpython.PySequence_Check(ids):
+        IDsData = ids
+        IDsPtr = <int64_t*>(IDsData.data())
+        size = IDsData.size()
+        assert size == ids_size
+    else:  # a pointer address
+        IDsPtr = <int64_t*><intptr_t>ids
+        size = ids_size
+
+    cdef _SliceGroup slice_group
+    with nogil:
+        status = cutensornetCreateSliceGroupFromIDs(
+            <_Handle>handle, IDsPtr, IDsPtr+size, &slice_group)
+    check_status(status)
+    return <intptr_t>slice_group
+
+
+cpdef destroy_slice_group(intptr_t slice_group):
+    """Destroy the slice group.
+
+    Args:
+        slice_group (intptr_t): An opaque slice group descriptor.
+
+    .. seealso:: `cutensornetDestroySliceGroup`
+    """
+    with nogil:
+        status = cutensornetDestroySliceGroup(<_SliceGroup>slice_group)
     check_status(status)
 
 
@@ -1413,6 +1699,12 @@ class MemoryModel(IntEnum):
     HEURISTIC = CUTENSORNET_MEMORY_MODEL_HEURISTIC
     CUTENSOR = CUTENSORNET_MEMORY_MODEL_CUTENSOR
 
+class OptimizerCost(IntEnum):
+    """See `cutensornetOptimizerCost_t`."""
+    FLOPS = CUTENSORNET_OPTIMIZER_COST_FLOPS
+    TIME = CUTENSORNET_OPTIMIZER_COST_TIME
+    TIME_TUNED = CUTENSORNET_OPTIMIZER_COST_TIME_TUNED
+
 class ContractionOptimizerConfigAttribute(IntEnum):
     """See `cutensornetContractionOptimizerConfigAttributes_t`."""
     GRAPH_NUM_PARTITIONS = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GRAPH_NUM_PARTITIONS
@@ -1429,9 +1721,10 @@ class ContractionOptimizerConfigAttribute(IntEnum):
     SLICER_MIN_SLICES = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_MIN_SLICES
     SLICER_SLICE_FACTOR = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SLICER_SLICE_FACTOR
     HYPER_NUM_SAMPLES = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES
+    HYPER_NUM_THREADS = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS
     SIMPLIFICATION_DISABLE_DR = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SIMPLIFICATION_DISABLE_DR
     SEED = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED
-    HYPER_NUM_THREADS = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS
+    COST_FUNCTION_OBJECTIVE = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE
 
 class ContractionOptimizerInfoAttribute(IntEnum):
     """See `cutensornetContractionOptimizerInfoAttributes_t`."""
@@ -1444,10 +1737,15 @@ class ContractionOptimizerInfoAttribute(IntEnum):
     FLOP_COUNT = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT
     LARGEST_TENSOR = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_LARGEST_TENSOR
     SLICING_OVERHEAD = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_SLICING_OVERHEAD
+    INTERMEDIATE_MODES = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_INTERMEDIATE_MODES
+    NUM_INTERMEDIATE_MODES = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_INTERMEDIATE_MODES
+    EFFECTIVE_FLOPS_EST = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_EFFECTIVE_FLOPS_EST
+    RUNTIME_EST = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_RUNTIME_EST
 
 class ContractionAutotunePreferenceAttribute(IntEnum):
     """See `cutensornetContractionAutotunePreferenceAttributes_t`."""
     MAX_ITERATIONS = CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS
+    INTERMEDIATE_MODES = CUTENSORNET_CONTRACTION_AUTOTUNE_INTERMEDIATE_MODES
 
 class WorksizePref(IntEnum):
     """See `cutensornetWorksizePref_t`."""

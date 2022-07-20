@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import contextlib
 from collections import abc
 import functools
 import os
@@ -86,6 +85,10 @@ def manage_resource(name):
                     h = cutn.create_contraction_autotune_preference(self.handle)
                 elif name == 'workspace':
                     h = cutn.create_workspace_descriptor(self.handle)
+                elif name == 'slice_group':
+                    # we use this version to avoid creating a sequence; another API
+                    # is tested elsewhere
+                    h = cutn.create_slice_group_from_id_range(self.handle, 0, 1, 1)
                 else:
                     assert False, f'name "{name}" not recognized'
                 setattr(self, name, h)
@@ -112,6 +115,9 @@ def manage_resource(name):
                 elif name == 'workspace' and hasattr(self, name):
                     h = cutn.destroy_workspace_descriptor(self.workspace)
                     del self.workspace
+                elif name == 'slice_group':
+                    h = cutn.destroy_slice_group(self.slice_group)
+                    del self.slice_group
         return test_func
     return decorator
 
@@ -297,6 +303,7 @@ class TensorNetworkFactory:
     # be discarded.
 
     def __init__(self, einsum, shapes, dtype):
+        self.einsum = einsum
         inputs, output = einsum.split('->') if "->" in einsum else (einsum, None)
         i_shapes, o_shape = shapes[:-1], shapes[-1]
         inputs = tuple(tuple(_input) for _input in inputs.split(","))
@@ -456,6 +463,34 @@ class TestTensorNetworkDescriptor(TestTensorNetworkBase):
 
 class TestOptimizerInfo(TestTensorNetworkBase):
 
+    def _get_path(self, handle, info):
+        raise NotImplementedError
+
+    def _set_path(self, handle, info, path):
+        attr = cutn.ContractionOptimizerInfoAttribute.PATH
+        if not isinstance(path, numpy.ndarray):
+            path = numpy.ascontiguousarray(path, dtype=numpy.int32)
+        num_contraction = path.shape[0]
+        p = cutn.ContractionPath(num_contraction, path.ctypes.data)
+        cutn.contraction_optimizer_info_set_attribute(
+            handle, info, attr, p.get_path(), p.get_size())
+
+    def _get_scalar_attr(self, handle, info, attr):
+        dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
+        data = numpy.empty((1,), dtype=dtype)
+        cutn.contraction_optimizer_info_get_attribute(
+            handle, info, attr,
+            data.ctypes.data, data.dtype.itemsize)
+        return data
+
+    def _set_scalar_attr(self, handle, info, attr, data):
+        dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
+        if not isinstance(data, numpy.ndarray):
+            data = numpy.ascontiguousarray(data, dtype=dtype)
+        cutn.contraction_optimizer_info_set_attribute(
+            handle, info, attr,
+            data.ctypes.data, data.dtype.itemsize)
+
     @manage_resource('handle')
     @manage_resource('dscr')
     @manage_resource('info')
@@ -476,27 +511,75 @@ class TestOptimizerInfo(TestTensorNetworkBase):
                 cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
                 cutn.ContractionOptimizerInfoAttribute.LARGEST_TENSOR,
                 cutn.ContractionOptimizerInfoAttribute.SLICING_OVERHEAD,
+                cutn.ContractionOptimizerInfoAttribute.EFFECTIVE_FLOPS_EST,
+                cutn.ContractionOptimizerInfoAttribute.RUNTIME_EST,
                 ):
             pytest.skip("setter not supported")
         elif attr in (
                 cutn.ContractionOptimizerInfoAttribute.PATH,
                 cutn.ContractionOptimizerInfoAttribute.SLICED_MODE,
                 cutn.ContractionOptimizerInfoAttribute.SLICED_EXTENT,
+                cutn.ContractionOptimizerInfoAttribute.INTERMEDIATE_MODES,
+                cutn.ContractionOptimizerInfoAttribute.NUM_INTERMEDIATE_MODES,
                 ):
             pytest.skip("TODO")
         handle, info = self.handle, self.info
-        dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
         # Hack: assume this is a valid value for all attrs
-        factor = numpy.asarray([30], dtype=dtype)
-        cutn.contraction_optimizer_info_set_attribute(
-            handle, info, attr,
-            factor.ctypes.data, factor.dtype.itemsize)
+        factor = 30
+        self._set_scalar_attr(handle, info, attr, factor)
         # do a round-trip test as a sanity check
-        factor2 = numpy.zeros_like(factor)
-        cutn.contraction_optimizer_info_get_attribute(
-            handle, info, attr,
-            factor2.ctypes.data, factor2.dtype.itemsize)
+        factor2 = self._get_scalar_attr(handle, info, attr)
         assert factor == factor2
+
+    @pytest.mark.parametrize(
+        "buffer_form", ("int", "buf")
+    )
+    @manage_resource('handle')
+    @manage_resource('dscr')
+    @manage_resource('info')
+    def test_optimizer_info_packing_unpacking(self, buffer_form):
+        tn, handle, dscr, info = self.tn, self.handle, self.dscr, self.info
+        attr = cutn.ContractionOptimizerInfoAttribute.PATH
+        dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
+
+        # compute a valid path for the problem
+        path, _ = numpy.einsum_path(
+            tn.einsum,
+            *[arr for arr in map(lambda a: numpy.broadcast_to(0, a.shape),
+                                 tn.input_tensors)])
+
+        # set the path in info (a few other attributes would be computed too)
+        # and then serialize it
+        self._set_path(handle, info, path[1:])
+        buf_size = cutn.contraction_optimizer_info_get_packed_size(
+            handle, info)
+        buf_data = numpy.empty((buf_size,), dtype=numpy.int8)
+        if buffer_form == "int":
+            buf = buf_data.ctypes.data
+        else:  # buffer_form == "buf"
+            buf = buf_data
+        cutn.contraction_optimizer_info_pack_data(
+            handle, info, buf, buf_size)
+
+        # sanity check: all info must give the same attribute
+        attr = cutn.ContractionOptimizerInfoAttribute.LARGEST_TENSOR
+        largest = self._get_scalar_attr(handle, info, attr)
+
+        info2 = cutn.create_contraction_optimizer_info_from_packed_data(
+            handle, dscr, buf, buf_size)
+        largest2 = self._get_scalar_attr(handle, info2, attr)
+
+        info3 = cutn.create_contraction_optimizer_info(handle, dscr)
+        cutn.update_contraction_optimizer_info_from_packed_data(
+            handle, buf, buf_size, info3)
+        largest3 = self._get_scalar_attr(handle, info3, attr)
+
+        try:
+            assert largest == largest2
+            assert largest == largest3
+        finally:
+            cutn.destroy_contraction_optimizer_info(info2)
+            cutn.destroy_contraction_optimizer_info(info3)
 
 
 class TestOptimizerConfig:
@@ -508,21 +591,19 @@ class TestOptimizerConfig:
         pass
 
     @pytest.mark.parametrize(
-        # TODO(leofang): enable this when the getter bug is fixed
         'attr', [val for val in cutn.ContractionOptimizerConfigAttribute]
-        #'attr', [cutn.ContractionOptimizerConfigAttribute.GRAPH_IMBALANCE_FACTOR]
     )
     @manage_resource('handle')
     @manage_resource('config')
     def test_optimizer_config_get_set_attribute(self, attr):
-        if attr == cutn.ContractionOptimizerConfigAttribute.SIMPLIFICATION_DISABLE_DR:
-            pytest.skip("pending on MR 275")
         handle, config = self.handle, self.config
         dtype = cutn.contraction_optimizer_config_get_attribute_dtype(attr)
         # Hack: assume this is a valid value for all attrs
         if attr in (cutn.ContractionOptimizerConfigAttribute.GRAPH_ALGORITHM,
                     cutn.ContractionOptimizerConfigAttribute.SLICER_MEMORY_MODEL,
-                    cutn.ContractionOptimizerConfigAttribute.SLICER_DISABLE_SLICING):
+                    cutn.ContractionOptimizerConfigAttribute.SLICER_DISABLE_SLICING,
+                    cutn.ContractionOptimizerConfigAttribute.SIMPLIFICATION_DISABLE_DR,
+                    cutn.ContractionOptimizerConfigAttribute.COST_FUNCTION_OBJECTIVE):
             factor = numpy.asarray([1], dtype=dtype)
         else:
             factor = numpy.asarray([30], dtype=dtype)
@@ -554,7 +635,7 @@ class TestAutotunePreference:
         handle, pref = self.handle, self.autotune
         dtype = cutn.contraction_autotune_preference_get_attribute_dtype(attr)
         # Hack: assume this is a valid value for all attrs
-        factor = numpy.asarray([10], dtype=dtype)
+        factor = numpy.asarray([2], dtype=dtype)
         cutn.contraction_autotune_preference_set_attribute(
             handle, pref, attr,
             factor.ctypes.data, factor.dtype.itemsize)
@@ -576,7 +657,7 @@ class TestAutotunePreference:
     'autotune', (True, False)
 )
 @pytest.mark.parametrize(
-    'contract', (True, False)
+    'contract', (False, "legacy", "slice_group")
 )
 @pytest.mark.parametrize(
     'stream', (cupy.cuda.Stream.null, cupy.cuda.Stream(non_blocking=True))
@@ -591,6 +672,7 @@ class TestContraction(TestTensorNetworkBase):
     @manage_resource('config')
     @manage_resource('autotune')
     @manage_resource('workspace')
+    @manage_resource('slice_group')
     def test_contraction_workflow(
             self, mempool, workspace_pref, autotune, contract, stream):
         if (isinstance(mempool, str) and mempool.startswith('cffi')
@@ -648,18 +730,50 @@ class TestContraction(TestTensorNetworkBase):
                     tn.get_input_tensors(**input_form),
                     tn.get_output_tensor(),
                     workspace, pref, stream.ptr)
-            if contract:
-                # assume no slicing for simple test cases!
+
+            # we don't care about correctness here, so just contract 1 slice
+            # TODO(leofang): check correctness?
+            if contract == "legacy":
                 cutn.contraction(
                     handle, plan,
                     tn.get_input_tensors(**input_form),
                     tn.get_output_tensor(),
                     workspace, 0, stream.ptr)
-                # TODO(leofang): check correctness?
+            elif contract == "slice_group":
+                accumulate = 0
+                cutn.contract_slices(
+                    handle, plan,
+                    tn.get_input_tensors(**input_form),
+                    tn.get_output_tensor(),
+                    accumulate,
+                    workspace, self.slice_group, stream.ptr)
             stream.synchronize()
         finally:
             if plan is not None:
                 cutn.destroy_contraction_plan(plan)
+
+
+@pytest.mark.parametrize(
+    'source', ('int', 'seq', 'range')
+)
+class TestSliceGroup:
+
+    @manage_resource('handle')
+    def test_slice_group(self, source):
+        # we don't do a simple round-trip test here because there are two
+        # flavors of constructors
+        if source == "int":
+            ids = numpy.arange(10, dtype=numpy.int64)
+            slice_group = cutn.create_slice_group_from_ids(
+                self.handle, ids.ctypes.data, ids.size)
+        elif source == "seq":
+            ids = numpy.arange(10, dtype=numpy.int64)
+            slice_group = cutn.create_slice_group_from_ids(
+                self.handle, ids, ids.size)
+        elif source == "range":
+            slice_group = cutn.create_slice_group_from_id_range(
+                self.handle, 0, 10, 1)
+        cutn.destroy_slice_group(slice_group)
 
 
 # TODO: add more different memory sources
