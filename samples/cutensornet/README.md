@@ -42,16 +42,13 @@ To execute the parallel MPI sample with explicit MPI parallelization, run:
 ```
 mpiexec -n N ./tensornet_example_mpi
 ```
-<<<<<<< HEAD
 where `N` is the desired number of processes. In this example, `N` can be larger than the number of GPUs in your system.
+
 The tensor SVD sample can be easily executed in a command shell using:
 ```
 ./tensor_svd_example
 ```
 The sample for tensor QR, gate split and MPS can also be executed in the same fashion.
-=======
-where `N` is the desired number of processes.
->>>>>>> cutensornet
 
 ## Support
 
