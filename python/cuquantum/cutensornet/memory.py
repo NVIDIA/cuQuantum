@@ -13,6 +13,9 @@ import weakref
 
 import cupy as cp
 
+from ._internal import utils
+
+
 class MemoryPointer:
     """
     An RAII class for a device memory buffer.
@@ -84,20 +87,20 @@ class _RawCUDAMemoryManager(BaseCUDAMemoryManager):
         """
         __init__(device_id)
         """
-        self.device = cp.cuda.Device(device_id)
+        self.device_id = device_id
         self.logger = logger
 
     def memalloc(self, size):
-        with self.device:
+        with utils.device_ctx(self.device_id):
             device_ptr = cp.cuda.runtime.malloc(size)
 
         self.logger.debug(f"_RawCUDAMemoryManager (allocate memory): size = {size}, ptr = {device_ptr}, "
-                          f"device = {self.device}, stream={cp.cuda.get_current_stream()}")
+                          f"device = {self.device_id}, stream={cp.cuda.get_current_stream()}")
 
         def create_finalizer():
             def finalizer():
-                with self.device:
-                    cp.cuda.runtime.free(device_ptr)
+                # Note: With UVA there is no need to switch context to the device the memory belongs to before calling free().
+                cp.cuda.runtime.free(device_ptr)
                 self.logger.debug(f"_RawCUDAMemoryManager (release memory): ptr = {device_ptr}")
             return finalizer
 
@@ -117,16 +120,16 @@ class _CupyCUDAMemoryManager(BaseCUDAMemoryManager):
         """
         __init__(device_id)
         """
-        self.device = cp.cuda.Device(device_id)
+        self.device_id = device_id
         self.logger = logger
 
     def memalloc(self, size):
-        with self.device:
+        with utils.device_ctx(self.device_id):
             cp_mem_ptr = cp.cuda.alloc(size)
             device_ptr = cp_mem_ptr.ptr
 
         self.logger.debug(f"_CupyCUDAMemoryManager (allocate memory): size = {size}, ptr = {device_ptr}, "
-                          f"device = {self.device}, stream={cp.cuda.get_current_stream()}")
+                          f"device = {self.device_id}, stream={cp.cuda.get_current_stream()}")
 
         return cp_mem_ptr
 
@@ -165,4 +168,3 @@ class _TorchCUDAMemoryManager(BaseCUDAMemoryManager):
 
 
 _MEMORY_MANAGER = {'_raw' : _RawCUDAMemoryManager, 'cupy' : _CupyCUDAMemoryManager, 'torch' : _TorchCUDAMemoryManager}
-

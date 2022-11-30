@@ -11,7 +11,9 @@ __all__ = ['NumpyTensor']
 import cupy
 import numpy
 
+from . import utils
 from .tensor_ifc import Tensor
+
 
 class NumpyTensor(Tensor):
     """
@@ -73,7 +75,7 @@ class NumpyTensor(Tensor):
         if not isinstance(device, int):
             raise ValueError(f"The device must be specified as an integer or 'cpu', not '{device}'.")
 
-        with cupy.cuda.Device(device):
+        with utils.device_ctx(device):
             tensor_device = cupy.asarray(self.tensor)
 
         return tensor_device

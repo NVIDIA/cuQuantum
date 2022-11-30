@@ -15,12 +15,14 @@ from cuquantum import cutensornet as cutn
 from cuquantum.cutensornet._internal.utils import infer_object_package
 
 from .data import backend_names, dtype_names, einsum_expressions
-from .testutils import atol_mapper, EinsumFactory, rtol_mapper
-from .testutils import compute_and_normalize_numpy_path
-from .testutils import set_path_to_optimizer_options
+from .test_utils import atol_mapper, EinsumFactory, rtol_mapper
+from .test_utils import compute_and_normalize_numpy_path
+from .test_utils import deselect_contract_tests
+from .test_utils import set_path_to_optimizer_options
 
 
 # TODO: parametrize compute type?
+@pytest.mark.uncollect_if(func=deselect_contract_tests)
 @pytest.mark.parametrize(
     "use_numpy_path", (False, True)
 )
@@ -46,9 +48,7 @@ class TestContract:
             stream, use_numpy_path, **kwargs):
         einsum_expr = copy.deepcopy(einsum_expr_pack)
         if isinstance(einsum_expr, list):
-            einsum_expr, network_opts, optimizer_opts, overwrite_dtype = einsum_expr
-            if dtype != overwrite_dtype:
-                pytest.skip(f"skipping {dtype} is requested")
+            einsum_expr, network_opts, optimizer_opts, _ = einsum_expr
         else:
             network_opts = optimizer_opts = None
         assert isinstance(einsum_expr, (str, tuple))
@@ -83,9 +83,9 @@ class TestContract:
                 *data, options=network_opts, optimize=optimizer_opts,
                 stream=stream, return_info=return_info)
             if return_info:
-                out, info = out
-                assert isinstance(info[0], list)  # path
-                assert isinstance(info[1], cuquantum.OptimizerInfo)
+                out, (path, info) = out
+                assert isinstance(path, list)
+                assert isinstance(info, cuquantum.OptimizerInfo)
         else:  # cuquantum.einsum()
             optimize = kwargs.pop('optimize')
             if optimize == 'path':

@@ -30,15 +30,29 @@ To execute the serial sample in a command shell, simply use:
 ```
 ./tensornet_example
 ```
-To execute the parallel MPI sample, run:
+To execute the parallel MPI sample with automatic MPI parallelization, run:
+```
+mpiexec -n N ./tensornet_example_mpi_auto
+```
+where `N` is the desired number of processes. You will need to define
+the environment variable CUTENSORNET_COMM_LIB as described in the Getting Started
+section of the cuTensorNet library documentation (Installation and Compilation).
+
+To execute the parallel MPI sample with explicit MPI parallelization, run:
 ```
 mpiexec -n N ./tensornet_example_mpi
 ```
 where `N` is the desired number of processes. In this example, `N` can be larger than the number of GPUs in your system.
 
+The tensor SVD sample can be easily executed in a command shell using:
+```
+./tensor_svd_example
+```
+The sample for tensor QR, gate split and MPS can also be executed in the same fashion.
+
 ## Support
 
-* **Supported SM Architectures:** SM 7.0, SM 7.5, SM 8.0, SM 8.6
+* **Supported SM Architectures:** SM 7.0, SM 7.5, SM 8.0, SM 8.6, SM 9.0
 * **Supported OSes:** Linux
 * **Supported CPU Architectures**: x86_64, aarch64-sbsa, ppc64le
 * **Language**: C++11 or above
@@ -64,9 +78,27 @@ This sample consists of:
 * Performing the computation of the contraction using `cutensornetContractSlices` for a group of slices (in this case, all of the slices) created (destroyed) using the `cutensornetCreateSliceGroupFromIDRange` (`cutensornetDestroySliceGroup`) API.
 * Freeing the cuTensorNet resources.
 
-### 2. Parallel execution (`tensornet_example_mpi.cu`)
+### 2. Parallel execution (`tensornet_example_mpi_auto.cu`)
 
-The parallel MPI sample illustrates advanced usage of cuTensorNet. Specifically, it demonstrates how to find a contraction path in parallel and how to exploit slice-based parallelism by contracting a subset of slices on each process.
+This parallel MPI sample enables automatic distributed parallelization across multiple/many GPUs.
+Specifically, it demonstrates how to activate an automatic distributed parallelization inside
+the cuTensorNet library such that it will find a contraction path and subsequently contract
+the tensor network in parallel using exactly the same source code as in a serial (single-GPU) run.
+Currently one will need a CUDA-aware MPI library implementation to run this sample. Please refer
+to the Getting Started section of the cuTensorNet library documenation for full details.
+
+This sample consists of:
+* A basic skeleton setting up a simple MPI+CUDA computation using a one GPU per MPI process model.
+* Activation call that enables automatic distributed parallelization inside the cuTensorNet library.
+* Parallel execution of the tensor network contraction path finder (`cutensornetContractionOptimize`).
+* Parallel execution of the tensor network contraction (`cutensornetContractSlices`).
+
+### 3. Parallel execution via explicit MPI calls (`tensornet_example_mpi.cu`)
+
+This parallel MPI sample illustrates advanced usage of cuTensorNet. Specifically, it demonstrates
+how to find a contraction path in parallel and how to exploit slice-based parallelism by contracting
+a subset of slices on each process using manual MPI instrumentation. Note that the previous parallel
+sample will do all these for you automatically without any chages to the original (serial) source code.
 
 This sample consists of:
 * A basic skeleton setting up a simple MPI+CUDA computation using a one GPU per process model.
@@ -74,3 +106,60 @@ This sample consists of:
 * Finding an optimal path with `cutensornetContractionOptimize` in parallel, and using global reduction (`MPI_MINLOC`) to find the best path and the owning process's identity. Note that the contraction optimizer on each process sets a different random seed, so each process typically computes a different optimal path for sufficiently large tensor networks.
 * Broadcasting the winner's `optimizerInfo` object by serializing it using the `cutensornetContractionOptimizerInfoGetPackedSize` and `cutensornetContractionOptimizerInfoPackData` APIs, and deserializing it into an existing `optimizerInfo` object using the `cutensornetUpdateContractionOptimizerInfoFromPackedData` API.
 * Computing the subset of slice IDs (in a relatively load-balanced fashion) for which each process is responsible, contracting them, and performing a global reduction (sum) to get the final result on the root process.
+
+### 4. Tensor QR (`approxTN/tensor_qr_example.cu`)
+
+This sample demonstrates how to use cuTensorNet to perform tensor QR operation. 
+
+This sample consists of:
+* Defining input and output tensors using `cutensornetCreateTensorDescriptor`.
+* Querying the required workspace for the computation using `cutensornetWorkspaceComputeQRSizes`. 
+* Performing the computation of tensor QR using `cutensornetTensorQR`. 
+* Freeing the cuTensorNet resources.
+
+### 5. Tensor SVD (`approxTN/tensor_svd_example.cu`)
+
+This sample demonstrates how to use cuTensorNet to perform tensor SVD operation. 
+
+This sample consists of:
+* Defining input and output tensors using `cutensornetCreateTensorDescriptor`. Fixed extent truncation can be directly specified by modifying the corresponding extent in the output tensor descriptor.
+* Setting up the SVD truncation options using the `cutensornetTensorSVDConfigSetAttribute` function of the `svdConfig` object created by `cutensornetCreateTensorSVDConfig`.
+* Optionally, calling `cutensornetCreateTensorSVDInfo` and `cutensornetTensorSVDInfoGetAttribute` to store and retrieve runtime SVD truncation information.
+* Querying the required workspace for the computation using `cutensornetWorkspaceComputeSVDSizes`. 
+* Performing the computation of tensor SVD using `cutensornetTensorSVD`. 
+* Freeing the cuTensorNet resources.
+
+### 6. Gate Split (`approxTN/gate_split_example.cu`)
+
+This sample demonstrates how to use cuTensorNet to perform a single gate split operation. 
+
+This sample consists of:
+* Defining input and output tensors using `cutensornetCreateTensorDescriptor`. Fixed extent truncation can be directly specified by modifying the corresponding extent in the output tensor descriptor.
+* Setting up the SVD truncation options using the `cutensornetTensorSVDConfigSetAttribute` function of the `svdConfig` object created by `cutensornetCreateTensorSVDConfig`.
+* Optionally, calling `cutensornetCreateTensorSVDInfo` and `cutensornetTensorSVDInfoGetAttribute` to store and retrieve runtime SVD truncation information.
+* Querying the required workspace for the computation using `cutensornetWorkspaceComputeGateSplitSizes`. The gate split algorithm is specified in `cutensornetGateSplitAlgo_t`. 
+* Performing the computation of tensor SVD using `cutensornetTensorGateSplit`. 
+* Freeing the cuTensorNet resources.
+
+### 7. MPS (`approxTN/mps_example.cu`)
+
+This sample demonstrates how to integrate cuTensorNet into matrix product states (MPS) simulator. 
+
+This sample is based on an ``MPSHelper`` that can systematically manage the MPS metadata and cuTensorNet library objects. 
+Following functionalities are encapsulated in this class:
+* Dynamically updating the `cutensornetTensorDescriptor_t` for all MPS tensors by calling `cutensornetCreateTensorDescriptor` and `cutensornetDestroyTensorDescriptor`.
+* Querying the maximal data size needed for each MPS tensor.
+* Setting up the SVD truncation options using the `cutensornetTensorSVDConfigSetAttribute` function of the `svdConfig` object created by `cutensornetCreateTensorSVDConfig`.
+* Querying the required workspace size for all gate split operations by calling `cutensornetWorkspaceComputeGateSplitSizes` on the largest problem.
+* Optionally, calling `cutensornetCreateTensorSVDInfo` and `cutensornetTensorSVDInfoGetAttribute` to store and retrieve runtime SVD truncation information.
+* Performing gate split operations for all gates using `cutensornetTensorGateSplit`. 
+* Freeing the cuTensorNet resources.
+* Finding an optimal contraction path with `cutensornetContractionOptimize` in parallel,
+  and using global reduction (`MPI_MINLOC`) to find the best path and the owning process's identity.
+  Note that the contraction optimizer on each process sets a different random seed, so each process
+  typically computes a different optimal path for sufficiently large tensor networks.
+* Broadcasting the winner's `optimizerInfo` object by serializing it using the `cutensornetContractionOptimizerInfoGetPackedSize`
+  and `cutensornetContractionOptimizerInfoPackData` APIs, and deserializing it into an existing `optimizerInfo`
+  object using the `cutensornetUpdateContractionOptimizerInfoFromPackedData` API function.
+* Computing the subset of slice IDs (in a relatively load-balanced fashion) for which each process is responsible,
+  contracting them, and performing a global reduction (sum) to get the final result on the root process.

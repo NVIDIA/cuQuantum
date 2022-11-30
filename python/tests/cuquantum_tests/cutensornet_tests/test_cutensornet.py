@@ -5,21 +5,24 @@
 from collections import abc
 import functools
 import os
-import sys
-import tempfile
 
-try:
-    import cffi
-except ImportError:
-    cffi = None
 import cupy
 from cupy import testing
 import numpy
+try:
+    import mpi4py
+    from mpi4py import MPI  # init!
+except ImportError:
+    mpi4py = MPI = None
 import pytest
 
 import cuquantum
 from cuquantum import ComputeType, cudaDataType
 from cuquantum import cutensornet as cutn
+from .test_utils import atol_mapper, rtol_mapper
+
+from .. import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type,
+                MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase)
 
 
 ###################################################################
@@ -30,29 +33,6 @@ from cuquantum import cutensornet as cutn
 # This decision will be revisited in the future.
 #
 ###################################################################
-
-if cffi:
-    # if the Python binding is not installed in the editable mode (pip install
-    # -e .), the cffi tests would fail as the modules cannot be imported
-    sys.path.append(os.getcwd())
-
-dtype_to_data_type = {
-    numpy.float16: cudaDataType.CUDA_R_16F,
-    numpy.float32: cudaDataType.CUDA_R_32F,
-    numpy.float64: cudaDataType.CUDA_R_64F,
-    numpy.complex64: cudaDataType.CUDA_C_32F,
-    numpy.complex128: cudaDataType.CUDA_C_64F,
-}
-
-
-dtype_to_compute_type = {
-    numpy.float16: ComputeType.COMPUTE_16F,
-    numpy.float32: ComputeType.COMPUTE_32F,
-    numpy.float64: ComputeType.COMPUTE_64F,
-    numpy.complex64: ComputeType.COMPUTE_32F,
-    numpy.complex128: ComputeType.COMPUTE_64F,
-}
-
 
 def manage_resource(name):
     def decorator(impl):
@@ -65,15 +45,29 @@ def manage_resource(name):
                     tn, dtype, input_form, output_form = self.tn, self.dtype, self.input_form, self.output_form
                     einsum, shapes = tn  # unpack
                     tn = TensorNetworkFactory(einsum, shapes, dtype)
-                    i_n_inputs, i_n_modes, i_extents, i_strides, i_modes, i_alignments = \
+                    i_n_inputs, i_n_modes, i_extents, i_strides, i_modes = \
                         tn.get_input_metadata(**input_form)
-                    o_n_modes, o_extents, o_strides, o_modes, o_alignments = \
+                    o_n_modes, o_extents, o_strides, o_modes = \
                         tn.get_output_metadata(**output_form)
+                    i_qualifiers = numpy.zeros(i_n_inputs, dtype=cutn.tensor_qualifiers_dtype)
                     h = cutn.create_network_descriptor(
                         self.handle,
-                        i_n_inputs, i_n_modes, i_extents, i_strides, i_modes, i_alignments,
-                        o_n_modes, o_extents, o_strides, o_modes, o_alignments,
+                        i_n_inputs, i_n_modes, i_extents, i_strides, i_modes, i_qualifiers, 
+                        o_n_modes, o_extents, o_strides, o_modes,
                         dtype_to_data_type[dtype], dtype_to_compute_type[dtype])
+                    # we also need to keep the tn data alive
+                    self.tn = tn
+                elif name == 'tensor_decom':
+                    tn, dtype, tensor_form = self.tn, self.dtype, self.tensor_form
+                    einsum, shapes = tn  # unpack
+                    tn = TensorDecompositionFactory(einsum, shapes, dtype)
+                    h = []
+                    for t in tn.tensor_names:
+                        t = cutn.create_tensor_descriptor(
+                            self.handle,
+                            *tn.get_tensor_metadata(t, **tensor_form),
+                            dtype_to_data_type[dtype])
+                        h.append(t)
                     # we also need to keep the tn data alive
                     self.tn = tn
                 elif name == 'config':
@@ -81,6 +75,10 @@ def manage_resource(name):
                 elif name == 'info':
                     h = cutn.create_contraction_optimizer_info(
                         self.handle, self.dscr)
+                elif name == 'svd_config':
+                    h = cutn.create_tensor_svd_config(self.handle)
+                elif name == 'svd_info':
+                    h = cutn.create_tensor_svd_info(self.handle)
                 elif name == 'autotune':
                     h = cutn.create_contraction_autotune_preference(self.handle)
                 elif name == 'workspace':
@@ -103,12 +101,22 @@ def manage_resource(name):
                 elif name == 'dscr' and hasattr(self, name):
                     cutn.destroy_network_descriptor(self.dscr)
                     del self.dscr
+                elif name == 'tensor_decom' and hasattr(self, name):
+                    for t in self.tensor_decom:
+                        cutn.destroy_tensor_descriptor(t)
+                    del self.tensor_decom
                 elif name == 'config' and hasattr(self, name):
                     cutn.destroy_contraction_optimizer_config(self.config)
                     del self.config
                 elif name == 'info' and hasattr(self, name):
                     cutn.destroy_contraction_optimizer_info(self.info)
                     del self.info
+                elif name == 'svd_config' and hasattr(self, name):
+                    cutn.destroy_tensor_svd_config(self.svd_config)
+                    del self.svd_config
+                elif name == 'svd_info' and hasattr(self, name):
+                    cutn.destroy_tensor_svd_info(self.svd_info)
+                    del self.svd_info
                 elif name == 'autotune' and hasattr(self, name):
                     cutn.destroy_contraction_autotune_preference(self.autotune)
                     del self.autotune
@@ -120,155 +128,6 @@ def manage_resource(name):
                     del self.slice_group
         return test_func
     return decorator
-
-
-# we don't wanna recompile for every test case...
-_cffi_mod1 = None
-_cffi_mod2 = None
-
-def _can_use_cffi():
-    if cffi is None or os.environ.get('CUDA_PATH') is None:
-        return False
-    else:
-        return True
-
-
-class MemoryResourceFactory:
-
-    def __init__(self, source, name=None):
-        self.source = source
-        self.name = source if name is None else name
-
-    def get_dev_mem_handler(self):
-        if self.source == "py-callable":
-            return (*self._get_cuda_callable(), self.name)
-        elif self.source == "cffi":
-            # ctx is not needed, so set to NULL
-            return (0, *self._get_functor_address(), self.name)
-        elif self.source == "cffi_struct":
-            return self._get_handler_address()
-        # TODO: add more different memory sources
-        else:
-            raise NotImplementedError
-
-    def _get_cuda_callable(self):
-        def alloc(size, stream):
-            return cupy.cuda.runtime.mallocAsync(size, stream)
-
-        def free(ptr, size, stream):
-            cupy.cuda.runtime.freeAsync(ptr, stream)
-
-        return alloc, free
-
-    def _get_functor_address(self):
-        if not _can_use_cffi():
-            raise RuntimeError
-
-        global _cffi_mod1
-        if _cffi_mod1 is None:
-            import importlib
-            mod_name = f"cutn_test_{self.source}"
-            ffi = cffi.FFI()
-            ffi.set_source(mod_name, """
-                #include <cuda_runtime.h>
-
-                // cffi limitation: we can't use the actual type cudaStream_t because
-                // it's considered an "incomplete" type and we can't get the functor
-                // address by doing so...
-
-                int my_alloc(void* ctx, void** ptr, size_t size, void* stream) {
-                    return (int)cudaMallocAsync(ptr, size, stream);
-                }
-
-                int my_free(void* ctx, void* ptr, size_t size, void* stream) {
-                    return (int)cudaFreeAsync(ptr, stream);
-                }
-                """,
-                include_dirs=[os.environ['CUDA_PATH']+'/include'],
-                library_dirs=[os.environ['CUDA_PATH']+'/lib64'],
-                libraries=['cudart'],
-            )
-            ffi.cdef("""
-                int my_alloc(void* ctx, void** ptr, size_t size, void* stream);
-                int my_free(void* ctx, void* ptr, size_t size, void* stream);
-            """)
-            ffi.compile(verbose=True)
-            self.ffi = ffi
-            _cffi_mod1 = importlib.import_module(mod_name)
-        self.ffi_mod = _cffi_mod1
-
-        alloc_addr = self._get_address("my_alloc")
-        free_addr = self._get_address("my_free")
-        return alloc_addr, free_addr
-
-    def _get_handler_address(self):
-        if not _can_use_cffi():
-            raise RuntimeError
-
-        global _cffi_mod2
-        if _cffi_mod2 is None:
-            import importlib
-            mod_name = f"cutn_test_{self.source}"
-            ffi = cffi.FFI()
-            ffi.set_source(mod_name, """
-                #include <cuda_runtime.h>
-
-                // cffi limitation: we can't use the actual type cudaStream_t because
-                // it's considered an "incomplete" type and we can't get the functor
-                // address by doing so...
-
-                int my_alloc(void* ctx, void** ptr, size_t size, void* stream) {
-                    return (int)cudaMallocAsync(ptr, size, stream);
-                }
-
-                int my_free(void* ctx, void* ptr, size_t size, void* stream) {
-                    return (int)cudaFreeAsync(ptr, stream);
-                }
-
-                typedef struct {
-                    void* ctx;
-                    int (*device_alloc)(void* ctx, void** ptr, size_t size, void* stream);
-                    int (*device_free)(void* ctx, void* ptr, size_t size, void* stream);
-                    char name[64];
-                } myHandler;
-
-                myHandler* init_myHandler(myHandler* h, const char* name) {
-                    h->ctx = NULL;
-                    h->device_alloc = my_alloc;
-                    h->device_free = my_free;
-                    memcpy(h->name, name, 64);
-                    return h;
-                }
-                """,
-                include_dirs=[os.environ['CUDA_PATH']+'/include'],
-                library_dirs=[os.environ['CUDA_PATH']+'/lib64'],
-                libraries=['cudart'],
-            )
-            ffi.cdef("""
-                typedef struct {
-                    ...;
-                } myHandler;
-
-                myHandler* init_myHandler(myHandler* h, const char* name);
-            """)
-            ffi.compile(verbose=True)
-            self.ffi = ffi
-            _cffi_mod2 = importlib.import_module(mod_name)
-        self.ffi_mod = _cffi_mod2
-
-        h = self.handler = self.ffi_mod.ffi.new("myHandler*")
-        self.ffi_mod.lib.init_myHandler(h, self.name.encode())
-        return self._get_address(h)
-
-    def _get_address(self, func_name_or_ptr):
-        if isinstance(func_name_or_ptr, str):
-            func_name = func_name_or_ptr
-            data = str(self.ffi_mod.ffi.addressof(self.ffi_mod.lib, func_name))
-        else:
-            ptr = func_name_or_ptr  # ptr to struct
-            data = str(self.ffi_mod.ffi.addressof(ptr[0]))
-        # data has this format: "<cdata 'int(*)(void *, void * *, size_t, void *)' 0x7f6c5da37300>"
-        return int(data.split()[-1][:-1], base=16)
 
 
 class TestLibHelper:
@@ -310,20 +169,21 @@ class TensorNetworkFactory:
         assert all([len(i) == len(s) for i, s in zip(inputs, i_shapes)])
         assert len(output) == len(o_shape)
 
+        # xp strides in bytes, cutn strides in counts
+        itemsize = cupy.dtype(dtype).itemsize
+
         self.input_tensors = [
             testing.shaped_random(s, cupy, dtype) for s in i_shapes]
         self.input_n_modes = [len(i) for i in inputs]
         self.input_extents = i_shapes
-        self.input_strides = [arr.strides for arr in self.input_tensors]
+        self.input_strides = [[stride // itemsize for stride in arr.strides] for arr in self.input_tensors]
         self.input_modes = [tuple([ord(m) for m in i]) for i in inputs]
-        self.input_alignments = [256] * len(i_shapes)
 
         self.output_tensor = cupy.empty(o_shape, dtype=dtype)
         self.output_n_modes = len(o_shape)
         self.output_extent = o_shape
-        self.output_stride = self.output_tensor.strides
+        self.output_stride = [stride // itemsize for stride in self.output_tensor.strides]
         self.output_mode = tuple([ord(m) for m in output])
-        self.output_alignment = 256
 
     def _get_data_type(self, category):
         if 'n_modes' in category:
@@ -334,8 +194,6 @@ class TensorNetworkFactory:
             return numpy.int64
         elif 'mode' in category:
             return numpy.int32
-        elif 'alignment' in category:
-            return numpy.uint32
         elif 'tensor' in category:
             return None  # unused
         else:
@@ -397,17 +255,14 @@ class TensorNetworkFactory:
         extents = self._return_data('input_extents', kwargs.pop('extent'))
         strides = self._return_data('input_strides', kwargs.pop('stride'))
         modes = self._return_data('input_modes', kwargs.pop('mode'))
-        alignments = self._return_data(
-            'input_alignments', kwargs.pop('alignment'))
-        return n_inputs, n_modes, extents, strides, modes, alignments
+        return n_inputs, n_modes, extents, strides, modes
 
     def get_output_metadata(self, **kwargs):
         n_modes = self.output_n_modes
         extent = self._return_data('output_extent', kwargs.pop('extent'))
         stride = self._return_data('output_stride', kwargs.pop('stride'))
         mode = self._return_data('output_mode', kwargs.pop('mode'))
-        alignment = self.output_alignment
-        return n_modes, extent, stride, mode, alignment
+        return n_modes, extent, stride, mode
 
     def get_input_tensors(self, **kwargs):
         data = self._return_data('input_tensors', kwargs['data'])
@@ -429,11 +284,11 @@ class TensorNetworkFactory:
     ),
     'input_form': (
         {'n_modes': 'int', 'extent': 'int', 'stride': 'int',
-         'mode': 'int', 'alignment': 'int', 'data': 'int'},
+         'mode': 'int', 'data': 'int'},
         {'n_modes': 'int', 'extent': 'seq', 'stride': 'seq',
-         'mode': 'seq', 'alignment': 'int', 'data': 'seq'},
+         'mode': 'seq', 'data': 'seq'},
         {'n_modes': 'seq', 'extent': 'nested_seq', 'stride': 'nested_seq',
-         'mode': 'seq', 'alignment': 'seq', 'data': 'seq'},
+         'mode': 'seq', 'data': 'seq'},
     ),
     'output_form': (
         {'extent': 'int', 'stride': 'int', 'mode': 'int'},
@@ -448,17 +303,32 @@ class TestTensorNetworkBase:
 
 class TestTensorNetworkDescriptor(TestTensorNetworkBase):
 
+    @pytest.mark.parametrize(
+        'API', ('old', 'new')
+    )
     @manage_resource('handle')
     @manage_resource('dscr')
-    def test_descriptor_create_destroy(self):
+    def test_descriptor_create_destroy(self, API):
         # we could just do a simple round-trip test, but let's also get
         # this helper API tested
         handle, dscr = self.handle, self.dscr
-        num_modes, modes, extents, strides = cutn.get_output_tensor_details(handle, dscr)
+
+        if API == 'old':
+            # TODO: remove this branch
+            num_modes, modes, extents, strides = cutn.get_output_tensor_details(
+                handle, dscr)
+        else:
+            tensor_dscr = cutn.get_output_tensor_descriptor(handle, dscr)
+            num_modes, modes, extents, strides = cutn.get_tensor_details(
+                handle, tensor_dscr)
+
         assert num_modes == self.tn.output_n_modes
         assert (modes == numpy.asarray(self.tn.output_mode, dtype=numpy.int32)).all()
         assert (extents == numpy.asarray(self.tn.output_extent, dtype=numpy.int64)).all()
         assert (strides == numpy.asarray(self.tn.output_stride, dtype=numpy.int64)).all()
+
+        if API == 'new':
+            cutn.destroy_tensor_descriptor(tensor_dscr)
 
 
 class TestOptimizerInfo(TestTensorNetworkBase):
@@ -468,12 +338,11 @@ class TestOptimizerInfo(TestTensorNetworkBase):
 
     def _set_path(self, handle, info, path):
         attr = cutn.ContractionOptimizerInfoAttribute.PATH
+        dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
         if not isinstance(path, numpy.ndarray):
             path = numpy.ascontiguousarray(path, dtype=numpy.int32)
-        num_contraction = path.shape[0]
-        p = cutn.ContractionPath(num_contraction, path.ctypes.data)
-        cutn.contraction_optimizer_info_set_attribute(
-            handle, info, attr, p.get_path(), p.get_size())
+        path_obj = numpy.asarray((path.shape[0], path.ctypes.data), dtype=dtype)
+        self._set_scalar_attr(handle, info, attr, path_obj)
 
     def _get_scalar_attr(self, handle, info, attr):
         dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
@@ -507,6 +376,7 @@ class TestOptimizerInfo(TestTensorNetworkBase):
     def test_optimizer_info_get_set_attribute(self, attr):
         if attr in (
                 cutn.ContractionOptimizerInfoAttribute.NUM_SLICES,
+                cutn.ContractionOptimizerInfoAttribute.NUM_SLICED_MODES,
                 cutn.ContractionOptimizerInfoAttribute.PHASE1_FLOP_COUNT,
                 cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
                 cutn.ContractionOptimizerInfoAttribute.LARGEST_TENSOR,
@@ -519,6 +389,7 @@ class TestOptimizerInfo(TestTensorNetworkBase):
                 cutn.ContractionOptimizerInfoAttribute.PATH,
                 cutn.ContractionOptimizerInfoAttribute.SLICED_MODE,
                 cutn.ContractionOptimizerInfoAttribute.SLICED_EXTENT,
+                cutn.ContractionOptimizerInfoAttribute.SLICING_CONFIG,
                 cutn.ContractionOptimizerInfoAttribute.INTERMEDIATE_MODES,
                 cutn.ContractionOptimizerInfoAttribute.NUM_INTERMEDIATE_MODES,
                 ):
@@ -697,10 +568,16 @@ class TestContraction(TestTensorNetworkBase):
         # manage workspace
         if mempool is None:
             cutn.workspace_compute_sizes(handle, dscr, info, workspace)
+            required_size_deprecated = cutn.workspace_get_size(
+                handle, workspace,
+                getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
+                cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+            cutn.workspace_compute_contraction_sizes(handle, dscr, info, workspace)
             required_size = cutn.workspace_get_size(
                 handle, workspace,
                 getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
                 cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+            assert required_size == required_size_deprecated
             if workspace_size < required_size:
                 assert False, \
                     f"wrong assumption on the workspace size " \
@@ -780,77 +657,601 @@ class TestSliceGroup:
 @pytest.mark.parametrize(
     'source', (None, "py-callable", 'cffi', 'cffi_struct')
 )
-class TestMemHandler:
+class TestMemHandler(MemHandlerTestBase):
+
+    mod = cutn
+    prefix = "cutensornet"
+    error = cutn.cuTensorNetError
 
     @manage_resource('handle')
     def test_set_get_device_mem_handler(self, source):
-        if (isinstance(source, str) and source.startswith('cffi')
-                and not _can_use_cffi()):
-            pytest.skip("cannot run cffi tests")
+        self._test_set_get_device_mem_handler(source, self.handle)
 
-        handle = self.handle
-        if source is not None:
-            mr = MemoryResourceFactory(source)
-            handler = mr.get_dev_mem_handler()
-            cutn.set_device_mem_handler(handle, handler)
-            # round-trip test
-            queried_handler = cutn.get_device_mem_handler(handle)
-            if source == 'cffi_struct':
-                # I'm lazy, otherwise I'd also fetch the functor addresses here...
-                assert queried_handler[0] == 0  # ctx is NULL
-                assert queried_handler[-1] == source
+
+class TensorDecompositionFactory:
+
+    # QR Example: "ab->ax,xb"
+    # SVD Example: "ab->ax,x,xb"
+    # Gate Example: "ijk,klm,jkpq->->ipk,k,kqm" for indirect gate with singular values returned.
+    #               "ijk,klm,jkpq->ipk,-,kqm" for direct gate algorithm with singular values equally partitioned onto u and v
+
+    # self.reconstruct must be a valid einsum expr and can be used to reconstruct
+    # the input tensor if no/little truncation was done
+
+    # This factory CANNOT be reused; once a tensor descriptor uses it, it must
+    # be discarded.
+
+    svd_partitioned = ('<', '-', '>')  # reserved symbols
+
+    def __init__(self, einsum, shapes, dtype):
+        if len(shapes) == 3:
+            self.tensor_names = ['input', 'left', 'right']
+            self.einsum = einsum
+        elif len(shapes) == 5:
+            self.tensor_names = ['inputA', 'inputB', 'inputG', 'left', 'right']
+            if einsum.count("->") == 1:
+                self.gate_algorithm = cutn.GateSplitAlgo.DIRECT
+                self.einsum = einsum
+            elif einsum.count("->") == 2:
+                self.gate_algorithm = cutn.GateSplitAlgo.REDUCED
+                self.einsum = einsum.replace("->->", "->")
             else:
-                assert queried_handler == handler
+                raise NotImplementedError
         else:
-            with pytest.raises(cutn.cuTensorNetError) as e:
-                queried_handler = cutn.get_device_mem_handler(handle)
-            assert 'CUTENSORNET_STATUS_NO_DEVICE_ALLOCATOR' in str(e.value)
+            raise NotImplementedError
+        
+        inputs, output = self.einsum.split('->')
+        output = output.split(',')
+        if len(output) == 2:  # QR
+            left, right = output
+            self.reconstruct = f"{left},{right}->{inputs}"
+            all_modes = [inputs, left, right]
+        elif len(output) == 3:  # SVD or Gate
+            left, mid_mode, right = output
+            common_mode = set(left).intersection(right).pop()
+            assert len(common_mode) == 1
+            idx_left = left.find(common_mode)
+            idx_right = right.find(common_mode)
+            self.mid_mode = mid_mode
+            
+            if len(shapes) == 3: # svd
+                all_modes = [inputs, left, right]
+                assert shapes[1][idx_left] == shapes[2][idx_right]
+                self.mid_extent = shapes[1][idx_left]
+                self.reference_einsum = None
+                if mid_mode in self.svd_partitioned:
+                    # s is already merged into left, both, or right
+                    self.reconstruct = f"{left},{right}->{inputs}"
+                else:
+                    assert mid_mode == common_mode
+                    self.reconstruct = f"{left},{common_mode},{right}->{inputs}"
+            else: # Gate
+                all_modes = list(inputs.split(","))+[left, right]
+                assert shapes[3][idx_left] == shapes[4][idx_right]
+                self.mid_extent = shapes[3][idx_left]
+                contracted_output_modes = "".join((set(left) | set(right)) - (set(left) & set(right)))
+                self.reference_einsum = f"{inputs}->{contracted_output_modes}"
+                if mid_mode in self.svd_partitioned:
+                    # s is already merged into left, both, or right
+                    self.reconstruct = f"{left},{right}->{contracted_output_modes}"
+                else:
+                    assert mid_mode == common_mode
+                    self.reconstruct = f"{left},{common_mode},{right}->{contracted_output_modes}"
+        else:
+            assert False
+        del output
+
+        # xp strides in bytes, cutn strides in counts
+        dtype = cupy.dtype(dtype)
+        itemsize = dtype.itemsize
+
+        for name, shape, modes in zip(self.tensor_names, shapes, all_modes):
+            real_dtype = dtype.char.lower()
+            if name.startswith('input'):
+                if dtype.char != real_dtype:  # complex
+                    arr = (cupy.random.random(shape, dtype=real_dtype)
+                           + 1j*cupy.random.random(shape, dtype=real_dtype)).astype(dtype)
+                else:
+                    arr = cupy.random.random(shape, dtype=dtype)
+            else:
+                arr = cupy.empty(shape, dtype=dtype, order='F')
+            setattr(self, f'{name}_tensor', arr)
+            setattr(self, f'{name}_n_modes', len(arr.shape))
+            setattr(self, f'{name}_extent', arr.shape)
+            setattr(self, f'{name}_stride', [stride // itemsize for stride in arr.strides])
+            setattr(self, f'{name}_mode', tuple([ord(m) for m in modes]))
+
+    def _get_data_type(self, category):
+        if 'n_modes' in category:
+            return numpy.int32
+        elif 'extent' in category:
+            return numpy.int64
+        elif 'stride' in category:
+            return numpy.int64
+        elif 'mode' in category:
+            return numpy.int32
+        elif 'tensor' in category:
+            return None  # unused
+        else:
+            assert False
+
+    def _return_data(self, category, return_value):
+        data = getattr(self, category)
+
+        if return_value == 'int':
+            if len(data) == 0:
+                # empty, give it a NULL
+                return 0
+            else:
+                # return int as void*
+                data = numpy.asarray(data, dtype=self._get_data_type(category))
+                setattr(self, category, data)  # keep data alive
+            return data.ctypes.data
+        elif return_value == 'seq':
+            return data
+        else:
+            assert False
+
+    def get_tensor_metadata(self, name, **kwargs):
+        assert name in self.tensor_names
+        n_modes = getattr(self, f'{name}_n_modes')
+        extent = self._return_data(f'{name}_extent', kwargs.pop('extent'))
+        stride = self._return_data(f'{name}_stride', kwargs.pop('stride'))
+        mode = self._return_data(f'{name}_mode', kwargs.pop('mode'))
+        return n_modes, extent, stride, mode
+
+    def get_tensor_ptr(self, name):
+        return getattr(self, f'{name}_tensor').data.ptr
 
 
-class TestLogger:
+@testing.parameterize(*testing.product({
+    'tn': (
+        ('ab->ax,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->ax,bx', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,bx', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->ax,xb', [(6, 8), (6, 6), (6, 8)]),
+        ('ab->ax,bx', [(6, 8), (6, 6), (8, 6)]),
+        ('ab->xa,xb', [(6, 8), (6, 6), (6, 8)]),
+        ('ab->xa,bx', [(6, 8), (6, 6), (8, 6)]),
+        ('ab->ax,xb', [(8, 6), (8, 6), (6, 6)]),
+        ('ab->ax,bx', [(8, 6), (8, 6), (6, 6)]),
+        ('ab->xa,xb', [(8, 6), (6, 8), (6, 6)]),
+        ('ab->xa,bx', [(8, 6), (6, 8), (6, 6)]),
+    ),
+    'dtype': (
+        numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
+    ),
+    'tensor_form': (
+        {'extent': 'int', 'stride': 'int', 'mode': 'int'},
+        {'extent': 'seq', 'stride': 'seq', 'mode': 'seq'},
+    ),
+}))
+class TestTensorQR:
 
-    def test_logger_set_level(self):
-        cutn.logger_set_level(6)  # on
-        cutn.logger_set_level(0)  # off
+    # There is no easy way for us to test each API independently, so we instead
+    # parametrize the steps and test the whole workflow
+    @manage_resource('handle')
+    @manage_resource('tensor_decom')
+    @manage_resource('workspace')
+    def test_tensor_qr(self):
+        # unpack
+        handle, tn, workspace = self.handle, self.tn, self.workspace
+        tensor_in, tensor_q, tensor_r = self.tensor_decom
+        dtype = cupy.dtype(self.dtype)
 
-    def test_logger_set_mask(self):
-        cutn.logger_set_mask(16)  # should not raise
+        # prepare workspace
+        cutn.workspace_compute_qr_sizes(
+            handle, tensor_in, tensor_q, tensor_r, workspace)
+        # for now host workspace is always 0, so just query device one
+        # also, it doesn't matter which one (min/recommended/max) is queried
+        required_size = cutn.workspace_get_size(
+            handle, workspace, cutn.WorksizePref.MIN,
+            cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+        if required_size > 0:
+            workspace_ptr = cupy.cuda.alloc(required_size)
+            cutn.workspace_set(
+                handle, workspace, cutn.Memspace.DEVICE,
+                workspace_ptr.ptr, required_size)
+            # round-trip check
+            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get(
+                handle, workspace, cutn.Memspace.DEVICE)
 
-    def test_logger_set_callback_data(self):
-        # we also test logger_open_file() here to avoid polluting stdout
+        # perform QR
+        stream = cupy.cuda.get_current_stream().ptr  # TODO
+        cutn.tensor_qr(
+            handle, tensor_in, tn.get_tensor_ptr('input'),
+            tensor_q, tn.get_tensor_ptr('left'),
+            tensor_r, tn.get_tensor_ptr('right'),
+            workspace, stream)
 
-        def callback(level, name, message, my_data, is_ok=False):
-            log = f"{level}, {name}, {message} (is_ok={is_ok}) -> logged\n"
-            my_data.append(log)
+        # we add a minimal correctness check here as we are not protected by
+        # any high-level API yet
+        out = cupy.einsum(tn.reconstruct, tn.left_tensor, tn.right_tensor)
+        assert cupy.allclose(out, tn.input_tensor,
+                             rtol=rtol_mapper[dtype.name],
+                             atol=atol_mapper[dtype.name])
 
-        handle = None
-        my_data = []
-        is_ok = True
 
-        with tempfile.TemporaryDirectory() as temp:
-            file_name = os.path.join(temp, "cutn_test")
-            cutn.logger_open_file(file_name)
-            cutn.logger_set_callback_data(callback, my_data, is_ok=is_ok)
-            cutn.logger_set_level(6)
+# TODO: expand tests:
+#  - add truncation
+#  - use config (cutoff & normalization)
+@testing.parameterize(*testing.product({
+    'tn': (
+        # no truncation, no partition
+        ('ab->ax,x,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->ax,x,bx', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,x,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,x,bx', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->ax,x,xb', [(6, 8), (6, 6), (6, 8)]),
+        ('ab->ax,x,bx', [(6, 8), (6, 6), (8, 6)]),
+        ('ab->xa,x,xb', [(6, 8), (6, 6), (6, 8)]),
+        ('ab->xa,x,bx', [(6, 8), (6, 6), (8, 6)]),
+        ('ab->ax,x,xb', [(8, 6), (8, 6), (6, 6)]),
+        ('ab->ax,x,bx', [(8, 6), (8, 6), (6, 6)]),
+        ('ab->xa,x,xb', [(8, 6), (6, 8), (6, 6)]),
+        ('ab->xa,x,bx', [(8, 6), (6, 8), (6, 6)]),
+        # no truncation, partition to u
+        ('ab->ax,<,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->ax,<,bx', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,<,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,<,bx', [(8, 8), (8, 8), (8, 8)]),
+        # no truncation, partition to v
+        ('ab->ax,>,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->ax,>,bx', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,>,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,>,bx', [(8, 8), (8, 8), (8, 8)]),
+        # no truncation, partition to both
+        ('ab->ax,-,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->ax,-,bx', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,-,xb', [(8, 8), (8, 8), (8, 8)]),
+        ('ab->xa,-,bx', [(8, 8), (8, 8), (8, 8)]),
+    ),
+    'dtype': (
+        numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
+    ),
+    'tensor_form': (
+        {'extent': 'int', 'stride': 'int', 'mode': 'int'},
+        {'extent': 'seq', 'stride': 'seq', 'mode': 'seq'},
+    ),
+}))
+class TestTensorSVD:
 
-            try:
-                handle = cutn.create()
-                cutn.destroy(handle)
-            except:
-                if handle:
-                    cutn.destroy(handle)
-                raise
-            finally:
-                cutn.logger_force_disable()  # to not affect the rest of tests
+    def _get_scalar_attr(self, handle, obj_type, obj, attr):
+        if obj_type == 'config':
+            dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
+            getter = cutn.tensor_svd_config_get_attribute
+        elif obj_type == 'info':
+            dtype_getter = cutn.tensor_svd_info_get_attribute_dtype
+            getter = cutn.tensor_svd_info_get_attribute
+        else:
+            assert False
 
-            with open(file_name) as f:
-                log_from_f = f.read()
+        dtype = dtype_getter(attr)
+        data = numpy.empty((1,), dtype=dtype)
+        getter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
+        return data
 
-        # check the log file
-        assert '[cutensornetCreate]' in log_from_f
-        assert '[cutensornetDestroy]' in log_from_f
+    def _set_scalar_attr(self, handle, obj_type, obj, attr, data):
+        assert obj_type == 'config'  # svd info has no setter
+        dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
+        setter = cutn.tensor_svd_config_set_attribute
 
-        # check the captured data (note we log 2 APIs)
-        log = ''.join(my_data)
-        assert log.count("-> logged") >= 2
-        assert log.count("is_ok=True") >= 2
+        dtype = dtype_getter(attr)
+        if not isinstance(data, numpy.ndarray):
+            data = numpy.asarray(data, dtype=dtype)
+        setter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
+
+    # There is no easy way for us to test each API independently, so we instead
+    # parametrize the steps and test the whole workflow
+    @manage_resource('handle')
+    @manage_resource('tensor_decom')
+    @manage_resource('svd_config')
+    @manage_resource('svd_info')
+    @manage_resource('workspace')
+    def test_tensor_svd(self):
+        # unpack
+        handle, tn, workspace = self.handle, self.tn, self.workspace
+        tensor_in, tensor_u, tensor_v = self.tensor_decom
+        svd_config, svd_info = self.svd_config, self.svd_info
+        dtype = cupy.dtype(self.dtype)
+
+        # prepare workspace
+        cutn.workspace_compute_svd_sizes(
+            handle, tensor_in, tensor_u, tensor_v, svd_config, workspace)
+        # for now host workspace is always 0, so just query device one
+        # also, it doesn't matter which one (min/recommended/max) is queried
+        required_size = cutn.workspace_get_size(
+            handle, workspace, cutn.WorksizePref.MIN,
+            cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+        if required_size > 0:
+            workspace_ptr = cupy.cuda.alloc(required_size)
+            cutn.workspace_set(
+                handle, workspace, cutn.Memspace.DEVICE,
+                workspace_ptr.ptr, required_size)
+            # round-trip check
+            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get(
+                handle, workspace, cutn.Memspace.DEVICE)
+
+        # set singular value partitioning, if requested
+        if tn.mid_mode in tn.svd_partitioned:
+            if tn.mid_mode == '<':
+                data = cutn.TensorSVDPartition.US
+            elif tn.mid_mode == '-':
+                data = cutn.TensorSVDPartition.UV_EQUAL
+            else:  # = '<':
+                data = cutn.TensorSVDPartition.SV
+            self._set_scalar_attr(
+                handle, 'config', svd_config,
+                cutn.TensorSVDConfigAttribute.S_PARTITION,
+                data)
+            # do a round-trip test as a sanity check
+            factor = self._get_scalar_attr(
+                handle, 'config', svd_config,
+                cutn.TensorSVDConfigAttribute.S_PARTITION)
+            assert factor == data
+
+        # perform SVD
+        stream = cupy.cuda.get_current_stream().ptr  # TODO
+        if tn.mid_mode in tn.svd_partitioned:
+            s_ptr = 0
+        else:
+            s = cupy.empty(tn.mid_extent, dtype=dtype.char.lower())
+            s_ptr = s.data.ptr
+        cutn.tensor_svd(
+            handle, tensor_in, tn.get_tensor_ptr('input'),
+            tensor_u, tn.get_tensor_ptr('left'),
+            s_ptr,
+            tensor_v, tn.get_tensor_ptr('right'),
+            svd_config, svd_info, workspace, stream)
+
+        # sanity checks (only valid for no truncation)
+        assert tn.mid_extent == self._get_scalar_attr(
+            handle, 'info', svd_info,
+            cutn.TensorSVDInfoAttribute.FULL_EXTENT)
+        assert tn.mid_extent == self._get_scalar_attr(
+            handle, 'info', svd_info,
+            cutn.TensorSVDInfoAttribute.REDUCED_EXTENT)
+        assert 0 == self._get_scalar_attr(
+            handle, 'info', svd_info,
+            cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT)
+
+        # we add a minimal correctness check here as we are not protected by
+        # any high-level API yet
+        if tn.mid_mode in tn.svd_partitioned:
+            out = cupy.einsum(
+                tn.reconstruct, tn.left_tensor, tn.right_tensor)
+        else:
+            out = cupy.einsum(
+                tn.reconstruct, tn.left_tensor, s, tn.right_tensor)
+        assert cupy.allclose(out, tn.input_tensor,
+                             rtol=rtol_mapper[dtype.name],
+                             atol=atol_mapper[dtype.name])
+
+
+# TODO: expand tests:
+#  - add truncation
+#  - use config (cutoff & normalization)
+@testing.parameterize(*testing.product({
+    'tn': (
+        # direct algorithm, no truncation, no partition
+        ('ijk,klm,jlpq->ipk,k,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
+        ('ijk,klm,jlpq->kpi,k,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
+        ('ijk,klm,jlpq->pki,k,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
+        # direct algorithm, no truncation, partition onto u
+        ('ijk,klm,jlpq->ipk,<,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
+        ('ijk,klm,jlpq->kpi,<,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
+        ('ijk,klm,jlpq->pki,<,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
+        # direct algorithm, no truncation, partition onto v
+        ('ijk,klm,jlpq->ipk,>,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
+        ('ijk,klm,jlpq->kpi,>,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
+        ('ijk,klm,jlpq->pki,>,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
+        # direct algorithm, no truncation, partition onto u and v equally
+        ('ijk,klm,jlpq->ipk,-,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
+        ('ijk,klm,jlpq->kpi,-,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
+        ('ijk,klm,jlpq->pki,-,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
+        # reduced algorithm, no truncation, no partition
+        ('ijk,klm,jlpq->->ipk,k,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
+        ('ijk,klm,jlpq->->kpi,k,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
+        ('ijk,klm,jlpq->->pki,k,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
+        # reduced algorithm, no truncation, partition onto u
+        ('ijk,klm,jlpq->->ipk,<,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
+        ('ijk,klm,jlpq->->kpi,<,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
+        ('ijk,klm,jlpq->->pki,<,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
+        # reduced algorithm, no truncation, partition onto v
+        ('ijk,klm,jlpq->->ipk,>,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
+        ('ijk,klm,jlpq->->kpi,>,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
+        ('ijk,klm,jlpq->->pki,>,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
+        # reduced algorithm, no truncation, partition onto u and v equally
+        ('ijk,klm,jlpq->->ipk,-,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
+        ('ijk,klm,jlpq->->kpi,-,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
+        ('ijk,klm,jlpq->->pki,-,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
+    ),
+    'dtype': (
+        numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
+    ),
+    'tensor_form': (
+        {'extent': 'int', 'stride': 'int', 'mode': 'int'},
+        {'extent': 'seq', 'stride': 'seq', 'mode': 'seq'},
+    ),
+}))
+class TestTensorGate:
+
+    def _get_scalar_attr(self, handle, obj_type, obj, attr):
+        if obj_type == 'config':
+            dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
+            getter = cutn.tensor_svd_config_get_attribute
+        elif obj_type == 'info':
+            dtype_getter = cutn.tensor_svd_info_get_attribute_dtype
+            getter = cutn.tensor_svd_info_get_attribute
+        else:
+            assert False
+
+        dtype = dtype_getter(attr)
+        data = numpy.empty((1,), dtype=dtype)
+        getter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
+        return data
+
+    def _set_scalar_attr(self, handle, obj_type, obj, attr, data):
+        assert obj_type == 'config'  # svd info has no setter
+        dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
+        setter = cutn.tensor_svd_config_set_attribute
+
+        dtype = dtype_getter(attr)
+        if not isinstance(data, numpy.ndarray):
+            data = numpy.asarray(data, dtype=dtype)
+        setter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
+
+    # There is no easy way for us to test each API independently, so we instead
+    # parametrize the steps and test the whole workflow
+    @manage_resource('handle')
+    @manage_resource('tensor_decom')
+    @manage_resource('svd_config')
+    @manage_resource('svd_info')
+    @manage_resource('workspace')
+    def test_gate_split(self):
+        # unpack
+        handle, tn, workspace = self.handle, self.tn, self.workspace
+        tensor_in_a, tensor_in_b, tensor_in_g, tensor_u, tensor_v = self.tensor_decom
+        gate_algorithm = tn.gate_algorithm
+        svd_config, svd_info = self.svd_config, self.svd_info
+        dtype = cupy.dtype(self.dtype)
+        compute_type = dtype_to_compute_type[self.dtype]
+        # prepare workspace
+        cutn.workspace_compute_gate_split_sizes(handle, 
+            tensor_in_a, tensor_in_b, tensor_in_g, tensor_u, tensor_v, 
+            gate_algorithm, svd_config, compute_type, workspace)
+        # for now host workspace is always 0, so just query device one
+        # also, it doesn't matter which one (min/recommended/max) is queried
+        required_size = cutn.workspace_get_size(
+            handle, workspace, cutn.WorksizePref.MIN,
+            cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+        if required_size > 0:
+            workspace_ptr = cupy.cuda.alloc(required_size)
+            cutn.workspace_set(
+                handle, workspace, cutn.Memspace.DEVICE,
+                workspace_ptr.ptr, required_size)
+            # round-trip check
+            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get(
+                handle, workspace, cutn.Memspace.DEVICE)
+
+        # set singular value partitioning, if requested
+        if tn.mid_mode in tn.svd_partitioned:
+            if tn.mid_mode == '<':
+                data = cutn.TensorSVDPartition.US
+            elif tn.mid_mode == '-':
+                data = cutn.TensorSVDPartition.UV_EQUAL
+            else:  # = '<':
+                data = cutn.TensorSVDPartition.SV
+            self._set_scalar_attr(
+                handle, 'config', svd_config,
+                cutn.TensorSVDConfigAttribute.S_PARTITION,
+                data)
+            # do a round-trip test as a sanity check
+            factor = self._get_scalar_attr(
+                handle, 'config', svd_config,
+                cutn.TensorSVDConfigAttribute.S_PARTITION)
+            assert factor == data
+
+        # perform gate split
+        stream = cupy.cuda.get_current_stream().ptr  # TODO
+        if tn.mid_mode in tn.svd_partitioned:
+            s_ptr = 0
+        else:
+            s = cupy.empty(tn.mid_extent, dtype=dtype.char.lower())
+            s_ptr = s.data.ptr
+        cutn.gate_split(handle, tensor_in_a, tn.get_tensor_ptr('inputA'),
+            tensor_in_b, tn.get_tensor_ptr('inputB'),
+            tensor_in_g, tn.get_tensor_ptr('inputG'),
+            tensor_u, tn.get_tensor_ptr('left'), s_ptr, 
+            tensor_v, tn.get_tensor_ptr('right'),
+            gate_algorithm, svd_config, compute_type, 
+            svd_info, workspace, stream)
+      
+        # sanity checks (only valid for no truncation)
+        assert tn.mid_extent == self._get_scalar_attr(
+            handle, 'info', svd_info,
+            cutn.TensorSVDInfoAttribute.FULL_EXTENT)
+        assert tn.mid_extent == self._get_scalar_attr(
+            handle, 'info', svd_info,
+            cutn.TensorSVDInfoAttribute.REDUCED_EXTENT)
+        assert 0 == self._get_scalar_attr(
+            handle, 'info', svd_info,
+            cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT)
+
+        # we add a minimal correctness check here as we are not protected by
+        # any high-level API yet
+        if tn.mid_mode in tn.svd_partitioned:
+            out = cupy.einsum(
+                tn.reconstruct, tn.left_tensor, tn.right_tensor)
+        else:
+            out = cupy.einsum(
+                tn.reconstruct, tn.left_tensor, s, tn.right_tensor)
+        reference = cupy.einsum(tn.reference_einsum, tn.inputA_tensor, tn.inputB_tensor, tn.inputG_tensor)
+        error = cupy.linalg.norm(out - reference)
+        assert cupy.allclose(out, reference,
+                             rtol=rtol_mapper[dtype.name],
+                             atol=atol_mapper[dtype.name])
+
+
+class TestTensorSVDConfig:
+
+    @manage_resource('handle')
+    @manage_resource('svd_config')
+    def test_tensor_svd_config_create_destroy(self):
+        # simple round-trip test
+        pass
+
+    @pytest.mark.parametrize(
+        'attr', [val for val in cutn.TensorSVDConfigAttribute]
+    )
+    @manage_resource('handle')
+    @manage_resource('svd_config')
+    def test_tensor_svd_config_get_set_attribute(self, attr):
+        handle, svd_config = self.handle, self.svd_config
+        dtype = cutn.tensor_svd_config_get_attribute_dtype(attr)
+        # Hack: assume this is a valid value for all attrs
+        factor = numpy.asarray([0.8], dtype=dtype)
+        cutn.tensor_svd_config_set_attribute(
+            handle, svd_config, attr,
+            factor.ctypes.data, factor.dtype.itemsize)
+        # do a round-trip test as a sanity check
+        factor2 = numpy.zeros_like(factor)
+        cutn.tensor_svd_config_get_attribute(
+            handle, svd_config, attr,
+            factor2.ctypes.data, factor2.dtype.itemsize)
+        assert factor == factor2
+
+
+@pytest.mark.skipif(mpi4py is None, reason="need mpi4py")
+@pytest.mark.skipif(os.environ.get("CUTENSORNET_COMM_LIB") is None,
+                    reason="wrapper lib not set")
+class TestDistributed:
+
+    def _get_comm(self, comm):
+        if comm == 'world':
+            return MPI.COMM_WORLD.Dup()
+        elif comm == 'self':
+            return MPI.COMM_SELF.Dup()
+        else:
+            assert False
+
+    @pytest.mark.parametrize(
+        'comm', ('world', 'self'),
+    )
+    @manage_resource('handle')
+    def test_distributed(self, comm):
+        handle = self.handle
+        comm = self._get_comm(comm)
+        cutn.distributed_reset_configuration(
+            handle, *cutn.get_mpi_comm_pointer(comm))
+        assert comm.Get_size() == cutn.distributed_get_num_ranks(handle)
+        assert comm.Get_rank() == cutn.distributed_get_proc_rank(handle)
+        cutn.distributed_synchronize(handle)
+        # no need to free the comm, for world/self mpi4py does it for us...
+
+
+class TestLogger(LoggerTestBase):
+
+    mod = cutn
+    prefix = "cutensornet"

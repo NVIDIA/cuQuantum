@@ -10,6 +10,7 @@ __all__ = ['CupyPackage']
 
 import cupy as cp
 
+from . import utils
 from .package_ifc import Package
 
 
@@ -17,7 +18,7 @@ class CupyPackage(Package):
 
     @staticmethod
     def get_current_stream(device_id):
-        with cp.cuda.Device(device_id):
+        with utils.device_ctx(device_id):
             stream = cp.cuda.get_current_stream()
         return stream
 
@@ -35,6 +36,6 @@ class CupyPackage(Package):
 
     @staticmethod
     def create_stream(device_id):
-        with cp.cuda.Device(device_id):
+        with utils.device_ctx(device_id):
             stream = cp.cuda.Stream(null=False, non_blocking=False, ptds=False)
         return stream

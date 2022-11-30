@@ -100,6 +100,7 @@ function(add_cutensornet_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
         cutensornet
         cutensor
         cudart
+        cusolver
         cublasLt
         $<$<BOOL:${MPI_FOUND}>:MPI::MPI_CXX>
   )
@@ -128,10 +129,15 @@ endfunction()
 add_custom_target(cutensornet_examples)
 
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.svd" approxTN/tensor_svd_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.qr" approxTN/tensor_qr_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gate" approxTN/gate_split_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps" approxTN/mps_example.cu)
 
 find_package(MPI)
 if (MPI_FOUND)
   add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi" tensornet_example_mpi.cu)
+  add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi.auto" tensornet_example_mpi_auto.cu)
 else ()
-  message(WARNING "An MPI installation was not detected. Please install MPI if you would like to build the distributed example(s).")
+  message(WARNING "An MPI installation was not detected. Please install CUDA-aware MPI if you would like to build the distributed example(s).")
 endif ()

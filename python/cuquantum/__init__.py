@@ -5,7 +5,7 @@
 from cuquantum import custatevec
 from cuquantum import cutensornet
 from cuquantum.cutensornet import (
-    contract, contract_path, einsum, einsum_path, Network, BaseCUDAMemoryManager, MemoryPointer,
+    contract, contract_path, einsum, einsum_path, tensor_qualifiers_dtype, Network, BaseCUDAMemoryManager, MemoryPointer,
     NetworkOptions, OptimizerInfo, OptimizerOptions, PathFinderOptions, ReconfigOptions, SlicerOptions, CircuitToEinsum)
 from cuquantum.utils import ComputeType, cudaDataType, libraryPropertyType
 from cuquantum._version import __version__
@@ -27,6 +27,11 @@ for enum in (
         cutensornet.GraphAlgo,
         cutensornet.MemoryModel,
         cutensornet.OptimizerCost,
+        cutensornet.TensorSVDConfigAttribute,
+        cutensornet.TensorSVDNormalization,
+        cutensornet.TensorSVDPartition,
+        cutensornet.TensorSVDInfoAttribute,
+        cutensornet.GateSplitAlgo,
         ):
     cutensornet._internal.enum_utils.add_enum_class_doc(enum, chomp="_ATTRIBUTE|_PREFERENCE_ATTRIBUTE")
 

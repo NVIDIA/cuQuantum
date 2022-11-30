@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import re
 import sys
 
 import cupy
@@ -75,6 +76,71 @@ def compute_and_normalize_numpy_path(data, num_operands):
     return norm_path
 
 
+def convert_linear_to_ssa(path):
+    n_inputs = len(path)+1
+    remaining = [*range(n_inputs)]
+    ssa_path = []
+    counter = n_inputs
+
+    for first, second in path:
+        idx1 = remaining[first]
+        idx2 = remaining[second]
+        ssa_path.append((idx1, idx2))
+        remaining.remove(idx1)
+        remaining.remove(idx2)
+        remaining.append(counter)
+        counter += 1
+
+    return ssa_path
+
+
+def check_ellipsis(modes):
+   # find ellipsis, record the position, remove it, and modify the modes
+   if isinstance(modes, str):
+       ellipsis = modes.find("...")
+       if ellipsis >= 0:
+           modes = modes.replace("...", "")
+   else:
+       try:
+           ellipsis = modes.index(Ellipsis)
+       except ValueError:
+           ellipsis = -1
+       if ellipsis >= 0:
+           modes = modes[:ellipsis] + modes[ellipsis+1:]
+   return ellipsis, modes
+
+
+def check_intermediate_modes(
+        intermediate_modes, input_modes, output_modes, path):
+
+    # remove ellipsis, if any, since it's singleton
+    input_modes = list(map(
+        lambda modes: (lambda modes: check_ellipsis(modes))(modes)[1],
+        input_modes
+    ))
+    _, output_modes = check_ellipsis(output_modes)
+    # peek at the very first element
+    if (isinstance(intermediate_modes[0], tuple)
+            and isinstance(intermediate_modes[0][0], str)):
+        # this is our internal mode label for ellipsis
+        custom_label = re.compile(r'\b__\d+__\b')
+        intermediate_modes = list(map(
+            lambda modes: list(filter(lambda mode: not custom_label.match(mode), modes)),
+            intermediate_modes
+        ))
+
+    ssa_path = convert_linear_to_ssa(path)
+    contraction_list = input_modes
+    contraction_list += intermediate_modes
+
+    for k, (i, j) in enumerate(ssa_path):
+        modesA = set(contraction_list[i])
+        modesB = set(contraction_list[j])
+        modesOut = set(intermediate_modes[k])
+        assert modesOut.issubset(modesA.union(modesB))
+    assert set(output_modes) == set(intermediate_modes[-1])
+
+
 class EinsumFactory:
     """Take a valid einsum expression and compute shapes, modes, etc for testing."""
 
@@ -99,17 +165,7 @@ class EinsumFactory:
         shape = []
 
         # find ellipsis, record the position, and remove it
-        if isinstance(modes, str):
-            ellipsis = modes.find("...")
-            if ellipsis >= 0:
-                modes = modes.replace("...", "")
-        else:
-            try:
-                ellipsis = modes.index(Ellipsis)
-            except ValueError:
-                ellipsis = -1
-            if ellipsis >= 0:
-                modes = modes[:ellipsis] + modes[ellipsis+1:]
+        ellipsis, modes = check_ellipsis(modes)
 
         # generate extents for remaining modes
         for mode in modes:
@@ -210,3 +266,21 @@ class EinsumFactory:
             data.append(tuple(self.output_modes))
 
         return data
+
+
+# We use the pytest marker hook to deselect/ignore collected tests
+# that we do not want to run. This is better than showing a ton of
+# tests as "skipped" at the end, since technically they never get
+# tested.
+#
+# Note the arguments here must be named and ordered in exactly the
+# same way as the tests being marked by @pytest.mark.uncollect_if().
+def deselect_contract_tests(
+        einsum_expr_pack, xp, dtype, *args, **kwargs):
+    if xp.startswith('torch') and torch is None:
+        return True
+    if isinstance(einsum_expr_pack, list):
+        _, _, _, overwrite_dtype = einsum_expr_pack
+        if dtype != overwrite_dtype:
+            return True
+    return False

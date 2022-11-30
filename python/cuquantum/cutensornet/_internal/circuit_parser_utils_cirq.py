@@ -49,7 +49,7 @@ def unfold_circuit(circuit, dtype='complex128', backend=cp):
             gate_qubits = operation.qubits
             tensor = unitary(operation).reshape((2,) * 2 * len(gate_qubits))
             tensor = asarray(tensor, dtype=dtype)
-            gates.append([tensor, operation.qubits])
+            gates.append((tensor, operation.qubits))
     return qubits, gates
 
 def get_lightcone_circuit(circuit, coned_qubits):
@@ -64,25 +64,16 @@ def get_lightcone_circuit(circuit, coned_qubits):
         A :class:`cirq.Circuit` object that potentially contains less number of gates
     """
     coned_qubits = set(coned_qubits)
+    all_operations = list(circuit.all_operations())
     n_qubits = len(circuit.all_qubits())
-    moments = []
-    reversed_moments = circuit.moments[::-1]
-    n_moments = len(reversed_moments)
-    for ix, moment in enumerate(reversed_moments):
-        if len(coned_qubits) == n_qubits:
-            moments.extend(reversed_moments[ix:])
-            break
-        reduced_moment = []
-        reversed_operations = moment.operations[::-1]
-        n_operations = len(reversed_operations)
-        for iy, operation in enumerate(reversed_operations):
-            if len(coned_qubits) == n_qubits:
-                reduced_moment.extend(reversed_operations[iy:])
-                break
-            qubit_set = set(operation.qubits)
-            if qubit_set & coned_qubits:
-                reduced_moment.append(operation)
-                coned_qubits |= qubit_set
-        moments.append(Moment(reduced_moment[::-1]))
-    newqc = Circuit(moments[::-1])
+    ix = len(all_operations)
+    tail_operations = []
+    while len(coned_qubits) != n_qubits and ix>0:
+        ix -= 1
+        operation = all_operations[ix]
+        qubit_set = set(operation.qubits)
+        if qubit_set & coned_qubits:
+            tail_operations.append(operation)
+            coned_qubits |= qubit_set
+    newqc = Circuit(all_operations[:ix]+tail_operations[::-1])
     return newqc

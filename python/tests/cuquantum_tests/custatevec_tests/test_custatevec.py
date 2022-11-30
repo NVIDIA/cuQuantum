@@ -3,14 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
-import os
-import sys
-import tempfile
 
-try:
-    import cffi
-except ImportError:
-    cffi = None
 import cupy
 from cupy import testing
 import numpy
@@ -19,6 +12,9 @@ import pytest
 import cuquantum
 from cuquantum import ComputeType, cudaDataType
 from cuquantum import custatevec as cusv
+
+from .. import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type,
+                MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase)
 
 
 ###################################################################
@@ -29,23 +25,6 @@ from cuquantum import custatevec as cusv
 # This decision will be revisited in the future.
 #
 ###################################################################
-
-if cffi:
-    # if the Python binding is not installed in the editable mode (pip install
-    # -e .), the cffi tests would fail as the modules cannot be imported
-    sys.path.append(os.getcwd())
-
-dtype_to_data_type = {
-    numpy.dtype(numpy.complex64): cudaDataType.CUDA_C_32F,
-    numpy.dtype(numpy.complex128): cudaDataType.CUDA_C_64F,
-}
-
-
-dtype_to_compute_type = {
-    numpy.dtype(numpy.complex64): ComputeType.COMPUTE_32F,
-    numpy.dtype(numpy.complex128): ComputeType.COMPUTE_64F,
-}
-
 
 @pytest.fixture()
 def handle():
@@ -192,155 +171,6 @@ class TestLibHelper:
             cuquantum.libraryPropertyType.PATCH_LEVEL)
 
 
-# we don't wanna recompile for every test case...
-_cffi_mod1 = None
-_cffi_mod2 = None
-
-def _can_use_cffi():
-    if cffi is None or os.environ.get('CUDA_PATH') is None:
-        return False
-    else:
-        return True
-
-
-class MemoryResourceFactory:
-
-    def __init__(self, source, name=None):
-        self.source = source
-        self.name = source if name is None else name
-
-    def get_dev_mem_handler(self):
-        if self.source == "py-callable":
-            return (*self._get_cuda_callable(), self.name)
-        elif self.source == "cffi":
-            # ctx is not needed, so set to NULL
-            return (0, *self._get_functor_address(), self.name)
-        elif self.source == "cffi_struct":
-            return self._get_handler_address()
-        # TODO: add more different memory sources
-        else:
-            raise NotImplementedError
-
-    def _get_cuda_callable(self):
-        def alloc(size, stream):
-            return cupy.cuda.runtime.mallocAsync(size, stream)
-
-        def free(ptr, size, stream):
-            cupy.cuda.runtime.freeAsync(ptr, stream)
-
-        return alloc, free
-
-    def _get_functor_address(self):
-        if not _can_use_cffi():
-            raise RuntimeError
-
-        global _cffi_mod1
-        if _cffi_mod1 is None:
-            import importlib
-            mod_name = f"cusv_test_{self.source}"
-            ffi = cffi.FFI()
-            ffi.set_source(mod_name, """
-                #include <cuda_runtime.h>
-
-                // cffi limitation: we can't use the actual type cudaStream_t because
-                // it's considered an "incomplete" type and we can't get the functor
-                // address by doing so...
-
-                int my_alloc(void* ctx, void** ptr, size_t size, void* stream) {
-                    return (int)cudaMallocAsync(ptr, size, stream);
-                }
-
-                int my_free(void* ctx, void* ptr, size_t size, void* stream) {
-                    return (int)cudaFreeAsync(ptr, stream);
-                }
-                """,
-                include_dirs=[os.environ['CUDA_PATH']+'/include'],
-                library_dirs=[os.environ['CUDA_PATH']+'/lib64'],
-                libraries=['cudart'],
-            )
-            ffi.cdef("""
-                int my_alloc(void* ctx, void** ptr, size_t size, void* stream);
-                int my_free(void* ctx, void* ptr, size_t size, void* stream);
-            """)
-            ffi.compile(verbose=True)
-            self.ffi = ffi
-            _cffi_mod1 = importlib.import_module(mod_name)
-        self.ffi_mod = _cffi_mod1
-
-        alloc_addr = self._get_address("my_alloc")
-        free_addr = self._get_address("my_free")
-        return alloc_addr, free_addr
-
-    def _get_handler_address(self):
-        if not _can_use_cffi():
-            raise RuntimeError
-
-        global _cffi_mod2
-        if _cffi_mod2 is None:
-            import importlib
-            mod_name = f"cusv_test_{self.source}"
-            ffi = cffi.FFI()
-            ffi.set_source(mod_name, """
-                #include <cuda_runtime.h>
-
-                // cffi limitation: we can't use the actual type cudaStream_t because
-                // it's considered an "incomplete" type and we can't get the functor
-                // address by doing so...
-
-                int my_alloc(void* ctx, void** ptr, size_t size, void* stream) {
-                    return (int)cudaMallocAsync(ptr, size, stream);
-                }
-
-                int my_free(void* ctx, void* ptr, size_t size, void* stream) {
-                    return (int)cudaFreeAsync(ptr, stream);
-                }
-
-                typedef struct {
-                    void* ctx;
-                    int (*device_alloc)(void* ctx, void** ptr, size_t size, void* stream);
-                    int (*device_free)(void* ctx, void* ptr, size_t size, void* stream);
-                    char name[64];
-                } myHandler;
-
-                myHandler* init_myHandler(myHandler* h, const char* name) {
-                    h->ctx = NULL;
-                    h->device_alloc = my_alloc;
-                    h->device_free = my_free;
-                    memcpy(h->name, name, 64);
-                    return h;
-                }
-                """,
-                include_dirs=[os.environ['CUDA_PATH']+'/include'],
-                library_dirs=[os.environ['CUDA_PATH']+'/lib64'],
-                libraries=['cudart'],
-            )
-            ffi.cdef("""
-                typedef struct {
-                    ...;
-                } myHandler;
-
-                myHandler* init_myHandler(myHandler* h, const char* name);
-            """)
-            ffi.compile(verbose=True)
-            self.ffi = ffi
-            _cffi_mod2 = importlib.import_module(mod_name)
-        self.ffi_mod = _cffi_mod2
-
-        h = self.handler = self.ffi_mod.ffi.new("myHandler*")
-        self.ffi_mod.lib.init_myHandler(h, self.name.encode())
-        return self._get_address(h)
-
-    def _get_address(self, func_name_or_ptr):
-        if isinstance(func_name_or_ptr, str):
-            func_name = func_name_or_ptr
-            data = str(self.ffi_mod.ffi.addressof(self.ffi_mod.lib, func_name))
-        else:
-            ptr = func_name_or_ptr  # ptr to struct
-            data = str(self.ffi_mod.ffi.addressof(ptr[0]))
-        # data has this format: "<cdata 'int(*)(void *, void * *, size_t, void *)' 0x7f6c5da37300>"
-        return int(data.split()[-1][:-1], base=16)
-
-
 class TestHandle:
 
     def test_handle_create_destroy(self, handle):
@@ -380,7 +210,7 @@ class TestAbs2Sum(TestSV):
         basis_bits = list(range(self.n_qubits))
         basis_bits, basis_bits_len = self._return_data(
             basis_bits, 'basis_bits', *input_form['basis_bits'])
-        data_type = dtype_to_data_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
 
         # case 1: both are computed
         sum0, sum1 = cusv.abs2sum_on_z_basis(
@@ -425,7 +255,7 @@ class TestAbs2Sum(TestSV):
         sv[1] = 1./numpy.sqrt(2)
         sv[4] = 1./numpy.sqrt(2)
 
-        data_type = dtype_to_data_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
         bit_ordering = list(range(self.n_qubits))
         bit_ordering, bit_ordering_len = self._return_data(
             bit_ordering, 'bit_ordering', *input_form['bit_ordering'])
@@ -458,7 +288,7 @@ class TestCollapse(TestSV):
         basis_bits = list(range(self.n_qubits))
         basis_bits, basis_bits_len = self._return_data(
             basis_bits, 'basis_bits', *input_form['basis_bits'])
-        data_type = dtype_to_data_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
 
         cusv.collapse_on_z_basis(
             handle, sv.data.ptr, data_type, self.n_qubits,
@@ -489,7 +319,7 @@ class TestCollapse(TestSV):
         bit_ordering = list(range(self.n_qubits))
         bit_ordering, _ = self._return_data(
             bit_ordering, 'bit_ordering', *input_form['bit_ordering'])
-        data_type = dtype_to_data_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
 
         norm = 0.5
         # the sv after collapse is normalized as sv -> sv / \sqrt{norm}
@@ -528,7 +358,7 @@ class TestMeasure(TestSV):
         basis_bits = list(range(self.n_qubits))
         basis_bits, basis_bits_len = self._return_data(
             basis_bits, 'basis_bits', *input_form['basis_bits'])
-        data_type = dtype_to_data_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
         orig_sv = sv.copy()
 
         parity = cusv.measure_on_z_basis(
@@ -561,7 +391,7 @@ class TestMeasure(TestSV):
         sv[-1] = numpy.sqrt(0.5)
         orig_sv = sv.copy()
 
-        data_type = dtype_to_data_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
         bitstring = numpy.empty(self.n_qubits, dtype=numpy.int32)
         bit_ordering = list(range(self.n_qubits))
         bit_ordering, _ = self._return_data(
@@ -606,7 +436,7 @@ class TestApply(TestSV):
         sv[0] = 0
         sv[4] = 1
 
-        data_type = dtype_to_data_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
         targets = [0, 1]
         targets, targets_len = self._return_data(
             targets, 'targets', *input_form['targets'])
@@ -646,8 +476,8 @@ class TestApply(TestSV):
             pytest.skip("cannot run cffi tests")
 
         sv = self.get_sv()
-        data_type = dtype_to_data_type[sv.dtype]
-        compute_type = dtype_to_compute_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
+        compute_type = dtype_to_compute_type[self.dtype]
         targets = [0, 1, 2]
         targets, targets_len = self._return_data(
             targets, 'targets', *input_form['targets'])
@@ -710,8 +540,8 @@ class TestApply(TestSV):
 
         sv = self.get_sv()
         sv[:] = 1  # invalid sv just to make math checking easier
-        data_type = dtype_to_data_type[sv.dtype]
-        compute_type = dtype_to_compute_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
+        compute_type = dtype_to_compute_type[self.dtype]
 
         # TODO(leofang): test permutation on either host or device
         permutation = list(numpy.random.permutation(2**self.n_qubits))
@@ -787,8 +617,8 @@ class TestExpect(TestSV):
         sv = self.get_sv()
         sv[:] = numpy.sqrt(1/(2**self.n_qubits))
 
-        data_type = dtype_to_data_type[sv.dtype]
-        compute_type = dtype_to_compute_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
+        compute_type = dtype_to_compute_type[self.dtype]
         basis_bits = list(range(self.n_qubits))
         basis_bits, basis_bits_len = self._return_data(
             basis_bits, 'basis_bits', *input_form['basis_bits'])
@@ -835,8 +665,8 @@ class TestExpect(TestSV):
         # create a uniform sv
         sv = self.get_sv()
         sv[:] = numpy.sqrt(1/(2**self.n_qubits))
-        data_type = dtype_to_data_type[sv.dtype]
-        compute_type = dtype_to_compute_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
+        compute_type = dtype_to_compute_type[self.dtype]
 
         # measure XX...X, YY..Y, ZZ...Z
         paulis = [[cusv.Pauli.X for i in range(self.n_qubits)],
@@ -877,8 +707,8 @@ class TestSampler(TestSV):
         sv = self.get_sv()
         sv[:] = numpy.sqrt(1/(2**self.n_qubits))
 
-        data_type = dtype_to_data_type[sv.dtype]
-        compute_type = dtype_to_compute_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
+        compute_type = dtype_to_compute_type[self.dtype]
         shots = 4096
 
         bitstrings = numpy.empty((shots,), dtype=numpy.int64)
@@ -959,8 +789,8 @@ class TestAccessor(TestSV):
         data /= cupy.sqrt(data**2)
         sv[:] = data
 
-        data_type = dtype_to_data_type[sv.dtype]
-        compute_type = dtype_to_compute_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
+        compute_type = dtype_to_compute_type[self.dtype]
 
         # measure all qubits
         bit_ordering = list(range(self.n_qubits))
@@ -1021,8 +851,8 @@ class TestAccessor(TestSV):
         data /= cupy.sqrt(data**2)
         sv[:] = data
 
-        data_type = dtype_to_data_type[sv.dtype]
-        compute_type = dtype_to_compute_type[sv.dtype]
+        data_type = dtype_to_data_type[self.dtype]
+        compute_type = dtype_to_compute_type[self.dtype]
 
         # measure all qubits
         bit_ordering = list(range(self.n_qubits))
@@ -1109,8 +939,8 @@ class TestTestMatrixType:
                 and not _can_use_cffi()):
             pytest.skip("cannot run cffi tests")
 
-        data_type = dtype_to_data_type[xp.dtype(dtype)]
-        compute_type = dtype_to_compute_type[xp.dtype(dtype)]
+        data_type = dtype_to_data_type[dtype]
+        compute_type = dtype_to_compute_type[dtype]
         n_targets = 4
 
         # matrix can live on host or device
@@ -1170,7 +1000,7 @@ class TestBatchMeasureWithSubSV(TestMultiGpuSV):
             self, multi_gpu_handles, rand, collapse, input_form):
         handles = multi_gpu_handles
         sub_sv = self.get_sv()
-        data_type = dtype_to_data_type[sub_sv[0].dtype]
+        data_type = dtype_to_data_type[self.dtype]
         bit_ordering = list(range(self.n_local_bits))
         bit_ordering, bit_ordering_len = self._return_data(
             bit_ordering, 'bit_ordering', *input_form['bit_ordering'])
@@ -1260,7 +1090,7 @@ class TestSwap:
     def test_swap_index_bits(self, handle, dtype, input_form):
         n_qubits = 4
         sv = cupy.zeros(2**n_qubits, dtype=dtype)
-        data_type = dtype_to_data_type[sv.dtype]
+        data_type = dtype_to_data_type[dtype]
 
         # set sv to |0110>
         sv[6] = 1
@@ -1317,7 +1147,7 @@ class TestMultiGPUSwap(TestMultiGpuSV):
         handles = multi_gpu_handles
         n_handles = len(handles)
         sub_sv = self.get_sv()
-        data_type = dtype_to_data_type[sub_sv[0].dtype]
+        data_type = dtype_to_data_type[self.dtype]
 
         # set sv to |0110> (up to normalization)
         with cupy.cuda.Device(0):
@@ -1365,79 +1195,21 @@ class TestMultiGPUSwap(TestMultiGpuSV):
             assert sub_sv[1][4] == 1
 
 
-class TestMemHandler:
+class TestMemHandler(MemHandlerTestBase):
+
+    mod = cusv
+    prefix = "custatevec"
+    error = cusv.cuStateVecError
 
     # TODO: add more different memory sources
     @pytest.mark.parametrize(
         'source', (None, "py-callable", 'cffi', 'cffi_struct')
     )
-    def test_set_get_device_mem_handler(self, handle, source):
-        if (isinstance(source, str) and source.startswith('cffi')
-                and not _can_use_cffi()):
-            pytest.skip("cannot run cffi tests")
-
-        if source is not None:
-            mr = MemoryResourceFactory(source)
-            handler = mr.get_dev_mem_handler()
-            cusv.set_device_mem_handler(handle, handler)
-            # round-trip test
-            queried_handler = cusv.get_device_mem_handler(handle)
-            if source == 'cffi_struct':
-                # I'm lazy, otherwise I'd also fetch the functor addresses here...
-                assert queried_handler[0] == 0  # ctx is NULL
-                assert queried_handler[-1] == source
-            else:
-                assert queried_handler == handler
-        else:
-            with pytest.raises(cusv.cuStateVecError) as e:
-                queried_handler = cusv.get_device_mem_handler(handle)
-            assert 'CUSTATEVEC_STATUS_NO_DEVICE_ALLOCATOR' in str(e.value)
+    def test_set_get_device_mem_handler(self, source, handle):
+        self._test_set_get_device_mem_handler(source, handle)
 
 
-class TestLogger:
+class TestLogger(LoggerTestBase):
 
-    def test_logger_set_level(self):
-        cusv.logger_set_level(6)  # on
-        cusv.logger_set_level(0)  # off
-
-    def test_logger_set_mask(self):
-        cusv.logger_set_mask(16)  # should not raise
-
-    def test_logger_set_callback_data(self):
-        # we also test logger_open_file() here to avoid polluting stdout
-
-        def callback(level, name, message, my_data, is_ok=False):
-            log = f"{level}, {name}, {message} (is_ok={is_ok}) -> logged\n"
-            my_data.append(log)
-
-        handle = None
-        my_data = []
-        is_ok = True
-
-        with tempfile.TemporaryDirectory() as temp:
-            file_name = os.path.join(temp, "cusv_test")
-            cusv.logger_open_file(file_name)
-            cusv.logger_set_callback_data(callback, my_data, is_ok=is_ok)
-            cusv.logger_set_level(6)
-
-            try:
-                handle = cusv.create()
-                cusv.destroy(handle)
-            except:
-                if handle:
-                    cusv.destroy(handle)
-                raise
-            finally:
-                cusv.logger_force_disable()  # to not affect the rest of tests
-
-            with open(file_name) as f:
-                log_from_f = f.read()
-
-        # check the log file
-        assert '[custatevecCreate]' in log_from_f
-        assert '[custatevecDestroy]' in log_from_f
-
-        # check the captured data (note we log 2 APIs)
-        log = ''.join(my_data)
-        assert log.count("-> logged") >= 2
-        assert log.count("is_ok=True") >= 2
+    mod = cusv
+    prefix = "custatevec"

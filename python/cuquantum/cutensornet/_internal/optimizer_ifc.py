@@ -9,6 +9,7 @@ Interface class to encapsulate low-level calls to get or set optimizer informati
 __all__ = ['OptimizerInfoInterface']
 
 from collections.abc import Sequence
+import itertools
 import operator
 
 import numpy as np
@@ -16,14 +17,17 @@ import numpy as np
 from cuquantum import cutensornet as cutn
 
 
-def _parse_and_map_sliced_modes(sliced_modes, mode_map_user_to_ord, size_dict, dtype_mode=np.int32, dtype_extent=np.int64):
+def _parse_and_map_sliced_modes(sliced_modes, mode_map_user_to_ord, size_dict):
     """
-    Parse user-provided sliced modes and create individual, contiguous sliced_modes and sliced extents array.
+    Parse user-provided sliced modes, create and return a contiguous (sliced mode, slide extent) array of
+      type `cutn.cutensornet.slice_info_pair_dtype`.
     """
 
     num_sliced_modes = len(sliced_modes)
+    slice_info_array = np.empty((num_sliced_modes,), dtype=cutn.cutensornet.slice_info_pair_dtype)
+
     if num_sliced_modes == 0:
-        return num_sliced_modes, np.zeros((num_sliced_modes,), dtype=dtype_mode), np.zeros((num_sliced_modes,), dtype=dtype_extent)
+        return slice_info_array
 
     # The sliced modes have already passed basic checks when creating the OptimizerOptions dataclass.
 
@@ -31,7 +35,7 @@ def _parse_and_map_sliced_modes(sliced_modes, mode_map_user_to_ord, size_dict, d
     if pairs:
         sliced_modes, sliced_extents = zip(*sliced_modes)
     else:
-        sliced_extents = np.ones((num_sliced_modes,), dtype=dtype_extent)
+        sliced_extents = (1,)
 
     # Check for invalid mode labels.
     invalid_modes = tuple(filter(lambda k: k not in mode_map_user_to_ord, sliced_modes))
@@ -39,19 +43,20 @@ def _parse_and_map_sliced_modes(sliced_modes, mode_map_user_to_ord, size_dict, d
        message = f"Invalid sliced mode labels: {invalid_modes}"
        raise ValueError(message)
 
-    sliced_modes = np.asarray([mode_map_user_to_ord[m] for m in sliced_modes], dtype=dtype_mode)
-    remainder = tuple(size_dict[m] % e for m, e in zip(sliced_modes, sliced_extents))
-    if any(remainder):
+    slice_info_array["sliced_mode"] = sliced_modes = [mode_map_user_to_ord[m] for m in sliced_modes]
+    remainder = any(size_dict[m] % e for m, e in itertools.zip_longest(sliced_modes, sliced_extents, fillvalue=1))
+    if remainder:
         raise ValueError("The sliced extents must evenly divide the original extents of the corresponding mode.")
+    slice_info_array["sliced_extent"] = sliced_extents
 
-    return num_sliced_modes, sliced_modes, np.asanyarray(sliced_extents, dtype=dtype_extent)
+    return slice_info_array
 
 
 InfoEnum = cutn.ContractionOptimizerInfoAttribute
 
-class OptimizerInfoInterface(object):
-    """
-    """
+
+class OptimizerInfoInterface:
+
     def __init__(self, network):
         """
         """
@@ -63,10 +68,11 @@ class OptimizerInfoInterface(object):
         self._largest_tensor = np.zeros((1,), dtype=get_dtype(InfoEnum.LARGEST_TENSOR))
         self._num_slices = np.zeros((1,), dtype=get_dtype(InfoEnum.NUM_SLICES))
         self._num_sliced_modes = np.zeros((1,), dtype=get_dtype(InfoEnum.NUM_SLICED_MODES))
+        self._slicing_config = np.zeros((1,), dtype=get_dtype(InfoEnum.SLICING_CONFIG))
         self._slicing_overhead = np.zeros((1,), dtype=get_dtype(InfoEnum.SLICING_OVERHEAD))
 
         self.num_contraction = len(self.network.operands) - 1
-        self._path = np.zeros((2*self.num_contraction, ), dtype=np.int32)
+        self._path = np.zeros((1,), dtype=get_dtype(InfoEnum.PATH))
 
     @staticmethod
     def _get_scalar_attribute(network, name, attribute):
@@ -96,13 +102,6 @@ class OptimizerInfoInterface(object):
         OptimizerInfoInterface._get_scalar_attribute(self.network, InfoEnum.NUM_SLICES, self._num_slices)
 
         return int(self._num_slices)
-
-    @num_slices.setter
-    def num_slices(self, number):
-        """
-        Set the number of slices in the network.
-        """
-        OptimizerInfoInterface._set_scalar_attribute(network, InfoEnum.NUM_SLICES, self._num_slices, number)
 
     @property
     def flop_count(self):
@@ -137,16 +136,11 @@ class OptimizerInfoInterface(object):
         """
         Return the contraction path in linear format.
         """
+        path = np.empty((2*self.num_contraction,), dtype=np.int32)
+        self._path["data"] = path.ctypes.data
+        OptimizerInfoInterface._get_scalar_attribute(self.network, InfoEnum.PATH, self._path)
 
-        network = self.network
-
-        path_wrapper = cutn.ContractionPath(self.num_contraction, self._path.ctypes.data)
-        size = path_wrapper.get_size()
-        cutn.contraction_optimizer_info_get_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.PATH, path_wrapper.get_path(), size)
-
-        path = list(zip(*[iter(self._path)]*2))
-
-        return path
+        return list(zip(*[iter(path)]*2))
 
     @path.setter
     def path(self, path):
@@ -164,10 +158,13 @@ class OptimizerInfoInterface(object):
             raise ValueError(f"The length of the contraction path ({num_contraction}) must be one less than the number of operands ({len(network.operands)}).")
 
         path = reduce(operator.concat, path)
-        self._path = np.array(path, dtype=np.int32)
-        path_wrapper = cutn.ContractionPath(num_contraction, self._path.ctypes.data)
-        size = path_wrapper.get_size()
-        cutn.contraction_optimizer_info_set_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.PATH, path_wrapper.get_path(), size)
+        path_array = np.asarray(path, dtype=np.int32)
+
+        # Construct the path type.
+        path = np.array((num_contraction, path_array.ctypes.data), dtype=get_dtype(InfoEnum.PATH))
+
+        # Set the attribute.
+        OptimizerInfoInterface._set_scalar_attribute(self.network, InfoEnum.PATH, self._path, path)
 
     @property
     def num_sliced_modes(self):
@@ -177,13 +174,6 @@ class OptimizerInfoInterface(object):
         OptimizerInfoInterface._get_scalar_attribute(self.network, InfoEnum.NUM_SLICED_MODES, self._num_sliced_modes)
 
         return int(self._num_sliced_modes)
-
-    @num_sliced_modes.setter
-    def num_sliced_modes(self, number):
-        """
-        Set the number of sliced_modes in the network.
-        """
-        OptimizerInfoInterface._set_scalar_attribute(self.network, InfoEnum.NUM_SLICED_MODES, self._num_sliced_modes, number)
 
     @property
     def sliced_mode_extent(self):
@@ -197,14 +187,15 @@ class OptimizerInfoInterface(object):
 
         num_sliced_modes = self.num_sliced_modes
 
-        sliced_modes = np.zeros((num_sliced_modes,), dtype=get_dtype(InfoEnum.SLICED_MODE))
-        size = num_sliced_modes * sliced_modes.dtype.itemsize
-        cutn.contraction_optimizer_info_get_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.SLICED_MODE, sliced_modes.ctypes.data, size)
-        sliced_modes = tuple(network.mode_map_ord_to_user[m] for m in sliced_modes)    # Convert to user mode labels
+        slice_info_array = np.empty((num_sliced_modes,), dtype=cutn.cutensornet.slice_info_pair_dtype)
 
-        sliced_extents = np.zeros((num_sliced_modes,), dtype=get_dtype(InfoEnum.SLICED_EXTENT))
-        size = num_sliced_modes * sliced_extents.dtype.itemsize
-        cutn.contraction_optimizer_info_get_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.SLICED_EXTENT, sliced_extents.ctypes.data, size)
+        slicing_config = self._slicing_config
+        slicing_config["num_sliced_modes"] = num_sliced_modes
+        slicing_config["data"] = slice_info_array.ctypes.data
+        OptimizerInfoInterface._get_scalar_attribute(self.network, InfoEnum.SLICING_CONFIG, slicing_config)
+
+        sliced_modes = tuple(network.mode_map_ord_to_user[m] for m in slice_info_array["sliced_mode"])  # Convert to user mode labels
+        sliced_extents = slice_info_array["sliced_extent"]
 
         return tuple(zip(sliced_modes, sliced_extents))
 
@@ -216,18 +207,16 @@ class OptimizerInfoInterface(object):
         sliced_mode = sequence of sliced modes, or sequence of (sliced mode, sliced extent) pairs
         """
 
+        get_dtype = cutn.contraction_optimizer_info_get_attribute_dtype
+
         network = self.network
 
-        num_sliced_modes, sliced_modes, sliced_extents = _parse_and_map_sliced_modes(sliced_modes, network.mode_map_user_to_ord, network.size_dict)
+        # Construct the slicing config type.
+        slice_info_array = _parse_and_map_sliced_modes(sliced_modes, network.mode_map_user_to_ord, network.size_dict)
+        slicing_config = np.array((len(slice_info_array), slice_info_array.ctypes.data), dtype=get_dtype(InfoEnum.SLICING_CONFIG))
 
-        # Set the number of sliced modes first
-        self.num_sliced_modes = num_sliced_modes
-
-        size = num_sliced_modes * sliced_modes.dtype.itemsize
-        cutn.contraction_optimizer_info_set_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.SLICED_MODE, sliced_modes.ctypes.data, size)
-
-        size = num_sliced_modes * sliced_extents.dtype.itemsize
-        cutn.contraction_optimizer_info_set_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.SLICED_EXTENT, sliced_extents.ctypes.data, size)
+        # Set the attribute.
+        OptimizerInfoInterface._set_scalar_attribute(network, InfoEnum.SLICING_CONFIG, self._slicing_config, slicing_config)
 
     @property
     def intermediate_modes(self):

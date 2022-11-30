@@ -7,7 +7,7 @@
 # Once we switch over the names would be prettier (in the Cython
 # layer).
 
-from libc.stdint cimport int32_t
+from libc.stdint cimport int32_t, int64_t, uint32_t
 
 from cuquantum.utils cimport DataType, DeviceAllocType, DeviceFreeType, Stream
 
@@ -23,14 +23,27 @@ cdef extern from '<cutensornet.h>' nogil:
     ctypedef void* _ContractionAutotunePreference 'cutensornetContractionAutotunePreference_t'
     ctypedef void* _WorkspaceDescriptor 'cutensornetWorkspaceDescriptor_t'
     ctypedef void* _SliceGroup 'cutensornetSliceGroup_t'
+    ctypedef void* _TensorDescriptor 'cutensornetTensorDescriptor_t'
+    ctypedef void* _TensorSVDConfig 'cutensornetTensorSVDConfig_t'
+    ctypedef void* _TensorSVDInfo 'cutensornetTensorSVDInfo_t'
 
     # cuTensorNet structs
     ctypedef struct _NodePair 'cutensornetNodePair_t':
         int first
         int second
+
     ctypedef struct _ContractionPath 'cutensornetContractionPath_t':
         int numContractions
         _NodePair *data
+
+    ctypedef struct _SliceInfoPair 'cutensornetSliceInfoPair_t':
+        int32_t slicedMode
+        int64_t slicedExtent
+
+    ctypedef struct _SlicingConfig 'cutensornetSlicingConfig_t':
+        uint32_t numSlicedModes
+        _SliceInfoPair* data
+
     ctypedef struct _DeviceMemHandler 'cutensornetDeviceMemHandler_t':
         void* ctx
         DeviceAllocType device_alloc
@@ -38,6 +51,10 @@ cdef extern from '<cutensornet.h>' nogil:
         # Cython limitation: cannot use C defines in declaring a static array,
         # so we just have to hard-code CUTENSORNET_ALLOCATOR_NAME_LEN here...
         char name[64]
+
+    ctypedef struct _TensorQualifiers 'cutensornetTensorQualifiers_t':
+        int32_t isConjugate # cannot assign default value to fields in cdef structs
+        
     ctypedef void(*LoggerCallbackData 'cutensornetLoggerCallbackData_t')(
         int32_t logLevel,
         const char* functionName,
@@ -95,6 +112,7 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_INTERMEDIATE_MODES
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_EFFECTIVE_FLOPS_EST
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_RUNTIME_EST
+        CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_SLICING_CONFIG
 
     ctypedef enum _ContractionAutotunePreferenceAttribute 'cutensornetContractionAutotunePreferenceAttributes_t':
         CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS
@@ -107,6 +125,34 @@ cdef extern from '<cutensornet.h>' nogil:
 
     ctypedef enum _Memspace 'cutensornetMemspace_t':
         CUTENSORNET_MEMSPACE_DEVICE
+        CUTENSORNET_MEMSPACE_HOST
+
+    ctypedef enum _TensorSVDConfigAttribute 'cutensornetTensorSVDConfigAttributes_t':
+        CUTENSORNET_TENSOR_SVD_CONFIG_ABS_CUTOFF
+        CUTENSORNET_TENSOR_SVD_CONFIG_REL_CUTOFF
+        CUTENSORNET_TENSOR_SVD_CONFIG_S_NORMALIZATION
+        CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION
+
+    ctypedef enum _TensorSVDNormalization 'cutensornetTensorSVDNormalization_t':
+        CUTENSORNET_TENSOR_SVD_NORMALIZATION_NONE
+        CUTENSORNET_TENSOR_SVD_NORMALIZATION_L1
+        CUTENSORNET_TENSOR_SVD_NORMALIZATION_L2
+        CUTENSORNET_TENSOR_SVD_NORMALIZATION_LINF
+
+    ctypedef enum _TensorSVDPartition 'cutensornetTensorSVDPartition_t':
+        CUTENSORNET_TENSOR_SVD_PARTITION_NONE
+        CUTENSORNET_TENSOR_SVD_PARTITION_US
+        CUTENSORNET_TENSOR_SVD_PARTITION_SV
+        CUTENSORNET_TENSOR_SVD_PARTITION_UV_EQUAL
+
+    ctypedef enum _TensorSVDInfoAttribute 'cutensornetTensorSVDInfoAttributes_t':
+        CUTENSORNET_TENSOR_SVD_INFO_FULL_EXTENT
+        CUTENSORNET_TENSOR_SVD_INFO_REDUCED_EXTENT
+        CUTENSORNET_TENSOR_SVD_INFO_DISCARDED_WEIGHT
+
+    ctypedef enum _GateSplitAlgo 'cutensornetGateSplitAlgo_t':
+        CUTENSORNET_GATE_SPLIT_ALGO_DIRECT
+        CUTENSORNET_GATE_SPLIT_ALGO_REDUCED
 
     # cuTensorNet consts
     int CUTENSORNET_MAJOR
