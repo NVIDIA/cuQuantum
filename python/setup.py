@@ -3,217 +3,82 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
-import site
 import sys
 
-from packaging.version import Version
-from setuptools import setup, Extension, find_packages
 from Cython.Build import cythonize
+from setuptools import setup, Extension, find_packages
 
-
-# Get __version__ variable
+# this is tricky: sys.path gets overwritten at different stages of the build
+# flow, so we need to hack sys.path ourselves...
 source_root = os.path.abspath(os.path.dirname(__file__))
-with open(os.path.join(source_root, 'cuquantum', '_version.py')) as f:
-    exec(f.read())
+sys.path.append(os.path.join(source_root, 'builder'))
+import utils  # this is builder.utils
 
 
 # Use README for the project long description
-with open("README.md") as f:
+with open(os.path.join(source_root, "README.md")) as f:
     long_description = f.read()
 
 
-# set up version constraints: note that CalVer like 22.03 is normalized to
-# 22.3 by setuptools, so we must follow the same practice in the constraints;
-# also, we don't need the Python patch number here
-cuqnt_py_ver = Version(__version__)
-cuqnt_ver_major_minor = f"{cuqnt_py_ver.major}.{cuqnt_py_ver.minor}"
+# Get test requirements
+with open(os.path.join(source_root, "tests/requirements.txt")) as f:
+    tests_require = f.read().split('\n')
 
 
-# search order:
-# 1. installed "cuquantum" package
-# 2. env var
-for path in site.getsitepackages():
-    path = os.path.join(path, 'cuquantum')
-    if os.path.isdir(path):
-        cuquantum_root = path
-        using_cuquantum_wheel = True
-        break
-else:
-    cuquantum_root = os.environ.get('CUQUANTUM_ROOT')
-    using_cuquantum_wheel = False
-
-
-# We allow setting CUSTATEVEC_ROOT and CUTENSORNET_ROOT separately for the ease
-# of development, but users are encouraged to either install cuquantum from PyPI
-# or conda, or set CUQUANTUM_ROOT to the existing installation.
-try:
-    custatevec_root = os.environ['CUSTATEVEC_ROOT']
-    using_cuquantum_wheel = False
-except KeyError as e:
-    if cuquantum_root is None:
-        raise RuntimeError('cuStateVec is not found, please install "cuquantum" '
-                           'or set $CUQUANTUM_ROOT') from e
-    else:
-        custatevec_root = cuquantum_root
-try:
-    cutensornet_root = os.environ['CUTENSORNET_ROOT']
-    using_cuquantum_wheel = False
-except KeyError as e:
-    if cuquantum_root is None:
-        raise RuntimeError('cuTensorNet is not found, please install "cuquantum" '
-                           'or set $CUQUANTUM_ROOT') from e
-    else:
-        cutensornet_root = cuquantum_root
-
-
-# search order:
-# 1. installed "cutensor" package
-# 2. env var
-for path in site.getsitepackages():
-    path = os.path.join(path, 'cutensor')
-    if os.path.isdir(path):
-        cutensor_root = path
-        assert using_cuquantum_wheel  # if this raises, the env is corrupted
-        break
-else:
-    cutensor_root = os.environ.get('CUTENSOR_ROOT')
-    assert not using_cuquantum_wheel
-if cutensor_root is None:
-    raise RuntimeError('cuTENSOR is not found, please install "cutensor" '
-                       'or set $CUTENSOR_ROOT')
-
-
-# We can't assume users to have CTK installed via pip, so we really need this...
-# TODO(leofang): try /usr/local/cuda?
-try:
-    cuda_path = os.environ['CUDA_PATH']
-except KeyError as e:
-    raise RuntimeError('CUDA is not found, please set $CUDA_PATH') from e
-
-
-# TODO: use setup.cfg and/or pyproject.toml
-setup_requires = [
-    'Cython>=0.29.22,<3',
-    'packaging',
-    ]
+# Runtime dependencies
+# - cuTENSOR version is constrained in the cutensornet-cuXX package, so we don't
+#   need to list it
 install_requires = [
     'numpy',
     # 'cupy', # TODO: use "cupy-wheel" once it's stablized, see https://github.com/cupy/cupy/issues/6688
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
+    f'custatevec-cu{utils.cuda_major_ver}~=1.1',   # ">=1.1.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.0',  # ">=2.0.0,<3"
     ]
-ignore_cuquantum_dep = bool(os.environ.get('CUQUANTUM_IGNORE_SOLVER', False))
-if not ignore_cuquantum_dep:
-    assert using_cuquantum_wheel  # if this raises, the env is corrupted
-    # - cuTENSOR version is constrained in the cuquantum package, so we don't
-    #   need to list it
-    # - here we assume no API breaking across releases, if there's any we must
-    #   bump the lowest supported version; we can't cap the highest supported
-    #   version as we don't use semantic versioning, unfortunately...
-    setup_requires.append(f'cuquantum>={cuqnt_ver_major_minor}.*')
-    install_requires.append(f'cuquantum>={cuqnt_ver_major_minor}.*')
 
 
-def check_cuda_version():
-    try:
-        # We cannot do a dlopen and call cudaRuntimeGetVersion, because it
-        # requires GPUs. We also do not want to rely on the compiler utility
-        # provided in distutils (deprecated) or setuptools, as this is a very
-        # simple string parsing task.
-        # TODO: switch to cudaRuntimeGetVersion once it's fixed (nvbugs 3624208)
-        cuda_h = os.path.join(cuda_path, 'include', 'cuda.h')
-        with open(cuda_h, 'r') as f:
-            cuda_h = f.read().split('\n')
-        for line in cuda_h:
-            if "#define CUDA_VERSION" in line:
-                ver = int(line.split()[-1])
-                break
-        else:
-            raise RuntimeError("cannot parse CUDA_VERSION")
-    except:
-        raise
-    else:
-        # 11020 -> "11.2"
-        return str(ver // 1000) + '.' + str((ver % 100) // 10)
+# Note: the extension attributes are overwritten in build_extension()
+ext_modules = [
+    Extension(
+        "cuquantum.custatevec.custatevec",
+        sources=["cuquantum/custatevec/custatevec.pyx"],
+    ),
+    Extension(
+        "cuquantum.cutensornet.cutensornet",
+        sources=["cuquantum/cutensornet/cutensornet.pyx"],
+    ),
+    Extension(
+        "cuquantum.utils",
+        sources=["cuquantum/utils.pyx"],
+        include_dirs=[os.path.join(utils.cuda_path, 'include')],
+    ),
+]
 
 
-cuda_ver = check_cuda_version()
-if cuda_ver in ('10.2', '11.0'):
-    cutensor_ver = cuda_ver
-elif '11.0' < cuda_ver < '12.0':
-    cutensor_ver = '11'
+cmdclass = {
+    'build_ext': utils.build_ext,
+    'bdist_wheel': utils.bdist_wheel,
+}
+
+if utils.cuda_major_ver == '11':
+    cuda_classifier = [
+        "Environment :: GPU :: NVIDIA CUDA :: 11.0",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.1",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.2",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.3",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.4",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.5",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.6",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.7",
+        "Environment :: GPU :: NVIDIA CUDA :: 11.8",
+    ]
 else:
-    raise RuntimeError(f"Unsupported CUDA version: {cuda_ver}")
+    cuda_classifier = None
 
-
-def prepare_libs_and_rpaths():
-    global cusv_lib_dir, cutn_lib_dir
-    # we include both lib64 and lib to accommodate all possible sources
-    cusv_lib_dir = [os.path.join(custatevec_root, 'lib'),
-                    os.path.join(custatevec_root, 'lib64')]
-    cutn_lib_dir = [os.path.join(cutensornet_root, 'lib'),
-                    os.path.join(cutensornet_root, 'lib64'),
-                    os.path.join(cutensor_root, 'lib', cutensor_ver)]
-
-    global cusv_lib, cutn_lib, extra_linker_flags
-    if using_cuquantum_wheel:
-        cusv_lib = [':libcustatevec.so.1']
-        cutn_lib = [':libcutensornet.so.1', ':libcutensor.so.1']
-        # The rpaths must be adjusted given the following full-wheel installation:
-        #   cuquantum-python: site-packages/cuquantum/{custatevec, cutensornet}/  [=$ORIGIN]
-        #   cusv & cutn:      site-packages/cuquantum/lib/
-        #   cutensor:         site-packages/cutensor/lib/CUDA_VER/
-        ldflag = "-Wl,--disable-new-dtags,"
-        ldflag += "-rpath,$ORIGIN/../lib,"
-        ldflag += f"-rpath,$ORIGIN/../../cutensor/lib/{cutensor_ver}"
-        extra_linker_flags = [ldflag]
-    else:
-        cusv_lib = ['custatevec']
-        cutn_lib = ['cutensornet', 'cutensor']
-        extra_linker_flags = []
-
-
-prepare_libs_and_rpaths()
-print("\n****************************************************************")
-print("CUDA version:", cuda_ver)
-print("CUDA path:", cuda_path)
-print("cuStateVec path:", custatevec_root)
-print("cuTensorNet path:", cutensornet_root)
-print("cuTENSOR path:", cutensor_root)
-print("****************************************************************\n")
-
-
-custatevec = Extension(
-    "cuquantum.custatevec.custatevec",
-    sources=["cuquantum/custatevec/custatevec.pyx"],
-    include_dirs=[os.path.join(cuda_path, 'include'),
-                  os.path.join(custatevec_root, 'include')],
-    library_dirs=cusv_lib_dir,
-    libraries=cusv_lib,
-    extra_link_args=extra_linker_flags,
-)
-
-
-cutensornet = Extension(
-    "cuquantum.cutensornet.cutensornet",
-    sources=["cuquantum/cutensornet/cutensornet.pyx"],
-    include_dirs=[os.path.join(cuda_path, 'include'),
-                  os.path.join(cutensornet_root, 'include')],
-    library_dirs=cutn_lib_dir,
-    libraries=cutn_lib,
-    extra_link_args=extra_linker_flags,
-)
-
-
-utils = Extension(
-    "cuquantum.utils",
-    sources=["cuquantum/utils.pyx"],
-    include_dirs=[os.path.join(cuda_path, 'include')],
-)
-
-
+# TODO: move static metadata to pyproject.toml
 setup(
-    name="cuquantum-python",
-    version=__version__,
+    name=f"cuquantum-python-cu{utils.cuda_major_ver}",
+    version=utils.cuqnt_py_ver,
     description="NVIDIA cuQuantum Python",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -234,32 +99,15 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: Implementation :: CPython",
         "Environment :: GPU :: NVIDIA CUDA",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.0",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.1",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.2",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.3",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.4",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.5",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.6",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.7",
-    ],
-    ext_modules=cythonize([custatevec, cutensornet, utils,],
+    ] + cuda_classifier,
+    ext_modules=cythonize(ext_modules,
         verbose=True, language_level=3,
         compiler_directives={'embedsignature': True}),
     packages=find_packages(include=['cuquantum', 'cuquantum.*']),
     package_data={"": ["*.pxd", "*.pyx", "*.py"],},
     zip_safe=False,
     python_requires='>=3.8',
-    setup_requires=setup_requires,
     install_requires=install_requires,
-    tests_require=install_requires + [
-        # pytest < 6.2 is slow in collecting tests
-        'pytest>=6.2',
-        'opt_einsum',
-        # optional test deps
-        #'cffi>=1.0.0',
-        #'nbmake>=1.3.0',  # for testing notebooks
-        #'cirq>=0.6.0',
-        #'qiskit>=0.24.0',
-    ]
+    tests_require=install_requires+tests_require,
+    cmdclass=cmdclass,
 )

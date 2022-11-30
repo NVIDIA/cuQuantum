@@ -17,11 +17,11 @@ if rank == root:
     print("*** Printing is done only from the root process to prevent jumbled messages ***")
     print(f"The number of processes is {size}")
 
-# Get cuTensorNet version and device properties.
-numDevices = cp.cuda.runtime.getDeviceCount()
-deviceId = rank % numDevices  # We assume that the processes are mapped to nodes in contiguous chunks.
-dev = cp.cuda.Device(deviceId)
+num_devices = cp.cuda.runtime.getDeviceCount()
+device_id = rank % num_devices
+dev = cp.cuda.Device(device_id)
 dev.use()
+
 props = cp.cuda.runtime.getDeviceProperties(dev.id)
 if rank == root:
     print("cuTensorNet-vers:", cutn.get_version())
@@ -34,60 +34,62 @@ if rank == root:
     print("GPU-minor:", props["minor"])
     print("========================")
 
-##########################################################
-# Computing: D_{m,x,n,y} = A_{m,h,k,n} B_{u,k,h} C_{x,u,y}
-##########################################################
+######################################################################################
+# Computing: R_{k,l} = A_{a,b,c,d,e,f} B_{b,g,h,e,i,j} C_{m,a,g,f,i,k} D_{l,c,h,d,j,m}
+######################################################################################
 
 if rank == root:
-    print("Include headers and define data types")
+    print("Include headers and define data types.")
 
 data_type = cuquantum.cudaDataType.CUDA_R_32F
 compute_type = cuquantum.ComputeType.COMPUTE_32F
-numInputs = 3
+num_inputs = 4
 
 # Create an array of modes
-modesA = [ord(c) for c in ('m','h','k','n')]
-modesB = [ord(c) for c in ('u','k','h')]
-modesC = [ord(c) for c in ('x','u','y')]
-modesD = [ord(c) for c in ('m','x','n','y')]
+modes_A = [ord(c) for c in ('a','b','c','d','e','f')]
+modes_B = [ord(c) for c in ('b','g','h','e','i','j')]
+modes_C = [ord(c) for c in ('m','a','g','f','i','k')]
+modes_D = [ord(c) for c in ('l','c','h','d','j','m')]
+modes_R = [ord(c) for c in ('k','l')]
 
 # Create an array of extents (shapes) for each tensor
-extentA = (96, 64, 64, 96)
-extentB = (96, 64, 64)
-extentC = (64, 96, 64)
-extentD = (96, 64, 96, 64)
+dim = 8
+extent_A = (dim,) * 6
+extent_B = (dim,) * 6
+extent_C = (dim,) * 6
+extent_D = (dim,) * 6
+extent_R = (dim,) * 2
 
 if rank == root:
-    print("Define network, modes, and extents")
+    print("Define network, modes, and extents.")
 
-############################
-# Allocate & initialize data
-############################
+#################
+# Initialize data
+#################
 
 if rank == root:
-    A = np.random.random((np.prod(extentA),)).astype(np.float32)
-    B = np.random.random((np.prod(extentB),)).astype(np.float32)
-    C = np.random.random((np.prod(extentC),)).astype(np.float32)
+    A = np.random.random(np.prod(extent_A)).astype(np.float32)
+    B = np.random.random(np.prod(extent_B)).astype(np.float32)
+    C = np.random.random(np.prod(extent_C)).astype(np.float32)
+    D = np.random.random(np.prod(extent_D)).astype(np.float32)
 else:
-    A = np.empty((np.prod(extentA),), dtype=np.float32)
-    B = np.empty((np.prod(extentB),), dtype=np.float32)
-    C = np.empty((np.prod(extentC),), dtype=np.float32)
-D = np.empty(extentD, dtype=np.float32)
+    A = np.empty(np.prod(extent_A), dtype=np.float32)
+    B = np.empty(np.prod(extent_B), dtype=np.float32)
+    C = np.empty(np.prod(extent_C), dtype=np.float32)
+    D = np.empty(np.prod(extent_D), dtype=np.float32)
+R = np.empty(extent_R)
 
-# Broadcast data to all ranks.
 comm.Bcast(A, root)
 comm.Bcast(B, root)
 comm.Bcast(C, root)
+comm.Bcast(D, root)
 
-# Copy data onto the device on all ranks.
 A_d = cp.asarray(A)
 B_d = cp.asarray(B)
 C_d = cp.asarray(C)
-D_d = cp.empty((np.prod(extentD),), dtype=np.float32)
-rawDataIn_d = (A_d.data.ptr, B_d.data.ptr, C_d.data.ptr)
-
-if rank == root:
-    print("Allocate memory for data, calculate workspace limit, and initialize data.")
+D_d = cp.asarray(D)
+R_d = cp.empty(np.prod(extent_R), dtype=np.float32)
+raw_data_in_d = (A_d.data.ptr, B_d.data.ptr, C_d.data.ptr, D_d.data.ptr)
 
 #############
 # cuTensorNet
@@ -96,41 +98,30 @@ if rank == root:
 stream = cp.cuda.Stream()
 handle = cutn.create()
 
-nmodeA = len(modesA)
-nmodeB = len(modesB)
-nmodeC = len(modesC)
-nmodeD = len(modesD)
+nmode_A = len(modes_A)
+nmode_B = len(modes_B)
+nmode_C = len(modes_C)
+nmode_D = len(modes_D)
+nmode_R = len(modes_R)
 
 ###############################
 # Create Contraction Descriptor
 ###############################
 
-# These also work, but require a bit more keystrokes
-#modesA = np.asarray(modesA, dtype=np.int32)
-#modesB = np.asarray(modesB, dtype=np.int32)
-#modesC = np.asarray(modesC, dtype=np.int32)
-#modesIn = (modesA.ctypes.data, modesB.ctypes.data, modesC.ctypes.data)
-#extentA = np.asarray(extentA, dtype=np.int64)
-#extentB = np.asarray(extentB, dtype=np.int64)
-#extentC = np.asarray(extentC, dtype=np.int64)
-#extentsIn = (extentA.ctypes.data, extentB.ctypes.data, extentC.ctypes.data)
+modes_in = (modes_A, modes_B, modes_C, modes_D)
+extents_in = (extent_A, extent_B, extent_C, extent_D)
+num_modes_in = (nmode_A, nmode_B, nmode_C, nmode_D)
 
-modesIn = (modesA, modesB, modesC)
-extentsIn = (extentA, extentB, extentC)
-numModesIn = (nmodeA, nmodeB, nmodeC)
+# Strides are optional; if no stride (0) is provided, then cuTensorNet assumes a generalized column-major data layout
+strides_in = (0, 0, 0, 0)
 
-# strides are optional; if no stride (0) is provided, then cuTensorNet assumes a generalized column-major data layout
-stridesIn = (0, 0, 0)
+# Set up the tensor qualifiers for all input tensors
+qualifiers_in = np.zeros(num_inputs, dtype=cutn.tensor_qualifiers_dtype)
 
-# compute the alignments
-# we hard-code them here because CuPy arrays are at least 256B aligned
-alignmentsIn = (256, 256, 256)
-alignmentOut = 256
-
-# setup tensor network
-descNet = cutn.create_network_descriptor(handle,
-    numInputs, numModesIn, extentsIn, stridesIn, modesIn, alignmentsIn,  # inputs
-    nmodeD, extentD, 0, modesD, alignmentOut,  # output
+# Set up tensor network
+desc_net = cutn.create_network_descriptor(handle,
+    num_inputs, num_modes_in, extents_in, strides_in, modes_in, qualifiers_in,  # inputs
+    nmode_R, extent_R, 0, modes_R,  # output
     data_type, compute_type)
 
 if rank == root:
@@ -140,38 +131,33 @@ if rank == root:
 # Choose workspace limit based on available resources
 #####################################################
 
-freeMem, totalMem = dev.mem_info
-totalMem = comm.allreduce(totalMem, MPI.MIN)
-workspaceLimit = int(totalMem * 0.9)
+free_mem, total_mem = dev.mem_info
+free_mem = comm.allreduce(free_mem, MPI.MIN)
+workspace_limit = int(free_mem * 0.9)
 
 ##############################################
 # Find "optimal" contraction order and slicing
 ##############################################
 
-optimizerConfig = cutn.create_contraction_optimizer_config(handle)
-optimizerInfo = cutn.create_contraction_optimizer_info(handle, descNet)
-
-# Compute the path on all ranks so that we can choose the path with the lowest cost. Note that since this is a tiny
-# example with 3 operands, all processes will compute the same globally optimal path. This is not the case for large
-# tensor networks. For large networks, hyperoptimization is also beneficial and can be enabled by setting the
-# optimizer config attribute cutn.ContractionOptimizerConfigAttribute.HYPER_NUM_SAMPLES.
+optimizer_config = cutn.create_contraction_optimizer_config(handle)
+optimizer_info = cutn.create_contraction_optimizer_info(handle, desc_net)
 
 # Force slicing
 min_slices_dtype = cutn.contraction_optimizer_config_get_attribute_dtype(
     cutn.ContractionOptimizerConfigAttribute.SLICER_MIN_SLICES)
 min_slices_factor = np.asarray((size,), dtype=min_slices_dtype)
 cutn.contraction_optimizer_config_set_attribute(
-    handle, optimizerConfig, cutn.ContractionOptimizerConfigAttribute.SLICER_MIN_SLICES,
+    handle, optimizer_config, cutn.ContractionOptimizerConfigAttribute.SLICER_MIN_SLICES,
     min_slices_factor.ctypes.data, min_slices_factor.dtype.itemsize)
 
 cutn.contraction_optimize(
-    handle, descNet, optimizerConfig, workspaceLimit, optimizerInfo)
+    handle, desc_net, optimizer_config, workspace_limit, optimizer_info)
 
 flops_dtype = cutn.contraction_optimizer_info_get_attribute_dtype(
     cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT)
 flops = np.zeros((1,), dtype=flops_dtype)
 cutn.contraction_optimizer_info_get_attribute(
-    handle, optimizerInfo, cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
+    handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
     flops.ctypes.data, flops.dtype.itemsize)
 flops = float(flops)
 
@@ -180,9 +166,9 @@ flops, sender = comm.allreduce(sendobj=(flops, rank), op=MPI.MINLOC)
 if rank == root:
     print(f"Process {sender} has the path with the lowest FLOP count {flops}.")
 
-# Get buffer size for optimizerInfo and broadcast it.
+# Get buffer size for optimizer_info and broadcast it.
 if rank == sender:
-    bufSize = cutn.contraction_optimizer_info_get_packed_size(handle, optimizerInfo)
+    bufSize = cutn.contraction_optimizer_info_get_packed_size(handle, optimizer_info)
 else:
     bufSize = 0  # placeholder
 bufSize = comm.bcast(bufSize, sender)
@@ -190,60 +176,59 @@ bufSize = comm.bcast(bufSize, sender)
 # Allocate buffer.
 buf = np.empty((bufSize,), dtype=np.int8)
 
-# Pack optimizerInfo on sender and broadcast it.
+# Pack optimizer_info on sender and broadcast it.
 if rank == sender:
-    cutn.contraction_optimizer_info_pack_data(handle, optimizerInfo, buf, bufSize)
+    cutn.contraction_optimizer_info_pack_data(handle, optimizer_info, buf, bufSize)
 comm.Bcast(buf, sender)
 
-# Unpack optimizerInfo from buffer.
+# Unpack optimizer_info from buffer.
 if rank != sender:
     cutn.update_contraction_optimizer_info_from_packed_data(
-        handle, buf, bufSize, optimizerInfo)
+        handle, buf, bufSize, optimizer_info)
 
-numSlices_dtype = cutn.contraction_optimizer_info_get_attribute_dtype(
+num_slices_dtype = cutn.contraction_optimizer_info_get_attribute_dtype(
     cutn.ContractionOptimizerInfoAttribute.NUM_SLICES)
-numSlices = np.zeros((1,), dtype=numSlices_dtype)
+num_slices = np.zeros((1,), dtype=num_slices_dtype)
 cutn.contraction_optimizer_info_get_attribute(
-    handle, optimizerInfo, cutn.ContractionOptimizerInfoAttribute.NUM_SLICES,
-    numSlices.ctypes.data, numSlices.dtype.itemsize)
-numSlices = int(numSlices)
+    handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.NUM_SLICES,
+    num_slices.ctypes.data, num_slices.dtype.itemsize)
+num_slices = int(num_slices)
 
-assert numSlices > 0
+assert num_slices > 0
 
 # Calculate each process's share of the slices.
-procChunk = numSlices / size
-extra = numSlices % size
-procSliceBegin = rank * procChunk + min(rank, extra)
-procSliceEnd = numSlices if rank == size - 1 else (rank + 1) * procChunk + min(rank + 1, extra)
+proc_chunk = num_slices / size
+extra = num_slices % size
+proc_slice_begin = rank * proc_chunk + min(rank, extra)
+proc_slice_end = num_slices if rank == size - 1 else (rank + 1) * proc_chunk + min(rank + 1, extra)
 
 if rank == root:
     print("Find an optimized contraction path with cuTensorNet optimizer.")
  
-#############################################################
-# Create workspace descriptor, allocate workspace, and set it
-#############################################################
-
-workDesc = cutn.create_workspace_descriptor(handle)
-cutn.workspace_compute_sizes(handle, descNet, optimizerInfo, workDesc)
-requiredWorkspaceSize = cutn.workspace_get_size(
-    handle, workDesc,
-    cutn.WorksizePref.MIN,
-    cutn.Memspace.DEVICE)
-work = cp.cuda.alloc(requiredWorkspaceSize)
-cutn.workspace_set(
-    handle, workDesc,
-    cutn.Memspace.DEVICE,
-    work.ptr, requiredWorkspaceSize)
-
-if rank == root:
-    print("Allocate workspace.")
-
 ###########################################################
 # Initialize all pair-wise contraction plans (for cuTENSOR)
 ###########################################################
 
-plan = cutn.create_contraction_plan(
-    handle, descNet, optimizerInfo, workDesc)
+work_desc = cutn.create_workspace_descriptor(handle)
+cutn.workspace_compute_contraction_sizes(handle, desc_net, optimizer_info, work_desc)
+required_workspace_size = cutn.workspace_get_size(
+    handle, work_desc,
+    cutn.WorksizePref.MIN,
+    cutn.Memspace.DEVICE)
+work = cp.cuda.alloc(required_workspace_size)
+cutn.workspace_set(
+    handle, work_desc,
+    cutn.Memspace.DEVICE,
+    work.ptr, required_workspace_size)
+
+if rank == root:
+    print("Allocate workspace.")
+    
+###########################################################
+# Initialize all pair-wise contraction plans (for cuTENSOR)
+###########################################################
+
+plan = cutn.create_contraction_plan(handle, desc_net, optimizer_info, work_desc)
 
 ###################################################################################
 # Optional: Auto-tune cuTENSOR's cutensorContractionPlan to pick the fastest kernel
@@ -251,49 +236,42 @@ plan = cutn.create_contraction_plan(
 
 pref = cutn.create_contraction_autotune_preference(handle)
 
-numAutotuningIterations = 5  # may be 0
+num_autotuning_iterations = 5  # may be 0
 n_iter_dtype = cutn.contraction_autotune_preference_get_attribute_dtype(
     cutn.ContractionAutotunePreferenceAttribute.MAX_ITERATIONS)
-numAutotuningIterations = np.asarray([numAutotuningIterations], dtype=n_iter_dtype)
+num_autotuning_iterations = np.asarray([num_autotuning_iterations], dtype=n_iter_dtype)
 cutn.contraction_autotune_preference_set_attribute(
     handle, pref,
     cutn.ContractionAutotunePreferenceAttribute.MAX_ITERATIONS,
-    numAutotuningIterations.ctypes.data, numAutotuningIterations.dtype.itemsize)
+    num_autotuning_iterations.ctypes.data, num_autotuning_iterations.dtype.itemsize)
 
 # modify the plan again to find the best pair-wise contractions
 cutn.contraction_autotune(
-    handle, plan, rawDataIn_d, D_d.data.ptr,
-    workDesc, pref, stream.ptr)
+    handle, plan, raw_data_in_d, R_d.data.ptr,
+    work_desc, pref, stream.ptr)
 
 cutn.destroy_contraction_autotune_preference(pref)
 
-if rank == root:
+if rank == root: 
     print("Create a contraction plan for cuTENSOR and optionally auto-tune it.")
  
-#####
-# Run
-#####
+###########
+# Execution
+###########
 
 minTimeCUTENSOR = 1e100
-numRuns = 3  # to get stable perf results
+num_runs = 3  # to get stable perf results
 e1 = cp.cuda.Event()
 e2 = cp.cuda.Event()
+slice_group = cutn.create_slice_group_from_id_range(handle, proc_slice_begin, proc_slice_end, 1)
 
-# Create a cutensornetSliceGroup_t object from a range of slice IDs.
-sliceGroup = cutn.create_slice_group_from_id_range(handle, procSliceBegin, procSliceEnd, 1)
-
-for i in range(numRuns):
-    dev.synchronize()
-
-    # Contract over the range of slices this process is responsible for.
-
-    # Don't accumulate into output since we use a one-process-per-gpu model.
-    accumulateOutput = False
-
+for i in range(num_runs):
+    # Contract over all slices.
+    # A user may choose to parallelize over the slices across multiple devices.
     e1.record()
     cutn.contract_slices(
-        handle, plan, rawDataIn_d, D_d.data.ptr, accumulateOutput,
-        workDesc, sliceGroup, stream.ptr)
+        handle, plan, raw_data_in_d, R_d.data.ptr, False,
+        work_desc, slice_group, stream.ptr)
     e2.record()
 
     # Synchronize and measure timing
@@ -302,40 +280,53 @@ for i in range(numRuns):
     minTimeCUTENSOR = minTimeCUTENSOR if minTimeCUTENSOR < time else time
 
 if rank == root:
-    print("Contract the network, all slices within the same rank use the same contraction plan.")
-    print(f"numSlices: {numSlices}")
-    numSlicesProc = procSliceEnd - procSliceBegin
-    print(f"numSlices on root process: {numSlicesProc}")
-    if numSlicesProc > 0:
-        print(f"{minTimeCUTENSOR * 1000 / numSlicesProc} ms / slice")
+    print("Contract the network, each slice uses the same contraction plan.")
 
-cutn.destroy_slice_group(sliceGroup)
-D[...] = cp.asnumpy(D_d).reshape(extentD, order='F')
+# free up the workspace
+del work
+
+R[...] = cp.asnumpy(R_d).reshape(extent_R, order='F')
 # Reduce on root process.
 if rank == root:
-    comm.Reduce(MPI.IN_PLACE, D, root=root)
+    comm.Reduce(MPI.IN_PLACE, R, root=root)
 else:
-    comm.Reduce(D, D, root=root)
+    comm.Reduce(R, R, root=root)
 
 # Compute the reference result.
 if rank == root:
-    # recall that we set strides to null (0), so the data are in F-contiguous layout
-    A_d = A_d.reshape(extentA, order='F')
-    B_d = B_d.reshape(extentB, order='F')
-    C_d = C_d.reshape(extentC, order='F')
-    D_d = D_d.reshape(extentD, order='F')
-    out = cp.einsum("mhkn,ukh,xuy->mxny", A_d, B_d, C_d)
-    if not cp.allclose(out, D):
+    # Recall that we set strides to null (0), so the data are in F-contiguous layout
+    A_d = A_d.reshape(extent_A, order='F')
+    B_d = B_d.reshape(extent_B, order='F')
+    C_d = C_d.reshape(extent_C, order='F')
+    D_d = D_d.reshape(extent_D, order='F')    
+    path, _ = cuquantum.einsum_path("abcdef,bgheij,magfik,lchdjm->kl", A_d, B_d, C_d, D_d)
+    out = cp.einsum("abcdef,bgheij,magfik,lchdjm->kl", A_d, B_d, C_d, D_d, optimize=path)
+
+    if not cp.allclose(out, R):
         raise RuntimeError("result is incorrect")
     print("Check cuTensorNet result against that of cupy.einsum().")
 
 #######################################################
 
+flops_dtype = cutn.contraction_optimizer_info_get_attribute_dtype(
+    cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT)
+flops = np.zeros((1,), dtype=flops_dtype)
+cutn.contraction_optimizer_info_get_attribute(
+    handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
+    flops.ctypes.data, flops.dtype.itemsize)
+flops = float(flops)
+
+if rank == root:
+    print(f"num_slices: {num_slices}")
+    print(f"{minTimeCUTENSOR * 1000 / num_slices} ms / slice")
+    print(f"{flops / 1e9 / minTimeCUTENSOR} GFLOPS/s")
+
+cutn.destroy_slice_group(slice_group)
 cutn.destroy_contraction_plan(plan)
-cutn.destroy_contraction_optimizer_info(optimizerInfo)
-cutn.destroy_contraction_optimizer_config(optimizerConfig)
-cutn.destroy_network_descriptor(descNet)
-cutn.destroy_workspace_descriptor(workDesc)
+cutn.destroy_contraction_optimizer_info(optimizer_info)
+cutn.destroy_contraction_optimizer_config(optimizer_config)
+cutn.destroy_network_descriptor(desc_net)
+cutn.destroy_workspace_descriptor(work_desc)
 cutn.destroy(handle)
 
 if rank == root:

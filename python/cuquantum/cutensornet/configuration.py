@@ -11,7 +11,7 @@ __all__ = ['NetworkOptions', 'OptimizerInfo', 'OptimizerOptions', 'PathFinderOpt
 import collections
 from dataclasses import dataclass
 from logging import Logger
-from typing import Dict, Hashable, Iterable, Mapping, Optional, Tuple, Union
+from typing import Dict, Hashable, Iterable, Literal, Mapping, Optional, Tuple, Union
 
 import cupy as cp
 
@@ -34,6 +34,10 @@ class NetworkOptions(object):
         logger (logging.Logger): Python Logger object. The root logger will be used if a logger object is not provided.
         memory_limit: Maximum memory available to cuTensorNet. It can be specified as a value (with optional suffix like
             K[iB], M[iB], G[iB]) or as a percentage. The default is 80%.
+        blocking: A flag specifying the behavior of the execution methods :meth:`Network.autotune` and :meth:`Network.contract`.
+            When ``blocking`` is ``True``, these methods do not return until the operation is complete. When blocking is ``"auto"``,
+            the methods return immediately when the input tensors are on the GPU. The execution methods always block when the
+            input tensors are on the CPU. The default is ``True``.
         allocator: An object that supports the :class:`BaseCUDAMemoryManager` protocol, used to draw device memory. If an
             allocator is not provided, a memory allocator from the library package will be used
             (:func:`torch.cuda.caching_allocator_alloc` for PyTorch operands, :func:`cupy.cuda.alloc` otherwise).
@@ -43,6 +47,7 @@ class NetworkOptions(object):
     handle : Optional[int] = None
     logger : Optional[Logger] = None
     memory_limit : Optional[Union[int, str]] = r'80%'
+    blocking : Literal[True, "auto"] = True
     allocator : Optional[BaseCUDAMemoryManager] = None
 
     def __post_init__(self):
@@ -63,6 +68,9 @@ class NetworkOptions(object):
             m2 = MEM_LIMIT_RE_VAL.match(self.memory_limit)
             if not (m1 or m2):
                 raise ValueError(MEM_LIMIT_DOC % self.memory_limit)
+
+        if self.blocking != True and self.blocking != "auto":
+            raise ValueError("The value specified for blocking must be either True or 'auto'.")
 
         if self.allocator is not None and not isinstance(self.allocator, BaseCUDAMemoryManager):
             raise TypeError("The allocator must be an object of type that fulfils the BaseCUDAMemoryManager protocol.")
@@ -104,6 +112,8 @@ class OptimizerOptions(object):
         reconfiguration: Options for the reconfiguration algorithm as a :class:`~cuquantum.ReconfigOptions` object or dict containing the
             ``(parameter, value)`` items for ``ReconfigOptions``.
         seed: Optional seed for the random number generator. See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED`.
+        cost_function: The objective function to use for finding the optimal contraction path.
+            See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE`.
     """
     samples : Optional[int] = None
     threads : Optional[int] = None
@@ -111,6 +121,7 @@ class OptimizerOptions(object):
     slicing : Optional[Union[SlicerOptions, ModeSequenceType, ModeExtentSequenceType]] = None
     reconfiguration : Optional[ReconfigOptions] = None
     seed : Optional[int] = None
+    cost_function: Optional[int] = None
 
     def _check_option(self, option, option_class, checker=None):
         if isinstance(option, option_class):
@@ -160,6 +171,8 @@ class OptimizerOptions(object):
         self.slicing = self._check_option(self.slicing, SlicerOptions, self._check_specified_slices)
         self.reconfiguration = self._check_option(self.reconfiguration, ReconfigOptions, None)
         self._check_int(self.seed, "seed")
+        if self.cost_function is not None:
+            self.cost_function = cuquantum.cutensornet.OptimizerCost(self.cost_function)
 
 
 @dataclass

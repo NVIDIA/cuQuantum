@@ -72,6 +72,17 @@ The re for the filter must contain the named group 'option_name'."""
     return options_class
 
 
+def snake_to_camel(names):
+    name = ""
+    for i, sub_name in enumerate(names):
+        if i == 0:
+            name += sub_name.lower()
+        else:
+            name += sub_name[0].upper() + sub_name[1:]
+    name += "_t"
+    return name
+
+
 def camel_to_snake(name, upper=True):
     """
     Convert string from camel case to snake style.

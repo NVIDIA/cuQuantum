@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import itertools
 from types import MappingProxyType
 
 try:
@@ -20,8 +21,11 @@ except ImportError:
     qiskit = None
 
 from cuquantum import contract, CircuitToEinsum
+from cuquantum.cutensornet._internal.circuit_converter_utils import convert_mode_labels_to_expression
 from cuquantum.cutensornet._internal.circuit_converter_utils import EINSUM_SYMBOLS_BASE
-from .testutils import atol_mapper, rtol_mapper
+from cuquantum.cutensornet._internal.circuit_converter_utils import get_pauli_gates
+from cuquantum.cutensornet._internal.circuit_converter_utils import parse_gates_to_mode_labels_operands
+from .test_utils import atol_mapper, rtol_mapper
 
 
 # note: this implementation would cause pytorch tests being silently skipped
@@ -65,6 +69,11 @@ def where_fixed_generator(qubits, nfix_max, nsite_max=None):
             for nsite in range(1, nsite_max):
                 where = [qubits[indices[ix]] for ix in range(nfix, nfix+nsite)]
                 yield where, fixed
+
+
+def random_pauli_string_generator(n_qubits, num_strings=4):
+    for _ in range(num_strings):
+        yield ''.join(np.random.choice(['I','X', 'Y', 'Z'], n_qubits))
 
 
 def get_partial_indices(qubits, fixed):
@@ -189,23 +198,24 @@ class BaseTester:
         self.nsite_max = max(1, min(nsite_max, self.n_qubits-1))
         self.nfix_max = max(min(nfix_max, self.n_qubits-nsite_max-1), 0)
         
-    def get_state_vector_from_simulator(self, fixed=EMPTY_DICT):
+    def get_state_vector_from_simulator(self):
         if self.sv is None:
             self.sv = self._get_state_vector_from_simulator()
-        if fixed:
-            partial_indices = get_partial_indices(self.qubits, fixed)
-            sv = self.sv[tuple(partial_indices)]
-            return sv.reshape((2,)*(self.n_qubits-len(fixed)))
-        else:
-            return self.sv
+        return self.sv
     
     def get_amplitude_from_simulator(self, bitstring):
         sv = self.get_state_vector_from_simulator()
         index = [int(ibit) for ibit in bitstring]
         return sv[tuple(index)]
     
+    def get_batched_amplitudes_from_simulator(self, fixed):
+        sv = self.get_state_vector_from_simulator()
+        partial_indices = get_partial_indices(self.qubits, fixed)
+        batched_amplitudes = sv[tuple(partial_indices)]
+        return batched_amplitudes.reshape((2,)*(self.n_qubits-len(fixed)))
+    
     def get_reduced_density_matrix_from_simulator(self, where, fixed=EMPTY_DICT):
-        """
+        r"""
         For where = (a, b), reduced density matrix is formulated as:
         :math: `rho_{a,b,a^{\prime},b^{\prime}}  = \sum_{c,d,e,...} SV^{\star}_{a^{\prime}, b^{\prime}, c, d, e, ...} SV_{a, b, c, d, e, ...}`
         """
@@ -229,19 +239,43 @@ class BaseTester:
         else:
             rdm = contract(expression, sv, sv.conj())
         return rdm
+    
+    def get_expectation_from_sv(self, pauli_string):
         
+        input_mode_labels = [[*range(self.n_qubits)]]
+        qubits_frontier = dict(zip(self.qubits, itertools.count()))
+        next_frontier = max(qubits_frontier.values()) + 1
+
+        pauli_map = dict(zip(self.qubits, pauli_string))
+        dtype = getattr(self.backend, self.dtype)
+        pauli_gates = get_pauli_gates(pauli_map, dtype=dtype, backend=self.backend)
+        gate_mode_labels, gate_operands = parse_gates_to_mode_labels_operands(pauli_gates, 
+                                                                              qubits_frontier, 
+                                                                              next_frontier)
+
+        mode_labels = input_mode_labels + gate_mode_labels + [[qubits_frontier[ix] for ix in self.qubits]]
+        output_mode_labels = []
+        expression = convert_mode_labels_to_expression(mode_labels, output_mode_labels)
+
+        sv = self.get_state_vector_from_simulator()
+        if self.backend is torch:
+            operands = [sv] + gate_operands + [sv.conj().resolve_conj()]
+        else:
+            operands = [sv] + gate_operands + [sv.conj()]
+        expec = contract(expression, *operands)
+        return expec
+
     def _get_state_vector_from_simulator(self):
         raise NotImplementedError
                 
     def test_state_vector(self):
-        for fixed in where_fixed_generator(self.qubits, self.nfix_max):
-            expression, operands = self.converter.state_vector(fixed=fixed)
-            sv1 = contract(expression, *operands)
-            sv2 = self.get_state_vector_from_simulator(fixed=fixed)
-            self.backend.allclose(
-                sv1, sv2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
+        expression, operands = self.converter.state_vector()
+        sv1 = contract(expression, *operands)
+        sv2 = self.get_state_vector_from_simulator()
+        self.backend.allclose(
+            sv1, sv2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
     
-    def test_bitstrings(self):
+    def test_amplitude(self):
         for bitstring in bitstring_generator(self.n_qubits, self.nsample):    
             expression, operands = self.converter.amplitude(bitstring)
             amp1 = contract(expression, *operands)
@@ -249,7 +283,15 @@ class BaseTester:
             self.backend.allclose(
                 amp1, amp2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
     
-    def test_reduced_density_matrices(self):
+    def test_batched_amplitudes(self):
+        for fixed in where_fixed_generator(self.qubits, self.nfix_max):
+            expression, operands = self.converter.batched_amplitudes(fixed)
+            batched_amps1 = contract(expression, *operands)
+            batched_amps2 = self.get_batched_amplitudes_from_simulator(fixed)
+            self.backend.allclose(
+                batched_amps1, batched_amps2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
+    
+    def test_reduced_density_matrix(self):
         for where, fixed in where_fixed_generator(self.qubits, self.nfix_max, nsite_max=self.nsite_max):
             expression1, operands1 = self.converter.reduced_density_matrix(where, fixed=fixed, lightcone=True)
             expression2, operands2 = self.converter.reduced_density_matrix(where, fixed=fixed, lightcone=False)
@@ -262,11 +304,27 @@ class BaseTester:
                 rdm1, rdm2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
             self.backend.allclose(
                 rdm1, rdm3, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
+    
+    def test_expectation(self):
+        for pauli_string in random_pauli_string_generator(self.n_qubits, 2):
+            expression1, operands1 = self.converter.expectation(pauli_string, lightcone=True)
+            expression2, operands2 = self.converter.expectation(pauli_string, lightcone=False)
+            assert len(operands1) <= len(operands2)
+            expec1 = contract(expression1, *operands1)
+            expec2 = contract(expression2, *operands2)
+            expec3 = self.get_expectation_from_sv(pauli_string)
+
+            self.backend.allclose(
+                expec1, expec2, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
+            self.backend.allclose(
+                expec1, expec3, atol=atol_mapper[self.dtype], rtol=rtol_mapper[self.dtype])
 
     def run_tests(self):
         self.test_state_vector()
-        self.test_bitstrings()
-        self.test_reduced_density_matrices()
+        self.test_amplitude()
+        self.test_batched_amplitudes()
+        self.test_reduced_density_matrix()
+        self.test_expectation()
 
 
 class CirqTester(BaseTester):

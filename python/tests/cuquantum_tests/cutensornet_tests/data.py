@@ -2,20 +2,17 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-try:
-    import torch
-except ImportError:
-    torch = None
-
 import cuquantum
 
 
-# note: this implementation would cause pytorch tests being silently skipped
-# if pytorch is not available, which is the desired effect since otherwise
-# it'd be too noisy
-backend_names = ("numpy", "cupy")
-if torch:
-    backend_names += ("torch-cpu", "torch-gpu")
+# We include torch tests here unconditionally, and use pytest deselect to
+# exclude them if torch is not present.
+backend_names = (
+    "numpy",
+    "cupy",
+    "torch-cpu",
+    "torch-gpu",
+)
 
 
 dtype_names = (

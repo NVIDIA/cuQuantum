@@ -8,6 +8,7 @@ A collection of functions for parsing Einsum expressions.
 
 from collections import Counter
 from itertools import chain
+import string
 
 import numpy as np
 
@@ -59,7 +60,7 @@ It is not permitted to specify more than one '->' in the Einstein summation expr
         """
         Parse single operand mode labels considering ellipsis. Leading or trailing whitespace, if present, is removed.
         """
-        subexpr = single.strip().split('...')
+        subexpr = single.strip(string.whitespace).split('...')
         n = len(subexpr)
         expr = [[Ellipsis]] * (2*n - 1)
         expr[::2] = subexpr
@@ -73,7 +74,7 @@ It is not permitted to specify more than one '->' in the Einstein summation expr
         for s in single:
             if s is Ellipsis:
                 continue
-            if s.isspace() or s in disallowed_labels:
+            if s in string.whitespace or s in disallowed_labels:
                 return False
 
         return True

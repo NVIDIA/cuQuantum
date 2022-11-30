@@ -34,18 +34,27 @@ cdef extern from * nogil:
     # network descriptor
     int cutensornetCreateNetworkDescriptor(
         _Handle, int32_t, const int32_t[], const int64_t* const[],
-        const int64_t* const[], const int32_t* const[], const uint32_t[],
+        const int64_t* const[], const int32_t* const[], const _TensorQualifiers[],
         int32_t, const int64_t[], const int64_t[], const int32_t[],
-        uint32_t, DataType, _ComputeType, _NetworkDescriptor*)
+        DataType, _ComputeType, _NetworkDescriptor*)
     int cutensornetDestroyNetworkDescriptor(_NetworkDescriptor)
     int cutensornetGetOutputTensorDetails(
         const _Handle, const _NetworkDescriptor,
+        int32_t*, size_t*, int32_t*, int64_t*, int64_t*)
+    int cutensornetGetOutputTensorDescriptor(
+        const _Handle, const _NetworkDescriptor,
+        _TensorDescriptor*)
+    int cutensornetGetTensorDetails(
+        const _Handle, const _TensorDescriptor,
         int32_t*, size_t*, int32_t*, int64_t*, int64_t*)
 
     # workspace descriptor
     int cutensornetCreateWorkspaceDescriptor(
         const _Handle, _WorkspaceDescriptor*)
     int cutensornetWorkspaceComputeSizes(
+        const _Handle, const _NetworkDescriptor,
+        const _ContractionOptimizerInfo, _WorkspaceDescriptor)
+    int cutensornetWorkspaceComputeContractionSizes(
         const _Handle, const _NetworkDescriptor,
         const _ContractionOptimizerInfo, _WorkspaceDescriptor)
     int cutensornetWorkspaceGetSize(
@@ -150,6 +159,60 @@ cdef extern from * nogil:
     int cutensornetLoggerSetMask(int32_t)
     int cutensornetLoggerForceDisable()
 
+    # tensor descriptor
+    int cutensornetCreateTensorDescriptor(
+        _Handle, int32_t, const int64_t[], const int64_t[], const int32_t[],
+        DataType, _TensorDescriptor*)
+    int cutensornetDestroyTensorDescriptor(_TensorDescriptor)
+
+    # svdConfig
+    int cutensornetCreateTensorSVDConfig(_Handle, _TensorSVDConfig*)
+    int cutensornetDestroyTensorSVDConfig(_TensorSVDConfig)
+    int cutensornetTensorSVDConfigGetAttribute(
+        _Handle, _TensorSVDConfig, _TensorSVDConfigAttribute, void*, size_t)
+    int cutensornetTensorSVDConfigSetAttribute(
+        _Handle, _TensorSVDConfig, _TensorSVDConfigAttribute, void*, size_t)
+
+    # svdInfo
+    int cutensornetCreateTensorSVDInfo(_Handle, _TensorSVDInfo*)
+    int cutensornetDestroyTensorSVDInfo(_TensorSVDInfo)
+    int cutensornetTensorSVDInfoGetAttribute(
+        _Handle, _TensorSVDInfo, _TensorSVDInfoAttribute, void*, size_t)
+
+    # tensorSVD
+    int cutensornetWorkspaceComputeSVDSizes(
+        _Handle, _TensorDescriptor, _TensorDescriptor, _TensorDescriptor,
+        _TensorSVDConfig, _WorkspaceDescriptor)
+    int cutensornetTensorSVD(
+        _Handle, _TensorDescriptor, void*, _TensorDescriptor, void*, void*,
+        _TensorDescriptor, void*, _TensorSVDConfig, _TensorSVDInfo,
+        _WorkspaceDescriptor, Stream)
+
+    # tensorQR
+    int cutensornetWorkspaceComputeQRSizes(
+        _Handle, _TensorDescriptor, _TensorDescriptor, _TensorDescriptor,
+        _WorkspaceDescriptor)
+    int cutensornetTensorQR(
+        _Handle, _TensorDescriptor, void*, _TensorDescriptor, void*,
+        _TensorDescriptor, void*, _WorkspaceDescriptor, Stream)
+
+    # gate split
+    int cutensornetWorkspaceComputeGateSplitSizes(
+        _Handle, _TensorDescriptor, _TensorDescriptor, _TensorDescriptor,
+        _TensorDescriptor, _TensorDescriptor, _GateSplitAlgo,
+        _TensorSVDConfig, _ComputeType, _WorkspaceDescriptor)
+    int cutensornetGateSplit(
+        _Handle, _TensorDescriptor, void*, _TensorDescriptor, void*,
+        _TensorDescriptor, void*, _TensorDescriptor, void*, void*,
+        _TensorDescriptor, void*, _GateSplitAlgo, _TensorSVDConfig,
+        _ComputeType, _TensorSVDInfo, _WorkspaceDescriptor, Stream)
+
+    # distributed
+    int cutensornetDistributedResetConfiguration(_Handle, void*, size_t)
+    int cutensornetDistributedGetNumRanks(_Handle, int*)
+    int cutensornetDistributedGetProcRank(_Handle, int*)
+    int cutensornetDistributedSynchronize(_Handle)
+
 
 class cuTensorNetError(RuntimeError):
     def __init__(self, status):
@@ -225,9 +288,9 @@ cpdef size_t get_cudart_version() except*:
 cpdef intptr_t create_network_descriptor(
         intptr_t handle,
         int32_t n_inputs, n_modes_in, extents_in,
-        strides_in, modes_in, alignments_in,
+        strides_in, modes_in, qualifiers_in,
         int32_t n_modes_out, extents_out,
-        strides_out, modes_out, uint32_t alignment_out,
+        strides_out, modes_out,
         int data_type, int compute_type) except*:
     """Create a tensor network descriptor.
 
@@ -261,11 +324,11 @@ cpdef intptr_t create_network_descriptor(
               to the corresponding tensor's modes
             - a nested Python sequence of :class:`int`
 
-        alignments_in: A host array of alignments for each input tensor. It can
+        qualifiers_in: A host array of qualifiers for each input tensor. It can
             be
 
-            - an :class:`int` as the pointer address to the array
-            - a Python sequence of :class:`int`
+            - an :class:`int` as the pointer address to the numpy array with dtype `tensor_qualifiers_dtype`
+            - a numpy array with dtype `tensor_qualifiers_dtype`
 
         n_modes_out (int32_t): The number of modes of the output tensor. If
             this is set to -1 and ``modes_out`` is set to 0 (not provided),
@@ -286,7 +349,6 @@ cpdef intptr_t create_network_descriptor(
             - an :class:`int` as the pointer address to the array
             - a Python sequence of :class:`int`
 
-        alignment_out (uint32_t): The alignment for the output tensor.
         data_type (cuquantum.cudaDataType): The data type of the input and
             output tensors.
         compute_type (cuquantum.ComputeType): The compute type of the tensor
@@ -388,14 +450,13 @@ cpdef intptr_t create_network_descriptor(
         # a pointer address, take it as is
         modesInPtr = <int32_t**><intptr_t>modes_in
 
-    # alignments_in can be a pointer address, or a Python sequence
-    cdef vector[uint32_t] alignmentsInData
-    cdef uint32_t* alignmentsInPtr
-    if cpython.PySequence_Check(alignments_in):
-        alignmentsInData = alignments_in
-        alignmentsInPtr = alignmentsInData.data()
-    else:  # a pointer address
-        alignmentsInPtr = <uint32_t*><intptr_t>alignments_in
+    # qualifiers_in can be a pointer address or a numpy array
+    cdef _TensorQualifiers* qualifiersInPtr
+    if isinstance(qualifiers_in, _numpy.ndarray):
+        assert qualifiers_in.dtype == tensor_qualifiers_dtype
+        qualifiersInPtr = <_TensorQualifiers*><intptr_t>qualifiers_in.ctypes.data
+    else:
+        qualifiersInPtr = <_TensorQualifiers*><intptr_t> qualifiers_in 
 
     # extents_out can be a pointer address, or a Python sequence
     cdef vector[int64_t] extentsOutData
@@ -427,8 +488,8 @@ cpdef intptr_t create_network_descriptor(
     cdef _NetworkDescriptor tn_desc
     with nogil:
         status = cutensornetCreateNetworkDescriptor(<_Handle>handle,
-            n_inputs, numModesInPtr, extentsInPtr, stridesInPtr, modesInPtr, alignmentsInPtr,
-            n_modes_out, extentsOutPtr, stridesOutPtr, modesOutPtr, alignment_out,
+            n_inputs, numModesInPtr, extentsInPtr, stridesInPtr, modesInPtr, qualifiersInPtr,
+            n_modes_out, extentsOutPtr, stridesOutPtr, modesOutPtr,
             <DataType>data_type, <_ComputeType>compute_type, &tn_desc)
     check_status(status)
     return <intptr_t>tn_desc
@@ -461,6 +522,10 @@ cpdef tuple get_output_tensor_details(intptr_t handle, intptr_t tn_desc):
 
     .. seealso:: `cutensornetGetOutputTensorDetails`
     """
+    warnings.warn("cuquantum.cutensornet.get_output_tensor_details() is "
+                  "deprecated and will be removed in a future release; please "
+                  "switch to cuquantum.cutensornet.get_output_tensor_descriptor() "
+                  "instead", DeprecationWarning, 2)
     cdef int32_t numModesOut = 0
     with nogil:
         status = cutensornetGetOutputTensorDetails(
@@ -476,6 +541,63 @@ cpdef tuple get_output_tensor_details(intptr_t handle, intptr_t tn_desc):
     with nogil:
         status = cutensornetGetOutputTensorDetails(
             <_Handle>handle, <_NetworkDescriptor>tn_desc,
+            &numModesOut, NULL, mPtr, ePtr, sPtr)
+    check_status(status)
+    return (numModesOut, modes, extents, strides)
+
+cpdef intptr_t get_output_tensor_descriptor(
+        intptr_t handle, intptr_t tn_desc) except*:
+    """Get the networks output tensor descriptor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tn_desc (intptr_t): The tensor network descriptor.
+
+    Returns:
+        intptr_t: An opaque descriptor handle (as Python :class:`int`).
+            Users are responsible to call :func:`destroy_tensor_descriptor` to
+            clean it up. 
+
+    .. seealso:: `cutensornetGetOutputTensorDescriptor`
+    """
+    cdef _TensorDescriptor desc
+    with nogil:
+        status = cutensornetGetOutputTensorDescriptor(
+            <_Handle>handle, <_NetworkDescriptor>tn_desc, &desc)
+    check_status(status)
+    return <intptr_t>desc
+
+
+cpdef tuple get_tensor_details(intptr_t handle, intptr_t desc):
+    """Get the tensor's metadata.
+
+    Args:
+        handle (intptr_t): The library handle.
+        desc (intptr_t): A tensor descriptor.
+
+    Returns:
+        tuple:
+            The metadata of the tensor: ``(num_modes, modes, extents,
+            strides)``.
+
+    .. seealso:: `cutensornetGetTensorDetails`
+
+    """
+    cdef int32_t numModesOut = 0
+    with nogil:
+        status = cutensornetGetTensorDetails(
+            <_Handle>handle, <_TensorDescriptor>desc,
+            &numModesOut, NULL, NULL, NULL, NULL)
+    check_status(status)
+    modes = _numpy.empty(numModesOut, dtype=_numpy.int32)
+    extents = _numpy.empty(numModesOut, dtype=_numpy.int64)
+    strides = _numpy.empty(numModesOut, dtype=_numpy.int64)
+    cdef int32_t* mPtr = <int32_t*><intptr_t>modes.ctypes.data
+    cdef int64_t* ePtr = <int64_t*><intptr_t>extents.ctypes.data
+    cdef int64_t* sPtr = <int64_t*><intptr_t>strides.ctypes.data
+    with nogil:
+        status = cutensornetGetTensorDetails(
+            <_Handle>handle, <_TensorDescriptor>desc,
             &numModesOut, NULL, mPtr, ePtr, sPtr)
     check_status(status)
     return (numModesOut, modes, extents, strides)
@@ -523,11 +645,40 @@ cpdef workspace_compute_sizes(
         tn_desc (intptr_t): The tensor network descriptor.
         info (intptr_t): The optimizer info handle.
         workspace (intptr_t): The workspace descriptor.
+    
+    .. warning::
+
+       This function is deprecated and will be removed in a future release.
+       Use :func:`workspace_compute_contraction_sizes` instead.
 
     .. seealso:: `cutensornetWorkspaceComputeSizes`
     """
+    warnings.warn("cuquantum.cutensornet.workspace_compute_sizes() is deprecated and will "
+                  "be removed in the future; please switch to "
+                  "cuquantum.cutensornet.workspace_compute_contraction_sizes() instead",
+                  DeprecationWarning, 2)
     with nogil:
         status = cutensornetWorkspaceComputeSizes(
+            <_Handle>handle, <_NetworkDescriptor>tn_desc,
+            <_ContractionOptimizerInfo>info,
+            <_WorkspaceDescriptor>workspace)
+    check_status(status)
+
+
+cpdef workspace_compute_contraction_sizes(
+        intptr_t handle, intptr_t tn_desc, intptr_t info, intptr_t workspace):
+    """Compute the required workspace sizes for tensor network contraction.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tn_desc (intptr_t): The tensor network descriptor.
+        info (intptr_t): The optimizer info handle.
+        workspace (intptr_t): The workspace descriptor.
+    
+    .. seealso:: `cutensornetWorkspaceComputeContractionSizes`
+    """
+    with nogil:
+        status = cutensornetWorkspaceComputeContractionSizes(
             <_Handle>handle, <_NetworkDescriptor>tn_desc,
             <_ContractionOptimizerInfo>info,
             <_WorkspaceDescriptor>workspace)
@@ -713,12 +864,34 @@ cpdef destroy_contraction_optimizer_info(intptr_t info):
 
 ######################### Python specific utility #########################
 
+contraction_path_dtype = _numpy.dtype(
+    {'names':['num_contractions','data'],
+     'formats': (_numpy.uint32, _numpy.intp),
+     'itemsize': sizeof(_ContractionPath),
+    }, align=True
+)
+
+# We need this dtype because its members are not of the same type...
+slice_info_pair_dtype = _numpy.dtype(
+    {'names': ('sliced_mode','sliced_extent'),
+     'formats': (_numpy.int32, _numpy.int64),
+     'itemsize': sizeof(_SliceInfoPair),
+    }, align=True
+)
+
+slicing_config_dtype = _numpy.dtype(
+    {'names': ('num_sliced_modes','data'),
+     'formats': (_numpy.uint32, _numpy.intp),
+     'itemsize': sizeof(_SlicingConfig),
+    }, align=True
+)
+
 cdef dict contract_opti_info_sizes = {
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_SLICES: _numpy.int64,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_SLICED_MODES: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_SLICED_MODE: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_SLICED_EXTENT: _numpy.int64,
-    CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_PATH: ContractionPath,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_PATH: contraction_path_dtype,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_PHASE1_FLOP_COUNT: _numpy.float64,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT: _numpy.float64,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_LARGEST_TENSOR: _numpy.float64,
@@ -727,6 +900,7 @@ cdef dict contract_opti_info_sizes = {
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_INTERMEDIATE_MODES: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_EFFECTIVE_FLOPS_EST: _numpy.float64,
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_RUNTIME_EST: _numpy.float64,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_SLICING_CONFIG: slicing_config_dtype,
 }
 
 cpdef contraction_optimizer_info_get_attribute_dtype(int attr):
@@ -736,7 +910,8 @@ cpdef contraction_optimizer_info_get_attribute_dtype(int attr):
         attr (ContractionOptimizerInfoAttribute): The attribute to query.
 
     Returns:
-        The data type of the queried attribute.
+        The data type of the queried attribute. The returned dtype is always
+        a valid NumPy dtype object.
 
     .. note:: This API has no C counterpart and is a convenient helper for
         allocating memory for :func:`contraction_optimizer_info_get_attribute`
@@ -750,23 +925,26 @@ cpdef contraction_optimizer_info_get_attribute_dtype(int attr):
             val = ContractionOptimizerInfoAttribute.PATH
             dtype = contraction_optimizer_info_get_attribute_dtype(val)
 
-            # setter
+            # for setting a path
             path = np.asarray([(1, 3), (1, 2), (0, 1)], dtype=np.int32)
-            path_obj = dtype(path.size//2, path.ctypes.data)
-            contraction_optimizer_info_set_attribute(
-                handle, info, val, path_obj.get_data(), path_obj.get_size())
-
-            # getter
-            # num_contractions is the number of input tensors minus one
+            # ... or for getting a path; note that num_contractions is the number of
+            # input tensors minus one
             path = np.empty(2*num_contractions, dtype=np.int32)
-            path_obj = dtype(num_contractions, path.ctypes.data)
+
+            path_obj = np.zeros((1,), dtype=dtype)
+            path_obj["num_contractions"] = path.size // 2
+            path_obj["node_pair"] = path.ctypes.ptr
+
+            # for setting a path
+            contraction_optimizer_info_set_attribute(
+                handle, info, val, path_obj.ctypes.data, path_obj.dtype.itemsize)
+
+            # for getting a path
             contraction_optimizer_info_get_attribute(
-                handle, info, val, path_obj.get_data(), path_obj.get_size())
+                handle, info, val, path_obj.ctypes.data, path_obj.dtype.itemsize)
             # now path is filled
             print(path)
 
-        See also the documentation of :class:`ContractionPath`. This design is subject
-        to change in a future release.
     """
     return contract_opti_info_sizes[attr]
 
@@ -788,9 +966,6 @@ cpdef contraction_optimizer_info_get_attribute(
 
     .. note:: To compute ``size``, use the itemsize of the corresponding data
         type, which can be queried using :func:`contraction_optimizer_info_get_attribute_dtype`.
-
-    .. note:: For getting the :data:`ContractionOptimizerInfoAttribute.PATH` attribute
-        please see :func:`contraction_optimizer_info_get_attribute_dtype`.
 
     .. seealso:: `cutensornetContractionOptimizerInfoGetAttribute`
     """
@@ -816,9 +991,6 @@ cpdef contraction_optimizer_info_set_attribute(
 
     .. note:: To compute ``size``, use the itemsize of the corresponding data
         type, which can be queried using :func:`contraction_optimizer_info_get_attribute_dtype`.
-
-    .. note:: For setting the :data:`ContractionOptimizerInfoAttribute.PATH` attribute
-        please see :func:`contraction_optimizer_info_get_attribute_dtype`.
 
     .. seealso:: `cutensornetContractionOptimizerInfoSetAttribute`
     """
@@ -1272,7 +1444,7 @@ cpdef contraction(
         stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
             :class:`int`).
 
-    .. note::
+    .. warning::
 
        This function is deprecated and will be removed in a future release.
        Use :func:`contract_slices` instead.
@@ -1623,70 +1795,582 @@ cpdef logger_force_disable():
     check_status(status)
 
 
-cdef class ContractionPath:
-    """A proxy object to hold a `cutensornetContractionPath_t` struct.
+cpdef intptr_t create_tensor_descriptor(
+        intptr_t handle, int32_t n_modes, extents, strides, modes,
+        int data_type) except*:
+    """Create a tensor descriptor.
 
-    Users provide the number of contractions and a pointer address to the actual
-    contraction path, and this object creates an `cutensornetContractionPath_t`
-    instance and fills in the provided information.
+    Args:
+        handle (intptr_t): The library handle.
+        n_modes (int32_t): The number of modes of the tensor.
+        extents: The extents of the tensor (on host). It can be
 
-    Example:
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        strides: The strides of the tensor (on host). It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        modes: The modes of the tensor (on host). It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        data_type (cuquantum.cudaDataType): The data type of the tensor.
+
+    Returns:
+        intptr_t: An opaque descriptor handle (as Python :class:`int`).
+
+    .. note::
+        If ``strides`` is set to 0 (``NULL``), it means the tensor is in
+        the Fortran layout (F-contiguous).
+
+    .. seealso:: `cutensornetCreateTensorDescriptor`
+    """
+    # extents can be a pointer address, or a Python sequence
+    cdef vector[int64_t] extentsData
+    cdef int64_t* extentsPtr
+    if cpython.PySequence_Check(extents):
+        extentsData = extents
+        extentsPtr = extentsData.data()
+    else:  # a pointer address
+        extentsPtr = <int64_t*><intptr_t>extents
+
+    # strides can be a pointer address, or a Python sequence
+    cdef vector[int64_t] stridesData
+    cdef int64_t* stridesPtr
+    if cpython.PySequence_Check(strides):
+        stridesData = strides
+        stridesPtr = stridesData.data()
+    else:  # a pointer address
+        stridesPtr = <int64_t*><intptr_t>strides
+
+    # modes can be a pointer address, or a Python sequence
+    cdef vector[int32_t] modesData
+    cdef int32_t* modesPtr
+    if cpython.PySequence_Check(modes):
+        modesData = modes
+        modesPtr = modesData.data()
+    else:  # a pointer address
+        modesPtr = <int32_t*><intptr_t>modes
+
+    cdef _TensorDescriptor desc
+    with nogil:
+        status = cutensornetCreateTensorDescriptor(
+            <_Handle>handle, n_modes, extentsPtr, stridesPtr, modesPtr,
+            <DataType>data_type, &desc)
+    check_status(status)
+    return <intptr_t>desc
+
+
+cpdef destroy_tensor_descriptor(intptr_t desc):
+    """Destroy a tensor descriptor.
+
+    Args:
+        desc (intptr_t): The tensor descriptor.
+
+    .. seealso:: `cutensornetDestroyTensorDescriptor`
+    """
+    with nogil:
+        status = cutensornetDestroyTensorDescriptor(<_TensorDescriptor>desc)
+    check_status(status)
+
+
+cpdef intptr_t create_tensor_svd_config(
+        intptr_t handle) except*:
+    """Create a tensor SVD config object.
+
+    Args:
+        handle (intptr_t): The library handle.
+
+    Returns:
+        intptr_t: An opaque tensor SVD config handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateTensorSVDConfig`
+    """
+    cdef _TensorSVDConfig config
+    with nogil:
+        status = cutensornetCreateTensorSVDConfig(
+            <_Handle>handle, &config)
+    check_status(status)
+    return <intptr_t>config
+
+
+cpdef destroy_tensor_svd_config(intptr_t config):
+    """Destroy a tensor SVD config object.
+
+    Args:
+        config (intptr_t): The tensor SVD config handle.
+
+    .. seealso:: `cutensornetDestroyTensorSVDConfig`
+    """
+    with nogil:
+        status = cutensornetDestroyTensorSVDConfig(
+            <_TensorSVDConfig>config)
+    check_status(status)
+
+
+######################### Python specific utility #########################
+
+cdef dict tensor_svd_cfg_sizes = {
+    CUTENSORNET_TENSOR_SVD_CONFIG_ABS_CUTOFF: _numpy.float64,
+    CUTENSORNET_TENSOR_SVD_CONFIG_REL_CUTOFF: _numpy.float64,
+    CUTENSORNET_TENSOR_SVD_CONFIG_S_NORMALIZATION: _numpy.int32,  # = sizeof(enum value)
+    CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION: _numpy.int32,  # = sizeof(enum value)
+}
+
+cpdef tensor_svd_config_get_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding tensor SVD config attribute.
+
+    Args:
+        attr (TensorSVDConfigAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`tensor_svd_config_get_attribute`
+        and :func:`tensor_svd_config_set_attribute`.
+    """
+    dtype = tensor_svd_cfg_sizes[attr]
+    if attr == CUTENSORNET_TENSOR_SVD_CONFIG_S_NORMALIZATION:
+        if _numpy.dtype(dtype).itemsize != sizeof(_TensorSVDNormalization):
+            warnings.warn("binary size may be incompatible")
+    elif attr == CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION:
+        if _numpy.dtype(dtype).itemsize != sizeof(_TensorSVDPartition):
+            warnings.warn("binary size may be incompatible")
+    return dtype
+
+###########################################################################
+
+
+cpdef tensor_svd_config_get_attribute(
+        intptr_t handle, intptr_t config, int attr,
+        intptr_t buf, size_t size):
+    """Get the tensor SVD config attribute.
+
+    Args:
+        handle (intptr_t): The library handle.
+        config (intptr_t): The tensor SVD config handle.
+        attr (TensorSVDConfigAttribute): The attribute to set.
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the returned attribute value.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`tensor_svd_config_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetTensorSVDConfigGetAttribute`
+    """
+    with nogil:
+        status = cutensornetTensorSVDConfigGetAttribute(
+            <_Handle>handle, <_TensorSVDConfig>config,
+            <_TensorSVDConfigAttribute>attr,
+            <void*>buf, size)
+    check_status(status)
+
+
+cpdef tensor_svd_config_set_attribute(
+        intptr_t handle, intptr_t config, int attr,
+        intptr_t buf, size_t size):
+    """Set the tensor SVD config attribute.
+
+    Args:
+        handle (intptr_t): The library handle.
+        config (intptr_t): The tensor SVD config handle.
+        attr (TensorSVDConfigAttribute): The attribute to set.
+        buf (intptr_t): The pointer address (as Python :class:`int`) to the attribute data.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`tensor_svd_config_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetTensorSVDConfigSetAttribute`
+    """
+    with nogil:
+        status = cutensornetTensorSVDConfigSetAttribute(
+            <_Handle>handle, <_TensorSVDConfig>config,
+            <_TensorSVDConfigAttribute>attr,
+            <void*>buf, size)
+    check_status(status)
+
+
+cpdef intptr_t create_tensor_svd_info(intptr_t handle) except*:
+    """Create a tensor SVD info object.
+
+    Args:
+        handle (intptr_t): The library handle.
+
+    Returns:
+        intptr_t: An opaque tensor SVD info handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateTensorSVDInfo`
+    """
+    cdef _TensorSVDInfo info
+    with nogil:
+        status = cutensornetCreateTensorSVDInfo(
+            <_Handle>handle, &info)
+    check_status(status)
+    return <intptr_t>info
+
+
+cpdef destroy_tensor_svd_info(intptr_t info):
+    """Destroy a tensor SVD info object.
+
+    Args:
+        info (intptr_t): The tensor SVD info handle.
+
+    .. seealso:: `cutensornetDestroyTensorSVDInfo`
+    """
+    with nogil:
+        status = cutensornetDestroyTensorSVDInfo(
+            <_TensorSVDInfo>info)
+    check_status(status)
+
+
+######################### Python specific utility #########################
+
+cdef dict tensor_svd_info_sizes = {
+    CUTENSORNET_TENSOR_SVD_INFO_FULL_EXTENT: _numpy.int64,
+    CUTENSORNET_TENSOR_SVD_INFO_REDUCED_EXTENT: _numpy.int64,
+    CUTENSORNET_TENSOR_SVD_INFO_DISCARDED_WEIGHT: _numpy.float64,
+}
+
+cpdef tensor_svd_info_get_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding tensor SVD info attribute.
+
+    Args:
+        attr (TensorSVDInfoAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute. The returned dtype is always
+        a valid NumPy dtype object.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`tensor_svd_info_get_attribute`.
+
+    """
+    return tensor_svd_info_sizes[attr]
+
+###########################################################################
+
+
+cpdef tensor_svd_info_get_attribute(
+        intptr_t handle, intptr_t info, int attr,
+        intptr_t buf, size_t size):
+    """Get the tensor SVD info attribute.
+
+    Args:
+        handle (intptr_t): The library handle.
+        info (intptr_t): The tensor SVD info handle.
+        attr (TensorSVDInfoAttribute): The attribute to query.
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the returned attribute value.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`tensor_svd_info_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetTensorSVDInfoGetAttribute`
+    """
+    with nogil:
+        status = cutensornetTensorSVDInfoGetAttribute(
+            <_Handle>handle, <_TensorSVDInfo>info,
+            <_TensorSVDInfoAttribute>attr,
+            <void*>buf, size)
+    check_status(status)
+
+
+cpdef workspace_compute_svd_sizes(
+        intptr_t handle, intptr_t tensor_in, intptr_t tensor_u,
+        intptr_t tensor_v, intptr_t config, intptr_t workspace):
+    """Compute the required workspace sizes for :func:`tensor_svd`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tensor_in (intptr_t): The input tensor descriptor.
+        tensor_u (intptr_t): The tensor descriptor for the output U.
+        tensor_v (intptr_t): The tensor descriptor for the output V.
+        config (intptr_t): The tensor SVD config handle.
+        workspace (intptr_t): The workspace descriptor.
+
+    .. seealso:: `cutensornetWorkspaceComputeSVDSizes`
+    """
+    with nogil:
+        status = cutensornetWorkspaceComputeSVDSizes(
+            <_Handle>handle, <_TensorDescriptor>tensor_in,
+            <_TensorDescriptor>tensor_u, <_TensorDescriptor>tensor_v,
+            <_TensorSVDConfig>config,
+            <_WorkspaceDescriptor>workspace)
+    check_status(status)
+
+
+cpdef tensor_svd(
+        intptr_t handle, intptr_t tensor_in, intptr_t raw_data_in,
+        intptr_t tensor_u, intptr_t u,
+        intptr_t s,
+        intptr_t tensor_v, intptr_t v,
+        intptr_t config, intptr_t info,
+        intptr_t workspace, intptr_t stream):
+    """Perform SVD decomposition of a tensor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tensor_in (intptr_t): The input tensor descriptor.
+        raw_data_in (intptr_t): The pointer address (as Python :class:`int`) to the
+            input tensor (on device).
+        tensor_u (intptr_t): The tensor descriptor for the output U.
+        u (intptr_t): The pointer address (as Python :class:`int`) to the output
+            tensor U (on device).
+        s (intptr_t): The pointer address (as Python :class:`int`) to the output
+            array S (on device).
+        tensor_v (intptr_t): The tensor descriptor for the output V.
+        v (intptr_t): The pointer address (as Python :class:`int`) to the output
+            tensor V (on device).
+        config (intptr_t): The tensor SVD config handle.
+        info (intptr_t): The tensor SVD info handle.
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. note::
+
+        After this function call, the output tensor descriptors ``tensor_u`` and
+        ``tensor_v`` may have their shapes and strides changed. See the documentation
+        for further information.
+
+    .. seealso:: `cutensornetTensorSVD`
+    """
+    with nogil:
+        status = cutensornetTensorSVD(
+            <_Handle>handle, <_TensorDescriptor>tensor_in, <void*>raw_data_in,
+            <_TensorDescriptor>tensor_u, <void*>u,
+            <void*>s,
+            <_TensorDescriptor>tensor_v, <void*>v,
+            <_TensorSVDConfig>config, <_TensorSVDInfo>info,
+            <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef workspace_compute_qr_sizes(
+        intptr_t handle, intptr_t tensor_in, intptr_t tensor_q,
+        intptr_t tensor_r, intptr_t workspace):
+    """Compute the required workspace sizes for :func:`tensor_qr`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tensor_in (intptr_t): The input tensor descriptor.
+        tensor_q (intptr_t): The tensor descriptor for the output Q.
+        tensor_r (intptr_t): The tensor descriptor for the output R.
+        workspace (intptr_t): The workspace descriptor.
+
+    .. seealso:: `cutensornetWorkspaceComputeQRSizes`
+    """
+    with nogil:
+        status = cutensornetWorkspaceComputeQRSizes(
+            <_Handle>handle, <_TensorDescriptor>tensor_in,
+            <_TensorDescriptor>tensor_q, <_TensorDescriptor>tensor_r,
+            <_WorkspaceDescriptor>workspace)
+    check_status(status)
+
+
+cpdef tensor_qr(
+        intptr_t handle, intptr_t tensor_in, intptr_t raw_data_in,
+        intptr_t tensor_q, intptr_t q,
+        intptr_t tensor_r, intptr_t r,
+        intptr_t workspace, intptr_t stream):
+    """Perform QR decomposition of a tensor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tensor_in (intptr_t): The input tensor descriptor.
+        raw_data_in (intptr_t): The pointer address (as Python :class:`int`) to the
+            input tensor (on device).
+        tensor_q (intptr_t): The tensor descriptor for the output Q.
+        q (intptr_t): The pointer address (as Python :class:`int`) to the output
+            tensor Q (on device).
+        tensor_r (intptr_t): The tensor descriptor for the output R.
+        r (intptr_t): The pointer address (as Python :class:`int`) to the output
+            tensor R (on device).
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetTensorQR`
+    """
+    with nogil:
+        status = cutensornetTensorQR(
+            <_Handle>handle, <_TensorDescriptor>tensor_in, <void*>raw_data_in,
+            <_TensorDescriptor>tensor_q, <void*>q,
+            <_TensorDescriptor>tensor_r, <void*>r,
+            <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef workspace_compute_gate_split_sizes(
+        intptr_t handle, intptr_t tensor_a, intptr_t tensor_b,
+        intptr_t tensor_g, intptr_t tensor_u, intptr_t tensor_v,
+        int algo, intptr_t svd_config, int compute_type,
+        intptr_t workspace):
+    """Compute the required workspace sizes for :func:`gate_split`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tensor_a (intptr_t): The tensor descriptor for the input A.
+        tensor_b (intptr_t): The tensor descriptor for the input B.
+        tensor_g (intptr_t): The tensor descriptor for the input G (the gate).
+        tensor_u (intptr_t): The tensor descriptor for the output U.
+        tensor_v (intptr_t): The tensor descriptor for the output V.
+        algo (cuquantum.cutensornet.GateSplitAlgo): The gate splitting algorithm.
+        svd_config (intptr_t): The tensor SVD config handle.
+        compute_type (cuquantum.ComputeType): The compute type of the
+            computation.
+        workspace (intptr_t): The workspace descriptor.
+
+    .. seealso:: `cutensornetWorkspaceComputeGateSplitSizes`
+    """
+    with nogil:
+        status = cutensornetWorkspaceComputeGateSplitSizes(
+            <_Handle>handle, <_TensorDescriptor>tensor_a,
+            <_TensorDescriptor>tensor_b, <_TensorDescriptor>tensor_g,
+            <_TensorDescriptor>tensor_u, <_TensorDescriptor>tensor_v,
+            <_GateSplitAlgo>algo, <_TensorSVDConfig>svd_config,
+            <_ComputeType>compute_type, <_WorkspaceDescriptor>workspace)
+    check_status(status)
+
+
+cpdef gate_split(
+        intptr_t handle, intptr_t tensor_a, intptr_t raw_data_a,
+        intptr_t tensor_b, intptr_t raw_data_b,
+        intptr_t tensor_g, intptr_t raw_data_g,
+        intptr_t tensor_u, intptr_t u,
+        intptr_t s,
+        intptr_t tensor_v, intptr_t v,
+        int algo, intptr_t svd_config, int compute_type,
+        intptr_t svd_info, intptr_t workspace, intptr_t stream):
+    """Perform gate split operation.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tensor_a (intptr_t): The tensor descriptor for the input A.
+        raw_data_a (intptr_t): The pointer address (as Python :class:`int`) to the
+            input tensor A (on device).
+        tensor_b (intptr_t): The tensor descriptor for the input B.
+        raw_data_b (intptr_t): The pointer address (as Python :class:`int`) to the
+            input tensor B (on device).
+        tensor_g (intptr_t): The tensor descriptor for the input G (the gate).
+        raw_data_g (intptr_t): The pointer address (as Python :class:`int`) to the
+            gate tensor G (on device).
+        tensor_u (intptr_t): The tensor descriptor for the output U.
+        u (intptr_t): The pointer address (as Python :class:`int`) to the output
+            tensor U (on device).
+        s (intptr_t): The pointer address (as Python :class:`int`) to the output
+            array S (on device).
+        tensor_v (intptr_t): The tensor descriptor for the output V.
+        v (intptr_t): The pointer address (as Python :class:`int`) to the output
+            tensor V (on device).
+        algo (cuquantum.cutensornet.GateSplitAlgo): The gate splitting algorithm.
+        svd_config (intptr_t): The tensor SVD config handle.
+        compute_type (cuquantum.ComputeType): The compute type of the
+            computation.
+        svd_info (intptr_t): The tensor SVD info handle.
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. note::
+
+        After this function call, the output tensor descriptors ``tensor_u`` and
+        ``tensor_v`` may have their shapes and strides changed. See the documentation
+        for further information.
+
+    .. seealso:: `cutensornetGateSplit`
+    """
+    with nogil:
+        status = cutensornetGateSplit(
+            <_Handle>handle,
+            <_TensorDescriptor>tensor_a, <void*>raw_data_a,
+            <_TensorDescriptor>tensor_b, <void*>raw_data_b,
+            <_TensorDescriptor>tensor_g, <void*>raw_data_g,
+            <_TensorDescriptor>tensor_u, <void*>u,
+            <void*>s,
+            <_TensorDescriptor>tensor_v, <void*>v,
+            <_GateSplitAlgo>algo, <_TensorSVDConfig>svd_config,
+            <_ComputeType>compute_type, <_TensorSVDInfo>svd_info,
+            <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef distributed_reset_configuration(
+        intptr_t handle, intptr_t comm_ptr, size_t comm_size):
+    """Reset the distributed communicator.
+
+    Args:
+        handle (intptr_t): The library handle.
+        comm_ptr (intptr_t): The pointer to the provided communicator.
+        comm_size (size_t): The size of the provided communicator
+            (``sizeof(comm)``).
+
+    .. note:: For using MPI communicators from mpi4py, the helper function
+        :func:`~cuquantum.cutensornet.get_mpi_comm_pointer` can be used:
 
         .. code-block:: python
 
-            # the pairwise contraction order is stored as C int
-            path = np.asarray([(1, 3), (1, 2), (0, 1)], dtype=np.int32)
-            path_obj = ContractionPath(path.size//2, path.ctypes.data)
+            cutn.distributed_reset_configuration(handle, *get_mpi_comm_pointer(comm))
 
-            # get the pointer address to the underlying `cutensornetContractionPath_t`
-            my_func(..., path_obj.get_data(), ...)
+    .. seealso:: `cutensornetDistributedResetConfiguration`
+    """
+    with nogil:
+        status = cutensornetDistributedResetConfiguration(
+            <_Handle>handle, <void*>comm_ptr, comm_size)
+    check_status(status)
 
-            # path must outlive path_obj!
-            del path_obj
-            del path
+
+cpdef int distributed_get_num_ranks(intptr_t handle) except -1:
+    """Get the number of distributed ranks.
 
     Args:
-        num_contractions (int): The number of contractions in the provided path.
-        data (uintptr_t): The pointer address (as Python :class:`int`) to the provided path.
+        handle (intptr_t): The library handle.
 
-    .. note::
-        Users are responsible for managing the lifetime of the underlying path data
-        (i.e. the validity of the ``data`` pointer).
-
-    .. warning::
-        The design of how `cutensornetContractionPath_t` is handled in Python is
-        experimental and subject to change in a future release.
+    .. seealso:: `cutensornetDistributedGetNumRanks`
     """
-    cdef _ContractionPath* path
+    cdef int rank
+    with nogil:
+        status = cutensornetDistributedGetNumRanks(
+            <_Handle>handle, &rank)
+    check_status(status)
+    return rank
 
-    def __cinit__(self, int num_contractions, uintptr_t data):
-        self.path = <_ContractionPath*>PyMem_Malloc(sizeof(_ContractionPath))
 
-    def __dealloc__(self):
-        PyMem_Free(<void*>self.path)
+cpdef int distributed_get_proc_rank(intptr_t handle) except -1:
+    """Get the current process rank.
 
-    def __init__(self, int num_contractions, uintptr_t data):
-        """
-        __init__(self, int num_contractions, uintptr_t data)
-        """
-        self.path.numContractions = num_contractions
-        self.path.data = <_NodePair*>data
+    Args:
+        handle (intptr_t): The library handle.
 
-    def get_path(self):
-        """Get the pointer address to the underlying `cutensornetContractionPath_t` struct.
+    .. seealso:: `cutensornetDistributedGetProcRank`
+    """
+    cdef int rank
+    with nogil:
+        status = cutensornetDistributedGetProcRank(
+            <_Handle>handle, &rank)
+    check_status(status)
+    return rank
 
-        Returns:
-            uintptr_t: The pointer address.
-        """
-        return <uintptr_t>self.path
 
-    def get_size(self):
-        """Get the size of the `cutensornetContractionPath_t` struct.
+cpdef distributed_synchronize(intptr_t handle):
+    """Synchronize the distributed communicator.
 
-        Returns:
-            size_t: ``sizeof(cutensornetContractionPath_t)``.
-        """
-        return sizeof(_ContractionPath)
+    Args:
+        handle (intptr_t): The library handle.
+
+    .. seealso:: `cutensornetDistributedSynchronize`
+    """
+    with nogil:
+        status = cutensornetDistributedSynchronize(<_Handle>handle)
+    check_status(status)
 
 
 class GraphAlgo(IntEnum):
@@ -1741,6 +2425,7 @@ class ContractionOptimizerInfoAttribute(IntEnum):
     NUM_INTERMEDIATE_MODES = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_INTERMEDIATE_MODES
     EFFECTIVE_FLOPS_EST = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_EFFECTIVE_FLOPS_EST
     RUNTIME_EST = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_RUNTIME_EST
+    SLICING_CONFIG = CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_SLICING_CONFIG
 
 class ContractionAutotunePreferenceAttribute(IntEnum):
     """See `cutensornetContractionAutotunePreferenceAttributes_t`."""
@@ -1756,6 +2441,39 @@ class WorksizePref(IntEnum):
 class Memspace(IntEnum):
     """See `cutensornetMemspace_t`."""
     DEVICE = CUTENSORNET_MEMSPACE_DEVICE
+    HOST = CUTENSORNET_MEMSPACE_HOST
+
+class TensorSVDConfigAttribute(IntEnum):
+    """See `cutensornetTensorSVDConfigAttributes_t`."""
+    ABS_CUTOFF = CUTENSORNET_TENSOR_SVD_CONFIG_ABS_CUTOFF
+    REL_CUTOFF = CUTENSORNET_TENSOR_SVD_CONFIG_REL_CUTOFF
+    S_NORMALIZATION = CUTENSORNET_TENSOR_SVD_CONFIG_S_NORMALIZATION
+    S_PARTITION = CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION
+
+class TensorSVDNormalization(IntEnum):
+    """See `cutensornetTensorSVDNormalization_t`."""
+    NONE = CUTENSORNET_TENSOR_SVD_NORMALIZATION_NONE
+    L1 = CUTENSORNET_TENSOR_SVD_NORMALIZATION_L1
+    L2 = CUTENSORNET_TENSOR_SVD_NORMALIZATION_L2
+    LINF = CUTENSORNET_TENSOR_SVD_NORMALIZATION_LINF
+
+class TensorSVDPartition(IntEnum):
+    """See `cutensornetTensorSVDPartition_t`."""
+    NONE = CUTENSORNET_TENSOR_SVD_PARTITION_NONE
+    US = CUTENSORNET_TENSOR_SVD_PARTITION_US
+    SV = CUTENSORNET_TENSOR_SVD_PARTITION_SV
+    UV_EQUAL = CUTENSORNET_TENSOR_SVD_PARTITION_UV_EQUAL
+
+class TensorSVDInfoAttribute(IntEnum):
+    """See `cutensornetTensorSVDInfoAttributes_t`."""
+    FULL_EXTENT = CUTENSORNET_TENSOR_SVD_INFO_FULL_EXTENT
+    REDUCED_EXTENT = CUTENSORNET_TENSOR_SVD_INFO_REDUCED_EXTENT
+    DISCARDED_WEIGHT = CUTENSORNET_TENSOR_SVD_INFO_DISCARDED_WEIGHT
+
+class GateSplitAlgo(IntEnum):
+    """See `cutensornetGateSplitAlgo_t`."""
+    DIRECT = CUTENSORNET_GATE_SPLIT_ALGO_DIRECT
+    REDUCED = CUTENSORNET_GATE_SPLIT_ALGO_REDUCED
 
 del IntEnum
 
@@ -1766,6 +2484,13 @@ MINOR_VER = CUTENSORNET_MINOR
 PATCH_VER = CUTENSORNET_PATCH
 VERSION = CUTENSORNET_VERSION
 
+# numpy dtypes 
+tensor_qualifiers_dtype = _numpy.dtype(
+    {'names':('is_conjugate', ),
+     'formats': (_numpy.int32, ),
+     'itemsize': sizeof(_TensorQualifiers),
+    }, align=True
+)
 
 # who owns a reference to user-provided Python objects (k: owner, v: object)
 cdef dict owner_pyobj = {}

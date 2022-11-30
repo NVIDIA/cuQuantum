@@ -69,7 +69,8 @@ set(CMAKE_CUDA_EXTENSIONS OFF)
 set(CMAKE_CUDA_FLAGS_ARCH_SM70 "-gencode arch=compute_70,code=sm_70")
 set(CMAKE_CUDA_FLAGS_ARCH_SM75 "-gencode arch=compute_75,code=sm_75")
 set(CMAKE_CUDA_FLAGS_ARCH_SM80 "-gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80")
-set(CMAKE_CUDA_FLAGS_ARCH "${CMAKE_CUDA_FLAGS_ARCH_SM70} ${CMAKE_CUDA_FLAGS_ARCH_SM75} ${CMAKE_CUDA_FLAGS_ARCH_SM80}")
+set(CMAKE_CUDA_FLAGS_ARCH_SM90 "-gencode arch=compute_90,code=sm_90 -gencode arch=compute_90,code=compute_90")
+set(CMAKE_CUDA_FLAGS_ARCH "${CMAKE_CUDA_FLAGS_ARCH_SM70} ${CMAKE_CUDA_FLAGS_ARCH_SM75} ${CMAKE_CUDA_FLAGS_ARCH_SM80} ${CMAKE_CUDA_FLAGS_ARCH_SM90}")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_ARCH}")
 
 # ##########################################
@@ -104,7 +105,7 @@ function(add_custatevec_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
     ${EXAMPLE_TARGET}
     PROPERTIES
       CUDA_ARCHITECTURES
-        "70;75;80"
+        "70;75;80;90"
   )
   # Install example
   install(

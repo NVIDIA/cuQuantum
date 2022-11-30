@@ -6,8 +6,10 @@
 A collection of (internal use) helper functions.
 """
 
+import contextlib
+import ctypes
 import functools
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Mapping, Optional
 
 import cupy as cp
 import numpy as np
@@ -16,6 +18,7 @@ from . import formatters
 from . import mem_limit
 from . import package_wrapper
 from . import tensor_wrapper
+
 
 def infer_object_package(obj):
     """
@@ -55,13 +58,42 @@ def _create_stream_ctx_ptr_cupy_stream(package_ifc, stream):
     return stream, stream_ctx, stream_ptr
 
 
-def get_or_create_stream(device, stream, op_package):
+@contextlib.contextmanager
+def device_ctx(new_device_id):
+    """
+    Semantics:
+
+    1. The device context manager makes the specified device current from the point of entry until the point of exit.
+
+    2. When the context manager exits, the current device is reset to what it was when the context manager was entered.
+
+    3. Any explicit setting of the device within the context manager (using cupy.cuda.Device().use(), torch.cuda.set_device(),
+       etc) will overrule the device set by the context manager from that point onwards till the context manager exits. In
+       other words, the context manager provides a local device scope and the current device can be explicitly reset for the
+       remainder of that scope.
+
+    Corollary: if any library function resets the device globally and this is an undesired side-effect, such functions must be
+      called from within the device context manager.
+
+    Device context managers can be arbitrarily nested.
+    """
+    old_device_id = cp.cuda.runtime.getDevice()
+    try:
+        if old_device_id != new_device_id:
+            cp.cuda.runtime.setDevice(new_device_id)
+        yield
+    finally:
+        # We should always restore the old device at exit.
+        cp.cuda.runtime.setDevice(old_device_id)
+
+
+def get_or_create_stream(device_id, stream, op_package):
     """
     Create a stream object from a stream pointer or extract the stream pointer from a stream object, or
     use the current stream.
 
     Args:
-        device: The device (CuPy object) for the stream.
+        device_id: The device ID.
         stream: A stream object, stream pointer, or None.
         op_package: The package the tensor network operands belong to.
 
@@ -69,7 +101,6 @@ def get_or_create_stream(device, stream, op_package):
         tuple: CuPy stream object, package stream context, stream pointer.
     """
 
-    device_id  = device.id
     op_package_ifc = package_wrapper.PACKAGE[op_package]
     if stream is None:
         stream = op_package_ifc.get_current_stream(device_id)
@@ -134,11 +165,10 @@ def get_memory_limit(memory_limit, device):
 
 def get_operands_data(operands):
     """
-    Get the raw data pointer of the input operands and their alignment for cutensornet.
+    Get the raw data pointer of the input operands for cuTensorNet.
     """
     op_data = tuple(o.data_ptr for o in operands)    
-    alignments = tuple(get_maximal_alignment(p) for p in op_data)
-    return op_data, alignments
+    return op_data
 
 
 def create_empty_tensor(cls, extents, dtype, device_id, stream_ctx):
@@ -155,30 +185,27 @@ def create_empty_tensor(cls, extents, dtype, device_id, stream_ctx):
     return tensor
 
 
-def create_output_tensor(cls, package, output, size_dict, device, data_type):
+def create_output_tensor(cls, package, output, size_dict, device_id, data_type):
     """
-    Create output tensor and associated data (modes, extents, strides, alignment). This operation is
+    Create output tensor and associated data (modes, extents, strides). This operation is
     blocking and is safe to use with asynchronous memory pools.
     """
     modes = tuple(m for m in output)
     extents = tuple(size_dict[m] for m in output)
 
     package_ifc = package_wrapper.PACKAGE[package]
-    device_id = device.id
 
     stream = package_ifc.create_stream(device_id)
     stream, stream_ctx, _ = _create_stream_ctx_ptr_cupy_stream(package_ifc, stream)
 
-    with device:
+    with device_ctx(device_id):
         start = stream.record()
         output = create_empty_tensor(cls, extents, data_type, device_id, stream_ctx)
         end = stream.record()
         end.synchronize()
 
     strides = output.strides
-    alignment = get_maximal_alignment(output.data_ptr)
-
-    return output, modes, extents, strides, alignment
+    return output, modes, extents, strides
 
 
 def get_network_device_id(operands):
@@ -204,6 +231,7 @@ def get_operands_dtype(operands):
     return dtype
 
 
+# Unused since cuQuantum 22.11
 def get_maximal_alignment(address):
     """
     Calculate the maximal alignment of the provided memory location.
@@ -242,6 +270,7 @@ The mismatch in {description} as a sequence of "position: original {description}
         raise ValueError(message)
 
 
+# Unused since cuQuantum 22.11
 def check_alignments_match(orig_alignments, new_alignments):
     """
     Check if alignment matches between the corresponding new and old operands, and raise an exception if it doesn't.
@@ -255,6 +284,30 @@ def check_alignments_match(orig_alignments, new_alignments):
         message = f"""The data alignment of each new operand must match the data alignment of the corresponding original operand.
 The mismatch in data alignment as a sequence of "position: original alignment => new alignment" is: \n{mismatch}"""
         raise ValueError(message)
+
+
+def check_tensor_qualifiers(qualifiers, dtype, num_inputs):
+    """
+    Check if the tensor qualifiers array is valid.
+    """
+
+    if qualifiers is None:
+        return 0
+
+    prolog = f"The tensor qualifiers must be specified as an one-dimensional NumPy ndarray of 'tensor_qualifiers_dtype' objects."
+    if not isinstance(qualifiers, np.ndarray):
+        raise ValueError(prolog)
+    elif qualifiers.dtype != dtype:
+        message = prolog + f" The dtype of the ndarray is '{qualifiers.dtype}'."
+        raise ValueError(message)
+    elif qualifiers.ndim != 1:
+        message = prolog + f" The shape of the ndarray is {qualifiers.shape}."
+        raise ValueError(message)
+    elif len(qualifiers) != num_inputs:
+        message = prolog + f" The length of the ndarray is {len(qualifiers)}, while the expected length is {num_inputs}."
+        raise ValueError(message)
+
+    return qualifiers
 
 
 def check_autotune_params(iterations):
@@ -283,6 +336,77 @@ def get_ptr_from_memory_pointer(mem_ptr):
 
     message = f"Memory pointer objects should have one of the following attributes specifying the device pointer: {attributes}"
     raise AttributeError(message)
+
+
+class Value:
+    """
+    A simple value wrapper holding a default value.
+    """
+    def __init__(self, default, *, validator: Callable[[object], bool]):
+        """
+        Args:
+            default: The default value to use.
+            validator: A callable that validates the provided value.
+        """
+        self.validator = validator
+        self._data = default
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, value):
+        self._data = self._validate(value)
+
+    def _validate(self, value):
+        if self.validator(value):
+            return value
+        raise ValueError(f"Internal Error: value '{value}' is not valid.")
+
+
+def check_and_set_options(required: Mapping[str, Value], provided: Mapping[str, object]):
+    """
+    Update each option specified in 'required' by getting the value from 'provided' if it exists or using a default.
+    """
+    for option, value in required.items():
+        try:
+            value.data = provided.pop(option)
+        except KeyError:
+            pass
+        required[option] = value.data
+
+    assert not provided, "Unrecognized options."
+
+
+@contextlib.contextmanager
+def cuda_call_ctx(stream, blocking=True, timing=True):
+    """
+    A simple context manager that provides (non-)blocking behavior depending on the `blocking` parameter for CUDA calls.
+      The call is timed only for blocking behavior when timing is requested.
+
+    An `end` event is recorded after the CUDA call for use in establishing stream ordering for non-blocking calls. This
+    event is returned together with a `Value` object that stores the elapsed time if the call is blocking and timing is
+    requested, or None otherwise.
+    """
+    if blocking:
+       start = cp.cuda.Event(disable_timing = False if timing else True)
+       stream.record(start)
+
+    end = cp.cuda.Event(disable_timing = False if timing and blocking else True)
+
+    time = Value(None, validator=lambda v: True)
+    yield end, time
+
+    stream.record(end)
+
+    if not blocking:
+        return
+
+    end.synchronize()
+
+    if timing:
+        time.data = cp.cuda.get_elapsed_time(start, end)
 
 
 # Decorator definitions
@@ -361,3 +485,28 @@ def precondition(checker: Callable[..., None], what: str = "") -> Callable:
     return outer
 
 
+def get_mpi_comm_pointer(comm):
+    """Simple helper to get the address to and size of a ``MPI_Comm`` handle.
+
+    Args:
+        comm (mpi4py.MPI.Comm): An MPI communicator.
+
+    Returns:
+        tuple: A pair of int values representing the address and the size.
+    """
+    # We won't initialize MPI for users in any case
+    try:
+        import mpi4py
+        init = mpi4py.rc.initialize
+        mpi4py.rc.initialize = False
+        from mpi4py import MPI
+    except ImportError as e:
+        raise RuntimeError("please install mpi4py") from e
+    finally:
+        mpi4py.rc.initialize = init
+
+    if not isinstance(comm, MPI.Comm):
+        raise ValueError("invalid MPI communicator")
+    comm_ptr = MPI._addressof(comm)  # = MPI_Comm*
+    mpi_comm_size = MPI._sizeof(MPI.Comm)
+    return comm_ptr, mpi_comm_size

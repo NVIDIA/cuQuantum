@@ -10,10 +10,7 @@ __all__ = ['contract', 'contract_path', 'einsum', 'einsum_path', 'Network']
 
 import collections
 import dataclasses
-import functools
 import logging
-import os
-import sys
 
 import cupy as cp
 import numpy as np
@@ -71,12 +68,14 @@ class Network:
         >>> logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%m-%d %H:%M:%S')
 
     Args:
-        subscripts : The mode labels (subscripts) defining the Einstein summation expression as a comma-separated sequence of
+        subscripts: The mode labels (subscripts) defining the Einstein summation expression as a comma-separated sequence of
             characters. Unicode characters are allowed in the expression thereby expanding the size of the tensor network that
             can be specified using the Einstein summation convention.
-        operands : A sequence of tensors (ndarray-like objects). The currently supported types are :class:`numpy.ndarray`,
+        operands: A sequence of tensors (ndarray-like objects). The currently supported types are :class:`numpy.ndarray`,
             :class:`cupy.ndarray`, and :class:`torch.Tensor`.
-        options : Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
+        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`~cuquantum.tensor_qualifiers_dtype` objects
+            of length equal to the number of operands.
+        options: Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
 
@@ -167,7 +166,7 @@ class Network:
         as specifying options for the tensor network and the optimizer.
     """
 
-    def __init__(self, *operands, options=None):
+    def __init__(self, *operands, qualifiers=None, options=None):
         """
         __init__(subscripts, *operands, options=None)
         """
@@ -191,6 +190,13 @@ class Network:
             self.network_location = 'cpu'
             self.device_id = options.device_id
             self.operands = tensor_wrapper.to(self.operands, self.device_id)
+
+        # Set blocking or non-blocking behavior.
+        self.blocking = self.options.blocking is True or self.network_location == 'cpu'
+        if self.blocking:
+            self.call_prologue = "This call is blocking and will return only after the operation is complete."
+        else:
+            self.call_prologue = "This call is non-blocking and will return immediately after the operation is launched on the device."
 
         # Infer the library package the operands belong to.
         self.package = utils.get_operands_package(self.operands)
@@ -222,12 +228,13 @@ The data type '{self.data_type}' is currently not supported.
 
         extents_in = tuple(o.shape for o in self.operands)
         strides_in = tuple(o.strides for o in self.operands)
-        self.operands_data, alignments_in = utils.get_operands_data(self.operands)
+        self.operands_data = utils.get_operands_data(self.operands)
         modes_in = tuple(tuple(m for m in _input) for _input in self.inputs)
         num_modes_in = tuple(len(m) for m in modes_in)
+        self.qualifiers_in = utils.check_tensor_qualifiers(qualifiers, cutn.tensor_qualifiers_dtype, num_inputs)
 
-        self.contraction, modes_out, extents_out, strides_out, alignment_out = utils.create_output_tensor(
-                self.output_class, self.package, self.output, self.size_dict, self.device, self.data_type)
+        self.contraction, modes_out, extents_out, strides_out = utils.create_output_tensor(
+                self.output_class, self.package, self.output, self.size_dict, self.device_id, self.data_type)
 
         # Create/set handle.
         if options.handle is not None:
@@ -235,19 +242,19 @@ The data type '{self.data_type}' is currently not supported.
             self.handle = options.handle
         else:
             self.own_handle = True
-            with self.device:
+            with utils.device_ctx(self.device_id):
                 self.handle = cutn.create()
 
         # Network definition.
         self.network = cutn.create_network_descriptor(self.handle, num_inputs,
-                num_modes_in, extents_in, strides_in, modes_in, alignments_in,        # inputs
-                num_modes_out, extents_out, strides_out, modes_out, alignment_out,    # output
+                num_modes_in, extents_in, strides_in, modes_in, self.qualifiers_in,  # inputs
+                num_modes_out, extents_out, strides_out, modes_out,  # output
                 typemaps.NAME_TO_DATA_TYPE[self.data_type], self.compute_type)
 
         # Keep output extents for creating new tensors, if needed.
         self.extents_out = extents_out
 
-        # Path optimization atributes.
+        # Path optimization attributes.
         self.optimizer_config_ptr, self.optimizer_info_ptr = None, None
         self.optimized = False
 
@@ -257,10 +264,15 @@ The data type '{self.data_type}' is currently not supported.
 
         # Contraction plan attributes.
         self.plan = None
+        self.planned = False
 
         # Autotuning attributes.
         self.autotune_pref_ptr = None
         self.autotuned = False
+
+        # Attributes to establish stream ordering.
+        self.workspace_stream = None
+        self.last_compute_event = None
 
         self.valid_state = True
 
@@ -284,6 +296,13 @@ The data type '{self.data_type}' is currently not supported.
         what = kwargs['what']
         if not self.optimized:
             raise RuntimeError(f"{what} cannot be performed before contract_path() has been called.")
+
+    def _check_planned(self, *args, **kwargs):
+        """
+        """
+        what = kwargs['what']
+        if not self.planned:
+            raise RuntimeError(f"Internal Error: {what} cannot be performed before planning has been done.")
 
     def _free_plan_resources(self, exception=None):
         """
@@ -327,21 +346,22 @@ The data type '{self.data_type}' is currently not supported.
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Workspace memory allocation")
     @utils.atomic(_free_workspace_memory, method=True)
-    def _allocate_workspace_memory_perhaps(self, stream_ctx):
+    def _allocate_workspace_memory_perhaps(self, stream, stream_ctx):
         if self.workspace_ptr is not None:
             return
 
         assert self.workspace_size is not None, "Internal Error."
 
         self.logger.debug("Allocating memory for contracting the tensor network...")
-        with self.device, stream_ctx:
+        with utils.device_ctx(self.device_id), stream_ctx:
             try:
                 self.workspace_ptr = self.allocator.memalloc(self.workspace_size)
             except TypeError as e:
                 message = "The method 'memalloc' in the allocator object must conform to the interface in the "\
                           "'BaseCUDAMemoryManager' protocol."
                 raise TypeError(message) from e
-        self.logger.debug(f"Finished allocating memory of size {formatters.MemoryStr(self.workspace_size)} for contraction.")
+        self.workspace_stream = stream
+        self.logger.debug(f"Finished allocating memory of size {formatters.MemoryStr(self.workspace_size)} for contraction in the context of stream {self.workspace_stream}.")
 
         device_ptr = utils.get_ptr_from_memory_pointer(self.workspace_ptr)
         cutn.workspace_set(self.handle, self.workspace_desc, cutn.Memspace.DEVICE, device_ptr, self.workspace_size)
@@ -357,7 +377,7 @@ The data type '{self.data_type}' is currently not supported.
         # Release workspace already allocated, if any, because the new requirements are likely different.
         self.workspace_ptr = None
 
-        cutn.workspace_compute_sizes(self.handle, self.network, self.optimizer_info_ptr, self.workspace_desc)
+        cutn.workspace_compute_contraction_sizes(self.handle, self.network, self.optimizer_info_ptr, self.workspace_desc)
 
         min_size = cutn.workspace_get_size(self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE)
         max_size = cutn.workspace_get_size(self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE)
@@ -375,7 +395,6 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         # Set workspace size to enable contraction planning. The device pointer will be set later during allocation.
         cutn.workspace_set(self.handle, self.workspace_desc, cutn.Memspace.DEVICE, 0, self.workspace_size)
-
 
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Planning")
@@ -456,10 +475,16 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         enum = ConfEnum.SEED
         self._set_opt_config_option('seed', enum, optimize.seed)
 
+        enum = ConfEnum.COST_FUNCTION_OBJECTIVE
+        self._set_opt_config_option('cost_function', enum, optimize.cost_function)
+
     @utils.precondition(_check_valid_network)
     @utils.atomic(_free_path_resources, method=True)
-    def contract_path(self, optimize=None):
-        """Compute the best contraction path together with any slicing that is needed to ensure that the contraction can be
+    def contract_path(self, optimize=None, **kwargs):
+        """
+        contract_path(optimize=None)
+
+        Compute the best contraction path together with any slicing that is needed to ensure that the contraction can be
         performed within the specified memory limit.
 
         Args:
@@ -481,12 +506,20 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         optimize = utils.check_or_create_options(configuration.OptimizerOptions, optimize, "path optimizer options")
 
+        internal_options = dict()
+        internal_options['create_plan'] = utils.Value(True, validator=lambda v: isinstance(v, bool))
+        utils.check_and_set_options(internal_options, kwargs)
+
         if self.optimizer_config_ptr is None:
             self.optimizer_config_ptr = cutn.create_contraction_optimizer_config(self.handle)
         if self.optimizer_info_ptr is None:
             self.optimizer_info_ptr = cutn.create_contraction_optimizer_info(self.handle, self.network)
 
         opt_info_ifc = optimizer_ifc.OptimizerInfoInterface(self)
+
+        # Special case worth optimizing, as it's an extremely common use case with a trivial path
+        if len(self.operands) == 2:
+            optimize.path = [(0, 1)]
 
         # Compute path (or set provided path).
         if isinstance(optimize.path, configuration.PathFinderOptions):
@@ -525,11 +558,15 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         self.optimized = True
 
-        # Calculate workspace size required.
-        self._calculate_workspace_size()
+        if internal_options['create_plan']:
+            # Calculate workspace size required.
+            self._calculate_workspace_size()
 
-        # Create plan.
-        self._create_plan()
+            # Create plan.
+            self._create_plan()
+            self.planned = True
+        else:
+            self.planned = False
 
         return opt_info.path, opt_info
 
@@ -566,6 +603,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Autotuning")
+    @utils.precondition(_check_planned, "Autotuning")
     def autotune(self, *, iterations=3, stream=None):
         """Autotune the network to reduce the contraction cost.
 
@@ -588,24 +626,25 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         self._set_autotune_options(options)
 
         # Allocate device memory (in stream context) if needed.
-        stream, stream_ctx, stream_ptr = utils.get_or_create_stream(self.device, stream, self.package)
-        self._allocate_workspace_memory_perhaps(stream_ctx)
+        stream, stream_ctx, stream_ptr = utils.get_or_create_stream(self.device_id, stream, self.package)
+        self._allocate_workspace_memory_perhaps(stream, stream_ctx)
 
         # Check if we still hold an output tensor; if not, create a new one.
         if self.contraction is None:
             self.contraction = utils.create_empty_tensor(self.output_class, self.extents_out, self.data_type, self.device_id, stream_ctx)
 
+        timing =  bool(self.logger and self.logger.handlers)
         self.logger.info(f"Starting autotuning...")
-        with self.device:
-            start = stream.record()
+        self.logger.info(f"{self.call_prologue}")
+        with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream, self.blocking, timing) as (self.last_compute_event, elapsed):
             cutn.contraction_autotune(self.handle, self.plan, self.operands_data, self.contraction.data_ptr,
                  self.workspace_desc, self.autotune_pref_ptr, stream_ptr)
-            end = stream.record()
-            end.synchronize()
-            elapsed = cp.cuda.get_elapsed_time(start, end)
+
+        if elapsed.data is not None:
+            self.logger.info(f"The autotuning took {elapsed.data:.3f} ms to complete.")
 
         self.autotuned = True
-        self.logger.info(f"The autotuning took {elapsed:.3f} ms to complete.")
+
 
     @utils.precondition(_check_valid_network)
     def reset_operands(self, *operands):
@@ -618,7 +657,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
             - The shapes, strides, datatypes match those of the old ones.
             - The packages that the operands belong to match those of the old ones.
-            - If input tensors are on GPU, the library package, device, and alignments must match.
+            - If input tensors are on GPU, the library package and device must match.
 
         Args:
             operands: See :class:`Network`'s documentation.
@@ -650,16 +689,13 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 raise ValueError(f"The new operands must be on the same device ({device_id}) as the original operands "
                                  f"({self.device_id}).")
 
-            _, orig_alignments = utils.get_operands_data(self.operands)
-            new_operands_data, new_alignments = utils.get_operands_data(operands)
-            utils.check_alignments_match(orig_alignments, new_alignments)
-
             # Finally, replace the original data pointers by the new ones.
-            self.operands_data = new_operands_data
+            self.operands_data = utils.get_operands_data(operands)
         self.logger.info("The operands have been reset.")
 
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Contraction")
+    @utils.precondition(_check_planned, "Contraction")
     def contract(self, *, slices=None, stream=None):
         """Contract the network and return the result.
 
@@ -675,8 +711,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         """
 
         # Allocate device memory (in stream context) if needed.
-        stream, stream_ctx, stream_ptr = utils.get_or_create_stream(self.device, stream, self.package)
-        self._allocate_workspace_memory_perhaps(stream_ctx)
+        stream, stream_ctx, stream_ptr = utils.get_or_create_stream(self.device_id, stream, self.package)
+        self._allocate_workspace_memory_perhaps(stream, stream_ctx)
 
         # Check if we still hold an output tensor; if not, create a new one.
         if self.contraction is None:
@@ -697,16 +733,15 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             message = f"The provided 'slices' must be a range object or a sequence object. The object type is {type(slices)}."
             raise TypeError(message)
 
+        timing =  bool(self.logger and self.logger.handlers)
         self.logger.info("Starting network contraction...")
-        with self.device:
-            start = stream.record()
+        self.logger.info(f"{self.call_prologue}")
+        with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream, self.blocking, timing) as (self.last_compute_event, elapsed):
             cutn.contract_slices(self.handle, self.plan, self.operands_data, self.contraction.data_ptr, False,
                     self.workspace_desc, slice_group, stream_ptr)
-            end = stream.record()
-            end.synchronize()
-            elapsed = cp.cuda.get_elapsed_time(start, end)
 
-        self.logger.info(f"The contraction took {elapsed:.3f} ms to complete.")
+        if elapsed.data is not None:
+            self.logger.info(f"The contraction took {elapsed.data:.3f} ms to complete.")
 
         # Destroy slice group, if created.
         if slice_group != 0:
@@ -718,6 +753,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         else:
             out = self.contraction.tensor
         self.contraction = None    # We cannot overwrite what we've already handed to users.
+
         return out
 
     def free(self):
@@ -731,6 +767,10 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             return
 
         try:
+            # Future operations on the workspace stream should be ordered after the computation.
+            if self.last_compute_event is not None:
+                self.workspace_stream.wait_event(self.last_compute_event)
+
             self._free_path_resources()
 
             if self.autotune_pref_ptr is not None:
@@ -759,7 +799,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         self.logger.info("The network resources have been released.")
 
 
-def contract(*operands, options=None, optimize=None, stream=None, return_info=False):
+def contract(*operands, qualifiers=None, options=None, optimize=None, stream=None, return_info=False):
     r"""
     contract(subscripts, *operands, options=None, optimize=None, stream=None, return_info=False)
 
@@ -775,6 +815,8 @@ def contract(*operands, options=None, optimize=None, stream=None, return_info=Fa
             can be specified using the Einstein summation convention.
         operands : A sequence of tensors (ndarray-like objects). The currently supported types are :class:`numpy.ndarray`,
             :class:`cupy.ndarray`, and :class:`torch.Tensor`.
+        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`~cuquantum.tensor_qualifiers_dtype` objects
+            of length equal to the number of operands.
         options : Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
@@ -796,14 +838,15 @@ def contract(*operands, options=None, optimize=None, stream=None, return_info=Fa
 
         .. code-block:: python
 
-            from cuquantum import cutensornet, NetworkOptions, contract
+            from cuquantum import cutensornet as cutn
+            from cuquantum import contract, NetworkOptions
 
-            handle = cutensornet.create()
+            handle = cutn.create()
             network_opts = NetworkOptions(handle=handle, ...)
             out = contract(..., options=network_opts, ...)
             # ... the same handle can be reused for further calls ...
             # when it's done, remember to destroy the handle
-            cutensornet.destroy(handle)
+            cutn.destroy(handle)
 
     Examples:
 
@@ -896,12 +939,8 @@ def contract(*operands, options=None, optimize=None, stream=None, return_info=Fa
         >>> r = contract('ij,jk', a, b)
     """
 
-    options = utils.check_or_create_options(configuration.NetworkOptions, options, "network options")
-
-    optimize = utils.check_or_create_options(configuration.OptimizerOptions, optimize, "path optimizer options")
-
     # Create network.
-    with Network(*operands, options=options) as network:
+    with Network(*operands, qualifiers=qualifiers, options=options) as network:
 
         # Compute path.
         opt_info = network.contract_path(optimize=optimize)
@@ -917,7 +956,7 @@ def contract(*operands, options=None, optimize=None, stream=None, return_info=Fa
     return output
 
 
-def contract_path(*operands, options=None, optimize=None):
+def contract_path(*operands, qualifiers=None, options=None, optimize=None):
     """
     contract_path(subscripts, *operands, options=None, optimize=None)
 
@@ -933,6 +972,8 @@ def contract_path(*operands, options=None, optimize=None):
             can be specified using the Einstein summation convention.
         operands : A sequence of tensors (ndarray-like objects). The currently supported types are :class:`numpy.ndarray`,
             :class:`cupy.ndarray`, and :class:`torch.Tensor`.
+        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`~cuquantum.tensor_qualifiers_dtype` objects
+            of length equal to the number of operands.
         options : Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
@@ -952,26 +993,23 @@ def contract_path(*operands, options=None, optimize=None):
 
         .. code-block:: python
 
-            from cuquantum import cutensornet, NetworkOptions, contract_path
+            from cuquantum import cutensornet as cutn
+            from cuquantum import contract, NetworkOptions
 
-            handle = cutensornet.create()
+            handle = cutn.create()
             network_opts = NetworkOptions(handle=handle, ...)
             path, info = contract_path(..., options=network_opts, ...)
             # ... the same handle can be reused for further calls ...
             # when it's done, remember to destroy the handle
-            cutensornet.destroy(handle)
+            cutn.destroy(handle)
 
     """
 
-    options = utils.check_or_create_options(configuration.NetworkOptions, options, "network options")
-
-    optimize = utils.check_or_create_options(configuration.OptimizerOptions, optimize, "path optimizer options")
-
     # Create network.
-    with Network(*operands, options=options) as network:
+    with Network(*operands, qualifiers=qualifiers, options=options) as network:
 
         # Compute path.
-        path, opt_info = network.contract_path(optimize=optimize)
+        path, opt_info = network.contract_path(optimize=optimize, create_plan=False)
 
     return path, opt_info
 
@@ -1102,6 +1140,6 @@ The only allowed value for 'optimize' is True."""
     with Network(*operands) as network:
 
         # Compute path.
-        path, opt_info = network.contract_path()
+        path, opt_info = network.contract_path(create_plan=False)
 
     return ['einsum_path', *path], str(opt_info)

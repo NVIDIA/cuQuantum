@@ -8,9 +8,9 @@ import pytest
 import cuquantum
 
 from .data import einsum_expressions
-from .testutils import compute_and_normalize_numpy_path
-from .testutils import EinsumFactory
-from .testutils import set_path_to_optimizer_options
+from .test_utils import compute_and_normalize_numpy_path
+from .test_utils import EinsumFactory
+from .test_utils import set_path_to_optimizer_options
 
 
 @pytest.mark.parametrize(

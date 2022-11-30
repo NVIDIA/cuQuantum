@@ -4,15 +4,15 @@
 
 try:
     import cirq
-    from . import cirq_parser_utils
+    from . import circuit_parser_utils_cirq
 except ImportError:
-    cirq = cirq_parser_utils = None
+    cirq = circuit_parser_utils_cirq = None
 import cupy as cp
 try:
     import qiskit
-    from . import qiskit_parser_utils
+    from . import circuit_parser_utils_qiskit
 except ImportError:
-    qiskit = qiskit_parser_utils = None
+    qiskit = circuit_parser_utils_qiskit = None
 
 from .tensor_wrapper import _get_backend_asarray_func
 
@@ -26,7 +26,7 @@ EMPTY_DICT = types.MappingProxyType({})
 
 def check_version(package_name, version, minimum_version):
     """
-    Check if the current version of a package is above the required minimum
+    Check if the current version of a package is above the required minimum.
     """
     version_numbers = [int(i) for i in version.split('.')]
     minimum_version_numbers = [int(i) for i in minimum_version.split('.')]
@@ -52,11 +52,11 @@ def infer_parser(circuit):
     if qiskit and isinstance(circuit, qiskit.QuantumCircuit):
         qiskit_version  = qiskit.__qiskit_version__['qiskit'] # qiskit metapackage version
         check_version('qiskit', qiskit_version, QISKIT_MIN_VERSION)
-        return qiskit_parser_utils
+        return circuit_parser_utils_qiskit
     elif cirq and isinstance(circuit, cirq.Circuit):
         cirq_version  = cirq.__version__
         check_version('cirq', cirq_version, CIRQ_MIN_VERSION)
-        return cirq_parser_utils
+        return circuit_parser_utils_cirq
     else:
         base = circuit.__module__.split('.')[0]
         raise NotImplementedError(f'circuit from {base} not supported')
@@ -91,7 +91,7 @@ def parse_bitstring(bitstring, n_qubits=None):
 
 def parse_fixed_qubits(fixed):
     """
-    Given a set of qubits with fixed states, return the output bitstring and corresponding qubits order
+    Given a set of qubits with fixed states, return the output bitstring and corresponding qubits order.
     """
     if fixed:
         fixed_qubits, fixed_bitstring = zip(*fixed.items())
@@ -133,18 +133,48 @@ def get_bitstring_tensors(bitstring, dtype='complex128', backend=cp):
 
 def convert_mode_labels_to_expression(input_mode_labels, output_mode_labels):
     """
-    Create an Einsum expression from input and output index labels
+    Create an Einsum expression from input and output index labels.
 
     Args:
         input_mode_labels: A sequence of mode labels for each input tensor.
         output_mode_labels: The desired mode labels for the output tensor.
 
     Returns:
-        An Einsum expression in explicit form
+        An Einsum expression in explicit form.
     """    
     input_symbols = [''.join(map(_get_symbol, idx)) for idx in input_mode_labels]
     expression = ','.join(input_symbols) + '->' + ''.join(map(_get_symbol, output_mode_labels))
     return expression
+
+def get_pauli_gates(pauli_map, dtype='complex128', backend=cp):
+    """
+    Populate the gates for all pauli operators.
+
+    Args:
+        pauli_map: A dictionary mapping qubits to pauli operators. 
+        dtype: Data type for the tensor operands.
+        backend: The package the tensor operands belong to.
+
+    Returns:
+        A sequence of pauli gates.
+    """
+    asarray = _get_backend_asarray_func(backend)
+    pauli_i = asarray([[1,0], [0,1]], dtype=dtype)
+    pauli_x = asarray([[0,1], [1,0]], dtype=dtype)
+    pauli_y = asarray([[0,-1j], [1j,0]], dtype=dtype)
+    pauli_z = asarray([[1,0], [0,-1]], dtype=dtype)
+    
+    operand_map = {'I': pauli_i,
+                   'X': pauli_x,
+                   'Y': pauli_y,
+                   'Z': pauli_z}
+    gates = []
+    for qubit, pauli_char in pauli_map.items():
+        operand = operand_map.get(pauli_char)
+        if operand is None:
+            raise ValueError('pauli string character must be one of I/X/Y/Z')
+        gates.append((operand, (qubit,)))
+    return gates
 
 def parse_gates_to_mode_labels_operands(
     gates, 

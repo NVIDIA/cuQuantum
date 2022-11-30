@@ -11,6 +11,7 @@ __all__ = ['CupyTensor']
 import cupy
 import numpy
 
+from . import utils
 from .tensor_ifc import Tensor
 
 
@@ -61,7 +62,15 @@ class CupyTensor(Tensor):
         name = context.get('dtype', 'float32')
         dtype = CupyTensor.name_to_dtype[name]
         device = context.get('device', None)
-        with cupy.cuda.Device(device=device):
+
+        if isinstance(device, cupy.cuda.Device):
+           device_id = device.id
+        elif isinstance(device, int):
+           device_id = device
+        else:
+            raise ValueError(f"The device must be specified as an integer or cupy.cuda.Device instance, not '{device}'.")
+
+        with utils.device_ctx(device_id):
             tensor = cupy.empty(shape, dtype=dtype)
 
         return tensor
@@ -77,7 +86,7 @@ class CupyTensor(Tensor):
         if not isinstance(device, int):
             raise ValueError(f"The device must be specified as an integer or 'cpu', not '{device}'.")
 
-        with cupy.cuda.Device(device):
+        with utils.device_ctx(device):
             tensor_device = cupy.asarray(self.tensor)
 
         return tensor_device

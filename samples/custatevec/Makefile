@@ -13,7 +13,8 @@ LINKER_FLAGS    := -lcudart -lcustatevec
 ARCH_FLAGS_SM70 = -gencode arch=compute_70,code=sm_70
 ARCH_FLAGS_SM75 = -gencode arch=compute_75,code=sm_75
 ARCH_FLAGS_SM80 = -gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80
-ARCH_FLAGS      = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80)
+ARCH_FLAGS_SM90 = -gencode arch=compute_90,code=sm_90 -gencode arch=compute_90,code=compute_90
+ARCH_FLAGS      = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80) $(ARCH_FLAGS_SM90)
 
 CXX_FLAGS       = -std=c++11 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(ARCH_FLAGS) $(LINKER_FLAGS)
 
