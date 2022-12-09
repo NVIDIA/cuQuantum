@@ -7,8 +7,14 @@ This public repository contains two sets of files related to the [NVIDIA cuQuant
 - `samples`: All C/C++ sample codes for the cuQuantum SDK.
 - `python`: The open-sourced cuQuantum Python project.
   - Available for download on
-    - conda-forge: `cuquantum` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum.svg)](https://anaconda.org/conda-forge/cuquantum), `cuquantum-python` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum-python.svg)](https://anaconda.org/conda-forge/cuquantum-python)
-    - PyPI: `cuquantum` [![pypi](https://img.shields.io/pypi/v/cuquantum.svg)](https://pypi.python.org/pypi/cuquantum), `cuquantum-python` [![pypi](https://img.shields.io/pypi/v/cuquantum-python.svg)](https://pypi.python.org/pypi/cuquantum-python)
+    - conda-forge:
+      - `custatevec` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/custatevec.svg)](https://anaconda.org/conda-forge/custatevec)
+      - `cutensornet` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cutensornet.svg)](https://anaconda.org/conda-forge/cutensornet)
+      - `cuquantum-python` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum-python.svg)](https://anaconda.org/conda-forge/cuquantum-python)
+    - PyPI:
+      - `custatevec-cu11` [![pypi](https://img.shields.io/pypi/v/custatevec-cu11.svg)](https://pypi.python.org/pypi/custatevec-cu11)
+      - `cutensornet-cu11` [![pypi](https://img.shields.io/pypi/v/cutensornet-cu11.svg)](https://pypi.python.org/pypi/cutensornet-cu11)
+      - `cuquantum-python` [![pypi](https://img.shields.io/pypi/v/cuquantum-python.svg)](https://pypi.python.org/pypi/cuquantum-python)
 
 Other components of the cuQuantum SDK can be accessed following the instruction given in the documentation.
 
@@ -25,4 +31,4 @@ All files hosted in this repository are subject to the [BSD-3-Clause](./LICENSE)
 
 This repository is uploaded to Zenodo automatically. Click the badge below to see citation formats.
 
-[![DOI](https://zenodo.org/badge/435003852.svg)](https://zenodo.org/badge/latestdoi/435003852)
+[![DOI](https://zenodo.org/badge/6385574.svg)](https://doi.org/10.5281/zenodo.6385574)
