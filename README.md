@@ -31,4 +31,4 @@ All files hosted in this repository are subject to the [BSD-3-Clause](./LICENSE)
 
 This repository is uploaded to Zenodo automatically. Click the badge below to see citation formats.
 
-[![DOI](https://zenodo.org/badge/6385574.svg)](https://doi.org/10.5281/zenodo.6385574)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6385574.svg)](https://doi.org/10.5281/zenodo.6385574)
