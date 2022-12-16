@@ -10,10 +10,14 @@ This public repository contains two sets of files related to the [NVIDIA cuQuant
     - conda-forge:
       - `custatevec` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/custatevec.svg)](https://anaconda.org/conda-forge/custatevec)
       - `cutensornet` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cutensornet.svg)](https://anaconda.org/conda-forge/cutensornet)
+      - `cuquantum` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum.svg)](https://anaconda.org/conda-forge/cuquantum)
       - `cuquantum-python` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum-python.svg)](https://anaconda.org/conda-forge/cuquantum-python)
     - PyPI:
       - `custatevec-cu11` [![pypi](https://img.shields.io/pypi/v/custatevec-cu11.svg)](https://pypi.python.org/pypi/custatevec-cu11)
       - `cutensornet-cu11` [![pypi](https://img.shields.io/pypi/v/cutensornet-cu11.svg)](https://pypi.python.org/pypi/cutensornet-cu11)
+      - `cuquantum-cu11` [![pypi](https://img.shields.io/pypi/v/cuquantum-cu11.svg)](https://pypi.python.org/pypi/cuquantum-cu11)
+      - `cuquantum` [![pypi](https://img.shields.io/pypi/v/cuquantum.svg)](https://pypi.python.org/pypi/cuquantum)
+      - `cuquantum-python-cu11` [![pypi](https://img.shields.io/pypi/v/cuquantum-python-cu11.svg)](https://pypi.python.org/pypi/cuquantum-python-cu11)
       - `cuquantum-python` [![pypi](https://img.shields.io/pypi/v/cuquantum-python.svg)](https://pypi.python.org/pypi/cuquantum-python)
 
 Other components of the cuQuantum SDK can be accessed following the instruction given in the documentation.
