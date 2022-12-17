@@ -8,10 +8,9 @@ import time
 
 import numpy as np
 try:
-    from qiskit.providers.aer import AerSimulator
-    from qiskit import transpile
+    import qiskit
 except ImportError:
-    AerSimulator = transpile = None
+    qiskit = None
 
 from .backend import Backend
 from .._utils import is_running_mpi
@@ -20,6 +19,8 @@ from .._utils import is_running_mpi
 class Qiskit(Backend):
 
     def __init__(self, ngpus, ncpu_threads, precision, logger, *args, identifier=None, **kwargs):
+        if qiskit is None:
+            raise RuntimeError("qiskit is not installed")
         self.precision = precision
         self.logger = logger
         self.identifier = identifier
@@ -28,7 +29,7 @@ class Qiskit(Backend):
 
     def preprocess_circuit(self, circuit, *args, **kwargs):
         t0 = time.perf_counter()
-        self.transpiled_qc = transpile(circuit, self.backend) # (circuit, basis_gates=['u3', 'cx'], backend=self.backend)
+        self.transpiled_qc = qiskit.transpile(circuit, self.backend) # (circuit, basis_gates=['u3', 'cx'], backend=self.backend)
         t1 = time.perf_counter()
         time_transpile = t1 - t0
         self.logger.info(f'transpile took {time_transpile} s')
@@ -49,6 +50,13 @@ class Qiskit(Backend):
 
     def create_aer_backend(self, identifier, ngpus, ncpu_threads, *args, **kwargs):
         nfused = kwargs.pop('nfused')
+        try:
+            # we defer importing Aer as late as possible, due to a bug it has that
+            # could init all GPUs prematurely
+            from qiskit.providers.aer import AerSimulator
+        except ImportError as e:
+            raise RuntimeError("qiskit-aer (or qiskit-aer-gpu) is not installed") from e
+
         if identifier == 'cusvaer':
             cusvaer_global_index_bits = kwargs.pop('cusvaer_global_index_bits')
             cusvaer_p2p_device_bits = kwargs.pop('cusvaer_p2p_device_bits')

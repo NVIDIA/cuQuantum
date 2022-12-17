@@ -99,6 +99,10 @@ Examples:
 - `cuquantum-benchmarks --frontend cirq --backend qsim-mgpu --benchmark qaoa --nqubits 16 --ngpus 2`: Construct a 16-qubit QAOA circuit in Cirq and run it with the (multi-GPU) `qsim-mgpu` backend on 2 GPUs (requires cuQuantum Appliance)
 - `mpiexec -n 4 cuquantum-benchmarks --frontend qiskit --backend cusvaer --benchmark quantum_volume --nqubits 32 --ngpus 1 --cusvaer-global-index-bits 2,2 --cusvaer-p2p-device-bits 2`: Construct a 32-qubit Quantum Volume circuit in Qiskit and run it with the (multi-GPU-multi-node) `cusvaer` backend on 2 nodes, each with 2 GPUs (requires cuQuantum Appliance)
 
+## Known issues
+
+- Due to Qiskit Aer's design, it'd initialize the CUDA contexts for all GPUs installed on the system at import time. While we can defer the import, it might have an impact to the (multi-GPU) system performance when any `aer*` backend is in use. For the time being, we recommend to work around it by limiting the visible devices. For example, `CUDA_VISIBLE_DEVICES=0,1 cuquantum-benchmarks ...` would only use GPU 0 & 1.
+
 ## Development Overview
 
 The benchmark suite generates a benchmark in a framework-agnostic fashion. Then, it's mapped to each framework's own circuit object. This mapping is done by picking a "frontend". Once a circuit object is generated, it is passed to a "backend" to execute, which may or may not be part of the framework. This componentized design allows for future extension of this benchmark suite to quickly support other quantum computing frameworks.

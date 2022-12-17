@@ -16,6 +16,8 @@ from .backend import Backend
 class QsimCirq(Backend):
 
     def __init__(self, ngpus, ncpu_threads, precision, logger, *args, identifier=None, **kwargs):
+        if qsimcirq is None:
+            raise RuntimeError("qsimcirq is not installed")
         if precision != 'single':
             raise ValueError("all qsim backends only support single precision")
         self.logger = logger

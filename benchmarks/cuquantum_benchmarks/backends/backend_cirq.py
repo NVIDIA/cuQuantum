@@ -15,6 +15,8 @@ from .backend import Backend
 class Cirq(Backend):
 
     def __init__(self, ngpus, ncpu_threads, precision, logger, *args, **kwargs):
+        if cirq is None:
+            raise RuntimeError("cirq is not installed")
         if ngpus > 0:
             raise ValueError("the cirq backend only runs on CPU")
         if ncpu_threads > 1:

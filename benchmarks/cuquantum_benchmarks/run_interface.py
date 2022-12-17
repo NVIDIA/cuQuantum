@@ -231,9 +231,6 @@ class RunSpecific:
         num_qubits = str(self.nqubits)
         num_gpus = str(self.ngpus)
 
-        backend_version = self.extract_backend_version()
-        frontend_version = self.extract_frontend_version()
-
         # FIXME: this is buggy (no early return)
         # try:
         #     if (self.general_interface.append
@@ -257,16 +254,10 @@ class RunSpecific:
         circuit_filename, target, pauli = self._fix_filename_for_cutn(circuit_filename, self.nqubits)
         self.general_interface.cutn_target = target
 
-        if self.ngpus == 0:
-            self.general_interface.logger.info(
-                f'* Running {self.benchmark_name} with {self.ncpu_threads} CPU threads, and {self.nqubits} qubits [{self.general_interface.backend}-v{backend_version}]:')
-        else:
-            self.general_interface.logger.info(
-                f'* Running {self.benchmark_name} with {self.ngpus} GPUs, and {self.nqubits} qubits [{self.general_interface.backend}-v{backend_version}]:')
-
         # get circuit
         circuit = self.load_or_generate_circuit(circuit_filename + '.pickle')
 
+        # get backend
         backend = createBackend(
             self.general_interface.backend, self.ngpus, self.ncpu_threads, self.general_interface.precision, self.general_interface.logger,
             nqubits=self.nqubits,                                      # TODO: backend config
@@ -274,6 +265,19 @@ class RunSpecific:
             cusvaer_p2p_device_bits=self.cusvaer_p2p_device_bits,      # only cusvaer needs this, TODO: backend config
             nfused=self.general_interface.nfused,                      # only qiskit and qsim
         )
+
+        # get versions; it's assumed up to this point, the existence of Python modules for
+        # both frontend and backend is confirmed
+        backend_version = self.extract_backend_version()
+        frontend_version = self.extract_frontend_version()
+
+        if self.ngpus == 0:
+            self.general_interface.logger.info(
+                f'* Running {self.benchmark_name} with {self.ncpu_threads} CPU threads, and {self.nqubits} qubits [{self.general_interface.backend}-v{backend_version}]:')
+        else:
+            self.general_interface.logger.info(
+                f'* Running {self.benchmark_name} with {self.ngpus} GPUs, and {self.nqubits} qubits [{self.general_interface.backend}-v{backend_version}]:')
+
         preprocess_data = backend.preprocess_circuit(
             circuit,
             circuit_filename=circuit_filename, target=target, pauli=pauli  # only cutn needs this, TODO: backend config
@@ -336,7 +340,7 @@ class RunSpecific:
         self.general_interface.logger.debug(f' - [GPU] Multi processor count: {gpu_multiprocessor_num}')
         self.general_interface.logger.debug(f' - [GPU] CUDA driver version: {gpu_driver_ver} ({nvml_driver_ver})')
         self.general_interface.logger.debug(f' - [GPU] CUDA runtime version: {gpu_runtime_ver}')
-        self.general_interface.logger.info('\n')
+        self.general_interface.logger.info('')
 
         self.benchmark_data['cpu_time'] = perf_time
         self.benchmark_data['cpu_phy_mem'] = cpu_phy_mem
