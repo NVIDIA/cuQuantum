@@ -233,8 +233,12 @@ The data type '{self.data_type}' is currently not supported.
         num_modes_in = tuple(len(m) for m in modes_in)
         self.qualifiers_in = utils.check_tensor_qualifiers(qualifiers, cutn.tensor_qualifiers_dtype, num_inputs)
 
-        self.contraction, modes_out, extents_out, strides_out = utils.create_output_tensor(
-                self.output_class, self.package, self.output, self.size_dict, self.device_id, self.data_type)
+        # Create the output in the context of the current stream to work around a performance issue with CuPy's memory pool.
+        stream = None
+        self.logger.debug("Beginning output tensor creation...")
+        self.contraction, self.contraction_output_event, modes_out, extents_out, strides_out = utils.create_output_tensor(
+                self.output_class, self.package, self.output, self.size_dict, self.device_id, stream, self.data_type)
+        self.logger.debug("The output tensor has been created.")
 
         # Create/set handle.
         if options.handle is not None:
@@ -631,7 +635,13 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         # Check if we still hold an output tensor; if not, create a new one.
         if self.contraction is None:
+            self.logger.debug("Beginning output (empty) tensor creation...")
             self.contraction = utils.create_empty_tensor(self.output_class, self.extents_out, self.data_type, self.device_id, stream_ctx)
+            self.logger.debug("The output (empty) tensor has been created.")
+        elif self.contraction_output_event is not None:
+            stream.wait_event(self.contraction_output_event)
+            self.contraction_output_event = None
+            self.logger.debug("Established ordering with output tensor creation event.")
 
         timing =  bool(self.logger and self.logger.handlers)
         self.logger.info(f"Starting autotuning...")
@@ -716,7 +726,13 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         # Check if we still hold an output tensor; if not, create a new one.
         if self.contraction is None:
+            self.logger.debug("Beginning output (empty) tensor creation...")
             self.contraction = utils.create_empty_tensor(self.output_class, self.extents_out, self.data_type, self.device_id, stream_ctx)
+            self.logger.debug("The output (empty) tensor has been created.")
+        elif self.contraction_output_event is not None:
+            stream.wait_event(self.contraction_output_event)
+            self.contraction_output_event = None
+            self.logger.debug("Established ordering with output tensor creation event.")
 
         # Create a slice group for contraction.
         slice_group = None

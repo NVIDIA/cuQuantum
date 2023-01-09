@@ -50,7 +50,8 @@ def infer_parser(circuit):
     Infer the package that defines the circuit object.
     """
     if qiskit and isinstance(circuit, qiskit.QuantumCircuit):
-        qiskit_version  = qiskit.__qiskit_version__['qiskit'] # qiskit metapackage version
+        import importlib.metadata
+        qiskit_version = importlib.metadata.version('qiskit') # qiskit metapackage version
         check_version('qiskit', qiskit_version, QISKIT_MIN_VERSION)
         return circuit_parser_utils_qiskit
     elif cirq and isinstance(circuit, cirq.Circuit):

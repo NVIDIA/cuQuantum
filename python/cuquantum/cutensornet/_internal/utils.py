@@ -185,27 +185,22 @@ def create_empty_tensor(cls, extents, dtype, device_id, stream_ctx):
     return tensor
 
 
-def create_output_tensor(cls, package, output, size_dict, device_id, data_type):
+def create_output_tensor(cls, package, output, size_dict, device_id, stream, data_type):
     """
     Create output tensor and associated data (modes, extents, strides). This operation is
-    blocking and is safe to use with asynchronous memory pools.
+    ordered through events and is safe to use with asynchronous memory pools.
     """
     modes = tuple(m for m in output)
     extents = tuple(size_dict[m] for m in output)
 
-    package_ifc = package_wrapper.PACKAGE[package]
-
-    stream = package_ifc.create_stream(device_id)
-    stream, stream_ctx, _ = _create_stream_ctx_ptr_cupy_stream(package_ifc, stream)
+    stream, stream_ctx, _ = get_or_create_stream(device_id, stream, package)
 
     with device_ctx(device_id):
-        start = stream.record()
         output = create_empty_tensor(cls, extents, data_type, device_id, stream_ctx)
-        end = stream.record()
-        end.synchronize()
+        output_event = stream.record()
 
     strides = output.strides
-    return output, modes, extents, strides
+    return output, output_event, modes, extents, strides
 
 
 def get_network_device_id(operands):
@@ -494,16 +489,10 @@ def get_mpi_comm_pointer(comm):
     Returns:
         tuple: A pair of int values representing the address and the size.
     """
-    # We won't initialize MPI for users in any case
     try:
-        import mpi4py
-        init = mpi4py.rc.initialize
-        mpi4py.rc.initialize = False
-        from mpi4py import MPI
+        from mpi4py import MPI  # init!
     except ImportError as e:
         raise RuntimeError("please install mpi4py") from e
-    finally:
-        mpi4py.rc.initialize = init
 
     if not isinstance(comm, MPI.Comm):
         raise ValueError("invalid MPI communicator")
