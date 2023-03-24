@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -87,8 +87,19 @@ def camel_to_snake(name, upper=True):
     """
     Convert string from camel case to snake style.
     """
-    name = re.sub("^([A-Z])|(?<!_)([A-Z])|([A-Z])", lambda m:
-            m.group(1).lower() if m.group(1) else (('_' + m.group(2).lower()) if m.group(2) else m.group(3).lower()), name)
+    def transformer(m):
+        prefix = iter(('', '_', ''))
+        for i in 1, 3, 5:
+            first, second = i, i + 1
+            s = next(prefix)
+            if m.group(second):
+                if m.group(first):   # If the second group doesn't exist, the first won't either by the design of the RE.
+                    s += m.group(first).lower() + '_'
+                s += m.group(second).lower()
+                break
+        return s
+
+    name = re.sub(r"^([A-Z]*)([A-Z])|(?<!_)([A-Z]*)([A-Z])|([A-Z]*)([A-Z])", transformer, name)
     if upper:
         name = name.upper()
     return name

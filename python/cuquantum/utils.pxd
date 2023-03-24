@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -7,7 +7,8 @@ cimport cpython
 
 
 cdef extern from "driver_types.h" nogil:
-    ctypedef int Stream 'cudaStream_t'
+    ctypedef void* Stream 'cudaStream_t'
+    ctypedef void* Event 'cudaEvent_t'
 
 cdef extern from "library_types.h" nogil:
     ctypedef enum DataType 'cudaDataType_t':

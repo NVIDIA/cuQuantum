@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -26,7 +26,7 @@ cdef int cuqnt_alloc_wrapper(void* ctx, void** ptr, size_t size, Stream stream) 
     try:
         pairs = <object>(ctx)
         user_alloc = pairs[0]
-        ptr[0] = <void*>(<intptr_t>user_alloc(size, stream))
+        ptr[0] = <void*>(<intptr_t>user_alloc(size, <intptr_t>stream))
     except:
         # TODO: logging?
         return 1
@@ -44,7 +44,7 @@ cdef int cuqnt_free_wrapper(void* ctx, void* ptr, size_t size, Stream stream) wi
     try:
         pairs = <object>(ctx)
         user_free = pairs[1]
-        user_free(<intptr_t>ptr, size, stream)
+        user_free(<intptr_t>ptr, size, <intptr_t>stream)
     except:
         # TODO: logging?
         return 1

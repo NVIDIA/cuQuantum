@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -9,6 +9,7 @@ Interface to seamlessly use tensors (or ndarray-like objects) from different lib
 from abc import ABC, abstractmethod
 
 from . import typemaps
+from .. import cutensornet as cutn
 
 class Tensor(ABC):
     """
@@ -79,4 +80,11 @@ class Tensor(ABC):
             except exception_type:
                 pass
         return name_to_dtype
+    
+    @abstractmethod
+    def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
+        raise NotImplementedError
+    
+    def create_tensor_descriptor(self, handle, modes):
+        return cutn.create_tensor_descriptor(handle, self.tensor.ndim, self.shape, self.strides, modes, typemaps.NAME_TO_DATA_TYPE[self.dtype])
 

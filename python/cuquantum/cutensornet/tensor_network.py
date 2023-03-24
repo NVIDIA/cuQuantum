@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -368,7 +368,7 @@ The data type '{self.data_type}' is currently not supported.
         self.logger.debug(f"Finished allocating memory of size {formatters.MemoryStr(self.workspace_size)} for contraction in the context of stream {self.workspace_stream}.")
 
         device_ptr = utils.get_ptr_from_memory_pointer(self.workspace_ptr)
-        cutn.workspace_set(self.handle, self.workspace_desc, cutn.Memspace.DEVICE, device_ptr, self.workspace_size)
+        cutn.workspace_set_memory(self.handle, self.workspace_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, device_ptr, self.workspace_size)
         self.logger.debug(f"The workspace memory (device pointer = {device_ptr}) has been set in the workspace descriptor.")
 
     @utils.precondition(_check_valid_network)
@@ -383,8 +383,8 @@ The data type '{self.data_type}' is currently not supported.
 
         cutn.workspace_compute_contraction_sizes(self.handle, self.network, self.optimizer_info_ptr, self.workspace_desc)
 
-        min_size = cutn.workspace_get_size(self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE)
-        max_size = cutn.workspace_get_size(self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE)
+        min_size = cutn.workspace_get_memory_size(self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        max_size = cutn.workspace_get_memory_size(self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
 
         if self.memory_limit < min_size:
             message = f"""Insufficient memory.
@@ -398,7 +398,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         self.logger.info(f"The workspace size has been set to {formatters.MemoryStr(self.workspace_size)}.")
 
         # Set workspace size to enable contraction planning. The device pointer will be set later during allocation.
-        cutn.workspace_set(self.handle, self.workspace_desc, cutn.Memspace.DEVICE, 0, self.workspace_size)
+        cutn.workspace_set_memory(self.handle, self.workspace_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, 0, self.workspace_size)
 
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Planning")
@@ -508,6 +508,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             - If the path is provided, the user has to set the sliced modes too if slicing is desired.
         """
 
+        binary_contraction_optimization = len(self.operands) == 2 and optimize is None
         optimize = utils.check_or_create_options(configuration.OptimizerOptions, optimize, "path optimizer options")
 
         internal_options = dict()
@@ -521,8 +522,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         opt_info_ifc = optimizer_ifc.OptimizerInfoInterface(self)
 
-        # Special case worth optimizing, as it's an extremely common use case with a trivial path
-        if len(self.operands) == 2:
+        # Special case worth optimizing (when the "optimize" option is not specified), as it's an extremely common use case with a trivial path.
+        if binary_contraction_optimization:
             optimize.path = [(0, 1)]
 
         # Compute path (or set provided path).

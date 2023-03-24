@@ -154,12 +154,13 @@ Following functionalities are encapsulated in this class:
 * Optionally, calling `cutensornetCreateTensorSVDInfo` and `cutensornetTensorSVDInfoGetAttribute` to store and retrieve runtime SVD truncation information.
 * Performing gate split operations for all gates using `cutensornetTensorGateSplit`. 
 * Freeing the cuTensorNet resources.
-* Finding an optimal contraction path with `cutensornetContractionOptimize` in parallel,
-  and using global reduction (`MPI_MINLOC`) to find the best path and the owning process's identity.
-  Note that the contraction optimizer on each process sets a different random seed, so each process
-  typically computes a different optimal path for sufficiently large tensor networks.
-* Broadcasting the winner's `optimizerInfo` object by serializing it using the `cutensornetContractionOptimizerInfoGetPackedSize`
-  and `cutensornetContractionOptimizerInfoPackData` APIs, and deserializing it into an existing `optimizerInfo`
-  object using the `cutensornetUpdateContractionOptimizerInfoFromPackedData` API function.
-* Computing the subset of slice IDs (in a relatively load-balanced fashion) for which each process is responsible,
-  contracting them, and performing a global reduction (sum) to get the final result on the root process.
+
+### 8. Intermediate tensor(s) reuse (`tensornet_example_reuse.cu`)
+
+This sample demonstrates how to use the "intermediate tensor reuse" feature to accelerate the contractions
+of a network with constant intput tensors, where repeated contractions would change some of the input tensor's data only. This sample largely builds on first sample provided above.
+
+This sample demonstrates how to:
+* Mark input tensors as "constant" when creating a tensor network using `cutensornetCreateNetworkDescriptor`, by setting the corresponding `cutensornetTensorQualifiers_t` field.
+* Provide a cache workspace to the contraction plan which will be used to accelerate the subsequent contractions of the same network. It shows how to query the required cache memory size using `cutensornetWorkspaceGetMemorySize` with a `CUTENSORNET_WORKSPACE_CACHE` workspace-kind, and how to the provide the workspace memory using `cutensornetWorkspaceSetMemory`.
+* Provide a predefined contraction path to the contraction optimizer by calling `cutensornetContractionOptimizerInfoSetAttribute` with `CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_PATH` attribute.

@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -19,8 +19,13 @@ import pytest
 import cuquantum
 from cuquantum import ComputeType, cudaDataType
 from cuquantum import cutensornet as cutn
-from .test_utils import atol_mapper, rtol_mapper
+from cuquantum import tensor
+from cuquantum.cutensornet._internal.decomposition_utils import get_svd_info_dict, parse_svd_config
+from cuquantum.cutensornet._internal.utils import check_or_create_options
 
+from . import approxTN_utils
+from .data import gate_decomp_expressions, tensor_decomp_expressions
+from .test_utils import atol_mapper, rtol_mapper
 from .. import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type,
                 MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase)
 
@@ -59,8 +64,10 @@ def manage_resource(name):
                     self.tn = tn
                 elif name == 'tensor_decom':
                     tn, dtype, tensor_form = self.tn, self.dtype, self.tensor_form
-                    einsum, shapes = tn  # unpack
-                    tn = TensorDecompositionFactory(einsum, shapes, dtype)
+                    options = getattr(self, "options", {})
+                    max_extent = options.get("max_extent", None)
+                    subscript, shapes = tn  # unpack
+                    tn = TensorDecompositionFactory(subscript, shapes, dtype, max_extent=max_extent)
                     h = []
                     for t in tn.tensor_names:
                         t = cutn.create_tensor_descriptor(
@@ -568,34 +575,39 @@ class TestContraction(TestTensorNetworkBase):
         # manage workspace
         if mempool is None:
             cutn.workspace_compute_sizes(handle, dscr, info, workspace)
-            required_size_deprecated = cutn.workspace_get_size(
+            required_size_deprecated = cutn.workspace_get_memory_size(
                 handle, workspace,
                 getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
-                cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+                cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
+                cutn.WorkspaceKind.SCRATCH)
             cutn.workspace_compute_contraction_sizes(handle, dscr, info, workspace)
-            required_size = cutn.workspace_get_size(
+            required_size = cutn.workspace_get_memory_size(
                 handle, workspace,
                 getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
-                cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+                cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
+                cutn.WorkspaceKind.SCRATCH)
             assert required_size == required_size_deprecated
             if workspace_size < required_size:
                 assert False, \
                     f"wrong assumption on the workspace size " \
                     f"(given: {workspace_size}, needed: {required_size})"
             workspace_ptr = cupy.cuda.alloc(workspace_size)
-            cutn.workspace_set(
+            cutn.workspace_set_memory(
                 handle, workspace,
                 cutn.Memspace.DEVICE,
+                cutn.WorkspaceKind.SCRATCH,
                 workspace_ptr.ptr, workspace_size)
             # round-trip check
-            assert (workspace_ptr.ptr, workspace_size) == cutn.workspace_get(
-                handle, workspace,
-                cutn.Memspace.DEVICE)
-        else:
-            cutn.workspace_set(
+            assert (workspace_ptr.ptr, workspace_size) == cutn.workspace_get_memory(
                 handle, workspace,
                 cutn.Memspace.DEVICE,
-                0, 0)  # TODO: check custom workspace size?
+                cutn.WorkspaceKind.SCRATCH)
+        else:
+            cutn.workspace_set_memory(
+                handle, workspace,
+                cutn.Memspace.DEVICE,
+                cutn.WorkspaceKind.SCRATCH,
+                0, -1)  # TODO: check custom workspace size?
 
         plan = None
         try:
@@ -670,91 +682,60 @@ class TestMemHandler(MemHandlerTestBase):
 
 class TensorDecompositionFactory:
 
-    # QR Example: "ab->ax,xb"
-    # SVD Example: "ab->ax,x,xb"
-    # Gate Example: "ijk,klm,jkpq->->ipk,k,kqm" for indirect gate with singular values returned.
-    #               "ijk,klm,jkpq->ipk,-,kqm" for direct gate algorithm with singular values equally partitioned onto u and v
-
-    # self.reconstruct must be a valid einsum expr and can be used to reconstruct
-    # the input tensor if no/little truncation was done
-
+    # QR/SVD Example: "ab->ax,xb"
+    # Gate Example: "ijk,klm,jkpq->->ipk,kqm" 
     # This factory CANNOT be reused; once a tensor descriptor uses it, it must
     # be discarded.
 
-    svd_partitioned = ('<', '-', '>')  # reserved symbols
+    def __init__(self, subscript, shapes, dtype, max_extent=None):
+        self.subscript = subscript
 
-    def __init__(self, einsum, shapes, dtype):
-        if len(shapes) == 3:
-            self.tensor_names = ['input', 'left', 'right']
-            self.einsum = einsum
-        elif len(shapes) == 5:
-            self.tensor_names = ['inputA', 'inputB', 'inputG', 'left', 'right']
-            if einsum.count("->") == 1:
-                self.gate_algorithm = cutn.GateSplitAlgo.DIRECT
-                self.einsum = einsum
-            elif einsum.count("->") == 2:
-                self.gate_algorithm = cutn.GateSplitAlgo.REDUCED
-                self.einsum = einsum.replace("->->", "->")
-            else:
-                raise NotImplementedError
-        else:
+        if len(shapes) not in [1, 3]:
             raise NotImplementedError
         
-        inputs, output = self.einsum.split('->')
-        output = output.split(',')
-        if len(output) == 2:  # QR
-            left, right = output
-            self.reconstruct = f"{left},{right}->{inputs}"
-            all_modes = [inputs, left, right]
-        elif len(output) == 3:  # SVD or Gate
-            left, mid_mode, right = output
-            common_mode = set(left).intersection(right).pop()
-            assert len(common_mode) == 1
-            idx_left = left.find(common_mode)
-            idx_right = right.find(common_mode)
-            self.mid_mode = mid_mode
-            
-            if len(shapes) == 3: # svd
-                all_modes = [inputs, left, right]
-                assert shapes[1][idx_left] == shapes[2][idx_right]
-                self.mid_extent = shapes[1][idx_left]
-                self.reference_einsum = None
-                if mid_mode in self.svd_partitioned:
-                    # s is already merged into left, both, or right
-                    self.reconstruct = f"{left},{right}->{inputs}"
+        modes_in, left_modes, right_modes, shared_mode = approxTN_utils.parse_split_expression(subscript)
+        modes_in = modes_in.split(",")
+        size_dict = dict()
+        for modes, shape in zip(modes_in, shapes):
+            for mode, extent in zip(modes, shape):
+                if mode in size_dict:
+                    assert size_dict[mode] == extent
                 else:
-                    assert mid_mode == common_mode
-                    self.reconstruct = f"{left},{common_mode},{right}->{inputs}"
-            else: # Gate
-                all_modes = list(inputs.split(","))+[left, right]
-                assert shapes[3][idx_left] == shapes[4][idx_right]
-                self.mid_extent = shapes[3][idx_left]
-                contracted_output_modes = "".join((set(left) | set(right)) - (set(left) & set(right)))
-                self.reference_einsum = f"{inputs}->{contracted_output_modes}"
-                if mid_mode in self.svd_partitioned:
-                    # s is already merged into left, both, or right
-                    self.reconstruct = f"{left},{right}->{contracted_output_modes}"
-                else:
-                    assert mid_mode == common_mode
-                    self.reconstruct = f"{left},{common_mode},{right}->{contracted_output_modes}"
+                    size_dict[mode] = extent
+        _, left_modes_out, right_modes_out, shared_mode_out, _, mid_extent = approxTN_utils.parse_modes_extents(size_dict, subscript)
+        # Note: we need to parse options as this is where max_extent is specified
+        self.shared_mode_idx_left = left_modes_out.find(shared_mode_out)
+        self.shared_mode_idx_right = right_modes_out.find(shared_mode_out)
+        if max_extent is None:
+            # no truncation on extent
+            self.mid_extent = mid_extent
         else:
-            assert False
-        del output
+            assert max_extent > 0
+            self.mid_extent = min(mid_extent, max_extent)
 
+        self.tensor_names = [f"input_{i}" for i in range(len(shapes))] + ["left", "right"] # note s needs to be explictly managed in the tester function
+    
         # xp strides in bytes, cutn strides in counts
         dtype = cupy.dtype(dtype)
+        real_dtype = dtype.char.lower()
+        is_complex = dtype.char != real_dtype
         itemsize = dtype.itemsize
 
-        for name, shape, modes in zip(self.tensor_names, shapes, all_modes):
-            real_dtype = dtype.char.lower()
+        def _get_tensor(name, modes):
             if name.startswith('input'):
-                if dtype.char != real_dtype:  # complex
+                shape = [size_dict[mode] for mode in modes]
+                if is_complex:  # complex
                     arr = (cupy.random.random(shape, dtype=real_dtype)
                            + 1j*cupy.random.random(shape, dtype=real_dtype)).astype(dtype)
                 else:
                     arr = cupy.random.random(shape, dtype=dtype)
             else:
+                shape = [self.mid_extent if mode == shared_mode_out else size_dict[mode] for mode in modes]
                 arr = cupy.empty(shape, dtype=dtype, order='F')
+            return arr
+
+        for name, modes in zip(self.tensor_names, modes_in + [left_modes_out, right_modes_out]):
+            arr = _get_tensor(name, modes)
             setattr(self, f'{name}_tensor', arr)
             setattr(self, f'{name}_n_modes', len(arr.shape))
             setattr(self, f'{name}_extent', arr.shape)
@@ -802,23 +783,19 @@ class TensorDecompositionFactory:
 
     def get_tensor_ptr(self, name):
         return getattr(self, f'{name}_tensor').data.ptr
+    
+    def get_operands(self, include_inputs=True, include_outputs=True):
+        operands = []
+        for name in self.tensor_names:
+            if include_inputs and name.startswith('input'):
+                operands.append(getattr(self, f'{name}_tensor'))
+            elif include_outputs and not name.startswith('input'):
+                operands.append(getattr(self, f'{name}_tensor'))
+        return operands
 
 
 @testing.parameterize(*testing.product({
-    'tn': (
-        ('ab->ax,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->ax,bx', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,bx', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->ax,xb', [(6, 8), (6, 6), (6, 8)]),
-        ('ab->ax,bx', [(6, 8), (6, 6), (8, 6)]),
-        ('ab->xa,xb', [(6, 8), (6, 6), (6, 8)]),
-        ('ab->xa,bx', [(6, 8), (6, 6), (8, 6)]),
-        ('ab->ax,xb', [(8, 6), (8, 6), (6, 6)]),
-        ('ab->ax,bx', [(8, 6), (8, 6), (6, 6)]),
-        ('ab->xa,xb', [(8, 6), (6, 8), (6, 6)]),
-        ('ab->xa,bx', [(8, 6), (6, 8), (6, 6)]),
-    ),
+    'tn': tensor_decomp_expressions,
     'dtype': (
         numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
     ),
@@ -837,6 +814,7 @@ class TestTensorQR:
     def test_tensor_qr(self):
         # unpack
         handle, tn, workspace = self.handle, self.tn, self.workspace
+        
         tensor_in, tensor_q, tensor_r = self.tensor_decom
         dtype = cupy.dtype(self.dtype)
 
@@ -845,68 +823,34 @@ class TestTensorQR:
             handle, tensor_in, tensor_q, tensor_r, workspace)
         # for now host workspace is always 0, so just query device one
         # also, it doesn't matter which one (min/recommended/max) is queried
-        required_size = cutn.workspace_get_size(
+        required_size = cutn.workspace_get_memory_size(
             handle, workspace, cutn.WorksizePref.MIN,
-            cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+            cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
+            cutn.WorkspaceKind.SCRATCH)
         if required_size > 0:
             workspace_ptr = cupy.cuda.alloc(required_size)
-            cutn.workspace_set(
-                handle, workspace, cutn.Memspace.DEVICE,
+            cutn.workspace_set_memory(
+                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH,
                 workspace_ptr.ptr, required_size)
             # round-trip check
-            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get(
-                handle, workspace, cutn.Memspace.DEVICE)
+            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get_memory(
+                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
 
         # perform QR
         stream = cupy.cuda.get_current_stream().ptr  # TODO
         cutn.tensor_qr(
-            handle, tensor_in, tn.get_tensor_ptr('input'),
+            handle, tensor_in, tn.get_tensor_ptr('input_0'),
             tensor_q, tn.get_tensor_ptr('left'),
             tensor_r, tn.get_tensor_ptr('right'),
             workspace, stream)
 
-        # we add a minimal correctness check here as we are not protected by
-        # any high-level API yet
-        out = cupy.einsum(tn.reconstruct, tn.left_tensor, tn.right_tensor)
-        assert cupy.allclose(out, tn.input_tensor,
-                             rtol=rtol_mapper[dtype.name],
-                             atol=atol_mapper[dtype.name])
+        # for QR, no need to compute the reference for correctness check
+        operands = tn.get_operands(include_inputs=True, include_outputs=True) # input, q, r
+        assert approxTN_utils.verify_split_QR(tn.subscript, *operands, None, None)
 
 
-# TODO: expand tests:
-#  - add truncation
-#  - use config (cutoff & normalization)
 @testing.parameterize(*testing.product({
-    'tn': (
-        # no truncation, no partition
-        ('ab->ax,x,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->ax,x,bx', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,x,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,x,bx', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->ax,x,xb', [(6, 8), (6, 6), (6, 8)]),
-        ('ab->ax,x,bx', [(6, 8), (6, 6), (8, 6)]),
-        ('ab->xa,x,xb', [(6, 8), (6, 6), (6, 8)]),
-        ('ab->xa,x,bx', [(6, 8), (6, 6), (8, 6)]),
-        ('ab->ax,x,xb', [(8, 6), (8, 6), (6, 6)]),
-        ('ab->ax,x,bx', [(8, 6), (8, 6), (6, 6)]),
-        ('ab->xa,x,xb', [(8, 6), (6, 8), (6, 6)]),
-        ('ab->xa,x,bx', [(8, 6), (6, 8), (6, 6)]),
-        # no truncation, partition to u
-        ('ab->ax,<,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->ax,<,bx', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,<,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,<,bx', [(8, 8), (8, 8), (8, 8)]),
-        # no truncation, partition to v
-        ('ab->ax,>,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->ax,>,bx', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,>,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,>,bx', [(8, 8), (8, 8), (8, 8)]),
-        # no truncation, partition to both
-        ('ab->ax,-,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->ax,-,bx', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,-,xb', [(8, 8), (8, 8), (8, 8)]),
-        ('ab->xa,-,bx', [(8, 8), (8, 8), (8, 8)]),
-    ),
+    'tn': tensor_decomp_expressions,
     'dtype': (
         numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
     ),
@@ -914,33 +858,16 @@ class TestTensorQR:
         {'extent': 'int', 'stride': 'int', 'mode': 'int'},
         {'extent': 'seq', 'stride': 'seq', 'mode': 'seq'},
     ),
+    'options': (
+        {}, # standard exact svd
+        {'max_extent': 4, 'normalization':'L1', 'partition':'U'}, # fix extent truncation
+        {'abs_cutoff': 0.1, 'rel_cutoff': 0.1}, # value based truncation
+        {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V'}, # absolute value based truncation
+        {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV'}, # relative value based truncation
+        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV'}, # compound truncation
+    ),
 }))
 class TestTensorSVD:
-
-    def _get_scalar_attr(self, handle, obj_type, obj, attr):
-        if obj_type == 'config':
-            dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
-            getter = cutn.tensor_svd_config_get_attribute
-        elif obj_type == 'info':
-            dtype_getter = cutn.tensor_svd_info_get_attribute_dtype
-            getter = cutn.tensor_svd_info_get_attribute
-        else:
-            assert False
-
-        dtype = dtype_getter(attr)
-        data = numpy.empty((1,), dtype=dtype)
-        getter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
-        return data
-
-    def _set_scalar_attr(self, handle, obj_type, obj, attr, data):
-        assert obj_type == 'config'  # svd info has no setter
-        dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
-        setter = cutn.tensor_svd_config_set_attribute
-
-        dtype = dtype_getter(attr)
-        if not isinstance(data, numpy.ndarray):
-            data = numpy.asarray(data, dtype=dtype)
-        setter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
 
     # There is no easy way for us to test each API independently, so we instead
     # parametrize the steps and test the whole workflow
@@ -956,117 +883,79 @@ class TestTensorSVD:
         svd_config, svd_info = self.svd_config, self.svd_info
         dtype = cupy.dtype(self.dtype)
 
+        # parse svdConfig
+        svd_method = check_or_create_options(tensor.SVDMethod, self.options, "SVDMethod")
+        parse_svd_config(handle, svd_config, svd_method, logger=None)
+
         # prepare workspace
         cutn.workspace_compute_svd_sizes(
             handle, tensor_in, tensor_u, tensor_v, svd_config, workspace)
         # for now host workspace is always 0, so just query device one
         # also, it doesn't matter which one (min/recommended/max) is queried
-        required_size = cutn.workspace_get_size(
+        required_size = cutn.workspace_get_memory_size(
             handle, workspace, cutn.WorksizePref.MIN,
-            cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+            cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
+            cutn.WorkspaceKind.SCRATCH)
         if required_size > 0:
             workspace_ptr = cupy.cuda.alloc(required_size)
-            cutn.workspace_set(
-                handle, workspace, cutn.Memspace.DEVICE,
+            cutn.workspace_set_memory(
+                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH,
                 workspace_ptr.ptr, required_size)
             # round-trip check
-            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get(
-                handle, workspace, cutn.Memspace.DEVICE)
-
-        # set singular value partitioning, if requested
-        if tn.mid_mode in tn.svd_partitioned:
-            if tn.mid_mode == '<':
-                data = cutn.TensorSVDPartition.US
-            elif tn.mid_mode == '-':
-                data = cutn.TensorSVDPartition.UV_EQUAL
-            else:  # = '<':
-                data = cutn.TensorSVDPartition.SV
-            self._set_scalar_attr(
-                handle, 'config', svd_config,
-                cutn.TensorSVDConfigAttribute.S_PARTITION,
-                data)
-            # do a round-trip test as a sanity check
-            factor = self._get_scalar_attr(
-                handle, 'config', svd_config,
-                cutn.TensorSVDConfigAttribute.S_PARTITION)
-            assert factor == data
-
-        # perform SVD
-        stream = cupy.cuda.get_current_stream().ptr  # TODO
-        if tn.mid_mode in tn.svd_partitioned:
-            s_ptr = 0
-        else:
+            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get_memory(
+                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        
+        partition = self.options.get("partition", None)
+        if partition is None:
             s = cupy.empty(tn.mid_extent, dtype=dtype.char.lower())
             s_ptr = s.data.ptr
+        else:
+            s = None
+            s_ptr = 0
+        
+        # perform SVD
+        stream = cupy.cuda.get_current_stream().ptr  # TODO
         cutn.tensor_svd(
-            handle, tensor_in, tn.get_tensor_ptr('input'),
+            handle, tensor_in, tn.get_tensor_ptr('input_0'),
             tensor_u, tn.get_tensor_ptr('left'),
             s_ptr,
             tensor_v, tn.get_tensor_ptr('right'),
             svd_config, svd_info, workspace, stream)
+        
+        # get runtime truncation details
+        info = get_svd_info_dict(handle, svd_info)
+        
+        T, u, v = tn.get_operands(include_inputs=True, include_outputs=True)
 
-        # sanity checks (only valid for no truncation)
-        assert tn.mid_extent == self._get_scalar_attr(
-            handle, 'info', svd_info,
-            cutn.TensorSVDInfoAttribute.FULL_EXTENT)
-        assert tn.mid_extent == self._get_scalar_attr(
-            handle, 'info', svd_info,
-            cutn.TensorSVDInfoAttribute.REDUCED_EXTENT)
-        assert 0 == self._get_scalar_attr(
-            handle, 'info', svd_info,
-            cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT)
+        # update the container if reduced extent if found to be different from specified mid extent
+        extent_U_out, strides_U_out = cutn.get_tensor_details(handle, tensor_u)[2:]
+        extent_V_out, strides_V_out = cutn.get_tensor_details(handle, tensor_v)[2:]
+        reduced_extent = info['reduced_extent']
+        assert extent_U_out[tn.shared_mode_idx_left] == reduced_extent
+        assert extent_V_out[tn.shared_mode_idx_right] == reduced_extent
+        if tuple(extent_U_out) != u.shape:
+            strides_U_out = [i * u.itemsize for i in strides_U_out]
+            strides_V_out = [i * v.itemsize for i in strides_V_out]
+            tn.left_tensor = u = cupy.ndarray(extent_U_out, dtype=u.dtype, memptr=u.data, strides=strides_U_out)
+            if s is not None:
+                s = cupy.ndarray(reduced_extent, dtype=s.dtype, memptr=s.data, order='F')
+            tn.right_tensor = v = cupy.ndarray(extent_V_out, dtype=v.dtype, memptr=v.data, strides=strides_V_out)
+        
+        u_ref, s_ref, v_ref, info_ref = approxTN_utils.tensor_decompose(
+            tn.subscript, T, 
+            method='svd', return_info=True, 
+            **self.options)
 
-        # we add a minimal correctness check here as we are not protected by
-        # any high-level API yet
-        if tn.mid_mode in tn.svd_partitioned:
-            out = cupy.einsum(
-                tn.reconstruct, tn.left_tensor, tn.right_tensor)
-        else:
-            out = cupy.einsum(
-                tn.reconstruct, tn.left_tensor, s, tn.right_tensor)
-        assert cupy.allclose(out, tn.input_tensor,
-                             rtol=rtol_mapper[dtype.name],
-                             atol=atol_mapper[dtype.name])
+        assert approxTN_utils.verify_split_SVD(
+            tn.subscript, T, 
+            tn.left_tensor, s, tn.right_tensor,
+            u_ref, s_ref, v_ref,
+            info=info, info_ref=info_ref,
+            **self.options) 
 
 
-# TODO: expand tests:
-#  - add truncation
-#  - use config (cutoff & normalization)
 @testing.parameterize(*testing.product({
-    'tn': (
-        # direct algorithm, no truncation, no partition
-        ('ijk,klm,jlpq->ipk,k,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
-        ('ijk,klm,jlpq->kpi,k,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
-        ('ijk,klm,jlpq->pki,k,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
-        # direct algorithm, no truncation, partition onto u
-        ('ijk,klm,jlpq->ipk,<,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
-        ('ijk,klm,jlpq->kpi,<,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
-        ('ijk,klm,jlpq->pki,<,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
-        # direct algorithm, no truncation, partition onto v
-        ('ijk,klm,jlpq->ipk,>,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
-        ('ijk,klm,jlpq->kpi,>,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
-        ('ijk,klm,jlpq->pki,>,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
-        # direct algorithm, no truncation, partition onto u and v equally
-        ('ijk,klm,jlpq->ipk,-,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
-        ('ijk,klm,jlpq->kpi,-,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
-        ('ijk,klm,jlpq->pki,-,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
-        # reduced algorithm, no truncation, no partition
-        ('ijk,klm,jlpq->->ipk,k,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
-        ('ijk,klm,jlpq->->kpi,k,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
-        ('ijk,klm,jlpq->->pki,k,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
-        # reduced algorithm, no truncation, partition onto u
-        ('ijk,klm,jlpq->->ipk,<,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
-        ('ijk,klm,jlpq->->kpi,<,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
-        ('ijk,klm,jlpq->->pki,<,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
-        # reduced algorithm, no truncation, partition onto v
-        ('ijk,klm,jlpq->->ipk,>,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
-        ('ijk,klm,jlpq->->kpi,>,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
-        ('ijk,klm,jlpq->->pki,>,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
-        # reduced algorithm, no truncation, partition onto u and v equally
-        ('ijk,klm,jlpq->->ipk,-,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (4, 2, 8), (8, 2, 4)]),
-        ('ijk,klm,jlpq->->kpi,-,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (8, 2, 4), (2, 4, 8)]),
-        ('ijk,klm,jlpq->->pki,-,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2), (2, 8, 4), (4, 8, 2)]),
-    ),
+    'tn': gate_decomp_expressions,
     'dtype': (
         numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
     ),
@@ -1074,34 +963,23 @@ class TestTensorSVD:
         {'extent': 'int', 'stride': 'int', 'mode': 'int'},
         {'extent': 'seq', 'stride': 'seq', 'mode': 'seq'},
     ),
+    'algo': (
+        "direct", "reduced"
+    ),
+    'options': (
+        {}, # exact svd
+        {'max_extent': 4, 'normalization':'L1', 'partition':'U'}, # fix extent truncation
+        {'abs_cutoff': 0.1, 'rel_cutoff': 0.1}, # value based truncation
+        {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V'}, # absolute value based truncation
+        {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV'}, # relative value based truncation
+        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV'}, # compound truncation
+    ),
 }))
 class TestTensorGate:
-
-    def _get_scalar_attr(self, handle, obj_type, obj, attr):
-        if obj_type == 'config':
-            dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
-            getter = cutn.tensor_svd_config_get_attribute
-        elif obj_type == 'info':
-            dtype_getter = cutn.tensor_svd_info_get_attribute_dtype
-            getter = cutn.tensor_svd_info_get_attribute
-        else:
-            assert False
-
-        dtype = dtype_getter(attr)
-        data = numpy.empty((1,), dtype=dtype)
-        getter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
-        return data
-
-    def _set_scalar_attr(self, handle, obj_type, obj, attr, data):
-        assert obj_type == 'config'  # svd info has no setter
-        dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
-        setter = cutn.tensor_svd_config_set_attribute
-
-        dtype = dtype_getter(attr)
-        if not isinstance(data, numpy.ndarray):
-            data = numpy.asarray(data, dtype=dtype)
-        setter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
-
+    
+    GATE_ALGO_MAP = {"direct": cutn.GateSplitAlgo.DIRECT,
+                    "reduced": cutn.GateSplitAlgo.REDUCED}
+    
     # There is no easy way for us to test each API independently, so we instead
     # parametrize the steps and test the whole workflow
     @manage_resource('handle')
@@ -1113,8 +991,14 @@ class TestTensorGate:
         # unpack
         handle, tn, workspace = self.handle, self.tn, self.workspace
         tensor_in_a, tensor_in_b, tensor_in_g, tensor_u, tensor_v = self.tensor_decom
-        gate_algorithm = tn.gate_algorithm
+        algo = self.algo
+        gate_algorithm = self.GATE_ALGO_MAP[algo]
         svd_config, svd_info = self.svd_config, self.svd_info
+
+        # parse svdConfig
+        svd_method = check_or_create_options(tensor.SVDMethod, self.options, "SVDMethod")
+        parse_svd_config(handle, svd_config, svd_method, logger=None)
+
         dtype = cupy.dtype(self.dtype)
         compute_type = dtype_to_compute_type[self.dtype]
         # prepare workspace
@@ -1123,75 +1007,71 @@ class TestTensorGate:
             gate_algorithm, svd_config, compute_type, workspace)
         # for now host workspace is always 0, so just query device one
         # also, it doesn't matter which one (min/recommended/max) is queried
-        required_size = cutn.workspace_get_size(
+        required_size = cutn.workspace_get_memory_size(
             handle, workspace, cutn.WorksizePref.MIN,
-            cutn.Memspace.DEVICE)  # TODO: parametrize memspace?
+            cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
+            cutn.WorkspaceKind.SCRATCH)
         if required_size > 0:
             workspace_ptr = cupy.cuda.alloc(required_size)
-            cutn.workspace_set(
-                handle, workspace, cutn.Memspace.DEVICE,
+            cutn.workspace_set_memory(
+                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH,
                 workspace_ptr.ptr, required_size)
             # round-trip check
-            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get(
-                handle, workspace, cutn.Memspace.DEVICE)
+            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get_memory(
+                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
 
-        # set singular value partitioning, if requested
-        if tn.mid_mode in tn.svd_partitioned:
-            if tn.mid_mode == '<':
-                data = cutn.TensorSVDPartition.US
-            elif tn.mid_mode == '-':
-                data = cutn.TensorSVDPartition.UV_EQUAL
-            else:  # = '<':
-                data = cutn.TensorSVDPartition.SV
-            self._set_scalar_attr(
-                handle, 'config', svd_config,
-                cutn.TensorSVDConfigAttribute.S_PARTITION,
-                data)
-            # do a round-trip test as a sanity check
-            factor = self._get_scalar_attr(
-                handle, 'config', svd_config,
-                cutn.TensorSVDConfigAttribute.S_PARTITION)
-            assert factor == data
-
-        # perform gate split
-        stream = cupy.cuda.get_current_stream().ptr  # TODO
-        if tn.mid_mode in tn.svd_partitioned:
-            s_ptr = 0
-        else:
+        partition = self.options.get("partition", None)
+        if partition is None:
             s = cupy.empty(tn.mid_extent, dtype=dtype.char.lower())
             s_ptr = s.data.ptr
-        cutn.gate_split(handle, tensor_in_a, tn.get_tensor_ptr('inputA'),
-            tensor_in_b, tn.get_tensor_ptr('inputB'),
-            tensor_in_g, tn.get_tensor_ptr('inputG'),
+        else:
+            s = None
+            s_ptr = 0
+        
+        # perform gate split
+        stream = cupy.cuda.get_current_stream().ptr  # TODO
+        cutn.gate_split(handle, tensor_in_a, tn.get_tensor_ptr('input_0'),
+            tensor_in_b, tn.get_tensor_ptr('input_1'),
+            tensor_in_g, tn.get_tensor_ptr('input_2'),
             tensor_u, tn.get_tensor_ptr('left'), s_ptr, 
             tensor_v, tn.get_tensor_ptr('right'),
             gate_algorithm, svd_config, compute_type, 
             svd_info, workspace, stream)
-      
-        # sanity checks (only valid for no truncation)
-        assert tn.mid_extent == self._get_scalar_attr(
-            handle, 'info', svd_info,
-            cutn.TensorSVDInfoAttribute.FULL_EXTENT)
-        assert tn.mid_extent == self._get_scalar_attr(
-            handle, 'info', svd_info,
-            cutn.TensorSVDInfoAttribute.REDUCED_EXTENT)
-        assert 0 == self._get_scalar_attr(
-            handle, 'info', svd_info,
-            cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT)
+        
+        # get runtime truncation information 
+        info = get_svd_info_dict(handle, svd_info)
 
-        # we add a minimal correctness check here as we are not protected by
-        # any high-level API yet
-        if tn.mid_mode in tn.svd_partitioned:
-            out = cupy.einsum(
-                tn.reconstruct, tn.left_tensor, tn.right_tensor)
-        else:
-            out = cupy.einsum(
-                tn.reconstruct, tn.left_tensor, s, tn.right_tensor)
-        reference = cupy.einsum(tn.reference_einsum, tn.inputA_tensor, tn.inputB_tensor, tn.inputG_tensor)
-        error = cupy.linalg.norm(out - reference)
-        assert cupy.allclose(out, reference,
-                             rtol=rtol_mapper[dtype.name],
-                             atol=atol_mapper[dtype.name])
+        arr_a, arr_b, arr_gate, u, v = tn.get_operands(include_inputs=True, include_outputs=True)
+
+        # update the container if reduced extent if found to be different from specified mid extent
+        extent_U_out, strides_U_out = cutn.get_tensor_details(handle, tensor_u)[2:]
+        extent_V_out, strides_V_out = cutn.get_tensor_details(handle, tensor_v)[2:]
+        reduced_extent = info['reduced_extent']
+        assert extent_U_out[tn.shared_mode_idx_left] == reduced_extent
+        assert extent_V_out[tn.shared_mode_idx_right] == reduced_extent
+        if tuple(extent_U_out) != u.shape:
+            strides_U_out = [i * u.itemsize for i in strides_U_out]
+            strides_V_out = [i * v.itemsize for i in strides_V_out]
+            tn.left_tensor = u = cupy.ndarray(extent_U_out, dtype=u.dtype, memptr=u.data, strides=strides_U_out)
+            if s is not None:
+                s = cupy.ndarray(reduced_extent, dtype=s.dtype, memptr=s.data, order='F')
+            tn.right_tensor = v = cupy.ndarray(extent_V_out, dtype=v.dtype, memptr=v.data, strides=strides_V_out)
+        
+        u_ref, s_ref, v_ref, info_ref = approxTN_utils.gate_decompose(
+            tn.subscript, 
+            arr_a, 
+            arr_b, 
+            arr_gate, 
+            gate_algo=algo, 
+            return_info=True, 
+            **self.options)
+        
+        assert approxTN_utils.verify_split_SVD(
+            tn.subscript, None, 
+            u, s, v, 
+            u_ref, s_ref, v_ref,
+            info=info, info_ref=info_ref, 
+            **self.options)
 
 
 class TestTensorSVDConfig:
@@ -1248,6 +1128,7 @@ class TestDistributed:
         assert comm.Get_size() == cutn.distributed_get_num_ranks(handle)
         assert comm.Get_rank() == cutn.distributed_get_proc_rank(handle)
         cutn.distributed_synchronize(handle)
+        cutn.distributed_reset_configuration(handle, 0, 0)  # reset
         # no need to free the comm, for world/self mpi4py does it for us...
 
 

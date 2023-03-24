@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -60,12 +60,23 @@ cdef extern from * nogil:
     int cutensornetWorkspaceGetSize(
         const _Handle, const _WorkspaceDescriptor,
         _WorksizePref, _Memspace, uint64_t*)
+    int cutensornetWorkspaceGetMemorySize(
+        const _Handle, const _WorkspaceDescriptor,
+        _WorksizePref, _Memspace, _WorkspaceKind, int64_t*)
     int cutensornetWorkspaceSet(
         const _Handle, _WorkspaceDescriptor, _Memspace,
         void* const, uint64_t)
+    int cutensornetWorkspaceSetMemory(
+        const _Handle, _WorkspaceDescriptor, _Memspace,
+        _WorkspaceKind,
+        void* const, int64_t)
     int cutensornetWorkspaceGet(
         const _Handle, const _WorkspaceDescriptor, _Memspace,
         void**, uint64_t*)
+    int cutensornetWorkspaceGetMemory(
+        const _Handle, const _WorkspaceDescriptor, _Memspace,
+        _WorkspaceKind,
+        void**, int64_t*)
     int cutensornetDestroyWorkspaceDescriptor(_WorkspaceDescriptor)
 
     # optimizer info
@@ -702,11 +713,43 @@ cpdef uint64_t workspace_get_size(
 
     .. seealso:: `cutensornetWorkspaceGetSize`.
     """
+    warnings.warn("cuquantum.cutensornet.workspace_get_size() is "
+                  "deprecated and will be removed in a future release; please "
+                  "switch to cuquantum.cutensornet.workspace_get_memory_size() "
+                  "instead", DeprecationWarning, 2)
     cdef uint64_t workspaceSize
     with nogil:
         status = cutensornetWorkspaceGetSize(
             <_Handle>handle, <_WorkspaceDescriptor>workspace,
             <_WorksizePref>pref, <_Memspace>mem_space,
+            &workspaceSize)
+    check_status(status)
+    return workspaceSize
+
+cpdef int64_t workspace_get_memory_size(
+        intptr_t handle, intptr_t workspace, int pref, int mem_space, int kind) except*:
+    """Get the workspace size for the corresponding preference and memory
+    space. Must be called after :func:`workspace_compute_sizes`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        workspace (intptr_t): The workspace descriptor.
+        pref (WorksizePref): The preference for the workspace size.
+        mem_space (Memspace): The memory space for the workspace being
+            queried.
+        kind (WorkspaceKind): The kind of the workspace being queried
+ 
+    Returns:
+        int64_t: The computed workspace size.
+
+    .. seealso:: `cutensornetWorkspaceGetMemorySize`.
+    """
+    cdef int64_t workspaceSize
+    with nogil:
+        status = cutensornetWorkspaceGetMemorySize(
+            <_Handle>handle, <_WorkspaceDescriptor>workspace,
+            <_WorksizePref>pref, <_Memspace>mem_space,
+            <_WorkspaceKind>kind,
             &workspaceSize)
     check_status(status)
     return workspaceSize
@@ -728,11 +771,41 @@ cpdef workspace_set(
 
     .. seealso:: `cutensornetWorkspaceSet`
     """
+    warnings.warn("cuquantum.cutensornet.workspace_set() is "
+                  "deprecated and will be removed in a future release; please "
+                  "switch to cuquantum.cutensornet.workspace_set_memory() "
+                  "instead", DeprecationWarning, 2)
     with nogil:
         status = cutensornetWorkspaceSet(
             <_Handle>handle, <_WorkspaceDescriptor>workspace,
             <_Memspace>mem_space,
             <void*>workspace_ptr, <uint64_t>workspace_size)
+    check_status(status)
+
+
+cpdef workspace_set_memory(
+        intptr_t handle, intptr_t workspace, int mem_space, int kind,
+        intptr_t workspace_ptr, int64_t workspace_size):
+    """Set the workspace pointer and size for the corresponding 
+    memory space and workspace kind
+    in the workspace descriptor for later use.
+
+    Args:
+        handle (intptr_t): The library handle.
+        workspace (intptr_t): The workspace descriptor.
+        mem_space (Memspace): The memory space for the workspace being
+            queried.
+        kind (WorkspaceKind): The kind of the workspace being queried
+        workspace_ptr (intptr_t): The pointer address to the workspace.
+        workspace_size (int64_t): The size of the workspace.
+
+    .. seealso:: `cutensornetWorkspaceSetMemory`
+    """
+    with nogil:
+        status = cutensornetWorkspaceSetMemory(
+            <_Handle>handle, <_WorkspaceDescriptor>workspace,
+            <_Memspace>mem_space, <_WorkspaceKind>kind,
+            <void*>workspace_ptr, <int64_t>workspace_size)
     check_status(status)
 
 
@@ -752,8 +825,12 @@ cpdef tuple workspace_get(
             A 2-tuple ``(workspace_ptr, workspace_size)`` for the pointer
             address to the workspace and the size of it.
 
-    .. seealso:: `cutensornetWorkspaceSet`
+    .. seealso:: `cutensornetWorkspaceGet`
     """
+    warnings.warn("cuquantum.cutensornet.workspace_get() is "
+                  "deprecated and will be removed in a future release; please "
+                  "switch to cuquantum.cutensornet.workspace_get_memory() "
+                  "instead", DeprecationWarning, 2)
     cdef void* workspace_ptr
     cdef uint64_t workspace_size
 
@@ -761,6 +838,38 @@ cpdef tuple workspace_get(
         status = cutensornetWorkspaceGet(
             <_Handle>handle, <_WorkspaceDescriptor>workspace,
             <_Memspace>mem_space,
+            &workspace_ptr, &workspace_size)
+    check_status(status)
+    return (<intptr_t>workspace_ptr, workspace_size)
+
+
+cpdef tuple workspace_get_memory(
+        intptr_t handle, intptr_t workspace, int mem_space, int kind):
+    """Get the workspace pointer and size for the corresponding 
+    memory space and workspace kind
+    that are set in a workspace descriptor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        workspace (intptr_t): The workspace descriptor.
+        mem_space (Memspace): The memory space for the workspace being
+            queried.
+        kind (WorkspaceKind): The kind of the workspace being queried
+
+    Returns:
+        tuple:
+            A 2-tuple ``(workspace_ptr, workspace_size)`` for the pointer
+            address to the workspace and the size of it.
+
+    .. seealso:: `cutensornetWorkspaceGetMemory`
+    """
+    cdef void* workspace_ptr
+    cdef int64_t workspace_size
+
+    with nogil:
+        status = cutensornetWorkspaceGetMemory(
+            <_Handle>handle, <_WorkspaceDescriptor>workspace,
+            <_Memspace>mem_space, <_WorkspaceKind>kind,
             &workspace_ptr, &workspace_size)
     check_status(status)
     return (<intptr_t>workspace_ptr, workspace_size)
@@ -933,7 +1042,7 @@ cpdef contraction_optimizer_info_get_attribute_dtype(int attr):
 
             path_obj = np.zeros((1,), dtype=dtype)
             path_obj["num_contractions"] = path.size // 2
-            path_obj["node_pair"] = path.ctypes.ptr
+            path_obj["data"] = path.ctypes.data
 
             # for setting a path
             contraction_optimizer_info_set_attribute(
@@ -2443,6 +2552,11 @@ class Memspace(IntEnum):
     DEVICE = CUTENSORNET_MEMSPACE_DEVICE
     HOST = CUTENSORNET_MEMSPACE_HOST
 
+class WorkspaceKind(IntEnum):
+    """See `cutensornetWorkspaceKind_t`."""
+    SCRATCH = CUTENSORNET_WORKSPACE_SCRATCH
+    CACHE = CUTENSORNET_WORKSPACE_CACHE
+
 class TensorSVDConfigAttribute(IntEnum):
     """See `cutensornetTensorSVDConfigAttributes_t`."""
     ABS_CUTOFF = CUTENSORNET_TENSOR_SVD_CONFIG_ABS_CUTOFF
@@ -2486,8 +2600,8 @@ VERSION = CUTENSORNET_VERSION
 
 # numpy dtypes 
 tensor_qualifiers_dtype = _numpy.dtype(
-    {'names':('is_conjugate', ),
-     'formats': (_numpy.int32, ),
+    {'names':('is_conjugate', 'is_constant', ),
+     'formats': (_numpy.int32, _numpy.int32, ),
      'itemsize': sizeof(_TensorQualifiers),
     }, align=True
 )

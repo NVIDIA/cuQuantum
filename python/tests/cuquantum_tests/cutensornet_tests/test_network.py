@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -79,7 +79,7 @@ class TestNetwork:
                 assert uninit_f_str.search(str(info)) is None
                 check_intermediate_modes(
                     info.intermediate_modes, factory.input_modes,
-                    factory.output_modes, path)
+                    factory.output_modes[0], path)
             else:
                 try:
                     path_ref = compute_and_normalize_numpy_path(

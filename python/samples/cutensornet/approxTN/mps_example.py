@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -137,7 +137,7 @@ class MPSHelper:
             desc_tensor_out_A, desc_tensor_out_B, 
             self.gate_algo, self.svd_config, self.compute_type, self.work_desc)
         
-        workspace_size = cutn.workspace_get_size(self.handle, self.work_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE)
+        workspace_size = cutn.workspace_get_memory_size(self.handle, self.work_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
 
         # free resources
         cutn.destroy_tensor_descriptor(desc_tensor_in_A)
@@ -154,7 +154,7 @@ class MPSHelper:
             work: Pointer to the allocated workspace.
             workspace_size: The required workspace size on the device.
         """
-        cutn.workspace_set(self.handle, self.work_desc, cutn.Memspace.DEVICE, work.ptr, workspace_size)
+        cutn.workspace_set_memory(self.handle, self.work_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, work.ptr, workspace_size)
 
     def apply_gate(self, site_A, site_B, gate, verbose, stream):
         """Inplace execution of the apply gate algoritm on site A and site B.

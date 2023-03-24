@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -8,6 +8,7 @@ cimport cython
 from libc.stdio cimport FILE
 from libcpp.vector cimport vector
 cimport cpython
+#from cpython cimport memoryview as _memoryview
 
 from cuquantum.utils cimport is_nested_sequence
 from cuquantum.utils cimport cuqnt_alloc_wrapper
@@ -134,7 +135,37 @@ cdef extern from * nogil:
     int custatevecGetDeviceMemHandler(_Handle, _DeviceMemHandler*)
     int custatevecSetDeviceMemHandler(_Handle, const _DeviceMemHandler*)
 
+    int custatevecCommunicatorCreate(
+        _Handle, _CommunicatorDescriptor*, _CommunicatorType, char*)
+    int custatevecCommunicatorDestroy(_Handle, _CommunicatorDescriptor)
+    int custatevecDistIndexBitSwapSchedulerCreate(
+        _Handle, _DistIndexBitSwapSchedulerDescriptor*, uint32_t, uint32_t)
+    int custatevecDistIndexBitSwapSchedulerDestroy(
+        _Handle, _DistIndexBitSwapSchedulerDescriptor)
+    int custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps(
+        _Handle, _DistIndexBitSwapSchedulerDescriptor,
+        int2*, uint32_t, int32_t*, int32_t*, uint32_t, uint32_t*)
+    int custatevecDistIndexBitSwapSchedulerGetParameters(
+        _Handle, _DistIndexBitSwapSchedulerDescriptor, int32_t, int32_t,
+        _SVSwapParameters*)
+    int custatevecSVSwapWorkerCreate(
+        _Handle, _SVSwapWorkerDescriptor, _CommunicatorDescriptor, void*,
+        int32_t, Event, DataType, Stream, size_t*, size_t*)
+    int custatevecSVSwapWorkerDestroy(
+        _Handle, _SVSwapWorkerDescriptor)
+    int custatevecSVSwapWorkerSetExtraWorkspace(
+        _Handle, _SVSwapWorkerDescriptor, void*, size_t)
+    int custatevecSVSwapWorkerSetTransferWorkspace(
+        _Handle, _SVSwapWorkerDescriptor, void*, size_t)
+    int custatevecSVSwapWorkerSetSubSVsP2P(
+        _Handle, _SVSwapWorkerDescriptor, void**, int32_t*, Event*, uint32_t)
+    int custatevecSVSwapWorkerSetParameters(
+        _Handle, _SVSwapWorkerDescriptor, _SVSwapParameters*, int)
+    int custatevecSVSwapWorkerExecute(
+        _Handle, _SVSwapWorkerDescriptor, _Index, _Index)
 
+
+# TODO: make this cpdef?
 class cuStateVecError(RuntimeError):
 
     def __init__(self, status):
@@ -1989,6 +2020,602 @@ cpdef tuple get_device_mem_handler(intptr_t handle):
                 name.decode('ascii'))
 
 
+cpdef intptr_t communicator_create(
+        intptr_t handle, int communicator_type, str soname="") except*:
+    """Create a cuStateVec distributed communicator.
+
+    Args:
+        handle (intptr_t): The library handle.
+        communicator_type (CommunicatorType): The MPI library behind mpi4py.
+        soname (str): Optional. If the name to the MPI wrapper library is
+            specified, cuStateVec will attempt to load the shared library
+            at runtime to fetch needed MPI symbols.
+
+    Returns:
+        intptr_t: The opaque communicator descriptor (as Python :class:`int`).
+
+    .. seealso:: `custatevecCommunicatorCreate`
+    """
+    cdef _CommunicatorDescriptor comm_desc
+    cdef bytes name = soname.encode()
+    cdef char* name_ptr
+    if len(name) > 0:
+        name_ptr = name
+    else:
+        name_ptr = NULL
+    with nogil:
+        status = custatevecCommunicatorCreate(
+            <_Handle>handle, &comm_desc, <_CommunicatorType>communicator_type,
+            name_ptr)
+    check_status(status)
+    return <intptr_t>comm_desc
+
+
+cpdef communicator_destroy(intptr_t handle, intptr_t comm_desc):
+    """Destory the cuStateVec distributed communicator.
+
+    Args:
+        handle (intptr_t): The library handle.
+        comm_desc (intptr_t): The communicator descriptor.
+
+    .. seealso:: `custatevecCommunicatorDestroy`
+    """
+    with nogil:
+        status = custatevecCommunicatorDestroy(
+            <_Handle>handle, <_CommunicatorDescriptor>comm_desc)
+    check_status(status)
+
+
+cpdef intptr_t dist_index_bit_swap_scheduler_create(
+        intptr_t handle, uint32_t n_global_index_bits,
+        uint32_t n_local_index_bits) except*:
+    """Create a cuStateVec distributed index-bit swap scheduler.
+
+    Args:
+        handle (intptr_t): The library handle.
+        n_global_index_bits (uint32_t): The number of global index bits.
+        n_local_index_bits (uint32_t): The number of local index bits.
+
+    Returns:
+        intptr_t: The opaque scheduler descriptor (as Python :class:`int`).
+
+    .. seealso:: `custatevecDistIndexBitSwapSchedulerCreate`
+    """
+    cdef _DistIndexBitSwapSchedulerDescriptor scheduler
+    with nogil:
+        status = custatevecDistIndexBitSwapSchedulerCreate(
+            <_Handle>handle, &scheduler, n_global_index_bits,
+            n_local_index_bits)
+    check_status(status)
+    return <intptr_t>scheduler
+
+
+cpdef dist_index_bit_swap_scheduler_destroy(
+        intptr_t handle, intptr_t scheduler):
+    """Destroy the cuStateVec distributed index-bit swap scheduler.
+
+    Args:
+        handle (intptr_t): The library handle.
+        scheduler (intptr_t): The scheduler descriptor.
+
+    .. seealso:: `custatevecDistIndexBitSwapSchedulerDestroy`
+    """
+    with nogil:
+        status = custatevecDistIndexBitSwapSchedulerDestroy(
+            <_Handle>handle, <_DistIndexBitSwapSchedulerDescriptor>scheduler)
+    check_status(status)
+
+
+cpdef uint32_t dist_index_bit_swap_scheduler_set_index_bit_swaps(
+        intptr_t handle, intptr_t scheduler,
+        swapped_bits, uint32_t n_swapped_bits,
+        mask_bit_string, mask_ordering, uint32_t mask_len) except*:
+    """Schedule the index bits to be swapped across processes.
+
+    Args:
+        handle (intptr_t): The library handle.
+        scheduler (intptr_t): The scheduler descriptor.
+        swapped_bits: A host array of pairs of swapped index bits. It can be
+
+            - an :class:`int` as the pointer address to the nested sequence
+            - a nested Python sequence of swapped index bits
+
+        n_swapped_bits (uint32_t): The number of pairs of swapped index bits.
+        mask_bit_string: A host array for specifying mask values. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of mask values
+
+        mask_ordering: A host array of mask ordering. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of index bit ordering
+
+        mask_len (uint32_t): The length of ``mask_ordering``.
+
+    .. seealso:: `custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps`
+    """
+    # swapped_bits can be:
+    #   - a plain pointer address
+    #   - a nested Python sequence (ex: a list of 2-tuples)
+    # Note: it cannot be a mix of sequences and ints. It also cannot be a
+    # 1D sequence (of ints), because it's inefficient.
+    cdef vector[intptr_t] swappedBitsCData
+    cdef int2* swappedBitsPtr
+    if is_nested_sequence(swapped_bits):
+        try:
+            # direct conversion
+            data = _numpy.asarray(swapped_bits, dtype=_numpy.int32)
+            data = data.reshape(-1)
+        except:
+            # unlikely, but let's do it in the stupid way
+            data = _numpy.empty(2*n_swapped_bits, dtype=_numpy.int32)
+            for i, (first, second) in enumerate(swapped_bits):
+                data[2*i] = first
+                data[2*i+1] = second
+        assert data.size == 2*n_swapped_bits
+        swappedBitsPtr = <int2*>(<intptr_t>data.ctypes.data)
+    elif isinstance(swapped_bits, int):
+        # a pointer address, take it as is
+        swappedBitsPtr = <int2*><intptr_t>swapped_bits
+    else:
+        raise ValueError("swapped_bits is provided in an "
+                         "un-recognized format")
+
+    # mask_bit_string can be a pointer address, or a Python sequence
+    cdef vector[int32_t] maskBitStringData
+    cdef int32_t* maskBitStringPtr
+    if cpython.PySequence_Check(mask_bit_string):
+        maskBitStringData = mask_bit_string
+        maskBitStringPtr = maskBitStringData.data()
+    else:  # a pointer address
+        maskBitStringPtr = <int32_t*><intptr_t>mask_bit_string
+
+    # mask_ordering can be a pointer address, or a Python sequence
+    cdef vector[int32_t] maskOrderingData
+    cdef int32_t* maskOrderingPtr
+    if cpython.PySequence_Check(mask_ordering):
+        maskOrderingData = mask_ordering
+        maskOrderingPtr = maskOrderingData.data()
+    else:  # a pointer address
+        maskOrderingPtr = <int32_t*><intptr_t>mask_ordering
+
+    cdef uint32_t n_swap_batches
+    with nogil:
+        status = custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps(
+            <_Handle>handle, <_DistIndexBitSwapSchedulerDescriptor>scheduler,
+            swappedBitsPtr, n_swapped_bits,
+            maskBitStringPtr, maskOrderingPtr, mask_len,
+            &n_swap_batches)
+    check_status(status)
+
+    return n_swap_batches
+
+
+_mask_dtype = _numpy.dtype(
+    (_numpy.int32, CUSTATEVEC_MAX_SEGMENT_MASK_SIZE),
+    align=True
+)
+
+
+cdef object _init_sv_swap_parameters_dtype():
+    # offsetof is not exposed to Cython (it's not possible), but luckily we
+    # only need to know this at runtime.
+    cdef _SVSwapParameters param
+
+    sv_swap_parameters_dtype = _numpy.dtype(
+        {'names': ('swap_batch_index', 'org_sub_sv_index', 'dst_sub_sv_index',
+                   'org_segment_mask_string', 'dst_segment_mask_string',
+                   'segment_mask_ordering', 'segment_mask_len', 'n_segment_bits',
+                   'data_transfer_type', 'transfer_size'),
+         'formats': (_numpy.int32, _numpy.int32, _numpy.int32,
+                     _mask_dtype, _mask_dtype,
+                     _mask_dtype, _numpy.uint32, _numpy.uint32,
+                     _numpy.int32, _numpy.int64),
+         'offsets': (<intptr_t>&param.swapBatchIndex       - <intptr_t>&param,
+                     <intptr_t>&param.orgSubSVIndex        - <intptr_t>&param,
+                     <intptr_t>&param.dstSubSVIndex        - <intptr_t>&param,
+                     <intptr_t>&param.orgSegmentMaskString - <intptr_t>&param,
+                     <intptr_t>&param.dstSegmentMaskString - <intptr_t>&param,
+                     <intptr_t>&param.segmentMaskOrdering  - <intptr_t>&param,
+                     <intptr_t>&param.segmentMaskLen       - <intptr_t>&param,
+                     <intptr_t>&param.nSegmentBits         - <intptr_t>&param,
+                     <intptr_t>&param.dataTransferType     - <intptr_t>&param,
+                     <intptr_t>&param.transferSize         - <intptr_t>&param,
+                    ),
+         'itemsize': sizeof(_SVSwapParameters),
+        }, align=True
+    )
+
+    return sv_swap_parameters_dtype
+
+
+sv_swap_parameters_dtype = _init_sv_swap_parameters_dtype()
+
+
+cdef inline void _check_for_sv_swap_parameters(data) except*:
+    if not isinstance(data, _numpy.ndarray) or data.size != 1:
+        raise ValueError("data must be size-1 NumPy ndarray")
+    if data.dtype != sv_swap_parameters_dtype:
+        raise ValueError("data must be of dtype sv_swap_parameters_dtype")
+
+
+cdef class SVSwapParameters:
+
+    """A wrapper class holding a set of data transfer parameters.
+
+    A instance of this cass can be constructed manually (either without any
+    argument, or using the :meth:`from_data` factory method). The parameters
+    can be retrieved/set via the instance attributes' getters/setters.
+
+    Attributes:
+        swap_batch_index (int32_t): See
+            `custatevecSVSwapParameters_t::swapBatchIndex`.
+        org_sub_sv_index (int32_t): See
+            `custatevecSVSwapParameters_t::orgSubSVIndex`.
+        dst_sub_sv_index (int32_t): See
+            `custatevecSVSwapParameters_t::dstSubSVIndex`.
+        org_segment_mask_string (numpy.ndarray): Should be a 1D array of dtype
+            :obj:`numpy.int32` and of size ``custatevec.MAX_SEGMENT_MASK_SIZE``.
+            See `custatevecSVSwapParameters_t::orgSegmentMaskString`.
+        dst_segment_mask_string (numpy.ndarray): Should be a 1D array of dtype
+            :obj:`numpy.int32` and of size ``custatevec.MAX_SEGMENT_MASK_SIZE``.
+            See `custatevecSVSwapParameters_t::dstSegmentMaskString`.
+        segment_mask_ordering (numpy.ndarray): Should be a 1D array of dtype
+            :obj:`numpy.int32` and of size ``custatevec.MAX_SEGMENT_MASK_SIZE``.
+            See `custatevecSVSwapParameters_t::segmentMaskOrdering`.
+        segment_mask_len (uint32_t): See
+            `custatevecSVSwapParameters_t::segmentMaskLen`.
+        n_segment_bits (uint32_t): See
+            `custatevecSVSwapParameters_t::nSegmentBits`.
+        data_transfer_type (DataTransferType): See
+            `custatevecSVSwapParameters_t::dataTransferType`.
+        transfer_size (int64_t): See
+            `custatevecSVSwapParameters_t::transferSize`.
+
+    .. seealso:: `custatevecSVSwapParameters_t`
+    """
+
+    cdef:
+        readonly object data
+        """data (numpy.ndarray): The underlying storage."""
+
+        readonly intptr_t ptr
+        """ptr (intptr_t): The pointer address (as Python :class:`int`) to the
+            underlying storage.
+        """
+
+    def __init__(self):
+        self.data = _numpy.empty((1,), dtype=sv_swap_parameters_dtype)
+        self.ptr = self.data.ctypes.data
+
+    def __getattr__(self, attr):
+        return self.data[attr]
+
+    def __setattr__(self, attr, val):
+        if attr in ('data', 'ptr'):
+            # because we redirect to internal storage, we need to hardwire
+            # Cython's err msg for readonly attrs
+            raise AttributeError(f"attribute '{attr}' of SVSwapParameters "
+                                  "objects is not writable")
+        else:
+            self.data[attr] = val
+
+    def __repr__(self):
+        return repr(self.data)
+
+    def __eq__(self, other):
+        return self.data == other.data
+
+    # has to be cdef so as to access cdef attributes
+    cdef inline _data_setter(self, data):
+        _check_for_sv_swap_parameters(data)
+        self.data = data
+        self.ptr = data.ctypes.data
+
+    @staticmethod
+    def from_data(data):
+        """Construct an :class:`SVSwapParameters` instance from an existing
+        NumPy ndarray.
+
+        Args:
+            data (numpy.ndarray): Must be a size-1 NumPy ndarray of dtype
+                :obj:`sv_swap_parameters_dtype`.
+        """
+        cdef SVSwapParameters param = SVSwapParameters.__new__(SVSwapParameters)
+        param._data_setter(data)
+        return param
+
+    # This works, but is really not very useful. If users manage to create the
+    # struct from within Python, they either do it with np.ndarray already (which
+    # would be silly that we create a view over), or they are smarter / more
+    # creative than we do, and in that case they just don't need this.
+    # @staticmethod
+    # def from_ptr(ptr):
+    #     # No check could be done.
+    #     cdef SVSwapParameters param = SVSwapParameters.__new__(SVSwapParameters)
+    #     # create a legit view over the memory
+    #     cdef object buf = _memoryview.PyMemoryView_FromMemory(
+    #         <char*><intptr_t>ptr, sizeof(_SVSwapParameters), cpython.PyBUF_WRITE)
+    #     data = _numpy.ndarray((1,), buffer=buf,
+    #                           dtype=sv_swap_parameters_dtype)
+    #     param.data = data
+    #     param.ptr = ptr
+    #     return param
+
+
+cpdef SVSwapParameters dist_index_bit_swap_scheduler_get_parameters(
+        intptr_t handle, intptr_t scheduler, int32_t swap_batch_index,
+        int32_t org_sub_sv_index, params=None):
+    """Get the data transfer parameters from the scheduler.
+
+    Args:
+        handle (intptr_t): The library handle.
+        scheduler (intptr_t): The scheduler descriptor.
+        swap_batch_index (int32_t): The swap batch index for statevector
+            swap parameters.
+        org_sub_sv_index (int32_t): The index of the origin sub statevector.
+        params: Optional. If set, it should be
+
+            - an :class:`int` as the pointer address to the struct
+            - a :class:`numpy.ndarray` of dtype :obj:`sv_swap_parameters_dtype`
+            - a :class:`SVSwapParameters`
+
+            and the result would be written in-place. Additionally, if an
+            :class:`int` is passed, there is no return value.
+
+    Returns:
+        SVSwapParameters:
+            the data transfer parameters that can be consumed later by a data
+            transfer worker.
+
+    .. seealso:: `custatevecDistIndexBitSwapSchedulerGetParameters`
+    """
+    cdef SVSwapParameters param = None  # placeholder
+    cdef _SVSwapParameters* paramPtr = NULL  # placeholder
+    cdef bint to_return = True
+
+    if params is None:
+        param = SVSwapParameters()
+    else:
+        if isinstance(params, SVSwapParameters):
+            param = params
+        elif isinstance(params, _numpy.ndarray):
+            param = SVSwapParameters.from_data(params)  # also check validity
+        elif isinstance(params, int):
+            #param = SVSwapParameters.from_ptr(params)
+            # no check, user is responsible 
+            # don't even create an SVSwapParameters instance, we want it to
+            # be blazingly fast
+            paramPtr = <_SVSwapParameters*><intptr_t>params
+            to_return = False
+        else:
+            raise ValueError("params must be of type SVSwapParameters or "
+                             "of dtype sv_swap_parameters_dtype")
+    if paramPtr == NULL:
+        paramPtr = <_SVSwapParameters*><intptr_t>param.ptr
+
+    with nogil:
+        status = custatevecDistIndexBitSwapSchedulerGetParameters(
+            <_Handle>handle, <_DistIndexBitSwapSchedulerDescriptor>scheduler,
+            swap_batch_index, org_sub_sv_index, paramPtr)
+    check_status(status)
+    return param if to_return else None
+
+
+cpdef (intptr_t, size_t, size_t) sv_swap_worker_create(
+        intptr_t handle, intptr_t comm_desc,
+        intptr_t org_sub_sv, int32_t org_sub_sv_idx,
+        intptr_t org_event, int sv_data_type, intptr_t stream) except*:
+    """Create a cuStateVec distributed statevector swap worker.
+
+    Args:
+        handle (intptr_t): The library handle.
+        comm_desc (intptr_t): The communicator descriptor.
+        org_sub_sv (intptr_t): The pointer address to a sub statevector.
+        org_sub_sv_idx (int32_t): The index of the sub statevector as
+            specified by ``org_sub_sv``.
+        org_event (intptr_t): A CUDA event handle (``cudaEvent_t`` as Python
+            :class:`int`) for synchronizing with the peer worker.
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    Returns:
+        Tuple:
+            A 3-tuple. The first element is the opaque worker descriptor (as
+            Python :class:`int`). The second element is the extra workspace
+            size (in bytes). The third element is the minimal transfer
+            workspace size (in bytes).
+
+    .. seealso:: `custatevecSVSwapWorkerCreate`
+    """
+    cdef _SVSwapWorkerDescriptor worker
+    cdef size_t extra_size, min_size
+    with nogil:
+        status = custatevecSVSwapWorkerCreate(
+            <_Handle>handle, &worker, <_CommunicatorDescriptor>comm_desc,
+            <void*>org_sub_sv, org_sub_sv_idx,
+            <Event>org_event, <DataType>sv_data_type, <Stream>stream,
+            &extra_size, &min_size)
+    check_status(status)
+    return (<intptr_t>worker, extra_size, min_size)
+
+
+cpdef sv_swap_worker_destroy(
+        intptr_t handle, intptr_t worker):
+    """Destroy the cuStateVec distributed statevector swap worker.
+
+    Args:
+        handle (intptr_t): The library handle.
+        worker (intptr_t): The worker descriptor.
+
+    .. seealso:: `custatevecSVSwapWorkerDestroy`
+    """
+    with nogil:
+        status = custatevecSVSwapWorkerDestroy(
+            <_Handle>handle, <_SVSwapWorkerDescriptor>worker)
+    check_status(status)
+
+
+cpdef sv_swap_worker_set_extra_workspace(
+        intptr_t handle, intptr_t worker, intptr_t ptr, size_t size):
+    """Set the extra workspace for the distributed statevector swap worker.
+
+    Args:
+        handle (intptr_t): The library handle.
+        worker (intptr_t): The worker descriptor.
+        ptr (intptr_t): The pointer address (as Python :class:`int`) to the
+            extra workspace (on device).
+        size (size_t): The extra workspace size (in bytes).
+
+    .. seealso:: `custatevecSVSwapWorkerSetExtraWorkspace`
+    """
+    with nogil:
+        status = custatevecSVSwapWorkerSetExtraWorkspace(
+            <_Handle>handle, <_SVSwapWorkerDescriptor>worker,
+            <void*>ptr, size)
+    check_status(status)
+
+
+cpdef sv_swap_worker_set_transfer_workspace(
+        intptr_t handle, intptr_t worker, intptr_t ptr, size_t size):
+    """Set the transfer workspace for the distributed statevector swap worker.
+
+    Args:
+        handle (intptr_t): The library handle.
+        worker (intptr_t): The worker descriptor.
+        ptr (intptr_t): The pointer address (as Python :class:`int`) to the
+            transfer workspace (on device).
+        size (size_t): The transfer workspace size (in bytes).
+
+    .. seealso:: `custatevecSVSwapWorkerSetTransferWorkspace`
+    """
+    with nogil:
+        status = custatevecSVSwapWorkerSetTransferWorkspace(
+            <_Handle>handle, <_SVSwapWorkerDescriptor>worker,
+            <void*>ptr, size)
+    check_status(status)
+
+
+cpdef sv_swap_worker_set_sub_svs_p2p(
+        intptr_t handle, intptr_t worker, dst_sub_svs, dst_sub_sv_indices,
+        dst_events, uint32_t n_dst_sub_svs):
+    """Set P2P access for the distributed sub statevectors.
+
+    Args:
+        handle (intptr_t): The library handle.
+        worker (intptr_t): The worker descriptor.
+        dst_sub_svs: A host array of pointer addresses to sub statevectors
+            to be accessed via GPUDirect P2P. It can be:
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of pointer addresses
+
+        dst_sub_sv_indices: A host array of sub statevector indices as
+            specified by ``dst_sub_svs``. It can be:
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of indices.
+
+        dst_events: A host array of CUDA events used to create peer workers.
+            It can be:
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of events.
+
+        n_dst_sub_svs (uint32_t): The number of sub statevectors as
+            specified by ``dst_sub_svs``.
+
+    .. seealso:: `custatevecSVSwapWorkerSetSubSVsP2P`
+    """
+    # dst_sub_svs can be a pointer address, or a Python sequence
+    cdef vector[intptr_t] subSVsData
+    cdef void** subSVsPtr
+    if cpython.PySequence_Check(dst_sub_svs):
+        subSVsData = dst_sub_svs
+        subSVsPtr = <void**>subSVsData.data()
+    else:  # a pointer address
+        subSVsPtr = <void**><intptr_t>dst_sub_svs
+
+    # dst_sub_sv_indices can be a pointer address, or a Python sequence
+    cdef vector[int32_t] subSVsIndicesData
+    cdef int32_t* subSVsIndicesPtr
+    if cpython.PySequence_Check(dst_sub_sv_indices):
+        subSVsIndicesData = dst_sub_sv_indices
+        subSVsIndicesPtr = <int32_t*>subSVsIndicesData.data()
+    else:  # a pointer address
+        subSVsIndicesPtr = <int32_t*><intptr_t>dst_sub_sv_indices
+
+    # dst_events can be a pointer address, or a Python sequence
+    cdef vector[intptr_t] eventsData
+    cdef Event* eventsPtr
+    if cpython.PySequence_Check(dst_events):
+        eventsData = dst_events
+        eventsPtr = <Event*>eventsData.data()
+    else:  # a pointer address
+        eventsPtr = <Event*><intptr_t>dst_events
+
+    with nogil:
+        status = custatevecSVSwapWorkerSetSubSVsP2P(
+            <_Handle>handle, <_SVSwapWorkerDescriptor>worker,
+            subSVsPtr, subSVsIndicesPtr, eventsPtr, n_dst_sub_svs)
+    check_status(status)
+
+
+cpdef sv_swap_worker_set_parameters(
+        intptr_t handle, intptr_t worker, params, int peer):
+    """Set data transfer parameters for the distributed sub statevector
+    swap workers.
+
+    Args:
+        handle (intptr_t): The library handle.
+        worker (intptr_t): The worker descriptor.
+        params: The data transfer parameters. It can be:
+
+            - an :class:`int` as the pointer address to the struct
+            - a :class:`numpy.ndarray` of dtype :obj:`sv_swap_parameters_dtype`
+            - a :class:`SVSwapParameters`
+        peer (int): The peer process identifier of the data transfer.
+
+    .. seealso:: `custatevecSVSwapWorkerSetParameters`
+    """
+    cdef _SVSwapParameters* paramPtr
+    if isinstance(params, SVSwapParameters):
+        paramPtr = <_SVSwapParameters*><intptr_t>params.ptr
+    elif isinstance(params, _numpy.ndarray):
+        _check_for_sv_swap_parameters(params)
+        paramPtr = <_SVSwapParameters*><intptr_t>params.ctypes.data
+    elif isinstance(params, int):
+        paramPtr = <_SVSwapParameters*><intptr_t>params
+    else:
+        raise ValueError("params must be of type SVSwapParameters, "
+                         "numpy.ndarray, or int")
+
+    with nogil:
+        status = custatevecSVSwapWorkerSetParameters(
+            <_Handle>handle, <_SVSwapWorkerDescriptor>worker, paramPtr, peer)
+    check_status(status)
+
+
+cpdef sv_swap_worker_execute(
+        intptr_t handle, intptr_t worker, _Index begin, _Index end):
+    """Execute the swapping of distributed sub statevectors.
+
+    Args:
+        handle (intptr_t): The library handle.
+        worker (intptr_t): The worker descriptor.
+        begin (int64_t): The index to start transfer (inclusive).
+        end (int64_t): The index to end transfer (exclusive).
+
+    .. seealso:: `custatevecSVSwapWorkerExecute`
+    """
+    with nogil:
+        status = custatevecSVSwapWorkerExecute(
+            <_Handle>handle, <_SVSwapWorkerDescriptor>worker, begin, end)
+    check_status(status)
+
+
 # can't be cpdef because args & kwargs can't be handled in a C signature
 def logger_set_callback_data(callback, *args, **kwargs):
     """Set the logger callback along with arguments.
@@ -2097,6 +2724,19 @@ class DeviceNetworkType(IntEnum):
     SWITCH = CUSTATEVEC_DEVICE_NETWORK_TYPE_SWITCH
     FULLMESH = CUSTATEVEC_DEVICE_NETWORK_TYPE_FULLMESH
 
+class CommunicatorType(IntEnum):
+    """See `custatevecCommunicatorType_t`."""
+    EXTERNAL = CUSTATEVEC_COMMUNICATOR_TYPE_EXTERNAL
+    OPENMPI = CUSTATEVEC_COMMUNICATOR_TYPE_OPENMPI
+    MPICH = CUSTATEVEC_COMMUNICATOR_TYPE_MPICH
+
+class DataTransferType(IntEnum):
+    """See `custatevecDataTransferType_t`."""
+    NONE = CUSTATEVEC_DATA_TRANSFER_TYPE_NONE
+    SEND = CUSTATEVEC_DATA_TRANSFER_TYPE_SEND
+    RECV = CUSTATEVEC_DATA_TRANSFER_TYPE_RECV
+    SEND_RECV = CUSTATEVEC_DATA_TRANSFER_TYPE_SEND_RECV
+
 
 del IntEnum
 
@@ -2106,6 +2746,8 @@ MAJOR_VER = CUSTATEVEC_VER_MAJOR
 MINOR_VER = CUSTATEVEC_VER_MINOR
 PATCH_VER = CUSTATEVEC_VER_PATCH
 VERSION = CUSTATEVEC_VERSION
+ALLOCATOR_NAME_LEN = CUSTATEVEC_ALLOCATOR_NAME_LEN
+MAX_SEGMENT_MASK_SIZE = CUSTATEVEC_MAX_SEGMENT_MASK_SIZE
 
 
 # who owns a reference to user-provided Python objects (k: owner, v: object)

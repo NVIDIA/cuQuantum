@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -16,6 +16,7 @@ from . import formatters
 from .tensor_wrapper import wrap_operands
 
 
+DISALLOWED_LABELS = set(['.', '-', '>'])
 native_to_str = lambda native : "'" + ''.join(s if s is not Ellipsis else '...' for s in native) + "'"
 
 def select_morpher(interleaved, mapper=None):
@@ -43,41 +44,41 @@ class ModeLabelMapper(object):
         return tuple(s if s is Ellipsis else self._map[s] for s in sequence)
 
 
+def parse_single(single):
+    """
+    Parse single operand mode labels considering ellipsis. Leading or trailing whitespace, if present, is removed.
+    """
+    subexpr = single.strip(string.whitespace).split('...')
+    n = len(subexpr)
+    expr = [[Ellipsis]] * (2*n - 1)
+    expr[::2] = subexpr
+
+    return tuple(chain(*expr))
+
+
+def check_single(single):
+    """
+    Check for disallowed characters used as mode labels for a single operand.
+    """
+    for s in single:
+        if s is Ellipsis:
+            continue
+        if s in string.whitespace or s in DISALLOWED_LABELS:
+            return False
+
+    return True
+
+
 def parse_einsum_str(expr):
     """
     Parse einsum expression in string format, retaining ellipses if present.
 
     Return operand as well as output mode labels if explicit form or None for implicit form.
     """
-    disallowed_labels = set(['.', '-', '>'])
-
     inputs, output, *rest = expr.split('->') if "->" in expr else (expr, None)
     if rest:
         raise ValueError("""Invalid expression.
 It is not permitted to specify more than one '->' in the Einstein summation expression.""")
-
-    def parse_single(single):
-        """
-        Parse single operand mode labels considering ellipsis. Leading or trailing whitespace, if present, is removed.
-        """
-        subexpr = single.strip(string.whitespace).split('...')
-        n = len(subexpr)
-        expr = [[Ellipsis]] * (2*n - 1)
-        expr[::2] = subexpr
-
-        return tuple(chain(*expr))
-
-    def check_single(single):
-        """
-        Check for disallowed characters used as mode labels for a single operand.
-        """
-        for s in single:
-            if s is Ellipsis:
-                continue
-            if s in string.whitespace or s in disallowed_labels:
-                return False
-
-        return True
 
     inputs = list(parse_single(_input) for _input in inputs.split(","))
     if output is not None:
@@ -89,7 +90,7 @@ It is not permitted to specify more than one '->' in the Einstein summation expr
                         for location, predicate in enumerate(checks) if predicate is False]
         incorrect = formatters.array2string(incorrect)
         message = f"""Incorrect term.
-Whitespace characters and characters from the set {disallowed_labels} cannot be used as mode labels in a summation expression.
+Whitespace characters and characters from the set {DISALLOWED_LABELS} cannot be used as mode labels in a summation expression.
 The incorrectly specified terms as a sequence of "position: term" are: \n{incorrect}"""
         raise ValueError(message)
 
@@ -236,20 +237,23 @@ in previous operand(s)."""
     return size_dict
 
 
-def infer_output_mode_labels(inputs):
+def infer_output_mode_labels(inputs, mode_map_ord_to_user=None):
     """
     Infer output mode labels (those that appear exactly once).
 
     Args:
-        inputs: Einsum expression in "neutral format" (sequence of sequences) after relabelling modes.
+        inputs: Einsum expression in "neutral format" (sequence of sequences). If `mode_map_ord_to_user` is provided, the
+                  mode labels correspond to ordinals, otherwise they correspond to user labels.
+        mode_map_ord_to_user: the map from ordinals to user labels.
     """
     mode_label_freq = Counter(chain(*inputs))
     del mode_label_freq[Ellipsis]
 
-    return tuple(sorted(m for m, c in mode_label_freq.items() if c == 1))
+    key = None if mode_map_ord_to_user is None else lambda m: mode_map_ord_to_user[m]
+    return tuple(sorted((m for m, c in mode_label_freq.items() if c == 1), key=key))
 
 
-def process_ellipses(inputs, output, operands, label_end, mapping_morpher):
+def process_ellipses(inputs, output, operands, label_end, mode_map_ord_to_user, mapping_morpher):
     """
     Replace ellipses by generated mode labels, using 'label_end' and aligning shapes from the right. Infer or update
     output mode labels.
@@ -259,6 +263,7 @@ def process_ellipses(inputs, output, operands, label_end, mapping_morpher):
         output: The output mode labels after relabelling as a sequence or None.
         operands: Wrapped operands.
         label_end: One past the largest mode label (int), including modes resulting from Ellipsis expansion.
+        mode_map_ord_to_user: the map from ordinals to user labels.
         mapping_morpher: A callable that transforms a term in neutral format (sequence) to string or interleaved format,
             while converting internal labels to user labels.
 
@@ -268,7 +273,7 @@ def process_ellipses(inputs, output, operands, label_end, mapping_morpher):
 
     inferred = False
     if output is None:
-        output = infer_output_mode_labels(inputs)
+        output = infer_output_mode_labels(inputs, mode_map_ord_to_user)
         inferred = True
 
     shortest, longest = label_end, 0
@@ -366,9 +371,9 @@ The output term {morpher(output)} contains ellipsis while none of the input term
 
     # Ellipsis expansion.
     if ellipses:
-        inputs, output = process_ellipses(inputs, output, operands, label_end, mapping_morpher)
+        inputs, output = process_ellipses(inputs, output, operands, label_end, mode_map_ord_to_user, mapping_morpher)
     elif output is None:
-        output = infer_output_mode_labels(inputs)
+        output = infer_output_mode_labels(inputs, mode_map_ord_to_user)
 
     # Create mode-extent map based on internal mode numbers.
     size_dict = create_size_dict(inputs, operands)

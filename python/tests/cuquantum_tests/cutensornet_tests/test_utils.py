@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -14,6 +14,7 @@ except ImportError:
     torch = None
 
 from cuquantum import OptimizerOptions
+from cuquantum import tensor
 from cuquantum.cutensornet._internal.circuit_converter_utils import EINSUM_SYMBOLS_BASE
 from cuquantum.cutensornet._internal.einsum_parser import infer_output_mode_labels
 
@@ -141,25 +142,22 @@ def check_intermediate_modes(
     assert set(output_modes) == set(intermediate_modes[-1])
 
 
-class EinsumFactory:
+class ExpressionFactory:
     """Take a valid einsum expression and compute shapes, modes, etc for testing."""
 
     size_dict = dict(zip(EINSUM_SYMBOLS_BASE, (2, 3, 4)*18))
 
-    def __init__(self, einsum_expr):
-        self.einsum_expr = einsum_expr
-        self.einsum_format = self._decide_format(einsum_expr)
-        self._modes = None
-
-    def _decide_format(self, einsum_expr):
-        # this is a helper solely for testing purpose
-        if isinstance(einsum_expr, str):
-            einsum_format = "subscript"
-        elif isinstance(einsum_expr, tuple):
-            einsum_format = "interleaved"
+    def __init__(self, expression):
+        self.expr = expression
+        if isinstance(expression, str):
+            self.expr_format = "subscript"
+        elif isinstance(expression, tuple):
+            self.expr_format = "interleaved"
         else:
             assert False
-        return einsum_format
+        self._modes = None
+        self._num_inputs = 0
+        self._num_outputs = 0
 
     def _gen_shape(self, modes):
         shape = []
@@ -185,7 +183,15 @@ class EinsumFactory:
             shape.insert(ellipsis, 5)
 
         return shape
-
+    
+    @property
+    def num_inputs(self):
+        return self._num_inputs
+    
+    @property
+    def num_outputs(self):
+        return self._num_outputs
+    
     @property
     def input_shapes(self):
         out = []
@@ -202,33 +208,15 @@ class EinsumFactory:
 
     @property
     def modes(self):
-        if self._modes is None:
-            if self.einsum_format == "subscript":
-                if "->" in self.einsum_expr:
-                    inputs, output = self.einsum_expr.split("->")
-                    inputs = inputs.split(",")
-                else:
-                    inputs = self.einsum_expr
-                    inputs = inputs.split(",")
-                    output = infer_output_mode_labels(inputs)
-            else:
-                # output could be a placeholder
-                inputs = self.einsum_expr[:-1]
-                if self.einsum_expr[-1] is None:
-                    output = infer_output_mode_labels(inputs)
-                else:
-                    output = self.einsum_expr[-1]
-
-            self._modes = tuple(inputs) + tuple([output])
-        return self._modes
+        raise NotImplementedError
 
     @property
     def input_modes(self):
-        return self.modes[:-1]
+        return self.modes[:self.num_inputs]
 
     @property
     def output_modes(self):
-        return self.modes[-1]
+        return self.modes[self.num_inputs:]
 
     def generate_operands(self, shapes, xp, dtype, order):
         # we always generate data from shaped_random as CuPy fixes
@@ -252,20 +240,79 @@ class EinsumFactory:
 
         return operands
 
+
+class EinsumFactory(ExpressionFactory):
+    """Take a valid einsum expression and compute shapes, modes, etc for testing."""
+
+    @property
+    def modes(self):
+        if self._modes is None:
+            if self.expr_format == "subscript":
+                if "->" in self.expr:
+                    inputs, output = self.expr.split("->")
+                    inputs = inputs.split(",")
+                else:
+                    inputs = self.expr.split(",")
+                    output = infer_output_mode_labels(inputs)
+            else:
+                # output could be a placeholder
+                inputs = self.expr[:-1]
+                if self.expr[-1] is None:
+                    output = infer_output_mode_labels(inputs)
+                else:
+                    output = self.expr[-1]
+            self._num_inputs = len(inputs)
+            self._num_outputs = 1
+            self._modes = tuple(inputs) + tuple([output])
+        return self._modes
+
     def convert_by_format(self, operands, *, dummy=False):
         if dummy:
             # create dummy NumPy arrays to bypass the __array_function__
             # dispatcher, see numpy/numpy#21379 for discussion
             operands = [numpy.broadcast_to(0, arr.shape) for arr in operands]
 
-        if self.einsum_format == "subscript":
-            data = [self.einsum_expr, *operands]
-        elif self.einsum_format == "interleaved":
+        if self.expr_format == "subscript":
+            data = [self.expr, *operands]
+        elif self.expr_format == "interleaved":
             modes = [tuple(modes) for modes in self.input_modes]
             data = [i for pair in zip(operands, modes) for i in pair]
-            data.append(tuple(self.output_modes))
+            data.append(tuple(self.output_modes[0]))
 
         return data
+
+
+class DecomposeFactory(ExpressionFactory):
+
+    @property
+    def modes(self):
+        if self._modes is None:
+            if self.expr_format == "subscript":
+                if "->" in self.expr:
+                    inputs, outputs = self.expr.split("->")
+                    inputs = inputs.split(",")
+                    outputs = outputs.split(",")
+                    self._num_inputs = len(inputs)
+                    self._num_outputs = len(outputs)
+                    self._modes = tuple(inputs) + tuple(outputs)
+                else:
+                    raise ValueError("output tensor must be explicitly specified for decomposition")
+            else:
+                raise ValueError("decomposition does not support interleave format")
+            
+        return self._modes
+    
+def gen_rand_svd_method(seed=None):
+    if seed is None:
+        return tensor.SVDMethod()
+    else:
+        numpy.random.seed(seed)
+        method = {"max_extent": numpy.random.randint(1, high=6), 
+                "abs_cutoff": numpy.random.random() / 2.0, # [0, 0.5)
+                "rel_cutoff": numpy.random.random() / 2.0, # [0, 0.5)
+                "normalization": numpy.random.choice([None, "L1", "L2", "LInf"]),
+                "partition": numpy.random.choice([None, "U", "V", "UV"])}
+        return tensor.SVDMethod(**method)
 
 
 # We use the pytest marker hook to deselect/ignore collected tests
@@ -279,8 +326,22 @@ def deselect_contract_tests(
         einsum_expr_pack, xp, dtype, *args, **kwargs):
     if xp.startswith('torch') and torch is None:
         return True
+    if xp == 'torch-cpu' and dtype == 'float16':
+        # float16 only implemented for gpu
+        return True
     if isinstance(einsum_expr_pack, list):
         _, _, _, overwrite_dtype = einsum_expr_pack
         if dtype != overwrite_dtype:
             return True
+    return False
+
+def deselect_decompose_tests(
+        decompose_expr, xp, dtype, *args, **kwargs):
+    if xp.startswith('torch') and torch is None:
+        return True
+    return False
+
+def deselect_contract_decompose_algorithm_tests(qr_method, svd_method, *args, **kwargs):
+    if qr_method is False and svd_method is False: # not a valid algorithm
+        return True
     return False

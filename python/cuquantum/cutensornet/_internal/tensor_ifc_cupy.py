@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -13,6 +13,7 @@ import numpy
 
 from . import utils
 from .tensor_ifc import Tensor
+from .. import cutensornet as cutn
 
 
 class CupyTensor(Tensor):
@@ -104,3 +105,9 @@ class CupyTensor(Tensor):
         """
         return isinstance(self.tensor, cupy.ndarray)
 
+    def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
+        _, _, extents, strides = cutn.get_tensor_details(handle, desc_tensor)
+        if tuple(extents) != self.shape:
+            strides = [i * self.tensor.itemsize for i in strides]
+            self.tensor = cupy.ndarray(extents, dtype=self.tensor.dtype, memptr=self.tensor.data, strides=strides)
+        

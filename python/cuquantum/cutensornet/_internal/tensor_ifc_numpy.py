@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -85,4 +85,7 @@ class NumpyTensor(Tensor):
         Check if the object is ndarray-like.
         """
         return isinstance(self.tensor, numpy.ndarray)
-
+    
+    def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
+        #NOTE: this method is only called for CupyTensor and TorchTensor
+        raise NotImplementedError

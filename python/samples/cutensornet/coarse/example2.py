@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -13,8 +13,10 @@ from cuquantum import contract
 
 
 a = np.ones((3,2))
-b = np.ones((2,3))
+b = np.ones((2,4))
 
-r = contract("ij,jk", a, b)
+r = contract("ij,jh", a, b)    # output modes = "hi" (lexicographically sorted in implicit form).
 print(r)
 
+n = np.einsum("ij,jh", a, b)
+assert np.allclose(r, n), 'Incorrect results for "ij,jh".'

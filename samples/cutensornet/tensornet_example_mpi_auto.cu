@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -394,26 +394,28 @@ int main(int argc, char **argv)
    cutensornetWorkspaceDescriptor_t workDesc;
    HANDLE_ERROR( cutensornetCreateWorkspaceDescriptor(handle, &workDesc) );
 
-   uint64_t requiredWorkspaceSize = 0;
+   int64_t requiredWorkspaceSize = 0;
    HANDLE_ERROR( cutensornetWorkspaceComputeContractionSizes(handle,
                                                          descNet,
                                                          optimizerInfo,
                                                          workDesc) );
 
-   HANDLE_ERROR( cutensornetWorkspaceGetSize(handle,
-                                 workDesc,
-                                 CUTENSORNET_WORKSIZE_PREF_MIN,
-                                 CUTENSORNET_MEMSPACE_DEVICE,
-                                 &requiredWorkspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceGetMemorySize(handle,
+                                                   workDesc,
+                                                   CUTENSORNET_WORKSIZE_PREF_MIN,
+                                                   CUTENSORNET_MEMSPACE_DEVICE,
+                                                   CUTENSORNET_WORKSPACE_SCRATCH,
+                                                   &requiredWorkspaceSize) );
 
    void* work = nullptr;
    HANDLE_CUDA_ERROR( cudaMalloc(&work, requiredWorkspaceSize) );
 
-   HANDLE_ERROR( cutensornetWorkspaceSet(handle,
-                                 workDesc,
-                                 CUTENSORNET_MEMSPACE_DEVICE,
-                                 work,
-                                 requiredWorkspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceSetMemory(handle,
+                                               workDesc,
+                                               CUTENSORNET_MEMSPACE_DEVICE,
+                                               CUTENSORNET_WORKSPACE_SCRATCH,
+                                               work,
+                                               requiredWorkspaceSize) );
 
    if(verbose)
       printf("Allocated and set up the GPU workspace\n");

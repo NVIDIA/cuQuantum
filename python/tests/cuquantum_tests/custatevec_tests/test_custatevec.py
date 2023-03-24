@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -7,6 +7,10 @@ import copy
 import cupy
 from cupy import testing
 import numpy
+try:
+    from mpi4py import MPI  # init!
+except ImportError:
+    MPI = None
 import pytest
 
 import cuquantum
@@ -1129,11 +1133,9 @@ class TestMultiGPUSwap(TestMultiGpuSV):
     @pytest.mark.parametrize(
         'input_form', (
             {'handles': (numpy.intp, 'int'), 'sub_svs': (numpy.intp, 'int'),
-             'swapped_bits': (numpy.int32, 'int'),
-             'mask_bitstring': (numpy.int32, 'int'), 'mask_ordering': (numpy.int32, 'int')},
+             'swapped_bits': (numpy.int32, 'int'), 'mask': (numpy.int32, 'int')},
             {'handles': (numpy.intp, 'seq'), 'sub_svs': (numpy.intp, 'seq'),
-             'swapped_bits': (numpy.int32, 'seq'),
-             'mask_bitstring': (numpy.int32, 'seq'), 'mask_ordering': (numpy.int32, 'seq')},
+             'swapped_bits': (numpy.int32, 'seq'), 'mask': (numpy.int32, 'seq')},
         )
     )
     @pytest.mark.parametrize(
@@ -1176,9 +1178,16 @@ class TestMultiGPUSwap(TestMultiGpuSV):
             swapped_bits = swapped_bits_data.ctypes.data
 
         # TODO: test mask
-        mask_bitstring = 0
-        mask_ordering = 0
+        mask_bitstring = []
+        mask_ordering = []
         mask_len = 0
+        if input_form['mask'][1] == 'int':
+            mask_bitstring_data = numpy.asarray(
+                mask_bitstring, dtype=input_form['mask'][0])
+            mask_bitstring = mask_bitstring_data.ctypes.data
+            mask_ordering_data = numpy.asarray(
+                mask_ordering, dtype=input_form['mask'][0])
+            mask_ordering = mask_ordering_data.ctypes.data
 
         cusv.multi_device_swap_index_bits(
             handles, n_handles, sub_sv, data_type,
@@ -1193,6 +1202,249 @@ class TestMultiGPUSwap(TestMultiGpuSV):
             assert sub_sv[0][-2] == 0
         with cupy.cuda.Device(1):
             assert sub_sv[1][4] == 1
+
+
+@pytest.mark.skipif(MPI is None, reason="need mpi4py (& MPI)")
+class TestCommunicator:
+
+    @pytest.mark.parametrize(
+        "communicator_args", (
+            (cusv.CommunicatorType.MPICH, 'libmpi.so'),  # see NVIDIA/cuQuantum#31
+            (cusv.CommunicatorType.OPENMPI, ''),
+            # TODO: can we use cffi to generate the wrapper lib on the fly?
+            (cusv.CommunicatorType.EXTERNAL, ''),
+        )
+    )
+    def test_communicator(self, handle, communicator_args):
+        if communicator_args[0] == cusv.CommunicatorType.MPICH:
+            vendor = "MPICH"
+        elif communicator_args[0] == cusv.CommunicatorType.OPENMPI:
+            vendor = "Open MPI"
+        else:
+            vendor = "n/a"
+        comm_name, _ = MPI.get_vendor()
+        if comm_name != vendor:
+            pytest.skip(f"Using {comm_name}, which mismatches with the "
+                        f"requested MPI implementation ({vendor})")
+        c = cusv.communicator_create(handle, *communicator_args)
+        cusv.communicator_destroy(handle, c)
+
+
+class TestParameters:
+
+    def test_parameters(self):
+
+        # test constructor
+        parameters = cusv.SVSwapParameters()
+
+        # test getter/setter
+        parameters.transfer_size = 42
+        assert parameters.transfer_size == 42
+
+        # test accessing internal data (numpy.ndarray)
+        parameters_arr = parameters.data
+        assert parameters_arr.ctypes.data == parameters.ptr
+
+        # test reading/writing the underlying ndarray of custom dtype
+        assert parameters_arr.dtype == cusv.sv_swap_parameters_dtype
+        assert parameters_arr['transfer_size'] == 42
+        parameters_arr['transfer_size'] = 24
+        assert parameters_arr['transfer_size'] == 24
+        assert parameters.transfer_size == 24
+
+        # test all struct members
+        parameters.swap_batch_index        == parameters_arr['swap_batch_index']
+        parameters.org_sub_sv_index        == parameters_arr['org_sub_sv_index']
+        parameters.dst_sub_sv_index        == parameters_arr['dst_sub_sv_index']
+        parameters.org_segment_mask_string == parameters_arr['org_segment_mask_string']
+        parameters.dst_segment_mask_string == parameters_arr['dst_segment_mask_string']
+        parameters.segment_mask_ordering   == parameters_arr['segment_mask_ordering']
+        parameters.segment_mask_len        == parameters_arr['segment_mask_len']
+        parameters.n_segment_bits          == parameters_arr['n_segment_bits']
+        parameters.data_transfer_type      == parameters_arr['data_transfer_type']
+        parameters.transfer_size           == parameters_arr['transfer_size']
+
+        # test alternative constructor & comparison op
+        new_parameters = cusv.SVSwapParameters.from_data(parameters_arr)
+        assert parameters.data == new_parameters.data
+        assert parameters.ptr == new_parameters.ptr
+        assert parameters == new_parameters
+
+        new_parameters_arr = numpy.empty(
+            (1,), dtype=cusv.sv_swap_parameters_dtype)
+        new_parameters_arr['segment_mask_ordering'][:] = 1
+        new_parameters = cusv.SVSwapParameters.from_data(new_parameters_arr)
+        assert parameters.data != new_parameters.data
+        assert parameters.ptr != new_parameters.ptr
+        assert parameters != new_parameters
+
+        # negative tests
+        parameters_arr = numpy.empty(
+            (2,), dtype=cusv.sv_swap_parameters_dtype)
+        with pytest.raises(ValueError) as e:  # wrong size
+            parameters = cusv.SVSwapParameters.from_data(parameters_arr)
+        parameters_arr = numpy.empty(
+            (1,), dtype=numpy.float32)
+        with pytest.raises(ValueError) as e:  # wrong dtype
+            parameters = cusv.SVSwapParameters.from_data(parameters_arr)
+        parameters_arr = "ABC"
+        with pytest.raises(ValueError) as e:  # wrong type
+            parameters = cusv.SVSwapParameters.from_data(parameters_arr)
+
+
+class TestWorker:
+
+    event = cupy.cuda.Event()
+    stream = cupy.cuda.Stream()
+    sv = cupy.zeros((2**4,), dtype=cupy.complex64)
+
+    @pytest.mark.parametrize(
+        "worker_args", ((sv.data.ptr, 0, event.ptr, cudaDataType.CUDA_C_32F, stream.ptr),)
+    )
+    @pytest.mark.parametrize(
+        'input_form', (
+            {'sv': (numpy.intp, 'int'), 'indices': (numpy.int32, 'int'),
+             'event': (numpy.intp, 'int')},
+            {'sv': (numpy.intp, 'seq'), 'indices': (numpy.int32, 'seq'),
+             'event': (numpy.intp, 'seq')},
+        )
+    )
+    @pytest.mark.parametrize(
+        'param_form', ('class', 'ndarray', 'int')
+    )
+    def test_worker(self, handle, worker_args, input_form, param_form):
+        worker, extra_size, min_size = cusv.sv_swap_worker_create(
+            handle,
+            0,  # set the communicator to null, assuming single process
+            *worker_args)
+
+        extra_space = cupy.cuda.alloc(extra_size)
+        cusv.sv_swap_worker_set_extra_workspace(
+            handle, worker, extra_space.ptr, extra_size)
+
+        transfer_space = cupy.cuda.alloc(min_size)
+        cusv.sv_swap_worker_set_transfer_workspace(
+            handle, worker, transfer_space.ptr, min_size)
+
+        sv = [self.sv.data.ptr]
+        if input_form['sv'][1] == 'int':
+            sv_data = numpy.asarray(
+                sv, dtype=input_form['sv'][0])
+            sv = sv_data.ctypes.data
+
+        indices = [1]
+        if input_form['indices'][1] == 'int':
+            indices_data = numpy.asarray(
+                indices, dtype=input_form['indices'][0])
+            indices = indices_data.ctypes.data
+
+        dummy = cupy.cuda.Event()
+        event = [dummy.ptr]
+        if input_form['event'][1] == 'int':
+            event_data = numpy.asarray(
+                event, dtype=input_form['event'][0])
+            event = event_data.ctypes.data
+
+        cusv.sv_swap_worker_set_sub_svs_p2p(
+            handle, worker,
+            sv, indices, event, 1)
+
+        parameters_data = cusv.SVSwapParameters()
+        parameters_data.swap_batch_index = 0
+        parameters_data.org_sub_sv_index = 0
+        parameters_data.dst_sub_sv_index = 1
+        parameters_data.n_segment_bits = 0
+        parameters_data.transfer_size = 1
+        parameters_data.data_transfer_type = cusv.DataTransferType.NONE
+        parameters_data.segment_mask_len = 0
+        if param_form == "class":
+            parameters = parameters_data
+        elif param_form == "ndarray":
+            parameters = parameters_data.data
+        elif param_form == "int":
+            parameters = parameters_data.ptr
+
+        cusv.sv_swap_worker_set_parameters(
+            handle, worker, parameters, 1)
+
+        cusv.sv_swap_worker_execute(
+            handle, worker, 0, 0)
+
+        cusv.sv_swap_worker_destroy(handle, worker)
+
+
+class TestScheduler:
+
+    @pytest.mark.parametrize(
+        "scheduler_args", ((1, 1),),
+    )
+    @pytest.mark.parametrize(
+        'input_form', (
+            {'swapped_bits': (numpy.int32, 'int'), 'mask': (numpy.int32, 'int')},
+            {'swapped_bits': (numpy.int32, 'seq'), 'mask': (numpy.int32, 'seq')},
+        )
+    )
+    @pytest.mark.parametrize(
+        'param_form', (None, 'class', 'ndarray', 'int')
+    )
+    def test_scheduler(self, handle, scheduler_args, input_form, param_form):
+        scheduler = cusv.dist_index_bit_swap_scheduler_create(
+            handle, *scheduler_args)
+
+        swapped_bits = [(0, 1)]
+        n_swapped_bits = len(swapped_bits)
+        if input_form['swapped_bits'][1] == 'int':
+            swapped_bits_data = numpy.asarray(
+                swapped_bits, dtype=input_form['swapped_bits'][0])
+            swapped_bits = swapped_bits_data.ctypes.data
+
+        # TODO: test mask
+        mask_bitstring = []
+        mask_ordering = []
+        mask_len = 0
+        if input_form['mask'][1] == 'int':
+            mask_bitstring_data = numpy.asarray(
+                mask_bitstring, dtype=input_form['mask'][0])
+            mask_bitstring = mask_bitstring_data.ctypes.data
+            mask_ordering_data = numpy.asarray(
+                mask_ordering, dtype=input_form['mask'][0])
+            mask_ordering = mask_ordering_data.ctypes.data
+
+        n_swap_batches = cusv.dist_index_bit_swap_scheduler_set_index_bit_swaps(
+            handle, scheduler,
+            swapped_bits, n_swapped_bits,
+            mask_bitstring, mask_ordering, mask_len)
+        if param_form is None:
+            params_in = None
+        elif param_form == "class":
+            params_in = cusv.SVSwapParameters()
+        elif param_form == "ndarray":
+            params_in = numpy.empty((1,), dtype=cusv.sv_swap_parameters_dtype)
+        elif param_form == "int":
+            params = numpy.empty((1,), dtype=cusv.sv_swap_parameters_dtype)
+            params_in = params.ctypes.data
+        else:
+            assert False
+
+        params_out = cusv.dist_index_bit_swap_scheduler_get_parameters(
+            handle, scheduler, 0, 0, params=params_in)
+        cusv.dist_index_bit_swap_scheduler_destroy(handle, scheduler)
+        if param_form != "int":
+            assert isinstance(params_out, cusv.SVSwapParameters)
+        else:
+            assert params_out is None
+
+        # params_in should be modified in-place
+        if param_form == "class":
+            assert id(params_out) == id(params_in)
+            assert params_out.data == params_in.data
+            assert params_out.ptr == params_in.ptr
+        elif param_form == "ndarray":
+            assert params_out.data == params_in
+            assert params_out.ptr == params_in.ctypes.data
+        elif param_form == "int":
+            # nothing to compare against...
+            pass
 
 
 class TestMemHandler(MemHandlerTestBase):
