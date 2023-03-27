@@ -32,8 +32,8 @@ install_requires = [
     'numpy',
     # 'cupy', # TODO: use "cupy-wheel" once it's stablized, see https://github.com/cupy/cupy/issues/6688
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.1',   # ">=1.1.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.0',  # ">=2.0.0,<3"
+    f'custatevec-cu{utils.cuda_major_ver}~=1.3',   # ">=1.3.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.1',  # ">=2.1.0,<3"
     ]
 
 

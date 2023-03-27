@@ -315,6 +315,19 @@ def gen_rand_svd_method(seed=None):
         return tensor.SVDMethod(**method)
 
 
+
+# We want to avoid fragmenting the stream-ordered mempools
+_predefined_streams = {
+    numpy: cupy.cuda.Stream(),  # implementation detail
+    cupy: cupy.cuda.Stream(),
+}
+if torch is not None:
+    _predefined_streams[torch] = torch.cuda.Stream()
+
+def get_stream_for_backend(backend):
+    return _predefined_streams[backend]
+
+
 # We use the pytest marker hook to deselect/ignore collected tests
 # that we do not want to run. This is better than showing a ton of
 # tests as "skipped" at the end, since technically they never get

@@ -44,7 +44,7 @@ class ContractDecomposeAlgorithm:
         svd_info: The SVD information during runtime. See :class:`~cuquantum.cutensornet.tensor.SVDInfo`.
     """
 
-    qr_method: Optional[Union[QRMethod, Literal[False, None],Dict]] = QRMethod()
+    qr_method: Optional[Union[QRMethod, Literal[False, None],Dict]] = dataclasses.field(default_factory=QRMethod)
     svd_method: Optional[Union[SVDMethod,Literal[False, None],Dict]] = False
     
     def __post_init__(self):

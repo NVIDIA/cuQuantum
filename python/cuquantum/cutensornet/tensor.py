@@ -384,6 +384,11 @@ class SVDMethod:
             :func:`cuquantum.cutensornet.experimental.contract_decompose` will be `None`.
         normalization: The specified norm of the singular values (after truncation) will be normalized to 1. 
             Currently supports ``None``, ``"L1"``, ``"L2"`` and ``"LInf"``. 
+    
+    .. note::
+        
+        For truncated SVD, currently at least one singular value will be retained in the output even if the truncation parameters are set to trim out all singular values. 
+        This behavior may be subject to change in a future release.
         
     """
     max_extent: Optional[int] = None

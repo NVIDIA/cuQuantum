@@ -18,6 +18,7 @@ from .data import backend_names, tensor_decomp_expressions
 from .test_options import _OptionsBase, TestNetworkOptions
 from .test_utils import DecomposeFactory
 from .test_utils import deselect_decompose_tests, gen_rand_svd_method
+from .test_utils import get_stream_for_backend
 
 
 @pytest.mark.uncollect_if(func=deselect_decompose_tests)
@@ -44,12 +45,9 @@ class TestDecompose:
         backend = sys.modules[infer_object_package(operand)]
 
         if stream:
-            if backend is numpy:
-                stream = cupy.cuda.Stream()
-            else:
-                stream = backend.cuda.Stream()
+            stream = get_stream_for_backend(backend)
         
-        return_info = kwargs.pop("return_info", False)
+        return_info = kwargs.pop("return_info", False)        
         outputs = tensor.decompose(decompose_expr, 
                                 operand, 
                                 method=method, 

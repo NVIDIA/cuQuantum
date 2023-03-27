@@ -20,6 +20,7 @@ from .approxTN_utils import split_contract_decompose, tensor_decompose, verify_s
 from .data import backend_names, contract_decompose_expr
 from .test_options import _OptionsBase
 from .test_utils import DecomposeFactory, deselect_contract_decompose_algorithm_tests, deselect_decompose_tests, gen_rand_svd_method
+from .test_utils import get_stream_for_backend
 
 
 @pytest.mark.uncollect_if(func=deselect_decompose_tests)
@@ -63,10 +64,7 @@ class TestContractDecompose:
         shared_mode_idx_right = output_modes[1].index(shared_mode_out)
 
         if stream:
-            if backend is numpy:
-                stream = cupy.cuda.Stream()
-            else:
-                stream = backend.cuda.Stream()
+            stream = get_stream_for_backend(backend)
         outputs = contract_decompose(decompose_expr, *operands, 
             algorithm=algorithm, stream=stream, options=options, optimize=optimize, **kwargs)
 

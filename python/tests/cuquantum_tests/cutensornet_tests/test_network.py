@@ -20,6 +20,7 @@ from .test_utils import atol_mapper, EinsumFactory, rtol_mapper
 from .test_utils import check_intermediate_modes
 from .test_utils import compute_and_normalize_numpy_path
 from .test_utils import deselect_contract_tests
+from .test_utils import get_stream_for_backend
 from .test_utils import set_path_to_optimizer_options
 
 
@@ -64,10 +65,7 @@ class TestNetwork:
         backend = sys.modules[infer_object_package(operands[0])]
         data = factory.convert_by_format(operands)
         if stream:
-            if backend is numpy:
-                stream = cupy.cuda.Stream()  # implementation detail
-            else:
-                stream = backend.cuda.Stream()
+            stream = get_stream_for_backend(backend)
         tn = Network(*data, options=network_opts)
 
         # We already test tn as a context manager in the samples, so let's test
