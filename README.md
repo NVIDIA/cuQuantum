@@ -1,6 +1,8 @@
-<div align="center"><img src="https://developer.nvidia.com/sites/default/files/akamai/nvidia-cuquantum-icon.svg" width="250"/></div>
-
 # Welcome to the cuQuantum repository!
+
+<img align="right" width="200"
+src="https://developer.nvidia.com/sites/default/files/akamai/nvidia-cuquantum-icon.svg"
+/>
 
 This public repository contains two sets of files related to the [NVIDIA cuQuantum SDK](https://developer.nvidia.com/cuquantum-sdk):
 
