@@ -12,7 +12,9 @@ You can install all optional dependencies via
 ```
 pip install .[all]
 ```
-if running outside of the [cuQuantum Appliance container](https://docs.nvidia.com/cuda/cuquantum/appliance/index.html). You may have to build `qsimcirq` and `qiskit-aer` GPU support from source if needed.
+if running outside of the [cuQuantum Appliance container](https://docs.nvidia.com/cuda/cuquantum/appliance/index.html).
+
+**Note: You may have to build `qsimcirq` and `qiskit-aer` GPU support from source if needed.**
 
 Alternatively, you can choose to manage all (required & optional) dependencies yourself via
 ```
@@ -25,68 +27,20 @@ and `pip` would not install any extra package for you.
 After installation, a new command `cuquantum-benchmarks` is installed to your Python environment. You can see the help message via `cuquantum-benchmarks --help`:
 
 ```
-usage: cuquantum-benchmarks [-h] --frontend {cirq,qiskit} --backend
-                            {aer,aer-cuda,aer-cusv,cusvaer,cirq,cutn,qsim,qsim-cuda,qsim-cusv,qsim-mgpu}
-                            [--benchmark {qft,iqft,ghz,simon,hidden_shift,qaoa,qpe,quantum_volume,random,all}] [--new] [--nqubits NQUBITS]
-                            [--nwarmups NWARMUPS] [--nrepeats NREPEATS] [--cachedir CACHEDIR] [--verbose] [--ngpus NGPUS]
-                            [--ncputhreads NCPUTHREADS] [--nshots NSHOTS] [--nfused NFUSED] [--precision {single,double}]
-                            [--cusvaer-global-index-bits [CUSVAER_GLOBAL_INDEX_BITS]] [--cusvaer-p2p-device-bits [CUSVAER_P2P_DEVICE_BITS]]
+usage: cuquantum-benchmarks [-h] {circuit,api} ...
 
-============= NVIDIA cuQuantum Circuit Performance Benchmark Suite =============
+=============== NVIDIA cuQuantum Performance Benchmark Suite ===============
 
-Supported Backends:
-
-  - aer: runs Qiskit Aer's CPU backend
-  - aer-cuda: runs the native Qiskit Aer GPU backend
-  - aer-cusv: runs Qiskit Aer's cuStateVec integration
-  - cusvaer: runs the *multi-GPU, multi-node* custom Qiskit Aer GPU backend, only
-    available in the cuQuantum Appliance container
-  - cirq: runs Cirq's native CPU backend (cirq.Simulator)
-  - cutn: runs cuTensorNet by constructing the tensor network corresponding to the
-    benchmark circuit (through cuquantum.CircuitToEinsum)
-  - qsim: runs qsim's CPU backend
-  - qsim-cuda: runs the native qsim GPU backend
-  - qsim-cusv: runs qsim's cuStateVec integration
-  - qsim-mgpu: runs the *multi-GPU* (single-node) custom qsim GPU backend, only
-    available in the cuQuantum Appliance container
-
-================================================================================
+positional arguments:
+  {circuit,api}
+    circuit      benchmark different classes of quantum circuits
+    api          benchmark different APIs from cuQuantum's libraries
 
 optional arguments:
-  -h, --help            show this help message and exit
-  --frontend {cirq,qiskit}
-                        set the simulator frontend (default: None)
-  --backend {aer,aer-cuda,aer-cusv,cusvaer,cirq,cutn,qsim,qsim-cuda,qsim-cusv,qsim-mgpu}
-                        set the simulator backend that is compatible with the frontend (default: None)
-  --benchmark {qft,iqft,ghz,simon,hidden_shift,qaoa,qpe,quantum_volume,random,all}
-                        pick the circuit to benchmark (default: all)
-  --new                 create a new circuit rather than use existing circuit (default: False)
-  --nqubits NQUBITS     set the number of qubits for each benchmark circuit (default: None)
-  --nwarmups NWARMUPS   set the number of warm-up runs for each benchmark (default: 3)
-  --nrepeats NREPEATS   set the number of repetitive runs for each benchmark (default: 10)
-  --cachedir CACHEDIR   set the directory to cache generated data (default: .)
-  --verbose             output extra information during benchmarking (default: False)
-
-backend-specific options:
-  each backend has its own default config, see cuquantum_benchmarks/config.py for detail
-
-  --ngpus NGPUS         set the number of GPUs to use (default: None)
-  --ncputhreads NCPUTHREADS
-                        set the number of CPU threads to use (default: None)
-  --nshots NSHOTS       set the number of shots for quantum state measurement (default: None)
-  --nfused NFUSED       set the maximum number of fused qubits for gate matrix fusion (default: None)
-  --precision {single,double}
-                        set the floating-point precision (default: None)
-  --cusvaer-global-index-bits [CUSVAER_GLOBAL_INDEX_BITS]
-                        set the global index bits to represent the inter-node network structure, refer to the cusvaer backend documentation
-                        for further detail. If not followed by any argument, the default (empty sequence) is used; otherwise, the argument
-                        should be a comma-separated string. Setting this option is mandatory for the cusvaer backend and an error otherwise
-                        (default: -1)
-  --cusvaer-p2p-device-bits [CUSVAER_P2P_DEVICE_BITS]
-                        set the number of p2p device bits, refer to the cusvaer backend documentation for further detail. If not followed by
-                        any argument, the default (0) is used. Setting this option is mandatory for the cusvaer backend and an error
-                        otherwise (default: -1)
+  -h, --help     show this help message and exit
 ```
+
+Starting v0.2.0, we offer subcommands for performing benchmarks at different levels, as shown above. For details, please refer to the help message of each subcommand, ex: `cuquantum-benchmarks circuit --help`.
 
 Alternatively, you can launch the benchmark program via `python -m cuquantum_benchmarks`. This is equivalent to the standalone command, and is useful when, say, `pip` installs this package to the user site-package (so that the `cuquantum-benchmarks` command may not be available without modifying `$PATH`).
 
@@ -95,13 +49,27 @@ For GPU backends, it is preferred that `--ngpus` is explicitly set.
 For backends that support MPI parallelism, it is assumed that `MPI_COMM_WORLD` is the communicator, and that `mpi4py` is installed. You can run the benchmarks as you would normally do to launch MPI processes: `mpiexec -n N cuquantum-benchmarks ...`. It is preferred if you fully specify the problem (explicitly set `--benchmark` & `--nqubits`).
 
 Examples:
-- `cuquantum-benchmarks --frontend qiskit --backend cutn --benchmark qft --nqubits 8 --ngpus 1`: Construct a 8-qubit QFT circuit in Qiskit and run it with cuTensorNet on GPU
-- `cuquantum-benchmarks --frontend cirq --backend qsim-mgpu --benchmark qaoa --nqubits 16 --ngpus 2`: Construct a 16-qubit QAOA circuit in Cirq and run it with the (multi-GPU) `qsim-mgpu` backend on 2 GPUs (requires cuQuantum Appliance)
-- `mpiexec -n 4 cuquantum-benchmarks --frontend qiskit --backend cusvaer --benchmark quantum_volume --nqubits 32 --ngpus 1 --cusvaer-global-index-bits 2,2 --cusvaer-p2p-device-bits 2`: Construct a 32-qubit Quantum Volume circuit in Qiskit and run it with the (multi-GPU-multi-node) `cusvaer` backend on 2 nodes, each with 2 GPUs (requires cuQuantum Appliance)
+- `cuquantum-benchmarks api --benchmark apply_matrix --targets 4,5 --controls 2,3 --nqubits 16`: Apply a random gate matrix controlled by qubits 2 & 3 to qubits 4 & 5 of a 16-qubit statevector using cuStateVec's `apply_matrix()` API
+- `cuquantum-benchmarks circuit --frontend qiskit --backend cutn --benchmark qft --nqubits 8 --ngpus 1`: Construct a 8-qubit QFT circuit in Qiskit and run it with cuTensorNet on GPU
+- `cuquantum-benchmarks circuit --frontend cirq --backend qsim-mgpu --benchmark qaoa --nqubits 16 --ngpus 2`: Construct a 16-qubit QAOA circuit in Cirq and run it with the (multi-GPU) `qsim-mgpu` backend on 2 GPUs (requires cuQuantum Appliance)
+- `mpiexec -n 4 cuquantum-benchmarks circuit --frontend qiskit --backend cusvaer --benchmark quantum_volume --nqubits 32 --ngpus 1 --cusvaer-global-index-bits 1,1 --cusvaer-p2p-device-bits 1`: Construct a 32-qubit Quantum Volume circuit in Qiskit and run it with the (multi-GPU-multi-node) `cusvaer` backend on 2 nodes. Each node runs 2 MPI processes, each of which controls 1 GPU (requires cuQuantum Appliance)
 
 ## Known issues
 
 - Due to Qiskit Aer's design, it'd initialize the CUDA contexts for all GPUs installed on the system at import time. While we can defer the import, it might have an impact to the (multi-GPU) system performance when any `aer*` backend is in use. For the time being, we recommend to work around it by limiting the visible devices. For example, `CUDA_VISIBLE_DEVICES=0,1 cuquantum-benchmarks ...` would only use GPU 0 & 1.
+
+## Output data
+
+All the recorded data is stored in the `data` directory as JSON files, and is separated by benchmarks. The data can be accessed by `json_data[nqubits][sim_config_hash]`, where `sim_config_hash` is a hash string for the benchmark setup as determined by `frontend`, `backend`, and `run_env`. This ensures benchmark data is properly recorded once any part of the benchmark setup changes.
+
+It is recommended to loop over all recorded `sim_config_hash` to gather perf data for analysis.
+
+## Environment variables
+
+Currently all environment variables are reserved for internal use only, and are subject to change in the future without notification.
+
+* `CUTENSORNET_DUMP_TN=txt`
+* `CUTENSORNET_BENCHMARK_TARGET={amplitude,state_vector,expectation}` (pick one)
 
 ## Development Overview
 
@@ -140,16 +108,3 @@ The output of `run` is a dictionary that contains `results`, the result of compu
 that one would want to record.
 
 The output of `preprocess_circuit` is a dictionary that similarly contains any performance data that one would like to record.
-
-## Output data
-
-All the recorded data is stored in the `data` directory as JSON files, and is separated by benchmarks. The data can be accessed by `json_data[nqubits][sim_config_hash]`, where `sim_config_hash` is a hash string for the benchmark setup as determined by `frontend`, `backend`, and `run_env`. This ensures benchmark data is properly recorded once any part of the benchmark setup changes.
-
-It is recommended to loop over all recorded `sim_config_hash` to gather perf data for analysis.
-
-## Environment variables
-
-Currently all environment variables are reserved for internal use only, and are subject to change in the future without notification.
-
-* `CUTENSORNET_DUMP_TN=txt`
-* `CUTENSORNET_BENCHMARK_TARGET={amplitude,state_vector,expectation}` (pick one)

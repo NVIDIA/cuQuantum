@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -245,4 +245,73 @@ backends = {
         },
     },
 
+    'naive': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 1,
+            'ncputhreads': 0,
+            'precision': 'single',
+        },
+    },
+    
+    'pennylane': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 0,
+            'ncputhreads': 1,
+            'precision': 'single',
+        },
+    },
+
+    'pennylane-lightning-gpu': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 1,
+            'ncputhreads': 0,
+            'precision': 'single',
+        },
+    },
+
+    'pennylane-lightning-qubit': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 0,
+            'ncputhreads': 1,
+            'precision': 'single',
+        },
+    },
+
+    'pennylane-lightning-kokkos': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 1,
+            'ncputhreads': 0,
+            'precision': 'single',
+        },
+    },
+
+    'qulacs-gpu': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 1,
+            'ncputhreads': 0,
+            'precision': 'double',
+        },
+    },
+
+    'qulacs-cpu': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 0,
+            'ncputhreads': 1,
+            'precision': 'double',
+        },
+    },
 }

@@ -1,11 +1,11 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import numpy as np
 
 from .benchmark import Benchmark
-from .._utils import random_unitary
+from .._utils import Gate, random_unitary
 
 
 class QuantumVolume(Benchmark):
@@ -32,8 +32,9 @@ class QuantumVolume(Benchmark):
                 su4 = random_unitary(4, rng)
                 assert su4.shape == (4, 4)
                 idx = [perm[2*w], perm[2*w+1]]
-                circuit.append(('u', [su4, idx]))
+                circuit.append(Gate(id='u', matrix=su4, targets=idx))
+
         if measure:
-            circuit.append(('measure', [list(range(nqubits))]))
+            circuit.append(Gate(id='measure', targets=list(range(nqubits))))
 
         return circuit

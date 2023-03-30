@@ -1,8 +1,7 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-# pylint: disable=wrong-or-nonexistent-copyright-notice
 # Used for classical post-processing:
 from collections import Counter
 
@@ -10,6 +9,7 @@ import numpy as np
 import scipy as sp
 
 from .benchmark import Benchmark
+from .._utils import Gate, reseed
 
 
 class Simon(Benchmark):
@@ -17,6 +17,8 @@ class Simon(Benchmark):
     # Example instantiation of Simon circuit paramterized by nqubits
     @staticmethod
     def generateGatesSequence(nqubits, config):
+        reseed(1234)  # TODO: use a global seed?
+
         # "nqubits" here refers to the number of total qubits in the circuit, and we need
         # it to be even so we can split the qubits into input/output
         if nqubits % 2:
@@ -96,7 +98,8 @@ class Simon(Benchmark):
         """Gates implementing the function f(a) = f(b) iff a ⨁ b = s"""
         # Copy contents to output qubits:
         for control_qubit, target_qubit in zip(input_qubits, output_qubits):
-            yield ('cnot', [control_qubit, target_qubit])
+            yield Gate(id='cnot', controls=control_qubit, targets=target_qubit)
+
         # Create mapping:
         if sum(secret_string):  # check if the secret string is non-zero
             # Find significant bit of secret string (first non-zero bit)
@@ -104,11 +107,12 @@ class Simon(Benchmark):
             # Add secret string to input according to the significant bit:
             for j in range(len(secret_string)):
                 if secret_string[j] > 0:
-                    yield ('cnot', [input_qubits[significant], output_qubits[j]])
+                    yield Gate(id='cnot', controls=input_qubits[significant], targets=output_qubits[j])
+
         # Apply a random permutation:
         pos = [0, len(secret_string) - 1,]
         # Swap some qubits to define oracle. We choose first and last:
-        yield ('swap', [output_qubits[pos[0]], output_qubits[pos[1]]])
+        yield Gate(id='swap', targets=[output_qubits[pos[0]], output_qubits[pos[1]]])
 
     def _make_simon_circuit(input_qubits, output_qubits, oracle, measure):
         """Solves for the secret period s of a 2-to-1 function such that
@@ -116,14 +120,17 @@ class Simon(Benchmark):
         """
         circuit = []
         # Initialize qubits.
-        init = [('h', [idx]) for idx in input_qubits]
+        init = [Gate(id='h', targets=idx) for idx in input_qubits]
         circuit += init
+
         # Query oracle.
         circuit += oracle
+
         if measure:
             # Measure in X basis.
             circuit += init
-            circuit.append(('measure', [input_qubits]))
+            circuit.append(Gate(id='measure', targets=input_qubits))
+
         return circuit
 
     def _post_processing(data, results):

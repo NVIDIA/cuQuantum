@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -15,12 +15,11 @@ from .backend import Backend
 
 class QsimCirq(Backend):
 
-    def __init__(self, ngpus, ncpu_threads, precision, logger, *args, identifier=None, **kwargs):
+    def __init__(self, ngpus, ncpu_threads, precision, *args, identifier=None, **kwargs):
         if qsimcirq is None:
             raise RuntimeError("qsimcirq is not installed")
         if precision != 'single':
             raise ValueError("all qsim backends only support single precision")
-        self.logger = logger
         self.identifier = identifier
         qsim_options = self.create_qsim_options(identifier, ngpus, ncpu_threads, **kwargs)
         self.backend = qsimcirq.QSimSimulator(qsim_options=qsim_options)

@@ -1,16 +1,71 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
 import ctypes
+from dataclasses import dataclass
+import math
+import json
 import hashlib
 import logging
 import os
+import platform
+import random
 import re
+import time
+from typing import Iterable, Optional, Union
+import warnings
 
+import cupy as cp
 import numpy as np
+from cuquantum import cudaDataType, ComputeType
 from cuquantum.cutensornet._internal.einsum_parser import create_size_dict
+import psutil
+
+
+# set up a logger
+logger_name = "cuquantum-benchmarks"
+logger = logging.getLogger(logger_name)
+
+
+def reseed(seed=1234):
+    random.seed(seed)
+    np.random.seed(seed)
+    # Q: How about CuPy?
+
+
+def precision_str_to_dtype(precision, is_complex=True):
+    if precision == "single":
+        if is_complex:
+            return np.complex64
+        else:
+            return np.float32
+    elif precision == "double":
+        if is_complex:
+            return np.complex128
+        else:
+            return np.float64
+    else:
+        raise ValueError
+
+
+def dtype_to_cuda_type(dtype):
+    if dtype == np.complex64:
+        return cudaDataType.CUDA_C_32F
+    elif dtype == np.complex128:
+        return cudaDataType.CUDA_C_64F
+    else:
+        raise ValueError
+
+
+def dtype_to_compute_type(dtype):
+    if dtype == np.complex64:
+        return ComputeType.COMPUTE_32F
+    elif dtype == np.complex128:
+        return ComputeType.COMPUTE_64F
+    else:
+        raise ValueError
 
 
 def generate_size_dict_from_operands(einsum, operands):
@@ -58,27 +113,40 @@ def convert_einsum_to_txt(einsum, size_dict, filename):
     def dump():
         with open(filename, 'w') as f:
             f.write(content)
-    write_on_rank_0(dump)
+    call_by_root(dump)
 
 
-def random_unitary(size, rng, dtype=np.float64):
+def random_unitary(size, rng=None, dtype=np.float64, check=False):
     # the same functionality can be done with scipy.stats.unitary_group.rvs(),
-    # but this is too simple that we just re-implement it here
+    # but this is so simple that we just re-implement it here
+    rng = np.random.default_rng(1234) if rng is None else rng  # TODO: honor a global seed?
     m = rng.standard_normal(size=(size, size), dtype=dtype) \
         + 1j*rng.standard_normal(size=(size, size), dtype=dtype)
     q, r = np.linalg.qr(m)
     d = np.diag(r)
     q *= d/abs(d)
+    if check:
+        is_unitary = np.allclose(
+            np.abs(np.dot(q, q.T.conj()) - np.eye(size, dtype=q.dtype)),
+            0,
+        )
+        if not is_unitary:
+            warnings.warn("generated random matrix might not be unitary")
     return q
 
 
 def is_running_mpiexec():
-    # This is not 100% robust but should cover MPICH & Open MPI
-    for key in os.environ.keys():
-        if key.startswith('PMI_') or key.startswith('OMPI_COMM_WORLD_'):
-            return True
-    else:
-        return False
+    # This is not 100% robust but should cover MPICH, Open MPI and Slurm
+    # PMI_SIZE, Hydra(MPICH), OMPI_COMM_WORLD_SIZE(OpenMPI)
+    if 'PMI_SIZE' in os.environ or \
+       'OMPI_COMM_WORLD_SIZE' in os.environ:
+        return True
+    # SLURM_NPROCS is defined by Slurm
+    if 'SLURM_NPROCS' in os.environ:
+        nprocs = os.environ['SLURM_NPROCS']
+        return nprocs != '1'
+    # no environmental variable found
+    return False
 
 
 def is_running_mpi():
@@ -94,15 +162,21 @@ def is_running_mpi():
     return MPI
 
 
-def write_on_rank_0(f):
+def get_num_processes():
+    MPI = is_running_mpi()
+    return MPI.COMM_WORLD.Get_size() if MPI else 1
+
+
+def call_by_root(f, root=0):
+    """ Call the callable f only by the root process. """
     MPI = is_running_mpi()
     if MPI:
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
-        if rank == 0:
-            f()
+        if rank == root:
+            return f()
     else:
-        f()
+        return f()
 
 
 class MPHandler(logging.StreamHandler):
@@ -187,3 +261,238 @@ class HashableDict(dict):
         # 1. we want a stable hash scheme, the built-in hash() is not
         # 2. but hash() requires __hash__() returning an int, while this is a str
         return hashlib.sha256(str(tuple(self.items())).encode()).hexdigest()
+
+
+@dataclass
+class Gate:
+    """A data class for holding all gate-related information.
+
+    Attributes:
+        id: The gate identity.
+        targets: The target qubit(s).
+        controls: The control qubit(s), if any.
+        matrix: The gate matrix.
+        params: The gate parameter(s).
+        name: The gate name.
+    """
+    id: str = ''
+    targets: Union[int, Iterable[int]] = None
+    controls: Optional[Union[int, Iterable[int]]] = None
+    matrix: Optional[Union[Iterable[float], Iterable[complex]]] = None
+    params: Optional[Union[float, Iterable[float]]] = None
+    name: Optional[str] = ''
+
+    def __post_init__(self):
+        if not self.id:
+            raise ValueError("gate id must be specified")
+        if self.targets is None:
+            raise ValueError("targets must be specified")
+        if self.matrix is not None:
+            if self.params is not None:
+                raise ValueError("gate matrix and gate parameters cannot coexist")
+            try:
+                n_targets = len(self.targets)
+            except TypeError:
+                n_targets = 1  # targets is int
+            try:
+                # 1D/2D ndarray-like objects
+                assert self.matrix.size == (2**n_targets)**2
+            except AttributeError:
+                # plain Python objects, must be 2D/nested (otherwise we'd have to
+                # assume there's a certain memory layout); we're being sloppy
+                # here and do not check the inner sequence lengths...
+                try:
+                    assert len(self.matrix) == 2**n_targets
+                except Exception as e:
+                    raise ValueError("gate matrix size must match targets") from e
+
+    def __repr__(self):
+        s = f"Gate(id={self.id}, targets={self.targets}"
+        if self.controls is not None:
+            s += f", controls={self.controls}"
+        if self.matrix is not None:
+            s += f", matrix={self.matrix}"
+        elif self.params is not None:
+            s += f", params={self.params}"
+        if self.name:
+            s += f", name={self.name}"
+        s += ")"
+        return s
+
+
+def gen_run_env(gpu_device_properties):
+    run_env = HashableDict({
+        'hostname': platform.node(),
+        'cpu_name': get_cpu_name(),
+        'gpu_name': gpu_device_properties['name'].decode('utf-8'),
+        'gpu_driver_ver': cp.cuda.runtime.driverGetVersion(),
+        'gpu_runtime_ver': cp.cuda.runtime.runtimeGetVersion(),
+        'nvml_driver_ver': get_gpu_driver_version(),
+    })
+    return run_env
+
+
+def report(perf_time, cuda_time, post_time, ngpus, run_env, gpu_device_properties, benchmark_data):
+    hostname = run_env['hostname']
+    cpu_name = run_env['cpu_name']
+    cpu_phy_mem = round(psutil.virtual_memory().total/1000000000, 2)
+    cpu_used_mem = round(psutil.virtual_memory().used/1000000000, 2)
+    cpu_phy_cores = psutil.cpu_count(logical=False)
+    cpu_log_cores = psutil.cpu_count(logical=True)
+    cpu_curr_freq = round(psutil.cpu_freq().current, 2)
+    cpu_min_freq = psutil.cpu_freq().min
+    cpu_max_freq = psutil.cpu_freq().max
+
+    gpu_name = run_env['gpu_name']
+    gpu_total_mem = round(gpu_device_properties['totalGlobalMem']/1000000000, 2)
+    gpu_clock_rate = round(gpu_device_properties['clockRate']/1000, 2)
+    gpu_multiprocessor_num = gpu_device_properties['multiProcessorCount']
+    gpu_driver_ver = run_env['gpu_driver_ver']
+    gpu_runtime_ver = run_env['gpu_runtime_ver']
+    nvml_driver_ver = run_env['nvml_driver_ver']
+
+    logger.debug(f' - hostname: {hostname}')
+    logger.info(f' - [CPU] Averaged elapsed time: {perf_time:.9f} s')
+    if post_time is not None:
+        logger.info(f' - [CPU] Averaged postprocessing Time: {post_time:.6f} s')
+        benchmark_data['cpu_post_time'] = post_time
+    logger.info(f' - [CPU] Processor type: {cpu_name}')
+    logger.debug(f' - [CPU] Total physical memory: {cpu_phy_mem} GB')
+    logger.debug(f' - [CPU] Total used memory: {cpu_used_mem} GB')
+    logger.debug(f' - [CPU] Number of physical cores: {cpu_phy_cores}, and logical cores: {cpu_log_cores}')
+    logger.debug(f' - [CPU] Frequency current (Mhz): {cpu_curr_freq}, min: {cpu_min_freq}, and max: {cpu_max_freq}')
+    logger.info(' -')
+    logger.info(f' - [GPU] Averaged elapsed time: {cuda_time:.9f} s {"(unused)" if ngpus == 0 else ""}')
+    logger.info(f' - [GPU] GPU device name: {gpu_name}')
+    logger.debug(f' - [GPU] Total global memory: {gpu_total_mem} GB')
+    logger.debug(f' - [GPU] Clock frequency (Mhz): {gpu_clock_rate}')
+    logger.debug(f' - [GPU] Multi processor count: {gpu_multiprocessor_num}')
+    logger.debug(f' - [GPU] CUDA driver version: {gpu_driver_ver} ({nvml_driver_ver})')
+    logger.debug(f' - [GPU] CUDA runtime version: {gpu_runtime_ver}')
+    logger.info('')
+
+    benchmark_data['cpu_time'] = perf_time
+    benchmark_data['cpu_phy_mem'] = cpu_phy_mem
+    benchmark_data['cpu_used_mem'] = cpu_used_mem
+    benchmark_data['cpu_phy_cores'] = cpu_phy_cores
+    benchmark_data['cpu_log_cores'] = cpu_log_cores
+    benchmark_data['cpu_current_freq'] = cpu_curr_freq
+
+    benchmark_data['gpu_time'] = cuda_time
+    benchmark_data['gpu_total_mem'] = gpu_total_mem
+    benchmark_data['gpu_clock_freq'] = gpu_clock_rate
+    benchmark_data['gpu_multiprocessor_num'] = gpu_multiprocessor_num
+
+    return benchmark_data
+
+
+def save_benchmark_data(
+        num_qubits, sim_config_hash, benchmark_data, full_data, filepath, save=True):
+    try:
+        full_data[num_qubits][sim_config_hash] = benchmark_data
+    except KeyError:
+        if num_qubits not in full_data:
+            full_data[num_qubits] = {}
+
+        if sim_config_hash not in full_data[num_qubits]:
+            full_data[num_qubits][sim_config_hash] = {}
+
+        full_data[num_qubits][sim_config_hash] = benchmark_data
+
+    if save:
+        def dump():
+            with open(filepath, 'w') as f:
+                json.dump(full_data, f, indent=2)
+        call_by_root(dump)
+        logger.debug(f'Saved {filepath} as JSON')
+
+    return full_data
+
+
+def load_benchmark_data(filepath, cache_dir, required_subdirs=()):
+    try:
+        with open(filepath, 'r') as f:
+            full_data = json.load(f)
+            logger.debug(f'Loaded {filepath} as JSON')
+    # If the data file does not exist, we'll create it later
+    except FileNotFoundError:
+        full_data = {}
+        logger.debug(f'{filepath} not found')
+
+        # it could be that the cache dirs are not created yet
+        def create_cache():
+            for subdir in required_subdirs:
+                path = os.path.join(cache_dir, subdir)
+                if not os.path.isdir(path):
+                    os.makedirs(path, exist_ok=True)
+        call_by_root(create_cache)
+
+    return full_data
+
+
+# TODO: upstream this to cupyx.profiler.benchmark
+class L2flush:
+    """ Handly utility for flushing the current device's L2 cache.
+
+    This instance must be created and used on the same (CuPy's) current device/stream
+    as those used by the target workload.
+
+    Reimplementation of the l2flush class from NVBench, see
+    https://github.com/NVIDIA/nvbench/blob/main/nvbench/detail/l2flush.cuh.
+    """
+    def __init__(self):
+        self.l2_size = cp.cuda.Device().attributes['L2CacheSize']
+        self.mem = cp.cuda.alloc(self.l2_size) if self.l2_size > 0 else None
+
+    def flush(self):
+        if self.mem:
+            self.mem.memset_async(0, self.l2_size)
+
+
+# TODO: we should convince upstream to allow this use case.
+def benchmark_with_prerun(
+        func, args=(), kwargs={}, *,
+        n_warmup=10, n_repeat=10000, pre_run=None):
+    """A simplified version of cupyx.profiler.benchmark(), with the additional
+    support for a user-supplied function ("pre_run") that's run every time
+    before the target "func" is run.
+
+    This is simplifed to only permit using on single GPUs.
+    """
+    e1 = cp.cuda.Event()
+    e2 = cp.cuda.Event()
+    try:
+        from cupyx.profiler._time import _PerfCaseResult
+    except ImportError:
+        _PerfCaseResult = None
+        class _Result: pass
+    cpu_times = []
+    gpu_times = [[]]
+
+    for _ in range(n_warmup):
+        func(*args, **kwargs)
+
+    for _ in range(n_repeat):
+        if pre_run:
+            pre_run(*args, **kwargs)
+        e1.record()
+        t1 = time.perf_counter()
+        func(*args, **kwargs)
+        t2 = time.perf_counter()
+        e2.record()
+        e2.synchronize()
+
+        cpu_times.append(t2-t1)
+        gpu_times[0].append(cp.cuda.get_elapsed_time(e1, e2)*1E-3)
+
+    if _PerfCaseResult:
+        result = _PerfCaseResult(
+            func.__name__,
+            np.asarray([cpu_times] + gpu_times, dtype=np.float64),
+            (cp.cuda.Device().id,))
+    else:
+        result = _Result()
+        result.cpu_times = cpu_times
+        result.gpu_times = gpu_times
+
+    return result
