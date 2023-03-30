@@ -231,6 +231,7 @@ def matrix_svd(
     if max_extent == 0 or max_extent is None:
         max_extent = len(s)
     reduced_extent = min(max_extent, int((s>cutoff).sum()))
+    reduced_extent = max(reduced_extent, 1)
     info["reduced_extent"] = reduced_extent
     if reduced_extent != len(s):
         sqrt_sum = backend.linalg.norm(s).item() ** 2
