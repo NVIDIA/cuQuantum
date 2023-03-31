@@ -54,10 +54,6 @@ Examples:
 - `cuquantum-benchmarks circuit --frontend cirq --backend qsim-mgpu --benchmark qaoa --nqubits 16 --ngpus 2`: Construct a 16-qubit QAOA circuit in Cirq and run it with the (multi-GPU) `qsim-mgpu` backend on 2 GPUs (requires cuQuantum Appliance)
 - `mpiexec -n 4 cuquantum-benchmarks circuit --frontend qiskit --backend cusvaer --benchmark quantum_volume --nqubits 32 --ngpus 1 --cusvaer-global-index-bits 1,1 --cusvaer-p2p-device-bits 1`: Construct a 32-qubit Quantum Volume circuit in Qiskit and run it with the (multi-GPU-multi-node) `cusvaer` backend on 2 nodes. Each node runs 2 MPI processes, each of which controls 1 GPU (requires cuQuantum Appliance)
 
-## Known issues
-
-- Due to Qiskit Aer's design, it'd initialize the CUDA contexts for all GPUs installed on the system at import time. While we can defer the import, it might have an impact to the (multi-GPU) system performance when any `aer*` backend is in use. For the time being, we recommend to work around it by limiting the visible devices. For example, `CUDA_VISIBLE_DEVICES=0,1 cuquantum-benchmarks ...` would only use GPU 0 & 1.
-
 ## Output data
 
 All the recorded data is stored in the `data` directory as JSON files, and is separated by benchmarks. The data can be accessed by `json_data[nqubits][sim_config_hash]`, where `sim_config_hash` is a hash string for the benchmark setup as determined by `frontend`, `backend`, and `run_env`. This ensures benchmark data is properly recorded once any part of the benchmark setup changes.
