@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -14,7 +14,7 @@ from .backend import Backend
 
 class Cirq(Backend):
 
-    def __init__(self, ngpus, ncpu_threads, precision, logger, *args, **kwargs):
+    def __init__(self, ngpus, ncpu_threads, precision, *args, **kwargs):
         if cirq is None:
             raise RuntimeError("cirq is not installed")
         if ngpus > 0:
@@ -24,7 +24,6 @@ class Cirq(Backend):
         if precision != 'single':
             raise ValueError("the cirq backend only supports single precision")
 
-        self.logger = logger
         self.backend = cirq.Simulator()
 
     def run(self, circuit, nshots=1024):

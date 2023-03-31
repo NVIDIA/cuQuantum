@@ -1,26 +1,32 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-# pylint: disable=wrong-or-nonexistent-copyright-notice
 import random
 
 from .benchmark import Benchmark
+from .._utils import Gate, reseed
 
 
 class HiddenShift(Benchmark):
 
     @staticmethod
     def generateGatesSequence(nqubits, config):
+        reseed(1234)  # TODO: use a global seed?
+
         # Define secret shift
         shift = [random.randint(0, 1) for _ in range(nqubits)]
+
         # Make oracles (black box)
         oracle_f = HiddenShift._make_oracle_f(nqubits)
+
         # Embed oracle into quantum circuit implementing the Hidden Shift Algorithm
         circuit = HiddenShift._make_hs_circuit(nqubits, oracle_f, shift)
+
         measure = config['measure']
         if measure:
-            circuit.append(('measure', [list(range(nqubits))]))
+            circuit.append(Gate(id='measure', targets=list(range(nqubits))))
+
         return circuit
 
     """Example program that demonstrates a Hidden Shift algorithm.
@@ -101,27 +107,34 @@ class HiddenShift(Benchmark):
     """
     def _make_oracle_f(nqubits):
         """Implement function {f(x) = Σ_i x_(2i) x_(2i+1)}."""
-        oracle_circuit = [('cz', [2 * i, 2 * i + 1]) for i in range(nqubits // 2)]
+        oracle_circuit = [Gate(id='cz', controls=2*i, targets=2*i+1) for i in range(nqubits//2)]
         return oracle_circuit
 
     def _make_hs_circuit(nqubits, oracle_f, shift):
         """Find the shift between two almost equivalent functions."""
         circuit = []
-        apply_h = [('h', [idx]) for idx in range(nqubits)]
-        apply_shift = [('x', [k]) for k in range(len(shift)) if shift[k]]
+        apply_h = [Gate(id='h', targets=idx) for idx in range(nqubits)]
+        apply_shift = [Gate(id='x', targets=k) for k in range(len(shift)) if shift[k]]
+
         # Initialize qubits.
         circuit += apply_h
+
         # Query oracle g: It is equivalent to that of f, shifted before and after:
         # Apply Shift:
         circuit += apply_shift
+
         # Query oracle.
         circuit += oracle_f
+
         # Apply Shift:
         circuit += apply_shift
+
         # Second Application of Hadamards.
         circuit += apply_h
+
         # Query oracle f (this simplifies the phase).
         circuit += oracle_f
+
         # Inverse Fourier Transform with Hadamards to go back to the shift state:
         circuit += apply_h
 

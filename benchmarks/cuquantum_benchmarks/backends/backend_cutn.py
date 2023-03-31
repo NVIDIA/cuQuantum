@@ -1,7 +1,8 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import logging
 import os
 import time
 import warnings
@@ -15,16 +16,20 @@ from .backend import Backend
 from .._utils import convert_einsum_to_txt, generate_size_dict_from_operands, is_running_mpiexec
 
 
+# set up a logger
+logger_name = "cuquantum-benchmarks"
+logger = logging.getLogger(logger_name)
+
+
 class cuTensorNet(Backend):
 
-    def __init__(self, ngpus, ncpu_threads, precision, logger, **kwargs):
+    def __init__(self, ngpus, ncpu_threads, precision, **kwargs):
         if ngpus != 1:
             raise ValueError("the cutn backend must be run with --ngpus 1 (regardless if MPI is in use)")
 
         self.ncpu_threads = ncpu_threads
         self.precision = precision
         self.nqubits = kwargs.pop('nqubits')
-        self.logger = logger
         self.rank = 0
         self.handle = cutn.create()
         try:
@@ -64,7 +69,7 @@ class cuTensorNet(Backend):
 
         t2 = time.perf_counter()
         time_circ2einsum = t2 - t1
-        self.logger.info(f'CircuitToEinsum took {time_circ2einsum} s')
+        logger.info(f'CircuitToEinsum took {time_circ2einsum} s')
 
         t1 = time.perf_counter()
         if target == 'amplitude':
@@ -75,14 +80,14 @@ class cuTensorNet(Backend):
         elif target == 'expectation':
             # new in cuQuantum Python 22.11
             assert pauli is not None
-            self.logger.info(f"compute expectation value for Pauli string: {pauli}")
+            logger.info(f"compute expectation value for Pauli string: {pauli}")
             self.expression, self.operands = circuit_converter.expectation(pauli)
         else:
             # TODO: add other CircuitToEinsum methods?
             raise NotImplementedError(f"the target {target} is not supported")
         t2 = time.perf_counter()
         time_tn = t2 - t1
-        self.logger.info(f'{target}() took {time_tn} s')
+        logger.info(f'{target}() took {time_tn} s')
 
         tn_format = os.environ.get('CUTENSORNET_DUMP_TN')
         if tn_format == 'txt':
@@ -102,7 +107,7 @@ class cuTensorNet(Backend):
             optimize={'samples': 512, 'threads': self.ncpu_threads})
         t2 = time.perf_counter()
         time_path = t2 - t1
-        self.logger.info(f'contract_path() took {time_path} s')
+        logger.info(f'contract_path() took {time_path} s')
 
         self.path = path
         self.opt_info = opt_info

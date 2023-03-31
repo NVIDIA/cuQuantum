@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -63,7 +63,7 @@ setup(
     ],
     install_requires=install_requires,
     extras_require={
-        "all": ["cirq", "qsimcirq", "qiskit"],
+        "all": ["cirq", "qsimcirq", "qiskit", "pennylane", "pennylane-lightning", "pennylane-lightning[gpu]"],
     },
     classifiers=[
         "Topic :: Scientific/Engineering",

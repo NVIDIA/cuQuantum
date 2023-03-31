@@ -1,9 +1,8 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 from math import pi
-import sys
 
 try:
     import qiskit
@@ -24,51 +23,51 @@ class Qiskit(Frontend):
         self.config = config
 
     def generateCircuit(self, gateSeq):
-        last_g, last_l = gateSeq[-1]
-        assert last_g == "measure"  # TODO: relax this?
-        circuit = qiskit.QuantumCircuit(self.nqubits, len(last_l[0]))
+        last_g = gateSeq[-1]
+        assert last_g.id == "measure"  # TODO: relax this?
+        circuit = qiskit.QuantumCircuit(self.nqubits, len(last_g.targets))
 
-        for g, l in gateSeq:
-            if g=='h': # l = [target qubit]
-                circuit.h(l[0])
+        for g in gateSeq:
+            if g.id == 'h':
+                circuit.h(g.targets)
 
-            elif g=='x': # l = [target qubit]
-                circuit.x(l[0])
+            elif g.id == 'x':
+                circuit.x(g.targets)
 
-            elif g=='cnot': # l = [control qubit, target qubit]
-                circuit.cnot(l[0], l[1])
+            elif g.id == 'cnot':
+                circuit.cnot(g.controls, g.targets)
 
-            elif g=='cz': # l = [control qubit, target qubit]
-                circuit.cz(l[0], l[1])
+            elif g.id == 'cz':
+                circuit.cz(g.controls, g.targets)
 
-            elif g=='rz': # l = [angle, target qubit]
-                circuit.rz(l[0], l[1])
+            elif g.id == 'rz':
+                circuit.rz(g.params, g.targets)
 
-            elif g=='rx': # l = [angle, target qubit]
-                circuit.rx(l[0], l[1])
+            elif g.id == 'rx':
+                circuit.rx(g.params, g.targets)
 
-            elif g=='ry': # l = [angle, target qubit]
-                circuit.ry(l[0], l[1])
+            elif g.id == 'ry':
+                circuit.ry(g.params, g.targets)
 
-            elif g=='czpowgate': # l = [exponent, control qubit, target qubit]
-                circuit.cp(pi*l[0], l[1], l[2])
+            elif g.id == 'czpowgate':
+                circuit.cp(pi*g.params, g.controls, g.targets)
 
-            elif g=='swap': # l = [first qubit, second qubit]
-                circuit.swap(l[0], l[1])
+            elif g.id == 'swap':
+                circuit.swap(*g.targets)
 
-            elif g=='cu': # l = [U matrix, U name, control qubit, target qubit]
-                U_gate = UnitaryGate(l[0], l[1]).control(1)
-                circuit.append(U_gate, [l[2]]+l[3])
+            elif g.id == 'cu':
+                U_gate = UnitaryGate(g.matrix, g.name).control(1)
+                circuit.append(U_gate, [g.controls]+g.targets)
 
-            elif g == 'u':  # l = [U matrix, target qubits]
+            elif g.id == 'u':
                 # TODO: give the gate a name?
-                U_gate = UnitaryGate(l[0])
-                circuit.append(U_gate, l[1])
+                U_gate = UnitaryGate(g.matrix)
+                circuit.append(U_gate, g.targets)
 
-            elif g=='measure': # l = [qubits ids]
-                circuit.measure(l[0], l[0])
+            elif g.id == 'measure':
+                circuit.measure(g.targets, g.targets)
 
             else:
-                sys.exit("The gate type [" + g +"] is not defined")
+                raise NotImplementedError(f"The gate type {g.id} is not defined")
         
         return circuit

@@ -1,28 +1,34 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import math
 import functools
+import logging
 import time
 
 import numpy as np
+import cupy as cp
 try:
     import qiskit
 except ImportError:
     qiskit = None
 
 from .backend import Backend
-from .._utils import is_running_mpi
+from .._utils import get_num_processes
+
+
+# set up a logger
+logger_name = "cuquantum-benchmarks"
+logger = logging.getLogger(logger_name)
 
 
 class Qiskit(Backend):
 
-    def __init__(self, ngpus, ncpu_threads, precision, logger, *args, identifier=None, **kwargs):
+    def __init__(self, ngpus, ncpu_threads, precision, *args, identifier=None, **kwargs):
         if qiskit is None:
             raise RuntimeError("qiskit is not installed")
         self.precision = precision
-        self.logger = logger
         self.identifier = identifier
         self.nqubits = kwargs.pop('nqubits')
         self.backend = self.create_aer_backend(identifier, ngpus, ncpu_threads, *args, **kwargs)
@@ -32,7 +38,7 @@ class Qiskit(Backend):
         self.transpiled_qc = qiskit.transpile(circuit, self.backend) # (circuit, basis_gates=['u3', 'cx'], backend=self.backend)
         t1 = time.perf_counter()
         time_transpile = t1 - t0
-        self.logger.info(f'transpile took {time_transpile} s')
+        logger.info(f'transpile took {time_transpile} s')
         return {'transpile': time_transpile}
 
     def run(self, circuit, nshots=1024):
@@ -42,6 +48,9 @@ class Qiskit(Backend):
             results = self.backend.run(transpiled_qc, shots=nshots, memory=True)
         else:
             results = self.backend.run(transpiled_qc, shots=0, memory=True)
+        # workaround for memory allocation failure for cusvaer 22.11
+        if self.identifier == 'cusvaer':
+            self._synchronize()
 
         post_res_list = results.result().get_memory()
         post_res_list = [list(i) for i in post_res_list]
@@ -58,8 +67,33 @@ class Qiskit(Backend):
             raise RuntimeError("qiskit-aer (or qiskit-aer-gpu) is not installed") from e
 
         if identifier == 'cusvaer':
+            import cusvaer
+
             cusvaer_global_index_bits = kwargs.pop('cusvaer_global_index_bits')
             cusvaer_p2p_device_bits = kwargs.pop('cusvaer_p2p_device_bits')
+            cusvaer_comm_plugin_type = kwargs.pop('cusvaer_comm_plugin_type')
+            cusvaer_comm_plugin_soname = kwargs.pop('cusvaer_comm_plugin_soname')
+            # convert comm plugin type to enum
+            if not cusvaer_comm_plugin_type:
+                cusvaer_comm_plugin_type = cusvaer.CommPluginType.MPI_AUTO
+            elif cusvaer_comm_plugin_type == 'self':
+                cusvaer_comm_plugin_type = cusvaer.CommPluginType.SELF
+            elif cusvaer_comm_plugin_type == 'mpi_auto':
+                cusvaer_comm_plugin_type = cusvaer.CommPluginType.MPI_AUTO
+            elif cusvaer_comm_plugin_type == 'mpi_openmpi':
+                cusvaer_comm_plugin_type = cusvaer.CommPluginType.MPI_OPENMPI
+            elif cusvaer_comm_plugin_type == 'mpi_mpich':
+                cusvaer_comm_plugin_type = cusvaer.CommPluginType.MPI_MPICH
+            elif cusvaer_comm_plugin_type == 'external':
+                cusvaer_comm_plugin_type = cusvaer.CommPluginType.EXTERNAL
+            else:
+                raise ValueError(f"Unknown cusvaer_comm_plugin_type, {cusvaer_comm_plugin_type}")
+            if not cusvaer_comm_plugin_soname:  # empty string
+                if cusvaer_comm_plugin_type == cusvaer.CommPluginType.EXTERNAL:
+                    raise ValueError("cusvaer_comm_plugin_soname should be specified "
+                                     "if cusvaer_comm_plugin_type=external is specified")
+                cusvaer_comm_plugin_soname = None
+            cusvaer_data_transfer_buffer_bits = kwargs.pop('cusvaer_data_transfer_buffer_bits')
 
             if ngpus != 1:
                 raise ValueError("the cusvaer requires 1 GPU per process (--ngpus 1)")
@@ -69,8 +103,10 @@ class Qiskit(Backend):
                     fusion_max_qubit=nfused,
                     cusvaer_global_index_bits=cusvaer_global_index_bits,
                     cusvaer_p2p_device_bits=cusvaer_p2p_device_bits,
-                    precision=self.precision
-                    #cusvaer_data_transfer_buffer_bits=26,  # default
+                    precision=self.precision,
+                    cusvaer_data_transfer_buffer_bits=cusvaer_data_transfer_buffer_bits,
+                    cusvaer_comm_plugin_type=cusvaer_comm_plugin_type,
+                    cusvaer_comm_plugin_soname=cusvaer_comm_plugin_soname
                 )
             except:  # AerError
                 raise RuntimeError(
@@ -133,12 +169,10 @@ class Qiskit(Backend):
         return backend
 
     def get_aer_blocking_setup(self, ngpus=None):
-        MPI = is_running_mpi()
-        if MPI:
+        size = get_num_processes()  # check if running MPI
+        if size > 1:
             blocking_enable = True
             if self.identifier == 'aer':
-                comm = MPI.COMM_WORLD
-                size = comm.Get_size()
                 blocking_qubits = self.nqubits - int(math.log2(size))
             else:
                 blocking_qubits = self.nqubits - int(math.log2(ngpus))
@@ -147,6 +181,13 @@ class Qiskit(Backend):
             blocking_enable = False
             blocking_qubits = None
         return blocking_enable, blocking_qubits
+
+    def _synchronize(self):
+        nprocs = get_num_processes()
+        ndevices_in_node = cp.cuda.runtime.getDeviceCount()
+        # GPU selected in this process
+        device_id = nprocs % ndevices_in_node
+        cp.cuda.Device(device_id).synchronize()
 
 
 CusvAer = functools.partial(Qiskit, identifier="cusvaer")
