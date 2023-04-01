@@ -1,28 +1,34 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import json
+import functools
 import logging
 import os
 import pickle
 import random
 import time
-import platform
-import psutil
 
 import cupy as cp
 
 from .backends import createBackend
 from .frontends import createFrontend
-from ._utils import (get_cpu_name, get_gpu_driver_version, is_running_mpiexec,
-                     write_on_rank_0, HashableDict)
+from ._utils import (call_by_root, gen_run_env, HashableDict, is_running_mpiexec,
+                     load_benchmark_data, report, save_benchmark_data, reseed,
+                     is_running_mpi)
+
+
+# set up a logger
+logger_name = "cuquantum-benchmarks"
+logger = logging.getLogger(logger_name)
 
 
 def run_interface(
         benchmarks, nqubits_interface, ngpus_interface, ncpu_threads_interface, frontend, backend, nwarmups, nrepeats, nshots_interface,
-        nfused_interface, precision_interface, new_circ, save, logger, cache_dir, cusvaer_global_index_bits, cusvaer_p2p_device_bits):
+        nfused_interface, precision_interface, new_circ, save, cache_dir,
+        cusvaer_global_index_bits, cusvaer_p2p_device_bits, cusvaer_data_transfer_buffer_bits, cusvaer_comm_plugin_type, cusvaer_comm_plugin_soname):
 
+    reseed(1234)  # TODO: use a global seed?
     backend, backend_config = backend  # unpack
     ngpus = ngpus_interface if ngpus_interface is not None else backend_config['config']['ngpus']
     ncpu_threads = ncpu_threads_interface if ncpu_threads_interface is not None else backend_config['config']['ncputhreads']
@@ -37,8 +43,8 @@ def run_interface(
                                          precision=precision,
                                          #append=append,
                                          new_circ=new_circ,
-                                         save=save,
-                                         logger=logger)
+                                         save=save)
+
     for benchmark_name in benchmarks.keys(): # Iterate over diferent benchmarks
         benchmark = benchmarks[benchmark_name]
 
@@ -51,6 +57,7 @@ def run_interface(
 
         benchmark_object = benchmark['benchmark']
         config = benchmark['config']
+        config['precision'] = precision  # WAR
 
         for nqubits in nqubits_list: # Iterate over diferent number of qubits
             run_specific = RunSpecific(benchmark_name=benchmark_name,
@@ -64,13 +71,16 @@ def run_interface(
                                        general_interface=general_interface,
                                        cache_dir=cache_dir,
                                        cusvaer_global_index_bits=cusvaer_global_index_bits,
-                                       cusvaer_p2p_device_bits=cusvaer_p2p_device_bits)
+                                       cusvaer_p2p_device_bits=cusvaer_p2p_device_bits,
+                                       cusvaer_data_transfer_buffer_bits=cusvaer_data_transfer_buffer_bits,
+                                       cusvaer_comm_plugin_type=cusvaer_comm_plugin_type,
+                                       cusvaer_comm_plugin_soname=cusvaer_comm_plugin_soname)
             run_specific.run()
 
 
 class GeneralInterface:
 
-    def __init__(self, frontend, backend, nshots, nfused, precision, new_circ, save, logger):
+    def __init__(self, frontend, backend, nshots, nfused, precision, new_circ, save):
         self.frontend = frontend
         self.backend = backend
         self.nshots = nshots
@@ -79,7 +89,6 @@ class GeneralInterface:
         #self.append = append
         self.new_circ = new_circ
         self.save = save
-        self.logger = logger
         self.full_data = {}
 
 
@@ -87,7 +96,9 @@ class RunSpecific:
 
     def __init__(
             self, benchmark_name, benchmark_object, nqubits, ngpus, ncpu_threads, nwarmups, nrepeats, config,
-            general_interface, cache_dir, cusvaer_global_index_bits, cusvaer_p2p_device_bits):
+            general_interface, cache_dir,
+            cusvaer_global_index_bits, cusvaer_p2p_device_bits, cusvaer_data_transfer_buffer_bits,
+            cusvaer_comm_plugin_type, cusvaer_comm_plugin_soname):
         self.benchmark_name = benchmark_name
         self.benchmark_object = benchmark_object
         self.nqubits = nqubits
@@ -99,18 +110,28 @@ class RunSpecific:
         self.general_interface = general_interface
         self.benchmark_data = {}
         self.cache_dir = cache_dir
+        # cusvaer options
         self.cusvaer_global_index_bits = cusvaer_global_index_bits
         self.cusvaer_p2p_device_bits = cusvaer_p2p_device_bits
+        self.cusvaer_data_transfer_buffer_bits = cusvaer_data_transfer_buffer_bits
+        self.cusvaer_comm_plugin_type = cusvaer_comm_plugin_type
+        self.cusvaer_comm_plugin_soname = cusvaer_comm_plugin_soname
 
         # currently we assume the following subdirectories exist
-        def create_cache():
-            for subdir in ('circuits', 'data'):
-                path = os.path.join(cache_dir, subdir)
-                if not os.path.isdir(path):
-                    os.makedirs(path, exist_ok=True)
-        write_on_rank_0(create_cache)
+        self.required_subdirs = ('circuits', 'data')
 
-    def load_or_generate_circuit(self, circuit_filename):
+    def _load_or_generate_circuit(self, circuit_filename):
+        # We need a mechanism to ensure any incompatible gate_sequence generated
+        # and cached from the previous releases is invalidated. We do so by
+        # assigning a version number gate_seq_ver for the gate sequence and
+        # encoding it in the pickle filename.
+        #
+        # v0.1.0: the gate_sequence is a list of size-2 lists.
+        # v0.2.0: the gate_sequence is a list of Gate objects. gate_seq_ver = 1.
+        gate_seq_ver = 1
+
+        circuit_filename += f"_v{gate_seq_ver}.pickle"
+        frontend = createFrontend(self.general_interface.frontend, self.nqubits, self.config)
         try:
             if self.general_interface.new_circ:
                 raise ValueError
@@ -118,49 +139,63 @@ class RunSpecific:
             # If this circuit has been generated previously, load it
             with open(os.path.join(self.cache_dir, circuit_filename), 'rb') as f:
                 gate_sequence = pickle.load(f)
-                frontend = createFrontend(self.general_interface.frontend, self.nqubits, self.config)
                 circuit = frontend.generateCircuit(gate_sequence)
-                self.general_interface.logger.debug(f'Circuit loaded from {circuit_filename}')
+                logger.debug(f'Circuit loaded from {circuit_filename}')
 
-        except: # Otherwise, generate the circuit and save it
+        except:  # Otherwise, generate the circuit and save it
             gate_sequence = self.benchmark_object.generateGatesSequence(self.nqubits, self.config)
-            frontend = createFrontend(self.general_interface.frontend, self.nqubits, self.config)
             circuit = frontend.generateCircuit(gate_sequence)
             def dump():
                 with open(os.path.join(self.cache_dir, circuit_filename), 'wb') as f:
                     pickle.dump(gate_sequence, f, protocol=pickle.HIGHEST_PROTOCOL)
-                    self.general_interface.logger.debug(f'Circuit generated and saved to {circuit_filename}')
-            write_on_rank_0(dump)
+                    logger.debug(f'Circuit generated and saved to {circuit_filename}')
+            call_by_root(dump)
 
+        return circuit
+
+    def get_circuit(self, circuit_filename):
+        # This method ensures only the root process is responsible to generate/broadcast the circuit
+        # so that all processes see the same circuit.
+        MPI = is_running_mpi()
+        circuit = call_by_root(functools.partial(self._load_or_generate_circuit, circuit_filename))
+        if MPI:
+            comm = MPI.COMM_WORLD
+            circuit = comm.bcast(circuit)
         return circuit
 
     def timer(self, backend, circuit, nshots):
         perf_time = 0
         cuda_time = 0
         post_time = 0
-        start_gpu = cp.cuda.Event()
-        end_gpu = cp.cuda.Event()
+        if self.ngpus > 0:
+            start_gpu = cp.cuda.Event()
+            end_gpu = cp.cuda.Event()
 
         # warm up
         for i in range(self.nwarmups):
+            backend.pre_run(circuit, nshots=nshots)
             backend.run(circuit, nshots)
 
         # actual timing
         for i in range(self.nrepeats):
-            pe1 = time.perf_counter()
+            backend.pre_run(circuit, nshots=nshots)
+
             if self.ngpus > 0:
                 start_gpu.record()
+            pe1 = time.perf_counter()
 
             run_dict = backend.run(circuit, nshots)
 
+            pe2 = time.perf_counter()
             if self.ngpus > 0:
                 end_gpu.record()
+
+            perf_time += pe2 - pe1
+            if self.ngpus > 0:
                 end_gpu.synchronize()
                 cuda_time += cp.cuda.get_elapsed_time(start_gpu, end_gpu) / 1000  # ms->s
 
-            pe2 = time.perf_counter()
-            perf_time += pe2 - pe1
-
+            # TODO: remove results?
             results = run_dict['results']
             post_res = run_dict['post_results']
             run_data = run_dict['run_data']
@@ -168,6 +203,7 @@ class RunSpecific:
             for k, v in run_data.items():
                 self.benchmark_data[k] = v
 
+            pe2 = time.perf_counter()
             post_process = self.benchmark_object.postProcess(self.nqubits, post_res)
             pe3 = time.perf_counter()
             post_time += pe3 - pe2
@@ -193,10 +229,28 @@ class RunSpecific:
             version = qsimcirq.__version__
         elif self.general_interface.backend == 'cutn':
             import cuquantum
-            version = cuquantum.__version__
+            version = cuquantum.cutensornet.get_version()
         elif self.general_interface.backend == 'cirq':
             import cirq
             version = cirq.__version__
+        elif self.general_interface.backend == 'naive':
+            from .backends import backends
+            version = backends['naive'].version
+        elif self.general_interface.backend == 'pennylane':
+            import pennylane
+            version = pennylane.__version__
+        elif self.general_interface.backend == 'pennylane-lightning-gpu':
+            import pennylane_lightning_gpu
+            version = pennylane_lightning_gpu.__version__
+        elif self.general_interface.backend == 'pennylane-lightning-qubit':
+            import pennylane_lightning
+            version = pennylane_lightning.__version__
+        elif self.general_interface.backend == 'pennylane-lightning-kokkos':
+            import pennylane_lightning_kokkos
+            version = pennylane_lightning_kokkos.__version__
+        elif self.general_interface.backend in ('qulacs-gpu', 'qulacs-cpu'):
+            import qulacs
+            version = qulacs.__version__
         else:
             assert False
         return version
@@ -208,23 +262,35 @@ class RunSpecific:
         elif self.general_interface.frontend == 'cirq':
             import cirq
             version = cirq.__version__
+        elif self.general_interface.frontend == 'naive':
+            from .frontends import frontends
+            version = frontends['naive'].version
+        elif self.general_interface.frontend == 'pennylane':
+            import pennylane
+            version = pennylane.__version__
+        elif self.general_interface.frontend == 'qulacs':
+            import qulacs
+            version = qulacs.__version__
         else:
             assert False
         return version
 
+    def extract_glue_layer_version(self):
+        if self.general_interface.backend == 'cutn':
+            import cuquantum
+            glue_ver = f'cuquantum {cuquantum.__version__}'
+        else:
+            return None
+        return glue_ver
+
     def run(self):
         measure = self.config['measure']
 
+        # try to load existing perf data, if any
         data_filename = f'{self.benchmark_name}.json'
-        if os.path.exists(f'data/{data_filename}'):
-            try:
-                with open(f'{self.cache_dir}/data/{data_filename}', 'r') as f:
-                    self.general_interface.full_data = json.load(f)
-                    self.general_interface.logger.debug(f'Loaded data/{data_filename} as JSON')
-            # If the data file does not exist, we'll create it later
-            except FileNotFoundError:
-                self.general_interface.logger.debug(f'data/{data_filename} not found')
-                pass
+        filepath = f'{self.cache_dir}/data/{data_filename}'
+        self.general_interface.full_data = load_benchmark_data(
+            filepath, self.cache_dir, self.required_subdirs)
 
         gpu_device_properties = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
         gpu_name = gpu_device_properties['name'].decode('utf-8').split(' ')[-1]
@@ -255,14 +321,17 @@ class RunSpecific:
         self.general_interface.cutn_target = target
 
         # get circuit
-        circuit = self.load_or_generate_circuit(circuit_filename + '.pickle')
+        circuit = self.get_circuit(circuit_filename)
 
         # get backend
         backend = createBackend(
-            self.general_interface.backend, self.ngpus, self.ncpu_threads, self.general_interface.precision, self.general_interface.logger,
+            self.general_interface.backend, self.ngpus, self.ncpu_threads, self.general_interface.precision,
             nqubits=self.nqubits,                                      # TODO: backend config
-            cusvaer_global_index_bits=self.cusvaer_global_index_bits,  # only cusvaer needs this, TODO: backend config
-            cusvaer_p2p_device_bits=self.cusvaer_p2p_device_bits,      # only cusvaer needs this, TODO: backend config
+            cusvaer_global_index_bits=self.cusvaer_global_index_bits,  # cusvaer options
+            cusvaer_p2p_device_bits=self.cusvaer_p2p_device_bits,
+            cusvaer_data_transfer_buffer_bits=self.cusvaer_data_transfer_buffer_bits,
+            cusvaer_comm_plugin_type=self.cusvaer_comm_plugin_type,
+            cusvaer_comm_plugin_soname=self.cusvaer_comm_plugin_soname,
             nfused=self.general_interface.nfused,                      # only qiskit and qsim
         )
 
@@ -270,17 +339,21 @@ class RunSpecific:
         # both frontend and backend is confirmed
         backend_version = self.extract_backend_version()
         frontend_version = self.extract_frontend_version()
+        glue_layer_version = self.extract_glue_layer_version()
 
         if self.ngpus == 0:
-            self.general_interface.logger.info(
+            logger.info(
                 f'* Running {self.benchmark_name} with {self.ncpu_threads} CPU threads, and {self.nqubits} qubits [{self.general_interface.backend}-v{backend_version}]:')
         else:
-            self.general_interface.logger.info(
+            logger.info(
                 f'* Running {self.benchmark_name} with {self.ngpus} GPUs, and {self.nqubits} qubits [{self.general_interface.backend}-v{backend_version}]:')
 
         preprocess_data = backend.preprocess_circuit(
             circuit,
-            circuit_filename=circuit_filename, target=target, pauli=pauli  # only cutn needs this, TODO: backend config
+            # only cutn needs these, TODO: backend config
+            circuit_filename=os.path.join(self.cache_dir, circuit_filename),
+            target=target,
+            pauli=pauli
         )
 
         for k in preprocess_data.keys():
@@ -290,71 +363,17 @@ class RunSpecific:
         perf_time, cuda_time, post_time, post_process = self.timer(backend, circuit, self.general_interface.nshots) # nsamples -> nshots
 
         # report the result
-        run_env = HashableDict({
-            'hostname': platform.node(),
-            'cpu_name': get_cpu_name(),
-            'gpu_name': gpu_device_properties['name'].decode('utf-8'),
-            'gpu_driver_ver': cp.cuda.runtime.driverGetVersion(),
-            'gpu_runtime_ver': cp.cuda.runtime.runtimeGetVersion(),
-            'nvml_driver_ver': get_gpu_driver_version(),
-        })
-        self.report(perf_time, cuda_time, post_time, post_process, run_env, gpu_device_properties)
+        run_env = gen_run_env(gpu_device_properties)
+        report(perf_time, cuda_time, post_time if post_process else None, self.ngpus,
+               run_env, gpu_device_properties, self.benchmark_data)
 
         # Save the new benchmark data
-        self.save_benchmark_data(data_filename, frontend_version, backend_version, run_env)
+        out = self.canonicalize_benchmark_data(frontend_version, backend_version, run_env, glue_layer_version)
+        save_benchmark_data(
+            *out,
+            self.general_interface.full_data, filepath, self.general_interface.save)
 
-    def report(self, perf_time, cuda_time, post_time, post_process, run_env, gpu_device_properties):
-        hostname = run_env['hostname']
-        cpu_name = run_env['cpu_name']
-        cpu_phy_mem = round(psutil.virtual_memory().total/1000000000, 2)
-        cpu_used_mem = round(psutil.virtual_memory().used/1000000000, 2)
-        cpu_phy_cores = psutil.cpu_count(logical=False)
-        cpu_log_cores = psutil.cpu_count(logical=True)
-        cpu_curr_freq = round(psutil.cpu_freq().current, 2)
-        cpu_min_freq = psutil.cpu_freq().min
-        cpu_max_freq = psutil.cpu_freq().max
-
-        gpu_name = run_env['gpu_name']
-        gpu_total_mem = round(gpu_device_properties['totalGlobalMem']/1000000000, 2)
-        gpu_clock_rate = round(gpu_device_properties['clockRate']/1000, 2)
-        gpu_multiprocessor_num = gpu_device_properties['multiProcessorCount']
-        gpu_driver_ver = run_env['gpu_driver_ver']
-        gpu_runtime_ver = run_env['gpu_runtime_ver']
-        nvml_driver_ver = run_env['nvml_driver_ver']
-
-        self.general_interface.logger.debug(f' - hostname: {hostname}')
-        self.general_interface.logger.info(f' - [CPU] Averaged elapsed time: {perf_time:.6f} s')
-        if post_process:
-            self.general_interface.logger.info(f' - [CPU] Averaged postprocessing Time: {post_time:.6f} s')
-            self.benchmark_data['cpu_post_time'] = post_time
-        self.general_interface.logger.info(f' - [CPU] Processor type: {cpu_name}')
-        self.general_interface.logger.debug(f' - [CPU] Total physical memory: {cpu_phy_mem} GB')
-        self.general_interface.logger.debug(f' - [CPU] Total used memory: {cpu_used_mem} GB')
-        self.general_interface.logger.debug(f' - [CPU] Number of physical cores: {cpu_phy_cores}, and logical cores: {cpu_log_cores}')
-        self.general_interface.logger.debug(f' - [CPU] Frequency current (Mhz): {cpu_curr_freq}, min: {cpu_min_freq}, and max: {cpu_max_freq}')
-        self.general_interface.logger.info(' -')
-        self.general_interface.logger.info(f' - [GPU] Averaged elapsed time: {cuda_time:.6f} s {"(unused)" if self.ngpus == 0 else ""}')
-        self.general_interface.logger.info(f' - [GPU] GPU device name: {gpu_name}')
-        self.general_interface.logger.debug(f' - [GPU] Total global memory: {gpu_total_mem} GB')
-        self.general_interface.logger.debug(f' - [GPU] Clock frequency (Mhz): {gpu_clock_rate}')
-        self.general_interface.logger.debug(f' - [GPU] Multi processor count: {gpu_multiprocessor_num}')
-        self.general_interface.logger.debug(f' - [GPU] CUDA driver version: {gpu_driver_ver} ({nvml_driver_ver})')
-        self.general_interface.logger.debug(f' - [GPU] CUDA runtime version: {gpu_runtime_ver}')
-        self.general_interface.logger.info('')
-
-        self.benchmark_data['cpu_time'] = perf_time
-        self.benchmark_data['cpu_phy_mem'] = cpu_phy_mem
-        self.benchmark_data['cpu_used_mem'] = cpu_used_mem
-        self.benchmark_data['cpu_phy_cores'] = cpu_phy_cores
-        self.benchmark_data['cpu_log_cores'] = cpu_log_cores
-        self.benchmark_data['cpu_current_freq'] = cpu_curr_freq
-
-        self.benchmark_data['gpu_time'] = cuda_time
-        self.benchmark_data['gpu_total_mem'] = gpu_total_mem
-        self.benchmark_data['gpu_clock_freq'] = gpu_clock_rate
-        self.benchmark_data['gpu_multiprocessor_num'] = gpu_multiprocessor_num
-
-    def save_benchmark_data(self, data_filename, frontend_version, backend_version, run_env):
+    def canonicalize_benchmark_data(self, frontend_version, backend_version, run_env, glue_layer_version):
         """
         json scheme: this is designed such that if any item in sim_config changes, the
         benchmark data would be appended, not overwriting.
@@ -369,13 +388,15 @@ class RunSpecific:
                      |_ backend (part of sim_config)
                          |_ name
                          |_ version
-                         |_ gpu_name
                          |_ ngpus
                          |_ ncputhreads
                          |_ nshots
                          |_ nfused
                          |_ precision
                          |_ ... (all backend-specific options go here)
+                     |_ glue_layer (part of sim_config)
+                         |_ name
+                         |_ version
                      |_ run_env (part of sim_config)
                          |_ hostname
                          |_ cpu_name
@@ -407,6 +428,10 @@ class RunSpecific:
                 "precision": self.general_interface.precision,
                 "with_mpi": is_running_mpiexec(),
             }),
+            'glue_layer': HashableDict({
+                "name": None,
+                "version": glue_layer_version,
+                }),
             'run_env': run_env,
         })
 
@@ -422,19 +447,142 @@ class RunSpecific:
 
         sim_config_hash = sim_config.get_hash()
         self.benchmark_data = {**self.benchmark_data, **sim_config}
-        try:
-            self.general_interface.full_data[num_qubits][sim_config_hash] = self.benchmark_data
-        except KeyError:
-            if num_qubits not in self.general_interface.full_data:
-                self.general_interface.full_data[num_qubits] = {}
 
-            if sim_config_hash not in self.general_interface.full_data[num_qubits]:
-                self.general_interface.full_data[num_qubits][sim_config_hash] = {}
+        return num_qubits, sim_config_hash, self.benchmark_data
 
-            self.general_interface.full_data[num_qubits][sim_config_hash] = self.benchmark_data
 
-        if self.general_interface.save:
-            def dump():
-                with open(f'{self.cache_dir}/data/{data_filename}', 'w') as f:
-                    json.dump(self.general_interface.full_data, f, indent=2)
-            write_on_rank_0(dump)
+class BenchApiRunner:
+
+    supported_cusv_apis = ('apply_matrix',)
+    supported_cutn_apis = ()
+    supported_apis = supported_cusv_apis + supported_cutn_apis
+
+    def __init__(self, **kwargs):
+        self.num_qubits = kwargs.pop("nqubits")
+        self.benchmark = kwargs.pop("benchmark")
+        self.cache_dir = kwargs.pop("cachedir")
+        kwargs.pop("verbose")  # don't care
+        self.args = kwargs  # just hold the entire group of parsed cmdline args, don't unpack all
+
+        # currently we assume the following subdirectories exist
+        self.required_subdirs = ('data',)
+
+        # load existing json, if any
+        self.data_filename = f"{self.benchmark}.json"
+        self.file_path = f'{self.cache_dir}/data/{self.data_filename}'
+        self.full_data = load_benchmark_data(
+            self.file_path, self.cache_dir, self.required_subdirs)
+
+    def run(self):
+        # prep
+        if self.benchmark not in self.supported_apis:
+            raise NotImplementedError(f"only {self.supported_apis} is supported for now")
+        gpu_device_properties = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
+        benchmark_data = {}  # dummy
+
+        # time the api
+        perf_time, cuda_time = self._run_apply_matrix()
+
+        # report the result
+        run_env = gen_run_env(gpu_device_properties)
+        report(perf_time, cuda_time, None, 1,
+               run_env, gpu_device_properties, benchmark_data)
+
+        # Save the new benchmark data
+        out = self.canonicalize_benchmark_data(run_env, benchmark_data)
+        save_benchmark_data(*out, self.full_data, self.file_path)
+
+    def _run_apply_matrix(self):
+        # TODO: It's better to move this method elsewhere, once we support more apis
+        from .benchmarks.apply_matrix import test_apply_matrix
+        args = self.args
+
+        # create targets while keeping args clean for later use
+        ntargets = args.pop("ntargets")
+        targets = args.pop("targets")
+        targets = tuple(range(ntargets)) if targets is None else tuple(targets)
+        args["targets"] = targets
+
+        # create controls while keeping args clean for later use
+        ncontrols = args.pop("ncontrols")
+        controls = args.pop("controls")
+        if controls is None and ncontrols is None:
+            controls = ()
+        elif controls is None:
+            controls = tuple(range(ncontrols))
+        else:
+            controls = tuple(controls)
+        args["controls"] = controls
+
+        # run
+        return test_apply_matrix(
+            self.num_qubits,
+            targets,
+            controls,
+            args["precision"],
+            args["precision"],  # TODO: allow different mat precision?
+            args["layout"],
+            int(args["adjoint"]),
+            args["nwarmups"],
+            args["nrepeats"],
+            args["location"],
+            flush_l2=args["flush_cache"],
+        )
+
+    def canonicalize_benchmark_data(self, run_env, benchmark_data):
+        """
+        json scheme: this is designed such that if any item in sim_config changes, the
+        benchmark data would be appended, not overwriting.
+
+        benchmark
+         |_ num_qubits
+             |_ sim_config_hash ( = hash string of sim_config )
+                 |_ benchmark_data
+                     |_ api (part of sim_config)
+                         |_ name
+                         |_ cuqnt_py_ver
+                         |_ lib_ver
+                         |_ precision
+                         |_ ... (all api-specific options go here)
+                     |_ run_env (part of sim_config)
+                         |_ hostname
+                         |_ cpu_name
+                         |_ gpu_name
+                         |_ gpu_driver_ver
+                         |_ gpu_runtime_ver
+                         |_ nvml_driver_ver
+                     |_ cpu_time
+                     |_ gpu_time
+                     |_ ... (other timings, env info, ...)
+        """
+        # TODO: consider recording cuquantum-benchmarks version?
+        from cuquantum import __version__ as cuqnt_py_ver
+        num_qubits = str(self.num_qubits)
+        benchmark = self.benchmark
+
+        if benchmark in self.supported_cusv_apis:
+            from cuquantum import custatevec as lib
+        elif benchmark in self.supported_cutn_apis:
+            from cuquantum import cutensornet as lib
+        else:
+            assert False
+
+        # Note: be mindful that we unpack self.args here, as it's designed to be
+        # sensitive to any change in the cmdline options.
+        sim_config = HashableDict({
+            "api": HashableDict({**{
+                "name": benchmark,
+                "cuqnt_py_ver": cuqnt_py_ver,
+                "lib_ver": lib.get_version(),
+            }, **self.args}),
+            'run_env': run_env,
+        })
+
+        # TODO: remember to record cutn_target once we support it
+        #elif self.args.backend == "cutn":
+        #    sim_config["backend"]["target"] = self.args.cutn_target
+
+        sim_config_hash = sim_config.get_hash()
+        benchmark_data = {**benchmark_data, **sim_config}
+
+        return num_qubits, sim_config_hash, benchmark_data

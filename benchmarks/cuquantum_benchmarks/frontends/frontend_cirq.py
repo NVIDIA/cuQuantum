@@ -1,8 +1,6 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-import sys
 
 try:
     import cirq
@@ -25,47 +23,47 @@ class Cirq(Frontend):
         qubits = cirq.LineQubit.range(self.nqubits)
         circuit = cirq.Circuit()
 
-        for g, l in gateSeq:
-            if g=='h': # l = [target qubit]
-                circuit.append(cirq.H(qubits[l[0]]))
+        for g in gateSeq:
+            if g.id == 'h':
+                circuit.append(cirq.H(qubits[g.targets]))
 
-            elif g=='x': # l = [target qubit]
-                circuit.append(cirq.X(qubits[l[0]]))
+            elif g.id == 'x':
+                circuit.append(cirq.X(qubits[g.targets]))
 
-            elif g=='cnot': # l = [control qubit, target qubit]
-                circuit.append(cirq.CNOT(qubits[l[0]], qubits[l[1]]))
+            elif g.id == 'cnot':
+                circuit.append(cirq.CNOT(qubits[g.controls], qubits[g.targets]))
 
-            elif g=='cz': # l = [control qubit, target qubit]
-                circuit.append(cirq.CZ(qubits[l[0]], qubits[l[1]]))
+            elif g.id == 'cz':
+                circuit.append(cirq.CZ(qubits[g.controls], qubits[g.targets]))
 
-            elif g=='rz': # l = [angle, target qubit]
-                circuit.append(cirq.rz(l[0]).on(qubits[l[1]]))
+            elif g.id == 'rz':
+                circuit.append(cirq.rz(g.params).on(qubits[g.targets]))
 
-            elif g=='rx': # l = [angle, target qubit]
-                circuit.append(cirq.rx(l[0]).on(qubits[l[1]]))
+            elif g.id == 'rx':
+                circuit.append(cirq.rx(g.params).on(qubits[g.targets]))
 
-            elif g=='ry': # l = [angle, target qubit]
-                circuit.append(cirq.ry(l[0]).on(qubits[l[1]]))
+            elif g.id == 'ry':
+                circuit.append(cirq.ry(g.params).on(qubits[g.targets]))
 
-            elif g=='czpowgate': # l = [exponent, control qubit, target qubit]
-                circuit.append(cirq.CZPowGate(exponent=l[0]).on(qubits[l[1]], qubits[l[2]]))
+            elif g.id == 'czpowgate':
+                circuit.append(cirq.CZPowGate(exponent=g.params).on(qubits[g.controls], qubits[g.targets]))
 
-            elif g=='swap': # l = [first qubit, second qubit]
-                circuit.append(cirq.SWAP(qubits[l[0]], qubits[l[1]]))
+            elif g.id == 'swap':
+                assert len(g.targets) == 2
+                circuit.append(cirq.SWAP(qubits[g.targets[0]], qubits[g.targets[1]]))
 
-            elif g=='cu': # l = [U matrix, U name, control qubit, target qubit]
-                U_gate = cirq.MatrixGate(l[0], name=l[1])
-                circuit.append(U_gate.on(*[qubits[i] for i in l[3]]).controlled_by(qubits[l[2]]))
+            elif g.id == 'cu':
+                U_gate = cirq.MatrixGate(g.matrix, name=g.name)
+                circuit.append(U_gate.on(*[qubits[i] for i in g.targets]).controlled_by(qubits[g.controls]))
 
-            elif g == 'u':  # l = [U matrix, target qubits]
-                # TODO: give the gate a name?
-                U_gate = cirq.MatrixGate(l[0])
-                circuit.append(U_gate.on(*[qubits[i] for i in l[1]]))
+            elif g.id == 'u':
+                U_gate = cirq.MatrixGate(g.matrix, name=g.name)
+                circuit.append(U_gate.on(*[qubits[i] for i in g.targets]))
 
-            elif g=='measure': # l = [qubits ids]
-                circuit.append(cirq.measure(*[qubits[i] for i in l[0]], key='result'))
+            elif g.id == 'measure':
+                circuit.append(cirq.measure(*[qubits[i] for i in g.targets], key='result'))
 
             else:
-                sys.exit("The gate type [" + g +"] is not defined")
+                raise NotImplementedError(f"The gate type {g.id} is not defined")
         
         return circuit

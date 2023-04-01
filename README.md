@@ -21,7 +21,7 @@ This public repository contains two sets of files related to the [NVIDIA cuQuant
           - `cutensornet-cu11` [![pypi](https://img.shields.io/pypi/v/cutensornet-cu11.svg)](https://pypi.python.org/pypi/cutensornet-cu11)
       - `cuquantum-python` [![pypi](https://img.shields.io/pypi/v/cuquantum-python.svg)](https://pypi.python.org/pypi/cuquantum-python)
         - `cuquantum-python-cu11` [![pypi](https://img.shields.io/pypi/v/cuquantum-python-cu11.svg)](https://pypi.python.org/pypi/cuquantum-python-cu11)
-- `benchmarks`: NVIDIA cuQuantum Circuit Performance Benchmark Suite (v0.1.0), see [README](./benchmarks/README.md) for detail.
+- `benchmarks`: NVIDIA cuQuantum Performance Benchmark Suite (v0.2.0), see [README](./benchmarks/README.md) for detail.
 - `extra`: Files to help utilize the cuQuantum SDK and the cuQuantum Appliance container.
 
 ## Installation

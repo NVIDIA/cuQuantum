@@ -1,3 +1,7 @@
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 import contextlib
 import glob
 import os
@@ -8,6 +12,31 @@ import subprocess
 import pytest
 
 from cuquantum_benchmarks.config import benchmarks
+
+
+@pytest.fixture()
+def visible_device(worker_id):
+    """ Assign 1 device for each test workers to enable test parallelization.
+
+    - If pytest-dist is not installed or unused (pytest -n ... is not set), just
+      pass through CUDA_VISIBLE_DEVICES as is.
+    - Otherwise, we assign 1 device for each worker. If there are more workers
+      than devices, we round-robin.
+      - In this case, CUDA_VISIBLE_DEVICES should be explicitly set, otherwise
+        we just take device 0.
+    """
+    visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES", "0")
+    if worker_id == "master":
+        return visible_devices
+    visible_devices = [int(i) for i in visible_devices.split(",")]
+    total_devices = len(visible_devices)
+    total_workers = int(os.environ["PYTEST_XDIST_WORKER_COUNT"])
+    worker_id = int(worker_id.lstrip("gw"))
+    if total_devices >= total_workers:
+        return visible_devices[worker_id]
+    else:
+        # round robin + oversubscription
+        return visible_devices[worker_id % total_devices]
 
 
 @pytest.mark.parametrize(
@@ -24,6 +53,13 @@ from cuquantum_benchmarks.config import benchmarks
         ("qiskit", "aer-cusv", True),
         ("qiskit", "cusvaer", True),
         ("qiskit", "cutn", True),
+        ("naive", "naive", False),
+        ("pennylane", "pennylane", False),
+        ("pennylane", "pennylane-lightning-gpu", False),
+        ("pennylane", "pennylane-lightning-qubit", False),
+        ("pennylane", "pennylane-lightning-kokkos", False),
+        ("qulacs", "qulacs-cpu", False),
+        ("qulacs", "qulacs-gpu", False),
     )
 )
 @pytest.mark.parametrize(
@@ -35,7 +71,7 @@ from cuquantum_benchmarks.config import benchmarks
 @pytest.mark.parametrize(
     "precision", ("single", "double")
 )
-class TestCmdline:
+class TestCmdCircuit:
 
     # TODO: perhaps this function should live in the _utils module...?
     def _skip_if_unavailable(self, combo, nqubits, benchmark, precision):
@@ -52,6 +88,20 @@ class TestCmdline:
                 import qiskit
             except ImportError:
                 pytest.skip("qiskit not available")
+        elif frontend == "naive":
+            from cuquantum_benchmarks.frontends import frontends
+            if "naive" not in frontends:
+                pytest.skip("naive not available")
+        elif frontend == "pennylane":
+            try:
+                import pennylane
+            except ImportError:
+                pytest.skip("pennylane not available")
+        elif frontend == "qulacs":
+            try:
+                import qulacs
+            except ImportError:
+                pytest.skip("qulacs not available")
 
         # check backend exists
         if backend == "aer-cuda":
@@ -73,7 +123,7 @@ class TestCmdline:
             try:
                 import cusvaer
             except ImportError:
-                pytest.skip(f"{backend} maybe not available")
+                pytest.skip(f"{backend} not available")
         elif backend == "aer":
             try:
                 from qiskit.providers.aer import AerSimulator
@@ -92,6 +142,36 @@ class TestCmdline:
                 from qsimcirq import qsim_mgpu
             except ImportError:
                 pytest.skip("qsim-mgpu not available")
+        elif backend == "pennylane":
+            try:
+                import pennylane
+            except ImportError:
+                pytest.skip("pennylane not available")
+        elif backend == "pennylane-lightning-gpu":
+            try:
+                from pennylane_lightning_gpu import LightningGPU
+            except ImportError:
+                pytest.skip("pennylane-lightning-gpu not available")
+        elif backend == "pennylane-lightning-qubit":
+            try:
+                from pennylane_lightning.lightning_qubit import LightningQubit
+            except ImportError:
+                pytest.skip("pennylane-lightning-qubit not available")
+        elif backend == "pennylane-lightning-kokkos":
+            try:
+                import pennylane_lightning_kokkos
+            except ImportError:
+                pytest.skip("pennylane-lightning-kokkos not available")
+        elif backend == "qulacs-cpu":
+            try:
+                import qulacs
+            except ImportError:
+                pytest.skip(f"{backend} not available")
+        elif backend == "qulacs-gpu":
+            try:
+                import qulacs.QuantumStateGpu
+            except ImportError:
+                pytest.skip(f"{backend} not available")
 
         # check MPI exists
         if support_mpi:
@@ -103,12 +183,17 @@ class TestCmdline:
         if ((backend == 'cirq' or backend.startswith('qsim'))
                 and precision == 'double'):
             return pytest.raises(subprocess.CalledProcessError), True
+        if backend.startswith('qulacs') and precision == 'single':
+            return pytest.raises(subprocess.CalledProcessError), True
 
         return contextlib.nullcontext(), False
 
-    def test_benchmark(self, combo, nqubits, benchmark, precision, tmp_path):
+    def test_benchmark(self, combo, nqubits, benchmark, precision, tmp_path, visible_device):
         frontend, backend, support_mpi = combo
         ctx, ret = self._skip_if_unavailable(combo, nqubits, benchmark, precision)
+
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
 
         # internal loop: run the same test twice, without and with MPI
         if support_mpi:
@@ -119,7 +204,7 @@ class TestCmdline:
             tests = ([], )
 
         # use default value from config.py for --ngpus
-        cmd = [sys.executable, '-m', 'cuquantum_benchmarks',
+        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'circuit',
                 '--frontend', frontend,
                 '--backend', backend,
                 '--ncputhreads', '1',
@@ -135,7 +220,7 @@ class TestCmdline:
             cmd += ['--cusvaer-global-index-bits', '--cusvaer-p2p-device-bits']
 
         for cmd_prefix in tests:
-            result = subprocess.run(cmd_prefix+cmd, env=os.environ, capture_output=True)
+            result = subprocess.run(cmd_prefix+cmd, env=env, capture_output=True)
 
             with ctx:
                 try:
@@ -151,3 +236,62 @@ class TestCmdline:
                     raise
                 finally:
                     print("cmd:\n", ' '.join(cmd_prefix+cmd))
+
+
+# TODO: test invalid cases and ensure we raise errors
+@pytest.mark.parametrize(
+    "args", (
+        ["--nqubits", "4", "--ntargets", "2"],
+        ["--nqubits", "4", "--targets", "2,3"],
+        ["--nqubits", "6", "--ntargets", "3", "--controls", "3"],
+        ["--nqubits", "4", "--targets", "2,3", "--ncontrols", "1"],
+        ["--nqubits", "4", "--targets", "2,3", "--controls", "1"],
+    )
+)
+@pytest.mark.parametrize(
+    "matrix_prop", (
+        [],  # default
+        ["--layout", "column", "--adjoint"],
+    )
+)
+@pytest.mark.parametrize(
+    "precision", ("single", "double")
+)
+@pytest.mark.parametrize(
+    "flush", (True, False)
+)
+class TestCmdApiApplyMatrix:
+
+    benchmark = "apply_matrix"
+
+    def test_apply_matrix(self, args, matrix_prop, precision, flush, tmp_path, visible_device):
+
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
+
+        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
+                '--benchmark', self.benchmark,
+                '--precision', precision,
+                '--cachedir', str(tmp_path),
+                # speed up the tests...
+                '--nwarmups', '1',
+                '--nrepeats', '1',
+                '--verbose']
+        cmd += args
+        cmd += matrix_prop
+        if flush:
+            cmd += ['--flush-cache']
+
+        result = subprocess.run(cmd, env=env, capture_output=True)
+
+        try:
+            assert bool(result.check_returncode()) == False
+            cached_json = [f for f in glob.glob(str(tmp_path / f"data/{self.benchmark}.json")) if os.path.isfile(f)]
+            assert len(cached_json) == 1  # TODO: test aggregate behavior too?
+        except:
+            # make debugging easier
+            print("stdout:\n", result.stdout.decode())
+            print("stderr:\n", result.stderr.decode())
+            raise
+        finally:
+            print("cmd:\n", ' '.join(cmd))
