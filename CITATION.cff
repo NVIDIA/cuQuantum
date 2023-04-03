@@ -9,4 +9,4 @@ repository-code: "https://github.com/nvidia/cuquantum"
 type: software
 url: "https://github.com/nvidia/cuquantum"
 doi: 10.5281/zenodo.6385574
-version: "v22.11.0.1"
+version: "v23.03.0"
