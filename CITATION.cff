@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: 'cuQuantum'
+message: 'If you use this software, please cite it as below.'
+authors:
+  - name: "The cuQuantum development team"
+license: BSD-3-Clause
+license-url: "https://github.com/NVIDIA/cuQuantum/blob/main/LICENSE"
+repository-code: "https://github.com/nvidia/cuquantum"
+type: software
+url: "https://github.com/nvidia/cuquantum"
