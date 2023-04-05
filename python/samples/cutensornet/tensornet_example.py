@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -137,14 +137,16 @@ print("Find an optimized contraction path with cuTensorNet optimizer.")
 
 work_desc = cutn.create_workspace_descriptor(handle)
 cutn.workspace_compute_contraction_sizes(handle, desc_net, optimizer_info, work_desc)
-required_workspace_size = cutn.workspace_get_size(
+required_workspace_size = cutn.workspace_get_memory_size(
     handle, work_desc,
     cutn.WorksizePref.MIN,
-    cutn.Memspace.DEVICE)
+    cutn.Memspace.DEVICE,
+    cutn.WorkspaceKind.SCRATCH)
 work = cp.cuda.alloc(required_workspace_size)
-cutn.workspace_set(
+cutn.workspace_set_memory(
     handle, work_desc,
     cutn.Memspace.DEVICE,
+    cutn.WorkspaceKind.SCRATCH,
     work.ptr, required_workspace_size)
 plan = cutn.create_contraction_plan(handle, desc_net, optimizer_info, work_desc)
 

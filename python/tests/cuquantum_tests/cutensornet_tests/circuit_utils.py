@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -25,6 +25,7 @@ from cuquantum.cutensornet._internal.circuit_converter_utils import convert_mode
 from cuquantum.cutensornet._internal.circuit_converter_utils import EINSUM_SYMBOLS_BASE
 from cuquantum.cutensornet._internal.circuit_converter_utils import get_pauli_gates
 from cuquantum.cutensornet._internal.circuit_converter_utils import parse_gates_to_mode_labels_operands
+from cuquantum.cutensornet._internal.utils import infer_object_package
 from .test_utils import atol_mapper, rtol_mapper
 
 
@@ -267,7 +268,15 @@ class BaseTester:
 
     def _get_state_vector_from_simulator(self):
         raise NotImplementedError
-                
+    
+    def test_qubits(self):
+        assert len(self.qubits) == self.num_qubits
+    
+    def test_gates(self):
+        for (gate_operand, qubits) in self.converter.gates:
+            assert gate_operand.ndim == len(qubits) * 2
+            assert infer_object_package(gate_operand) is self.backend
+    
     def test_state_vector(self):
         expression, operands = self.converter.state_vector()
         sv1 = contract(expression, *operands)

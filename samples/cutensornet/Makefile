@@ -23,6 +23,7 @@ CXX_FLAGS        = -std=c++11 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(LINKER_FLAGS) $(
 
 all: check-env
 	${CUDA_PATH}/bin/nvcc tensornet_example.cu -o tensornet_example ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc tensornet_example_reuse.cu -o tensornet_example_reuse ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc approxTN/tensor_svd_example.cu -o tensor_svd_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc approxTN/tensor_qr_example.cu -o tensor_qr_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc approxTN/gate_split_example.cu -o gate_split_example ${CXX_FLAGS}
@@ -59,6 +60,6 @@ check-env:
 	fi
 
 clean:
-	rm -f tensornet_example tensornet_example.o tensornet_example_mpi tensornet_example_mpi.o tensornet_example_mpi_auto tensornet_example_mpi_auto.o
+	rm -f tensornet_example tensornet_example.o tensornet_example_reuse tensornet_example_reuse.o tensornet_example_mpi tensornet_example_mpi.o tensornet_example_mpi_auto tensornet_example_mpi_auto.o
 	rm -f tensor_qr_example tensor_qr_example.o tensor_svd_example tensor_svd_example.o
 	rm -f gatesplit_example gatesplit_example.o mps_example mps_example.o

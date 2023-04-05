@@ -1,5 +1,5 @@
 /*  
- * Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES.
  * 
  * SPDX-License-Identifier: BSD-3-Clause
  */  
@@ -251,10 +251,20 @@ int main()
    cutensornetWorkspaceDescriptor_t workDesc;
    HANDLE_ERROR( cutensornetCreateWorkspaceDescriptor(handle, &workDesc) );
    HANDLE_ERROR( cutensornetWorkspaceComputeSVDSizes(handle, descTensorIn, descTensorU, descTensorV, svdConfig, workDesc) );
-   uint64_t hostWorkspaceSize, deviceWorkspaceSize;
+   int64_t hostWorkspaceSize, deviceWorkspaceSize;
    // for tensor SVD, it does not matter which cutensornetWorksizePref_t we pick
-   HANDLE_ERROR( cutensornetWorkspaceGetSize(handle, workDesc, CUTENSORNET_WORKSIZE_PREF_RECOMMENDED, CUTENSORNET_MEMSPACE_DEVICE, &deviceWorkspaceSize) );
-   HANDLE_ERROR( cutensornetWorkspaceGetSize(handle, workDesc, CUTENSORNET_WORKSIZE_PREF_RECOMMENDED, CUTENSORNET_MEMSPACE_HOST, &hostWorkspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceGetMemorySize(handle,
+                                                   workDesc,
+                                                   CUTENSORNET_WORKSIZE_PREF_RECOMMENDED,
+                                                   CUTENSORNET_MEMSPACE_DEVICE,
+                                                   CUTENSORNET_WORKSPACE_SCRATCH,
+                                                   &deviceWorkspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceGetMemorySize(handle,
+                                                   workDesc,
+                                                   CUTENSORNET_WORKSIZE_PREF_RECOMMENDED,
+                                                   CUTENSORNET_MEMSPACE_HOST,
+                                                   CUTENSORNET_WORKSPACE_SCRATCH,
+                                                   &hostWorkspaceSize) );
 
    void *devWork = nullptr, *hostWork = nullptr;
    if (deviceWorkspaceSize > 0) {
@@ -263,8 +273,18 @@ int main()
    if (hostWorkspaceSize > 0) {
       hostWork = malloc(hostWorkspaceSize);
    }
-   HANDLE_ERROR( cutensornetWorkspaceSet(handle, workDesc, CUTENSORNET_MEMSPACE_DEVICE, devWork, deviceWorkspaceSize) );
-   HANDLE_ERROR( cutensornetWorkspaceSet(handle, workDesc, CUTENSORNET_MEMSPACE_HOST, hostWork, hostWorkspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceSetMemory(handle,
+                                               workDesc,
+                                               CUTENSORNET_MEMSPACE_DEVICE,
+                                               CUTENSORNET_WORKSPACE_SCRATCH,
+                                               devWork,
+                                               deviceWorkspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceSetMemory(handle,
+                                               workDesc,
+                                               CUTENSORNET_MEMSPACE_HOST,
+                                               CUTENSORNET_WORKSPACE_SCRATCH,
+                                               hostWork,
+                                               hostWorkspaceSize) );
 
    // Sphinx: #7
    /**********

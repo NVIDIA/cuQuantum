@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -10,7 +10,7 @@
 from libc.stdint cimport intptr_t, int32_t, uint32_t, int64_t
 
 from cuquantum.utils cimport (DataType, DeviceAllocType, DeviceFreeType, int2,
-                              LibPropType, Stream)
+                              LibPropType, Stream, Event)
 
 
 cdef extern from '<custatevec.h>' nogil:
@@ -33,6 +33,22 @@ cdef extern from '<custatevec.h>' nogil:
         const char* functionName,
         const char* message,
         void* userData)
+    ctypedef void* _CommunicatorDescriptor 'custatevecCommunicatorDescriptor_t'
+    ctypedef struct _SVSwapParameters 'custatevecSVSwapParameters_t':
+        int32_t swapBatchIndex
+        int32_t orgSubSVIndex
+        int32_t dstSubSVIndex
+        # Same Cython limitation as above
+        int32_t orgSegmentMaskString[48]
+        int32_t dstSegmentMaskString[48]
+        int32_t segmentMaskOrdering[48]
+        uint32_t segmentMaskLen
+        uint32_t nSegmentBits
+        _DataTransferType dataTransferType
+        _Index transferSize
+    ctypedef void* _DistIndexBitSwapSchedulerDescriptor 'custatevecDistIndexBitSwapSchedulerDescriptor_t'
+    ctypedef void* _SVSwapWorkerDescriptor 'custatevecSVSwapWorkerDescriptor_t'
+
 
     # cuStateVec enums
     ctypedef enum _ComputeType 'custatevecComputeType_t':
@@ -65,9 +81,22 @@ cdef extern from '<custatevec.h>' nogil:
         CUSTATEVEC_DEVICE_NETWORK_TYPE_SWITCH
         CUSTATEVEC_DEVICE_NETWORK_TYPE_FULLMESH
 
+    ctypedef enum _CommunicatorType 'custatevecCommunicatorType_t':
+        CUSTATEVEC_COMMUNICATOR_TYPE_EXTERNAL
+        CUSTATEVEC_COMMUNICATOR_TYPE_OPENMPI
+        CUSTATEVEC_COMMUNICATOR_TYPE_MPICH
+
+    ctypedef enum _DataTransferType 'custatevecDataTransferType_t':
+        CUSTATEVEC_DATA_TRANSFER_TYPE_NONE
+        CUSTATEVEC_DATA_TRANSFER_TYPE_SEND
+        CUSTATEVEC_DATA_TRANSFER_TYPE_RECV
+        CUSTATEVEC_DATA_TRANSFER_TYPE_SEND_RECV
+
+
     # cuStateVec consts
     int CUSTATEVEC_VER_MAJOR
     int CUSTATEVEC_VER_MINOR
     int CUSTATEVEC_VER_PATCH
     int CUSTATEVEC_VERSION
     int CUSTATEVEC_ALLOCATOR_NAME_LEN
+    int CUSTATEVEC_MAX_SEGMENT_MASK_SIZE

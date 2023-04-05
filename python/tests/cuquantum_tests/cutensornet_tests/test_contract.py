@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -18,6 +18,7 @@ from .data import backend_names, dtype_names, einsum_expressions
 from .test_utils import atol_mapper, EinsumFactory, rtol_mapper
 from .test_utils import compute_and_normalize_numpy_path
 from .test_utils import deselect_contract_tests
+from .test_utils import get_stream_for_backend
 from .test_utils import set_path_to_optimizer_options
 
 
@@ -58,10 +59,7 @@ class TestContract:
             factory.input_shapes, xp, dtype, order)
         backend = sys.modules[infer_object_package(operands[0])]
         if stream:
-            if backend is numpy:
-                stream = cupy.cuda.Stream()  # implementation detail
-            else:
-                stream = backend.cuda.Stream()
+            stream = get_stream_for_backend(backend)
 
         path = None
         if use_numpy_path:

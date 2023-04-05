@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -32,8 +32,8 @@ install_requires = [
     'numpy',
     # 'cupy', # TODO: use "cupy-wheel" once it's stablized, see https://github.com/cupy/cupy/issues/6688
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.1',   # ">=1.1.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.0',  # ">=2.0.0,<3"
+    f'custatevec-cu{utils.cuda_major_ver}~=1.3',   # ">=1.3.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.1',  # ">=2.1.0,<3"
     ]
 
 
@@ -60,20 +60,11 @@ cmdclass = {
     'bdist_wheel': utils.bdist_wheel,
 }
 
+cuda_classifier = []
 if utils.cuda_major_ver == '11':
-    cuda_classifier = [
-        "Environment :: GPU :: NVIDIA CUDA :: 11.0",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.1",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.2",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.3",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.4",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.5",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.6",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.7",
-        "Environment :: GPU :: NVIDIA CUDA :: 11.8",
-    ]
-else:
-    cuda_classifier = None
+    cuda_classifier.append("Environment :: GPU :: NVIDIA CUDA :: 11")
+elif utils.cuda_major_ver == '12':
+    cuda_classifier.append("Environment :: GPU :: NVIDIA CUDA :: 12")
 
 # TODO: move static metadata to pyproject.toml
 setup(
@@ -82,7 +73,13 @@ setup(
     description="NVIDIA cuQuantum Python",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/NVIDIA/cuQuantum",
+    url="https://developer.nvidia.com/cuquantum-sdk",
+    project_urls={
+        "Bug Tracker": "https://github.com/NVIDIA/cuQuantum/issues",
+        "User Forum": "https://github.com/NVIDIA/cuQuantum/discussions",
+        "Documentation": "https://docs.nvidia.com/cuda/cuquantum/python/",
+        "Source Code": "https://github.com/NVIDIA/cuQuantum",
+    },
     author="NVIDIA Corporation",
     author_email="cuquantum-python@nvidia.com",
     license="BSD-3-Clause",
@@ -97,6 +94,7 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: Implementation :: CPython",
         "Environment :: GPU :: NVIDIA CUDA",
     ] + cuda_classifier,

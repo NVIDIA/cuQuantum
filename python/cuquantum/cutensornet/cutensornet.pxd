@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -54,6 +54,7 @@ cdef extern from '<cutensornet.h>' nogil:
 
     ctypedef struct _TensorQualifiers 'cutensornetTensorQualifiers_t':
         int32_t isConjugate # cannot assign default value to fields in cdef structs
+        int32_t isConstant # cannot assign default value to fields in cdef structs
         
     ctypedef void(*LoggerCallbackData 'cutensornetLoggerCallbackData_t')(
         int32_t logLevel,
@@ -126,6 +127,10 @@ cdef extern from '<cutensornet.h>' nogil:
     ctypedef enum _Memspace 'cutensornetMemspace_t':
         CUTENSORNET_MEMSPACE_DEVICE
         CUTENSORNET_MEMSPACE_HOST
+
+    ctypedef enum _WorkspaceKind 'cutensornetWorkspaceKind_t':
+        CUTENSORNET_WORKSPACE_SCRATCH
+        CUTENSORNET_WORKSPACE_CACHE
 
     ctypedef enum _TensorSVDConfigAttribute 'cutensornetTensorSVDConfigAttributes_t':
         CUTENSORNET_TENSOR_SVD_CONFIG_ABS_CUTOFF

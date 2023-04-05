@@ -129,6 +129,7 @@ endfunction()
 add_custom_target(cutensornet_examples)
 
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example_reuse.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.svd" approxTN/tensor_svd_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.qr" approxTN/tensor_qr_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gate" approxTN/gate_split_example.cu)

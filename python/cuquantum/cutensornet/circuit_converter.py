@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -100,7 +100,7 @@ class CircuitToEinsum:
         self.dtype = dtype
 
         # unfold circuit metadata
-        self._qubits, self.gates = self.parser.unfold_circuit(circuit, dtype=self.dtype, backend=self.backend)
+        self._qubits, self._gates = self.parser.unfold_circuit(circuit, dtype=self.dtype, backend=self.backend)
         self.n_qubits = len(self.qubits)
         self._metadata = None
     
@@ -108,32 +108,32 @@ class CircuitToEinsum:
     def qubits(self):
         """A sequence of all qubits in the circuit."""
         return self._qubits
-        
-    def state_vector(self, fixed=EMPTY_DICT):
+    
+    @property
+    def gates(self):
         """
-        state_vector(fixed=None)
+        A sequence of 2-tuple (``gate_operand``, ``qubits``) representing all gates in the circuit:
 
+        Returns:
+            tuple:
+
+                - ``gate_operand``: A ndarray-like tensor object.
+                  The modes of the operands are ordered as ``AB...ab...``, where ``AB...`` denotes all output modes and
+                  ``ab...`` denotes all input modes.
+                - ``qubits``: A list of arrays corresponding to all the qubits and gate tensor operands.
+        """
+        return self._gates
+        
+    def state_vector(self):
+        """
         Generate the Einstein summation expression and tensor operands to compute the statevector for the input circuit.
-
-        Args:    
-            fixed: Optional, a dictionary that maps certain qubits to the corresponding fixed states 0 or 1.
 
         Returns:
             The Einstein summation expression and a list of tensor operands. The order of the output mode labels is consistent with :attr:`CircuitToEinsum.qubits`.
             For :class:`cirq.Circuit`, this order corresponds to all qubits in the circuit sorted in ascending order. 
             For :class:`qiskit.QuantumCircuit`, this order is the same as :attr:`qiskit.QuantumCircuit.qubits`.
-        
-        .. note::
-
-            The kwargs "fixed" is deprecated and will be removed in the future; please switch to :meth:`CircuitToEinsum.batched_amplitudes` for the same functionality.
         """
-        if fixed:
-            warnings.warn("The kwargs \"fixed\" is deprecated and will be removed in the future; please "
-                          "switch to CircuitToEinsum.batched_amplitudes() for the same functionality.")
-        elif fixed is None:
-            fixed = dict()
-
-        return self.batched_amplitudes(fixed)
+        return self.batched_amplitudes(dict())
 
     def batched_amplitudes(self, fixed):
         """
@@ -317,7 +317,7 @@ class CircuitToEinsum:
                 - ``qubits_frontier`` : A dictionary that maps all qubits to their current mode labels.
         """
         if self._metadata is None:
-            self._metadata = circ_utils.parse_inputs(self.qubits, self.gates, self.dtype, self.backend)
+            self._metadata = circ_utils.parse_inputs(self.qubits, self._gates, self.dtype, self.backend)
         return self._metadata
     
     def _get_forward_inverse_metadata(self, lightcone, coned_qubits):

@@ -1,8 +1,9 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
+import platform
 import re
 import site
 import sys
@@ -53,7 +54,7 @@ def check_cuda_version():
         return str(ver // 1000) + '.' + str((ver % 100) // 10)
 
 
-# We only support CUDA 11 in v22.11
+# We support CUDA 11/12 starting 23.03
 cuda_ver = check_cuda_version()
 if cuda_ver == '11.0':
     cutensor_ver = cuda_ver
@@ -61,6 +62,9 @@ if cuda_ver == '11.0':
 elif '11.0' < cuda_ver < '12.0':
     cutensor_ver = '11'
     cuda_major_ver = '11'
+elif '12.0' <= cuda_ver < '13.0':
+    cutensor_ver = '12'
+    cuda_major_ver = '12'
 else:
     raise RuntimeError(f"Unsupported CUDA version: {cuda_ver}")
 
@@ -74,6 +78,20 @@ class bdist_wheel(_bdist_wheel):
         global building_wheel
         building_wheel = True
         super().run()
+
+    def finalize_options(self):
+        super().finalize_options()
+        self.root_is_pure = False
+
+    def get_tag(self):
+        # hack: passing --build-options in cmdline no longer works with PEP 517 backend,
+        # so we need to overwrite --plat-name here
+        # refs:
+        #   - https://github.com/pypa/build/issues/480
+        #   - https://github.com/scikit-build/ninja-python-distributions/pull/85
+        impl_tag, abi_tag, _ = super().get_tag()
+        plat_tag = f"manylinux2014_{platform.machine()}"
+        return impl_tag, abi_tag, plat_tag
 
 
 class build_ext(_build_ext):
@@ -202,4 +220,5 @@ class build_ext(_build_ext):
 
     def build_extensions(self):
         self._prep_includes_libs_rpaths()
+        self.parallel = 4  # use 4 threads
         super().build_extensions()

@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -34,7 +34,8 @@ class NetworkOptions(object):
         logger (logging.Logger): Python Logger object. The root logger will be used if a logger object is not provided.
         memory_limit: Maximum memory available to cuTensorNet. It can be specified as a value (with optional suffix like
             K[iB], M[iB], G[iB]) or as a percentage. The default is 80%.
-        blocking: A flag specifying the behavior of the execution methods :meth:`Network.autotune` and :meth:`Network.contract`.
+        blocking: A flag specifying the behavior of the execution functions and methods,
+            such as :meth:`Network.autotune` and :meth:`Network.contract`.
             When ``blocking`` is ``True``, these methods do not return until the operation is complete. When blocking is ``"auto"``,
             the methods return immediately when the input tensors are on the GPU. The execution methods always block when the
             input tensors are on the CPU. The default is ``True``.

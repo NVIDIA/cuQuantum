@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -118,8 +118,8 @@ def get_or_create_stream(device_id, stream, op_package):
 
     stream_package = infer_object_package(stream)
     if stream_package != op_package:
-            message = "The stream object must belong to the same package as the tensor network operands."
-            raise TypeError(message)
+        message = "The stream object must belong to the same package as the tensor network operands."
+        raise TypeError(message)
 
     return _create_stream_ctx_ptr_cupy_stream(op_package_ifc, stream)
 

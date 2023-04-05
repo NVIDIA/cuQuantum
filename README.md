@@ -1,10 +1,13 @@
-<div align="center"><img src="https://developer.nvidia.com/sites/default/files/akamai/nvidia-cuquantum-icon.svg" width="250"/></div>
-
 # Welcome to the cuQuantum repository!
 
-This public repository contains two sets of files related to the [NVIDIA cuQuantum SDK](https://developer.nvidia.com/cuquantum-sdk):
+<img align="right" width="200"
+src="https://developer.nvidia.com/sites/default/files/akamai/nvidia-cuquantum-icon.svg"
+/>
 
-- `samples`: All C/C++ sample codes for the cuQuantum SDK.
+This public repository contains a few sets of files related to the [NVIDIA cuQuantum SDK](https://developer.nvidia.com/cuquantum-sdk):
+
+- `benchmarks`: NVIDIA cuQuantum Performance Benchmark Suite (v0.2.0), see [README](./benchmarks/README.md) for detail.
+- `extra`: Files to help utilize the cuQuantum SDK and the cuQuantum Appliance container.
 - `python`: The open-sourced cuQuantum Python project.
   - Available for download on
     - conda-forge:
@@ -17,10 +20,13 @@ This public repository contains two sets of files related to the [NVIDIA cuQuant
         - `cuquantum-cu11` [![pypi](https://img.shields.io/pypi/v/cuquantum-cu11.svg)](https://pypi.python.org/pypi/cuquantum-cu11)
           - `custatevec-cu11` [![pypi](https://img.shields.io/pypi/v/custatevec-cu11.svg)](https://pypi.python.org/pypi/custatevec-cu11)
           - `cutensornet-cu11` [![pypi](https://img.shields.io/pypi/v/cutensornet-cu11.svg)](https://pypi.python.org/pypi/cutensornet-cu11)
+        - `cuquantum-cu12` [![pypi](https://img.shields.io/pypi/v/cuquantum-cu12.svg)](https://pypi.python.org/pypi/cuquantum-cu12)
+          - `custatevec-cu12` [![pypi](https://img.shields.io/pypi/v/custatevec-cu12.svg)](https://pypi.python.org/pypi/custatevec-cu12)
+          - `cutensornet-cu12` [![pypi](https://img.shields.io/pypi/v/cutensornet-cu12.svg)](https://pypi.python.org/pypi/cutensornet-cu12)
       - `cuquantum-python` [![pypi](https://img.shields.io/pypi/v/cuquantum-python.svg)](https://pypi.python.org/pypi/cuquantum-python)
         - `cuquantum-python-cu11` [![pypi](https://img.shields.io/pypi/v/cuquantum-python-cu11.svg)](https://pypi.python.org/pypi/cuquantum-python-cu11)
-- `benchmarks`: NVIDIA cuQuantum Performance Benchmark Suite (v0.2.0), see [README](./benchmarks/README.md) for detail.
-- `extra`: Files to help utilize the cuQuantum SDK and the cuQuantum Appliance container.
+        - `cuquantum-python-cu12` [![pypi](https://img.shields.io/pypi/v/cuquantum-python-cu12.svg)](https://pypi.python.org/pypi/cuquantum-python-cu12)
+- `samples`: All C/C++ sample codes for the cuQuantum SDK.
 
 ## Installation
 

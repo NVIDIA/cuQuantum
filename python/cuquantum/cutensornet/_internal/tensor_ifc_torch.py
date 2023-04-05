@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -12,6 +12,7 @@ import torch
 
 from . import typemaps
 from .tensor_ifc import Tensor
+from .. import cutensornet as cutn
 
 
 class TorchTensor(Tensor):
@@ -89,4 +90,10 @@ class TorchTensor(Tensor):
         Check if the object is ndarray-like.
         """
         return isinstance(self.tensor, torch.Tensor)
+    
+    def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
+        _, _, extents, strides = cutn.get_tensor_details(handle, desc_tensor)
+        if tuple(extents) != self.shape:
+            #note: torch strides is not scaled by bytes
+            self.tensor = torch.as_strided(self.tensor, tuple(extents), tuple(strides))
 

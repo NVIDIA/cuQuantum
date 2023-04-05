@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -102,14 +102,15 @@ svd_info = cutn.create_tensor_svd_info(handle)
 work_desc = cutn.create_workspace_descriptor(handle)
 
 cutn.workspace_compute_svd_sizes(handle, desc_tensor_T, desc_tensor_U, desc_tensor_V, svd_config, work_desc)
-required_workspace_size = cutn.workspace_get_size(handle, 
-    work_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE)
+required_workspace_size = cutn.workspace_get_memory_size(handle, 
+    work_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
 if worksize < required_workspace_size:
     raise MemoryError("Not enough workspace memory is available.")
 work = cp.cuda.alloc(required_workspace_size)
-cutn.workspace_set(
+cutn.workspace_set_memory(
     handle, work_desc,
     cutn.Memspace.DEVICE,
+    cutn.WorkspaceKind.SCRATCH,
     work.ptr, required_workspace_size)
 
 print("Query and allocate required workspace.")
