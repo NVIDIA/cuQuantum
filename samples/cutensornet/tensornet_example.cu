@@ -418,7 +418,7 @@ int main()
                      R_d,
                      accumulateOutput,
                      workDesc,
-                     sliceGroup, // slternatively, NULL can also be used to contract over all slices instead of specifying a sliceGroup object
+                     sliceGroup, // alternatively, NULL can also be used to contract over all slices instead of specifying a sliceGroup object
                      stream) );
 
       // Synchronize and measure best timing
