@@ -16,9 +16,14 @@ for enum in (
         custatevec.Pauli,
         custatevec.MatrixLayout,
         custatevec.MatrixType,
+        custatevec.MatrixMapType,
         custatevec.Collapse,
         custatevec.SamplerOutput,
         custatevec.DeviceNetworkType,
+        cutensornet.NetworkAttribute,
+        custatevec.CommunicatorType,
+        custatevec.DataTransferType,
+        custatevec.StateVectorType,
         cutensornet.ContractionOptimizerInfoAttribute,
         cutensornet.ContractionOptimizerConfigAttribute,
         cutensornet.ContractionAutotunePreferenceAttribute,
@@ -32,6 +37,9 @@ for enum in (
         cutensornet.TensorSVDPartition,
         cutensornet.TensorSVDInfoAttribute,
         cutensornet.GateSplitAlgo,
+        cutensornet.StatePurity,
+        cutensornet.MarginalAttribute,
+        cutensornet.SamplerAttribute,
         ):
     cutensornet._internal.enum_utils.add_enum_class_doc(enum, chomp="_ATTRIBUTE|_PREFERENCE_ATTRIBUTE")
 

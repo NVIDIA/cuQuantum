@@ -50,6 +50,12 @@ The tensor SVD sample can be easily executed in a command shell using:
 ```
 The sample for tensor QR, gate split and MPS can also be executed in the same fashion.
 
+**Note**: Depending on how CUDA Toolkit and cuTENSOR are installed, you might need to add them to `LD_LIBRARY_PATH` like this:
+```
+export LD_LIBRARY_PATH=$CUDA_PATH/lib64:$CUTENSOR_ROOT/lib/11:$LD_LIBRARY_PATH
+```
+The cuTENSOR library path would depend on the CUDA major version. Please refer to the [Getting Started](https://docs.nvidia.com/cuda/cuquantum/cutensornet/getting_started.html) page for further detail.
+
 ## Support
 
 * **Supported SM Architectures:** SM 7.0, SM 7.5, SM 8.0, SM 8.6, SM 9.0
@@ -164,3 +170,14 @@ This sample demonstrates how to:
 * Mark input tensors as "constant" when creating a tensor network using `cutensornetCreateNetworkDescriptor`, by setting the corresponding `cutensornetTensorQualifiers_t` field.
 * Provide a cache workspace to the contraction plan which will be used to accelerate the subsequent contractions of the same network. It shows how to query the required cache memory size using `cutensornetWorkspaceGetMemorySize` with a `CUTENSORNET_WORKSPACE_CACHE` workspace-kind, and how to the provide the workspace memory using `cutensornetWorkspaceSetMemory`.
 * Provide a predefined contraction path to the contraction optimizer by calling `cutensornetContractionOptimizerInfoSetAttribute` with `CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_PATH` attribute.
+
+### 9. Gradient via back-propagation (`tensornet_example_gradients.cu`)
+
+This sample demonstrates how to perform back-propagation to compute gradients of a tensor-network w.r.t. select input tensors.
+This sample largely builds on first sample provided above.
+
+This sample demonstrates how to:
+* Mark input tensors for gradient computation when creating a tensor network by calling `cutensornetNetworkSetAttribute`.
+* Provide a cache workspace to the contraction plan which will be used to hold intermediate data needed for gradient computation. It shows how to query the required cache memory size using `cutensornetWorkspaceGetMemorySize` with a `CUTENSORNET_WORKSPACE_CACHE` workspace-kind, and how to the provide the workspace memory using `cutensornetWorkspaceSetMemory`.
+* Call `cutensornetComputeGradientsBackward` to perform the gradient computation.
+* Call `cutensornetWorkspacePurgeCache` to clean up the cache and prepare for the next gradient calculation.

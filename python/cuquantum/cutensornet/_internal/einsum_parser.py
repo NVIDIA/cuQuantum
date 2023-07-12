@@ -8,16 +8,19 @@ A collection of functions for parsing Einsum expressions.
 
 from collections import Counter
 from itertools import chain
-import string
+import re
+import sys
 
 import numpy as np
 
 from . import formatters
 from .tensor_wrapper import wrap_operands
+from ...utils import WHITESPACE_UNICODE
 
 
 DISALLOWED_LABELS = set(['.', '-', '>'])
 native_to_str = lambda native : "'" + ''.join(s if s is not Ellipsis else '...' for s in native) + "'"
+
 
 def select_morpher(interleaved, mapper=None):
     """
@@ -48,7 +51,8 @@ def parse_single(single):
     """
     Parse single operand mode labels considering ellipsis. Leading or trailing whitespace, if present, is removed.
     """
-    subexpr = single.strip(string.whitespace).split('...')
+    whitespace = WHITESPACE_UNICODE
+    subexpr = single.strip(whitespace).split('...')
     n = len(subexpr)
     expr = [[Ellipsis]] * (2*n - 1)
     expr[::2] = subexpr
@@ -60,10 +64,11 @@ def check_single(single):
     """
     Check for disallowed characters used as mode labels for a single operand.
     """
+    whitespace = WHITESPACE_UNICODE
     for s in single:
         if s is Ellipsis:
             continue
-        if s in string.whitespace or s in DISALLOWED_LABELS:
+        if s in whitespace or s in DISALLOWED_LABELS:
             return False
 
     return True

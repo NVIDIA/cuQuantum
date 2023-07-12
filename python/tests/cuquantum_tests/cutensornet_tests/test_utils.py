@@ -10,6 +10,8 @@ from cupy.testing import shaped_random
 import numpy
 try:
     import torch
+    if not torch.cuda.is_available():
+        raise ImportError
 except ImportError:
     torch = None
 
@@ -284,6 +286,15 @@ class EinsumFactory(ExpressionFactory):
 
 class DecomposeFactory(ExpressionFactory):
 
+    def __init__(self, expression, *, shapes=None):
+        super().__init__(expression)
+
+        if shapes is not None:
+            # overwrite the base class's dict
+            inputs, _ = self.expr.split("->")
+            inputs = inputs.split(",")
+            self.size_dict = dict((m, e) for k, v in zip(inputs, shapes) for m, e in zip(k, v))
+
     @property
     def modes(self):
         if self._modes is None:
@@ -301,19 +312,22 @@ class DecomposeFactory(ExpressionFactory):
                 raise ValueError("decomposition does not support interleave format")
             
         return self._modes
-    
-def gen_rand_svd_method(seed=None):
-    if seed is None:
-        return tensor.SVDMethod()
-    else:
-        numpy.random.seed(seed)
-        method = {"max_extent": numpy.random.randint(1, high=6), 
-                "abs_cutoff": numpy.random.random() / 2.0, # [0, 0.5)
-                "rel_cutoff": numpy.random.random() / 2.0, # [0, 0.5)
-                "normalization": numpy.random.choice([None, "L1", "L2", "LInf"]),
-                "partition": numpy.random.choice([None, "U", "V", "UV"])}
-        return tensor.SVDMethod(**method)
 
+
+def gen_rand_svd_method(rng):
+    method = {"max_extent": rng.choice(range(1, 7)), 
+              "abs_cutoff": rng.random() / 2.0,  # [0, 0.5)
+              "rel_cutoff": 0.1 + rng.random() / 2.5 ,  # [0.1, 0.5)
+              "normalization": rng.choice([None, "L1", "L2", "LInf"]),
+              "partition": rng.choice([None, "U", "V", "UV"]),
+              "algorithm": rng.choice(['gesvd', 'gesvdj', 'gesvdp', 'gesvdr'])}
+    if method["algorithm"] == 'gesvdj':
+        method["gesvdj_tol"] = rng.choice([0, 1e-14])
+        method["gesvdj_max_sweeps"] = rng.choice([0, 100])
+    elif method["algorithm"] == 'gesvdr':
+        method["gesvdr_niters"] = rng.choice([0, 40])
+        # we can't set oversampling as it depends on matrix size here
+    return tensor.SVDMethod(**method)
 
 
 # We want to avoid fragmenting the stream-ordered mempools

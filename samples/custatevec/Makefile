@@ -19,23 +19,29 @@ ARCH_FLAGS      = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80) $(ARC
 CXX_FLAGS       = -std=c++11 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(ARCH_FLAGS) $(LINKER_FLAGS)
 
 all: check-env
-	nvcc gate_application.cu     -o gate_application     ${CXX_FLAGS}
-	nvcc permutation_matrix.cu   -o permutation_matrix   ${CXX_FLAGS}
-	nvcc diagonal_matrix.cu      -o diagonal_matrix      ${CXX_FLAGS}
-	nvcc exponential_pauli.cu    -o exponential_pauli    ${CXX_FLAGS}
-	nvcc expectation.cu          -o expectation          ${CXX_FLAGS}
-	nvcc expectation_pauli.cu    -o expectation_pauli    ${CXX_FLAGS}
-	nvcc sampler.cu              -o sampler              ${CXX_FLAGS}
-	nvcc measure_zbasis.cu       -o measure_zbasis       ${CXX_FLAGS}
-	nvcc batch_measure.cu        -o batch_measure        ${CXX_FLAGS}
-	nvcc accessor_get.cu         -o accessor_get         ${CXX_FLAGS}
-	nvcc accessor_set.cu         -o accessor_set         ${CXX_FLAGS}
-	nvcc test_matrix_type.cu     -o test_matrix_type     ${CXX_FLAGS}
-	nvcc memory_handler.cu       -o memory_handler       ${CXX_FLAGS}
-	nvcc swap_index_bits.cu      -o swap_index_bits      ${CXX_FLAGS}
-	nvcc mgpu_swap_index_bits.cu -o mgpu_swap_index_bits ${CXX_FLAGS}
-	nvcc mgpu_batch_measure.cu   -o mgpu_batch_measure   ${CXX_FLAGS}
-	nvcc mgpu_sampler.cu         -o mgpu_sampler         ${CXX_FLAGS}
+	nvcc initialize_sv.cu            -o initialize_sv            ${CXX_FLAGS}
+	nvcc gate_application.cu         -o gate_application         ${CXX_FLAGS}
+	nvcc permutation_matrix.cu       -o permutation_matrix       ${CXX_FLAGS}
+	nvcc diagonal_matrix.cu          -o diagonal_matrix          ${CXX_FLAGS}
+	nvcc batched_gate_application.cu -o batched_gate_application ${CXX_FLAGS}
+	nvcc exponential_pauli.cu        -o exponential_pauli        ${CXX_FLAGS}
+	nvcc expectation.cu              -o expectation              ${CXX_FLAGS}
+	nvcc expectation_pauli.cu        -o expectation_pauli        ${CXX_FLAGS}
+	nvcc sampler.cu                  -o sampler                  ${CXX_FLAGS}
+	nvcc measure_zbasis.cu           -o measure_zbasis           ${CXX_FLAGS}
+	nvcc batch_measure.cu            -o batch_measure            ${CXX_FLAGS}
+	nvcc batched_collapse.cu         -o batched_collapse         ${CXX_FLAGS}
+	nvcc batched_abs2sum.cu          -o batched_abs2sum          ${CXX_FLAGS}
+	nvcc batched_measure.cu          -o batched_measure          ${CXX_FLAGS}
+	nvcc accessor_get.cu             -o accessor_get             ${CXX_FLAGS}
+	nvcc accessor_set.cu             -o accessor_set             ${CXX_FLAGS}
+	nvcc test_matrix_type.cu         -o test_matrix_type         ${CXX_FLAGS}
+	nvcc memory_handler.cu           -o memory_handler           ${CXX_FLAGS}
+	nvcc swap_index_bits.cu          -o swap_index_bits          ${CXX_FLAGS}
+	nvcc mgpu_swap_index_bits.cu     -o mgpu_swap_index_bits     ${CXX_FLAGS}
+	nvcc mgpu_batch_measure.cu       -o mgpu_batch_measure       ${CXX_FLAGS}
+	nvcc mgpu_sampler.cu             -o mgpu_sampler             ${CXX_FLAGS}
+
 
 check-env:
 	@ echo "" && \
@@ -50,15 +56,20 @@ check-env:
 	fi
 
 clean:
-	rm -f gate_application \
+	rm -f initialize_sv \
+		gate_application \
 		permutation_matrix \
 		diagonal_matrix \
+		batched_gate_application \
 		exponential_pauli \
 		expectation \
 		expectation_pauli \
 		sampler \
 		measure_zbasis \
 		batch_measure \
+		batched_collapse \
+		abs2sum_batched \
+		measure_batched \
 		accessor_get \
 		accessor_set \
 		test_matrix_type \
