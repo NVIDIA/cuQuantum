@@ -6,15 +6,21 @@ from collections import abc
 import functools
 import os
 
-import cupy
+import cupy as cp
 from cupy import testing
-import numpy
+import numpy as np
 try:
     import mpi4py
     from mpi4py import MPI  # init!
 except ImportError:
     mpi4py = MPI = None
 import pytest
+try:
+    import torch
+    # unlike in other test modules, we don't check torch.cuda.is_available()
+    # here because we allow verifying against PyTorch CPU tensors
+except:
+    torch = None
 
 import cuquantum
 from cuquantum import ComputeType, cudaDataType
@@ -25,7 +31,7 @@ from cuquantum.cutensornet._internal.utils import check_or_create_options
 
 from . import approxTN_utils
 from .data import gate_decomp_expressions, tensor_decomp_expressions
-from .test_utils import atol_mapper, rtol_mapper
+from .test_utils import atol_mapper, get_stream_for_backend, rtol_mapper
 from .. import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type,
                 MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase)
 
@@ -43,18 +49,21 @@ def manage_resource(name):
     def decorator(impl):
         @functools.wraps(impl)
         def test_func(self, *args, **kwargs):
+            # "self" refers to the test case
             try:
                 if name == 'handle':
                     h = cutn.create()
                 elif name == 'dscr':
-                    tn, dtype, input_form, output_form = self.tn, self.dtype, self.input_form, self.output_form
+                    tn, dtype, input_form = self.tn, self.dtype, self.input_form
                     einsum, shapes = tn  # unpack
-                    tn = TensorNetworkFactory(einsum, shapes, dtype)
+                    tn = TensorNetworkFactory(einsum, shapes, dtype, order=self.order)
                     i_n_inputs, i_n_modes, i_extents, i_strides, i_modes = \
                         tn.get_input_metadata(**input_form)
                     o_n_modes, o_extents, o_strides, o_modes = \
-                        tn.get_output_metadata(**output_form)
-                    i_qualifiers = numpy.zeros(i_n_inputs, dtype=cutn.tensor_qualifiers_dtype)
+                        tn.get_output_metadata(**input_form)
+                    i_qualifiers = np.zeros(i_n_inputs, dtype=cutn.tensor_qualifiers_dtype)
+                    if self.qual is not None:
+                        i_qualifiers['requires_gradient'][:] = True
                     h = cutn.create_network_descriptor(
                         self.handle,
                         i_n_inputs, i_n_modes, i_extents, i_strides, i_modes, i_qualifiers, 
@@ -94,6 +103,9 @@ def manage_resource(name):
                     # we use this version to avoid creating a sequence; another API
                     # is tested elsewhere
                     h = cutn.create_slice_group_from_id_range(self.handle, 0, 1, 1)
+                elif name == 'state':
+                    dtype = dtype_to_data_type[getattr(np, self.dtype)]
+                    h = cutn.create_state(self.handle, self.state_purity, self.n_qubits, (2,)*self.n_qubits, dtype)
                 else:
                     assert False, f'name "{name}" not recognized'
                 setattr(self, name, h)
@@ -133,6 +145,8 @@ def manage_resource(name):
                 elif name == 'slice_group':
                     h = cutn.destroy_slice_group(self.slice_group)
                     del self.slice_group
+                elif name == 'state':
+                    h = cutn.destroy_state(self.state)
         return test_func
     return decorator
 
@@ -168,7 +182,7 @@ class TensorNetworkFactory:
     # This factory CANNOT be reused; once a TN descriptor uses it, it must
     # be discarded.
 
-    def __init__(self, einsum, shapes, dtype):
+    def __init__(self, einsum, shapes, dtype, *, order='C'):
         self.einsum = einsum
         inputs, output = einsum.split('->') if "->" in einsum else (einsum, None)
         i_shapes, o_shape = shapes[:-1], shapes[-1]
@@ -177,30 +191,34 @@ class TensorNetworkFactory:
         assert len(output) == len(o_shape)
 
         # xp strides in bytes, cutn strides in counts
-        itemsize = cupy.dtype(dtype).itemsize
+        itemsize = cp.dtype(dtype).itemsize
 
         self.input_tensors = [
-            testing.shaped_random(s, cupy, dtype) for s in i_shapes]
+            testing.shaped_random(s, cp, dtype, seed=i, order=order)
+            for i, s in enumerate(i_shapes)]
         self.input_n_modes = [len(i) for i in inputs]
         self.input_extents = i_shapes
-        self.input_strides = [[stride // itemsize for stride in arr.strides] for arr in self.input_tensors]
+        self.input_strides = [[stride // itemsize for stride in arr.strides]
+                              for arr in self.input_tensors]
         self.input_modes = [tuple([ord(m) for m in i]) for i in inputs]
 
-        self.output_tensor = cupy.empty(o_shape, dtype=dtype)
+        self.output_tensor = cp.empty(o_shape, dtype=dtype, order=order)
         self.output_n_modes = len(o_shape)
         self.output_extent = o_shape
         self.output_stride = [stride // itemsize for stride in self.output_tensor.strides]
         self.output_mode = tuple([ord(m) for m in output])
 
+        self.gradients = None
+
     def _get_data_type(self, category):
         if 'n_modes' in category:
-            return numpy.int32
+            return np.int32
         elif 'extent' in category:
-            return numpy.int64
+            return np.int64
         elif 'stride' in category:
-            return numpy.int64
+            return np.int64
         elif 'mode' in category:
-            return numpy.int32
+            return np.int32
         elif 'tensor' in category:
             return None  # unused
         else:
@@ -213,38 +231,38 @@ class TensorNetworkFactory:
             if len(data) == 0:
                 # empty, give it a NULL
                 return 0
-            elif category == 'input_tensors':
+            elif category in ('input_tensors', 'gradients'):
                 # special case for device arrays, return int as void**
-                data = numpy.asarray([d.data.ptr for d in data],
-                    dtype=numpy.intp)
+                data = np.asarray([d.data.ptr for d in data],
+                    dtype=np.intp)
                 setattr(self, f'{category}_ptrs', data)  # keep data alive
             # some data are not nested in nature, so we peek at the first
             # element to determine
             elif isinstance(data[0], abc.Sequence):
                 # return int as void**
-                data = [numpy.asarray(d, dtype=self._get_data_type(category))
+                data = [np.asarray(d, dtype=self._get_data_type(category))
                     for d in data]
                 setattr(self, category, data)  # keep data alive
-                data = numpy.asarray([d.ctypes.data for d in data],
-                    dtype=numpy.intp)
+                data = np.asarray([d.ctypes.data for d in data],
+                    dtype=np.intp)
                 setattr(self, f'{category}_ptrs', data)  # keep data alive
             else:
                 # return int as void*
-                data = numpy.asarray(data, dtype=self._get_data_type(category))
+                data = np.asarray(data, dtype=self._get_data_type(category))
                 setattr(self, category, data)  # keep data alive
             return data.ctypes.data
         elif return_value == 'seq':
             if len(data) == 0:
                 # empty, leave it as is
                 pass
-            elif category == 'input_tensors':
+            elif category in ('input_tensors', 'gradients'):
                 # special case for device arrays
                 data = [d.data.ptr for d in data]
                 setattr(self, f'{category}_ptrs', data)  # keep data alive
             # some data are not nested in nature, so we peek at the first
             # element to determine
             elif isinstance(data[0], abc.Sequence):
-                data = [numpy.asarray(d, dtype=self._get_data_type(category))
+                data = [np.asarray(d, dtype=self._get_data_type(category))
                     for d in data]
                 setattr(self, category, data)  # keep data alive
             else:
@@ -278,6 +296,14 @@ class TensorNetworkFactory:
     def get_output_tensor(self):
         return self.output_tensor.data.ptr
 
+    def get_gradient_tensors(self, **kwargs):
+        if self.gradients is None:
+            # as of 23.06, the gradient tensors' strides follow those of the
+            # input tensors
+            self.gradients = [cp.empty_like(arr) for arr in self.input_tensors]
+        data = self._return_data('gradients', kwargs['data'])
+        return data
+
 
 @testing.parameterize(*testing.product({
     'tn': (
@@ -287,8 +313,9 @@ class TensorNetworkFactory:
         ('ab,bc,cd->ad', [(2, 3), (3, 1), (1, 5), (2, 5)]),
     ),
     'dtype': (
-        numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
+        np.float32, np.float64, np.complex64, np.complex128
     ),
+    # use the same format for both input/output tensors
     'input_form': (
         {'n_modes': 'int', 'extent': 'int', 'stride': 'int',
          'mode': 'int', 'data': 'int'},
@@ -297,10 +324,9 @@ class TensorNetworkFactory:
         {'n_modes': 'seq', 'extent': 'nested_seq', 'stride': 'nested_seq',
          'mode': 'seq', 'data': 'seq'},
     ),
-    'output_form': (
-        {'extent': 'int', 'stride': 'int', 'mode': 'int'},
-        {'extent': 'seq', 'stride': 'seq', 'mode': 'seq'},
-    )
+    'order': ('C', 'F'),
+    # mainly for gradient tests
+    'qual': (None, True),
 }))
 class TestTensorNetworkBase:
 
@@ -330,9 +356,9 @@ class TestTensorNetworkDescriptor(TestTensorNetworkBase):
                 handle, tensor_dscr)
 
         assert num_modes == self.tn.output_n_modes
-        assert (modes == numpy.asarray(self.tn.output_mode, dtype=numpy.int32)).all()
-        assert (extents == numpy.asarray(self.tn.output_extent, dtype=numpy.int64)).all()
-        assert (strides == numpy.asarray(self.tn.output_stride, dtype=numpy.int64)).all()
+        assert (modes == np.asarray(self.tn.output_mode, dtype=np.int32)).all()
+        assert (extents == np.asarray(self.tn.output_extent, dtype=np.int64)).all()
+        assert (strides == np.asarray(self.tn.output_stride, dtype=np.int64)).all()
 
         if API == 'new':
             cutn.destroy_tensor_descriptor(tensor_dscr)
@@ -346,14 +372,14 @@ class TestOptimizerInfo(TestTensorNetworkBase):
     def _set_path(self, handle, info, path):
         attr = cutn.ContractionOptimizerInfoAttribute.PATH
         dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
-        if not isinstance(path, numpy.ndarray):
-            path = numpy.ascontiguousarray(path, dtype=numpy.int32)
-        path_obj = numpy.asarray((path.shape[0], path.ctypes.data), dtype=dtype)
+        if not isinstance(path, np.ndarray):
+            path = np.ascontiguousarray(path, dtype=np.int32)
+        path_obj = np.asarray((path.shape[0], path.ctypes.data), dtype=dtype)
         self._set_scalar_attr(handle, info, attr, path_obj)
 
     def _get_scalar_attr(self, handle, info, attr):
         dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
-        data = numpy.empty((1,), dtype=dtype)
+        data = np.empty((1,), dtype=dtype)
         cutn.contraction_optimizer_info_get_attribute(
             handle, info, attr,
             data.ctypes.data, data.dtype.itemsize)
@@ -361,8 +387,8 @@ class TestOptimizerInfo(TestTensorNetworkBase):
 
     def _set_scalar_attr(self, handle, info, attr, data):
         dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
-        if not isinstance(data, numpy.ndarray):
-            data = numpy.ascontiguousarray(data, dtype=dtype)
+        if not isinstance(data, np.ndarray):
+            data = np.ascontiguousarray(data, dtype=dtype)
         cutn.contraction_optimizer_info_set_attribute(
             handle, info, attr,
             data.ctypes.data, data.dtype.itemsize)
@@ -421,9 +447,9 @@ class TestOptimizerInfo(TestTensorNetworkBase):
         dtype = cutn.contraction_optimizer_info_get_attribute_dtype(attr)
 
         # compute a valid path for the problem
-        path, _ = numpy.einsum_path(
+        path, _ = np.einsum_path(
             tn.einsum,
-            *[arr for arr in map(lambda a: numpy.broadcast_to(0, a.shape),
+            *[arr for arr in map(lambda a: np.broadcast_to(0, a.shape),
                                  tn.input_tensors)])
 
         # set the path in info (a few other attributes would be computed too)
@@ -431,7 +457,7 @@ class TestOptimizerInfo(TestTensorNetworkBase):
         self._set_path(handle, info, path[1:])
         buf_size = cutn.contraction_optimizer_info_get_packed_size(
             handle, info)
-        buf_data = numpy.empty((buf_size,), dtype=numpy.int8)
+        buf_data = np.empty((buf_size,), dtype=np.int8)
         if buffer_form == "int":
             buf = buf_data.ctypes.data
         else:  # buffer_form == "buf"
@@ -481,15 +507,16 @@ class TestOptimizerConfig:
                     cutn.ContractionOptimizerConfigAttribute.SLICER_MEMORY_MODEL,
                     cutn.ContractionOptimizerConfigAttribute.SLICER_DISABLE_SLICING,
                     cutn.ContractionOptimizerConfigAttribute.SIMPLIFICATION_DISABLE_DR,
-                    cutn.ContractionOptimizerConfigAttribute.COST_FUNCTION_OBJECTIVE):
-            factor = numpy.asarray([1], dtype=dtype)
+                    cutn.ContractionOptimizerConfigAttribute.COST_FUNCTION_OBJECTIVE,
+                    cutn.ContractionOptimizerConfigAttribute.SMART_OPTION):
+            factor = np.asarray([1], dtype=dtype)
         else:
-            factor = numpy.asarray([30], dtype=dtype)
+            factor = np.asarray([30], dtype=dtype)
         cutn.contraction_optimizer_config_set_attribute(
             handle, config, attr,
             factor.ctypes.data, factor.dtype.itemsize)
         # do a round-trip test as a sanity check
-        factor2 = numpy.zeros_like(factor)
+        factor2 = np.zeros_like(factor)
         cutn.contraction_optimizer_config_get_attribute(
             handle, config, attr,
             factor2.ctypes.data, factor2.dtype.itemsize)
@@ -513,12 +540,12 @@ class TestAutotunePreference:
         handle, pref = self.handle, self.autotune
         dtype = cutn.contraction_autotune_preference_get_attribute_dtype(attr)
         # Hack: assume this is a valid value for all attrs
-        factor = numpy.asarray([2], dtype=dtype)
+        factor = np.asarray([2], dtype=dtype)
         cutn.contraction_autotune_preference_set_attribute(
             handle, pref, attr,
             factor.ctypes.data, factor.dtype.itemsize)
         # do a round-trip test as a sanity check
-        factor2 = numpy.zeros_like(factor)
+        factor2 = np.zeros_like(factor)
         cutn.contraction_autotune_preference_get_attribute(
             handle, pref, attr,
             factor2.ctypes.data, factor2.dtype.itemsize)
@@ -535,10 +562,10 @@ class TestAutotunePreference:
     'autotune', (True, False)
 )
 @pytest.mark.parametrize(
-    'contract', (False, "legacy", "slice_group")
+    'contract', ("legacy", "slice_group", "gradient")
 )
 @pytest.mark.parametrize(
-    'stream', (cupy.cuda.Stream.null, cupy.cuda.Stream(non_blocking=True))
+    'stream', (cp.cuda.Stream.null, get_stream_for_backend(cp))
 )
 class TestContraction(TestTensorNetworkBase):
 
@@ -551,7 +578,7 @@ class TestContraction(TestTensorNetworkBase):
     @manage_resource('autotune')
     @manage_resource('workspace')
     @manage_resource('slice_group')
-    def test_contraction_workflow(
+    def test_contraction_gradient_workflow(
             self, mempool, workspace_pref, autotune, contract, stream):
         if (isinstance(mempool, str) and mempool.startswith('cffi')
                 and not _can_use_cffi()):
@@ -560,54 +587,87 @@ class TestContraction(TestTensorNetworkBase):
         # unpack
         handle, dscr, info, config, pref = self.handle, self.dscr, self.info, self.config, self.autotune
         workspace = self.workspace
-        tn, input_form, output_form = self.tn, self.input_form, self.output_form
+        tn, input_form = self.tn, self.input_form
+
+        # make sure inputs are ready
+        # TODO: use stream_wait_event to establish stream order is better
+        cp.cuda.Device().synchronize()
 
         if mempool:
             mr = MemoryResourceFactory(mempool)
             handler = mr.get_dev_mem_handler()
             cutn.set_device_mem_handler(handle, handler)
 
-        workspace_size = 32*1024**2  # large enough for our test cases
+        workspace_hint = 32*1024**2  # large enough for our test cases
         # we have to run this API in any case in order to create a path
         cutn.contraction_optimize(
-            handle, dscr, config, workspace_size, info)
+            handle, dscr, config, workspace_hint, info)
+
+        # for simplicity, compute grads for all tensors
+        if contract == "gradient":
+            if self.qual is None:
+                # set up the grad flag via TN attributes instead of input qualifiers
+                tensor_id_range = np.arange(len(tn.input_tensors), dtype=np.int32)
+                net_attr_dtype = cutn.network_get_attribute_dtype(
+                    cutn.NetworkAttribute.INPUT_TENSORS_REQUIRE_GRAD)
+                tensor_ids = np.zeros(1, dtype=net_attr_dtype)
+                tensor_ids['num_tensors'] = tensor_id_range.size
+                tensor_ids['data'] = tensor_id_range.ctypes.data
+                cutn.network_set_attribute(
+                    handle, dscr, cutn.NetworkAttribute.INPUT_TENSORS_REQUIRE_GRAD,
+                    tensor_ids.ctypes.data, tensor_ids.dtype.itemsize)
+                # round-trip
+                tensor_id_range_back = np.zeros_like(tensor_id_range)
+                tensor_ids['num_tensors'] = tensor_id_range_back.size
+                tensor_ids['data'] = tensor_id_range_back.ctypes.data
+                cutn.network_get_attribute(
+                    handle, dscr, cutn.NetworkAttribute.INPUT_TENSORS_REQUIRE_GRAD,
+                    tensor_ids.ctypes.data, tensor_ids.dtype.itemsize)
+                assert (tensor_id_range_back == tensor_id_range).all()
+
+            output_grads = cp.ones_like(tn.output_tensor)
 
         # manage workspace
+        placeholder = []
         if mempool is None:
-            cutn.workspace_compute_sizes(handle, dscr, info, workspace)
-            required_size_deprecated = cutn.workspace_get_memory_size(
-                handle, workspace,
-                getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
-                cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
-                cutn.WorkspaceKind.SCRATCH)
             cutn.workspace_compute_contraction_sizes(handle, dscr, info, workspace)
-            required_size = cutn.workspace_get_memory_size(
-                handle, workspace,
-                getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
-                cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
-                cutn.WorkspaceKind.SCRATCH)
-            assert required_size == required_size_deprecated
-            if workspace_size < required_size:
-                assert False, \
-                    f"wrong assumption on the workspace size " \
-                    f"(given: {workspace_size}, needed: {required_size})"
-            workspace_ptr = cupy.cuda.alloc(workspace_size)
-            cutn.workspace_set_memory(
-                handle, workspace,
-                cutn.Memspace.DEVICE,
-                cutn.WorkspaceKind.SCRATCH,
-                workspace_ptr.ptr, workspace_size)
-            # round-trip check
-            assert (workspace_ptr.ptr, workspace_size) == cutn.workspace_get_memory(
-                handle, workspace,
-                cutn.Memspace.DEVICE,
-                cutn.WorkspaceKind.SCRATCH)
+            for kind in cutn.WorkspaceKind:  # for both scratch & cache
+                required_size = cutn.workspace_get_memory_size(
+                    handle, workspace,
+                    getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
+                    cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
+                    kind)
+                if contract != "gradient":
+                    cutn.workspace_compute_sizes(handle, dscr, info, workspace)
+                    required_size_deprecated = cutn.workspace_get_memory_size(
+                        handle, workspace,
+                        getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
+                        cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
+                        kind)
+                    assert required_size == required_size_deprecated
+                if workspace_hint < required_size:
+                    assert False, \
+                        f"wrong assumption on the workspace size " \
+                        f"(given: {workspace_hint}, needed: {required_size})"
+                if required_size > 0:
+                    workspace_ptr = cp.cuda.alloc(required_size)
+                    cutn.workspace_set_memory(
+                        handle, workspace,
+                        cutn.Memspace.DEVICE,
+                        kind,
+                        workspace_ptr.ptr, required_size)
+                    placeholder.append(workspace_ptr)  # keep it alive
+                    # round-trip check
+                    assert ((workspace_ptr.ptr, required_size) ==
+                        cutn.workspace_get_memory(handle, workspace,
+                                                  cutn.Memspace.DEVICE, kind))
         else:
-            cutn.workspace_set_memory(
-                handle, workspace,
-                cutn.Memspace.DEVICE,
-                cutn.WorkspaceKind.SCRATCH,
-                0, -1)  # TODO: check custom workspace size?
+            for kind in cutn.WorkspaceKind:
+                cutn.workspace_set_memory(
+                    handle, workspace,
+                    cutn.Memspace.DEVICE,
+                    kind,
+                    0, -1)  # TODO: check custom workspace size?
 
         plan = None
         try:
@@ -628,7 +688,7 @@ class TestContraction(TestTensorNetworkBase):
                     tn.get_input_tensors(**input_form),
                     tn.get_output_tensor(),
                     workspace, 0, stream.ptr)
-            elif contract == "slice_group":
+            elif contract in ("slice_group", "gradient"):
                 accumulate = 0
                 cutn.contract_slices(
                     handle, plan,
@@ -636,10 +696,48 @@ class TestContraction(TestTensorNetworkBase):
                     tn.get_output_tensor(),
                     accumulate,
                     workspace, self.slice_group, stream.ptr)
+                if contract == "gradient":
+                    cutn.compute_gradients_backward(
+                        handle, plan,
+                        tn.get_input_tensors(**input_form),
+                        output_grads.data.ptr,
+                        tn.get_gradient_tensors(**input_form),
+                        accumulate, workspace, stream.ptr)
             stream.synchronize()
         finally:
             if plan is not None:
                 cutn.destroy_contraction_plan(plan)
+
+        if contract == "gradient" and torch:
+
+            if not torch.cuda.is_available():
+                # copy data back to CPU
+                dev = "cpu"
+                func = cp.asnumpy
+            else:
+                # zero-copy from CuPy to PyTorch!
+                dev = "cuda"
+                func = (lambda x: x)  # no op
+
+            inputs = [torch.as_tensor(func(t), device=dev)
+                      for t in tn.input_tensors]
+            output_grads = torch.as_tensor(func(output_grads), device=dev)
+            for t in inputs:
+                t.requires_grad_(True)
+                assert t.grad is None
+
+            # repeat the same calculation with PyTorch so that it fills up the
+            # gradients for us to do verification
+            out = torch.einsum(tn.einsum, *inputs)
+            out.backward(output_grads)
+
+            # compare gradients
+            for grad_cutn, in_torch in zip(tn.gradients, inputs):
+                grad_torch = in_torch.grad
+                if torch.is_complex(grad_torch):
+                    grad_torch = grad_torch.conj().resolve_conj()
+                # zero-copy if on GPU
+                assert cp.allclose(grad_cutn, cp.asarray(grad_torch))
 
 
 @pytest.mark.parametrize(
@@ -652,11 +750,11 @@ class TestSliceGroup:
         # we don't do a simple round-trip test here because there are two
         # flavors of constructors
         if source == "int":
-            ids = numpy.arange(10, dtype=numpy.int64)
+            ids = np.arange(10, dtype=np.int64)
             slice_group = cutn.create_slice_group_from_ids(
                 self.handle, ids.ctypes.data, ids.size)
         elif source == "seq":
-            ids = numpy.arange(10, dtype=numpy.int64)
+            ids = np.arange(10, dtype=np.int64)
             slice_group = cutn.create_slice_group_from_ids(
                 self.handle, ids, ids.size)
         elif source == "range":
@@ -716,7 +814,7 @@ class TensorDecompositionFactory:
         self.tensor_names = [f"input_{i}" for i in range(len(shapes))] + ["left", "right"] # note s needs to be explictly managed in the tester function
     
         # xp strides in bytes, cutn strides in counts
-        dtype = cupy.dtype(dtype)
+        dtype = cp.dtype(dtype)
         real_dtype = dtype.char.lower()
         is_complex = dtype.char != real_dtype
         itemsize = dtype.itemsize
@@ -725,13 +823,13 @@ class TensorDecompositionFactory:
             if name.startswith('input'):
                 shape = [size_dict[mode] for mode in modes]
                 if is_complex:  # complex
-                    arr = (cupy.random.random(shape, dtype=real_dtype)
-                           + 1j*cupy.random.random(shape, dtype=real_dtype)).astype(dtype)
+                    arr = (cp.random.random(shape, dtype=real_dtype)
+                           + 1j*cp.random.random(shape, dtype=real_dtype)).astype(dtype)
                 else:
-                    arr = cupy.random.random(shape, dtype=dtype)
+                    arr = cp.random.random(shape, dtype=dtype)
             else:
                 shape = [self.mid_extent if mode == shared_mode_out else size_dict[mode] for mode in modes]
-                arr = cupy.empty(shape, dtype=dtype, order='F')
+                arr = cp.empty(shape, dtype=dtype, order='F')
             return arr
 
         for name, modes in zip(self.tensor_names, modes_in + [left_modes_out, right_modes_out]):
@@ -744,13 +842,13 @@ class TensorDecompositionFactory:
 
     def _get_data_type(self, category):
         if 'n_modes' in category:
-            return numpy.int32
+            return np.int32
         elif 'extent' in category:
-            return numpy.int64
+            return np.int64
         elif 'stride' in category:
-            return numpy.int64
+            return np.int64
         elif 'mode' in category:
-            return numpy.int32
+            return np.int32
         elif 'tensor' in category:
             return None  # unused
         else:
@@ -765,7 +863,7 @@ class TensorDecompositionFactory:
                 return 0
             else:
                 # return int as void*
-                data = numpy.asarray(data, dtype=self._get_data_type(category))
+                data = np.asarray(data, dtype=self._get_data_type(category))
                 setattr(self, category, data)  # keep data alive
             return data.ctypes.data
         elif return_value == 'seq':
@@ -797,7 +895,7 @@ class TensorDecompositionFactory:
 @testing.parameterize(*testing.product({
     'tn': tensor_decomp_expressions,
     'dtype': (
-        numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
+        np.float32, np.float64, np.complex64, np.complex128
     ),
     'tensor_form': (
         {'extent': 'int', 'stride': 'int', 'mode': 'int'},
@@ -816,7 +914,7 @@ class TestTensorQR:
         handle, tn, workspace = self.handle, self.tn, self.workspace
         
         tensor_in, tensor_q, tensor_r = self.tensor_decom
-        dtype = cupy.dtype(self.dtype)
+        dtype = cp.dtype(self.dtype)
 
         # prepare workspace
         cutn.workspace_compute_qr_sizes(
@@ -828,7 +926,7 @@ class TestTensorQR:
             cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
             cutn.WorkspaceKind.SCRATCH)
         if required_size > 0:
-            workspace_ptr = cupy.cuda.alloc(required_size)
+            workspace_ptr = cp.cuda.alloc(required_size)
             cutn.workspace_set_memory(
                 handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH,
                 workspace_ptr.ptr, required_size)
@@ -837,7 +935,7 @@ class TestTensorQR:
                 handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
 
         # perform QR
-        stream = cupy.cuda.get_current_stream().ptr  # TODO
+        stream = cp.cuda.get_current_stream().ptr  # TODO
         cutn.tensor_qr(
             handle, tensor_in, tn.get_tensor_ptr('input_0'),
             tensor_q, tn.get_tensor_ptr('left'),
@@ -852,7 +950,7 @@ class TestTensorQR:
 @testing.parameterize(*testing.product({
     'tn': tensor_decomp_expressions,
     'dtype': (
-        numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
+        np.float32, np.float64, np.complex64, np.complex128
     ),
     'tensor_form': (
         {'extent': 'int', 'stride': 'int', 'mode': 'int'},
@@ -860,11 +958,11 @@ class TestTensorQR:
     ),
     'options': (
         {}, # standard exact svd
-        {'max_extent': 4, 'normalization':'L1', 'partition':'U'}, # fix extent truncation
-        {'abs_cutoff': 0.1, 'rel_cutoff': 0.1}, # value based truncation
-        {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V'}, # absolute value based truncation
-        {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV'}, # relative value based truncation
-        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV'}, # compound truncation
+        {'max_extent': 4, 'normalization':'L1', 'partition':'U', 'algorithm': 'gesvdr', 'gesvdr_niters': 40}, # fix extent truncation
+        {'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'algorithm': 'gesvdj', 'gesvdj_tol':1e-14, 'gesvdj_max_sweeps': 80}, # value based truncation
+        {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V', 'algorithm': 'gesvdj'}, # absolute value based truncation
+        {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # relative value based truncation
+        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV', 'algorithm': 'gesvdp'}, # compound truncation
     ),
 }))
 class TestTensorSVD:
@@ -881,7 +979,7 @@ class TestTensorSVD:
         handle, tn, workspace = self.handle, self.tn, self.workspace
         tensor_in, tensor_u, tensor_v = self.tensor_decom
         svd_config, svd_info = self.svd_config, self.svd_info
-        dtype = cupy.dtype(self.dtype)
+        dtype = cp.dtype(self.dtype)
 
         # parse svdConfig
         svd_method = check_or_create_options(tensor.SVDMethod, self.options, "SVDMethod")
@@ -892,29 +990,37 @@ class TestTensorSVD:
             handle, tensor_in, tensor_u, tensor_v, svd_config, workspace)
         # for now host workspace is always 0, so just query device one
         # also, it doesn't matter which one (min/recommended/max) is queried
-        required_size = cutn.workspace_get_memory_size(
-            handle, workspace, cutn.WorksizePref.MIN,
-            cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
-            cutn.WorkspaceKind.SCRATCH)
-        if required_size > 0:
-            workspace_ptr = cupy.cuda.alloc(required_size)
-            cutn.workspace_set_memory(
-                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH,
-                workspace_ptr.ptr, required_size)
-            # round-trip check
-            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get_memory(
-                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        workspaces = {}
+        allocators = {cutn.Memspace.DEVICE: cp.cuda.alloc,
+                      cutn.Memspace.HOST: lambda nbytes: np.empty(nbytes, dtype=np.int8)}
+        for mem_space, allocator in allocators.items():
+            required_size = cutn.workspace_get_memory_size(
+                handle, workspace, cutn.WorksizePref.MIN,
+                mem_space,  
+                cutn.WorkspaceKind.SCRATCH)
+            if required_size > 0:
+                workspaces[mem_space] = workspace_ptr = allocator(required_size) # keep alive
+                if mem_space == cutn.Memspace.DEVICE:
+                    workspace_ptr_address = workspace_ptr.ptr
+                else:
+                    workspace_ptr_address = workspace_ptr.ctypes.data
+                cutn.workspace_set_memory(
+                    handle, workspace, mem_space, cutn.WorkspaceKind.SCRATCH,
+                    workspace_ptr_address, required_size)
+                # round-trip check
+                assert (workspace_ptr_address, required_size) == cutn.workspace_get_memory(
+                    handle, workspace, mem_space, cutn.WorkspaceKind.SCRATCH)
         
         partition = self.options.get("partition", None)
         if partition is None:
-            s = cupy.empty(tn.mid_extent, dtype=dtype.char.lower())
+            s = cp.empty(tn.mid_extent, dtype=dtype.char.lower())
             s_ptr = s.data.ptr
         else:
             s = None
             s_ptr = 0
         
         # perform SVD
-        stream = cupy.cuda.get_current_stream().ptr  # TODO
+        stream = cp.cuda.get_current_stream().ptr  # TODO
         cutn.tensor_svd(
             handle, tensor_in, tn.get_tensor_ptr('input_0'),
             tensor_u, tn.get_tensor_ptr('left'),
@@ -936,10 +1042,10 @@ class TestTensorSVD:
         if tuple(extent_U_out) != u.shape:
             strides_U_out = [i * u.itemsize for i in strides_U_out]
             strides_V_out = [i * v.itemsize for i in strides_V_out]
-            tn.left_tensor = u = cupy.ndarray(extent_U_out, dtype=u.dtype, memptr=u.data, strides=strides_U_out)
+            tn.left_tensor = u = cp.ndarray(extent_U_out, dtype=u.dtype, memptr=u.data, strides=strides_U_out)
             if s is not None:
-                s = cupy.ndarray(reduced_extent, dtype=s.dtype, memptr=s.data, order='F')
-            tn.right_tensor = v = cupy.ndarray(extent_V_out, dtype=v.dtype, memptr=v.data, strides=strides_V_out)
+                s = cp.ndarray(reduced_extent, dtype=s.dtype, memptr=s.data, order='F')
+            tn.right_tensor = v = cp.ndarray(extent_V_out, dtype=v.dtype, memptr=v.data, strides=strides_V_out)
         
         u_ref, s_ref, v_ref, info_ref = approxTN_utils.tensor_decompose(
             tn.subscript, T, 
@@ -957,7 +1063,7 @@ class TestTensorSVD:
 @testing.parameterize(*testing.product({
     'tn': gate_decomp_expressions,
     'dtype': (
-        numpy.float32, numpy.float64, numpy.complex64, numpy.complex128
+        np.float32, np.float64, np.complex64, np.complex128
     ),
     'tensor_form': (
         {'extent': 'int', 'stride': 'int', 'mode': 'int'},
@@ -967,18 +1073,18 @@ class TestTensorSVD:
         "direct", "reduced"
     ),
     'options': (
-        {}, # exact svd
-        {'max_extent': 4, 'normalization':'L1', 'partition':'U'}, # fix extent truncation
-        {'abs_cutoff': 0.1, 'rel_cutoff': 0.1}, # value based truncation
-        {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V'}, # absolute value based truncation
-        {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV'}, # relative value based truncation
-        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV'}, # compound truncation
+        {}, # standard exact svd
+        {'max_extent': 4, 'normalization':'L1', 'partition':'U', 'algorithm': 'gesvdr', 'gesvdr_niters': 40}, # fix extent truncation
+        {'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'algorithm': 'gesvdj', 'gesvdj_tol':1e-14, 'gesvdj_max_sweeps': 80}, # value based truncation
+        {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V', 'algorithm': 'gesvdj'}, # absolute value based truncation
+        {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # relative value based truncation
+        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV', 'algorithm': 'gesvdp'}, # compound truncation
     ),
 }))
 class TestTensorGate:
     
     GATE_ALGO_MAP = {"direct": cutn.GateSplitAlgo.DIRECT,
-                    "reduced": cutn.GateSplitAlgo.REDUCED}
+                     "reduced": cutn.GateSplitAlgo.REDUCED}
     
     # There is no easy way for us to test each API independently, so we instead
     # parametrize the steps and test the whole workflow
@@ -999,37 +1105,43 @@ class TestTensorGate:
         svd_method = check_or_create_options(tensor.SVDMethod, self.options, "SVDMethod")
         parse_svd_config(handle, svd_config, svd_method, logger=None)
 
-        dtype = cupy.dtype(self.dtype)
+        dtype = cp.dtype(self.dtype)
         compute_type = dtype_to_compute_type[self.dtype]
         # prepare workspace
         cutn.workspace_compute_gate_split_sizes(handle, 
             tensor_in_a, tensor_in_b, tensor_in_g, tensor_u, tensor_v, 
             gate_algorithm, svd_config, compute_type, workspace)
-        # for now host workspace is always 0, so just query device one
-        # also, it doesn't matter which one (min/recommended/max) is queried
-        required_size = cutn.workspace_get_memory_size(
-            handle, workspace, cutn.WorksizePref.MIN,
-            cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
-            cutn.WorkspaceKind.SCRATCH)
-        if required_size > 0:
-            workspace_ptr = cupy.cuda.alloc(required_size)
-            cutn.workspace_set_memory(
-                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH,
-                workspace_ptr.ptr, required_size)
-            # round-trip check
-            assert (workspace_ptr.ptr, required_size) == cutn.workspace_get_memory(
-                handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        workspaces = {}
+        allocators = {cutn.Memspace.DEVICE: cp.cuda.alloc,
+                      cutn.Memspace.HOST: lambda nbytes: np.empty(nbytes, dtype=np.int8)}
+        for mem_space, allocator in allocators.items():
+            required_size = cutn.workspace_get_memory_size(
+                handle, workspace, cutn.WorksizePref.MIN,
+                mem_space,  
+                cutn.WorkspaceKind.SCRATCH)
+            if required_size > 0:
+                workspaces[mem_space] = workspace_ptr = allocator(required_size) # keep alive
+                if mem_space == cutn.Memspace.DEVICE:
+                    workspace_ptr_address = workspace_ptr.ptr
+                else:
+                    workspace_ptr_address = workspace_ptr.ctypes.data
+                cutn.workspace_set_memory(
+                    handle, workspace, mem_space, cutn.WorkspaceKind.SCRATCH,
+                    workspace_ptr_address, required_size)
+                # round-trip check
+                assert (workspace_ptr_address, required_size) == cutn.workspace_get_memory(
+                    handle, workspace, mem_space, cutn.WorkspaceKind.SCRATCH)
 
         partition = self.options.get("partition", None)
         if partition is None:
-            s = cupy.empty(tn.mid_extent, dtype=dtype.char.lower())
+            s = cp.empty(tn.mid_extent, dtype=dtype.char.lower())
             s_ptr = s.data.ptr
         else:
             s = None
             s_ptr = 0
         
         # perform gate split
-        stream = cupy.cuda.get_current_stream().ptr  # TODO
+        stream = cp.cuda.get_current_stream().ptr  # TODO
         cutn.gate_split(handle, tensor_in_a, tn.get_tensor_ptr('input_0'),
             tensor_in_b, tn.get_tensor_ptr('input_1'),
             tensor_in_g, tn.get_tensor_ptr('input_2'),
@@ -1052,10 +1164,10 @@ class TestTensorGate:
         if tuple(extent_U_out) != u.shape:
             strides_U_out = [i * u.itemsize for i in strides_U_out]
             strides_V_out = [i * v.itemsize for i in strides_V_out]
-            tn.left_tensor = u = cupy.ndarray(extent_U_out, dtype=u.dtype, memptr=u.data, strides=strides_U_out)
+            tn.left_tensor = u = cp.ndarray(extent_U_out, dtype=u.dtype, memptr=u.data, strides=strides_U_out)
             if s is not None:
-                s = cupy.ndarray(reduced_extent, dtype=s.dtype, memptr=s.data, order='F')
-            tn.right_tensor = v = cupy.ndarray(extent_V_out, dtype=v.dtype, memptr=v.data, strides=strides_V_out)
+                s = cp.ndarray(reduced_extent, dtype=s.dtype, memptr=s.data, order='F')
+            tn.right_tensor = v = cp.ndarray(extent_V_out, dtype=v.dtype, memptr=v.data, strides=strides_V_out)
         
         u_ref, s_ref, v_ref, info_ref = approxTN_utils.gate_decompose(
             tn.subscript, 
@@ -1083,7 +1195,7 @@ class TestTensorSVDConfig:
         pass
 
     @pytest.mark.parametrize(
-        'attr', [val for val in cutn.TensorSVDConfigAttribute]
+        'attr', [val for val in cutn.TensorSVDConfigAttribute if val != cutn.TensorSVDConfigAttribute.ALGO_PARAMS]
     )
     @manage_resource('handle')
     @manage_resource('svd_config')
@@ -1091,14 +1203,41 @@ class TestTensorSVDConfig:
         handle, svd_config = self.handle, self.svd_config
         dtype = cutn.tensor_svd_config_get_attribute_dtype(attr)
         # Hack: assume this is a valid value for all attrs
-        factor = numpy.asarray([0.8], dtype=dtype)
+        factor = np.asarray([0.8], dtype=dtype)
         cutn.tensor_svd_config_set_attribute(
             handle, svd_config, attr,
             factor.ctypes.data, factor.dtype.itemsize)
         # do a round-trip test as a sanity check
-        factor2 = numpy.zeros_like(factor)
+        factor2 = np.zeros_like(factor)
         cutn.tensor_svd_config_get_attribute(
             handle, svd_config, attr,
+            factor2.ctypes.data, factor2.dtype.itemsize)
+        assert factor == factor2
+    
+    @pytest.mark.parametrize(
+        'svd_algorithm', (cutn.TensorSVDAlgo.GESVDJ, cutn.TensorSVDAlgo.GESVDR)
+    )
+    @manage_resource('handle')
+    @manage_resource('svd_config')
+    def test_tensor_svd_config_get_set_params_attribute(self, svd_algorithm):
+        handle, svd_config = self.handle, self.svd_config
+        # set ALGO first
+        algo_dtype = cutn.tensor_svd_config_get_attribute_dtype(cutn.TensorSVDConfigAttribute.ALGO)
+        algo = np.asarray(svd_algorithm, dtype=algo_dtype)
+        cutn.tensor_svd_config_set_attribute(
+            handle, svd_config, cutn.TensorSVDConfigAttribute.ALGO,
+            algo.ctypes.data, algo.dtype.itemsize)
+        
+        algo_params_dtype = cutn.tensor_svd_algo_params_get_dtype(svd_algorithm)
+        # Hack: assume this is a valid value for all SVD parameters
+        factor = np.asarray([1.8], dtype=algo_params_dtype) # 0 may trigger default behavior, eg, gesvdr_niters set to 0 means default (10)
+        cutn.tensor_svd_config_set_attribute(
+            handle, svd_config, cutn.TensorSVDConfigAttribute.ALGO_PARAMS,
+            factor.ctypes.data, factor.dtype.itemsize)
+        # do a round-trip test as a sanity check
+        factor2 = np.zeros_like(factor)
+        cutn.tensor_svd_config_get_attribute(
+            handle, svd_config, cutn.TensorSVDConfigAttribute.ALGO_PARAMS,
             factor2.ctypes.data, factor2.dtype.itemsize)
         assert factor == factor2
 

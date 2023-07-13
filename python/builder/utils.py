@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
-import platform
 import re
 import site
 import sys
@@ -57,13 +56,10 @@ def check_cuda_version():
 # We support CUDA 11/12 starting 23.03
 cuda_ver = check_cuda_version()
 if cuda_ver == '11.0':
-    cutensor_ver = cuda_ver
     cuda_major_ver = '11'
 elif '11.0' < cuda_ver < '12.0':
-    cutensor_ver = '11'
     cuda_major_ver = '11'
 elif '12.0' <= cuda_ver < '13.0':
-    cutensor_ver = '12'
     cuda_major_ver = '12'
 else:
     raise RuntimeError(f"Unsupported CUDA version: {cuda_ver}")
@@ -78,20 +74,6 @@ class bdist_wheel(_bdist_wheel):
         global building_wheel
         building_wheel = True
         super().run()
-
-    def finalize_options(self):
-        super().finalize_options()
-        self.root_is_pure = False
-
-    def get_tag(self):
-        # hack: passing --build-options in cmdline no longer works with PEP 517 backend,
-        # so we need to overwrite --plat-name here
-        # refs:
-        #   - https://github.com/pypa/build/issues/480
-        #   - https://github.com/scikit-build/ninja-python-distributions/pull/85
-        impl_tag, abi_tag, _ = super().get_tag()
-        plat_tag = f"manylinux2014_{platform.machine()}"
-        return impl_tag, abi_tag, plat_tag
 
 
 class build_ext(_build_ext):
@@ -131,28 +113,14 @@ class build_ext(_build_ext):
                 else:
                     cutensornet_root = cuquantum_root
 
-        # search order:
-        # 1. installed "cutensor" package
-        # 2. env var
-        for path in py_paths:
-            path = os.path.join(path, 'cutensor')
-            if os.path.isdir(os.path.join(path, 'include')):
-                cutensor_root = path
-                break
-        else:
-            try:
-                cutensor_root = os.environ['CUTENSOR_ROOT']
-            except KeyError as e:
-                raise RuntimeError('cuTENSOR is not found, please set $CUTENSOR_ROOT') from e
-
-        return custatevec_root, cutensornet_root, cutensor_root
+        return custatevec_root, cutensornet_root
 
     def _prep_includes_libs_rpaths(self):
         """
         Set global vars cusv_incl_dir, cutn_incl_dir, cusv_lib_dir, cutn_lib_dir,
         cusv_lib, cutn_lib, and extra_linker_flags.
         """
-        custatevec_root, cutensornet_root, cutensor_root = self._set_library_roots()
+        custatevec_root, cutensornet_root = self._set_library_roots()
 
         global cusv_incl_dir, cutn_incl_dir
         cusv_incl_dir = [os.path.join(cuda_path, 'include'),
@@ -165,22 +133,20 @@ class build_ext(_build_ext):
         cusv_lib_dir = [os.path.join(custatevec_root, 'lib'),
                         os.path.join(custatevec_root, 'lib64')]
         cutn_lib_dir = [os.path.join(cutensornet_root, 'lib'),
-                        os.path.join(cutensornet_root, 'lib64'),
-                        os.path.join(cutensor_root, 'lib'),  # wheel
-                        os.path.join(cutensor_root, 'lib', cutensor_ver)]  # tarball
+                        os.path.join(cutensornet_root, 'lib64')]
 
         global cusv_lib, cutn_lib, extra_linker_flags
         if not building_wheel:
             # Note: with PEP-517 the editable mode would not build a wheel for installation
             # (and we purposely do not support PEP-660).
             cusv_lib = ['custatevec']
-            cutn_lib = ['cutensornet', 'cutensor']
+            cutn_lib = ['cutensornet']
             extra_linker_flags = []
         else:
             # Note: soname = library major version
-            # We don't need to link to cuBLAS/cuSOLVER at build time (TODO: perhaps cuTENSOR too...?)
+            # We don't need to link to cuBLAS/cuSOLVER/cuTensor at build time
             cusv_lib = [':libcustatevec.so.1']
-            cutn_lib = [':libcutensornet.so.2', ':libcutensor.so.1']
+            cutn_lib = [':libcutensornet.so.2']
             # The rpaths must be adjusted given the following full-wheel installation:
             # - cuquantum-python: site-packages/cuquantum/{custatevec, cutensornet}/  [=$ORIGIN]
             # - cusv & cutn:      site-packages/cuquantum/lib/
@@ -201,7 +167,6 @@ class build_ext(_build_ext):
         print("CUDA path:", cuda_path)
         print("cuStateVec path:", custatevec_root)
         print("cuTensorNet path:", cutensornet_root)
-        print("cuTENSOR path:", cutensor_root)
         print("*"*80+"\n")
 
     def build_extension(self, ext):

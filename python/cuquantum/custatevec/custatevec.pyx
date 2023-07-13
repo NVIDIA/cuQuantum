@@ -46,18 +46,32 @@ cdef extern from * nogil:
     int custatevecAbs2SumArray(
         _Handle, const void*, DataType, const uint32_t, double*, const int32_t*,
         const uint32_t, const int32_t*, const int32_t*, const uint32_t)
+    int custatevecAbs2SumArrayBatched(
+        _Handle, const void*, DataType, const uint32_t, const uint32_t,
+        const _Index, double*, const _Index, const int32_t*,
+        const uint32_t, const _Index*, const int32_t*, const uint32_t)
     int custatevecCollapseOnZBasis(
         _Handle, void*, DataType, const uint32_t, const int32_t, const int32_t*,
         const uint32_t, double)
     int custatevecCollapseByBitString(
         _Handle, void*, DataType, const uint32_t, const int32_t*, const int32_t*,
         const uint32_t, double)
+    int custatevecCollapseByBitStringBatchedGetWorkspaceSize(
+        _Handle, const uint32_t, const _Index*, const double*, size_t*)
+    int custatevecCollapseByBitStringBatched(
+        _Handle, void*, DataType, const uint32_t, const uint32_t,
+        const _Index, const _Index*, const int32_t*, const uint32_t,
+        const double*, void*, size_t)
     int custatevecMeasureOnZBasis(
         _Handle, void*, DataType, const uint32_t, int32_t*, const int32_t*,
         const uint32_t, const double, _CollapseOp)
     int custatevecBatchMeasure(
         _Handle, void*, DataType, const uint32_t, int32_t*, const int32_t*,
         const uint32_t, const double, _CollapseOp)
+    int custatevecMeasureBatched(
+        _Handle, void*, DataType, const uint32_t, const uint32_t, const _Index,
+        _Index*, const int32_t*, const uint32_t,
+        const double*, _CollapseOp)
     int custatevecBatchMeasureWithOffset(
         _Handle, void*, DataType, const uint32_t, int32_t*, const int32_t*,
         const uint32_t, const double, _CollapseOp, const double, const double)
@@ -72,6 +86,17 @@ cdef extern from * nogil:
     int custatevecApplyMatrix(
         _Handle, void*, DataType, const uint32_t, const void*,
         DataType, _MatrixLayout, const int32_t, const int32_t*,
+        const uint32_t, const int32_t*, const int32_t*, const uint32_t,
+        _ComputeType, void*, size_t)
+    int custatevecApplyMatrixBatchedGetWorkspaceSize(
+        _Handle, DataType, const uint32_t, const uint32_t, const _Index,
+        _MatrixMapType, const int32_t*, const void*, DataType,
+        _MatrixLayout, const int32_t, const uint32_t, const uint32_t,
+        const uint32_t, _ComputeType, size_t*)
+    int custatevecApplyMatrixBatched(
+        _Handle, void*, DataType, const uint32_t, const uint32_t, _Index,
+        _MatrixMapType, const int32_t*, const void*, DataType,
+        _MatrixLayout, const int32_t, const uint32_t, const int32_t*,
         const uint32_t, const int32_t*, const int32_t*, const uint32_t,
         _ComputeType, void*, size_t)
     int custatevecComputeExpectationGetWorkspaceSize(
@@ -132,6 +157,8 @@ cdef extern from * nogil:
     int custatevecTestMatrixType(
         _Handle, double*, _MatrixType, const void*, DataType, _MatrixLayout,
         const uint32_t, const int32_t, _ComputeType, void*, size_t)
+    int custatevecInitializeStateVector(
+        _Handle, void*, DataType, const uint32_t, _StateVectorType)
     int custatevecGetDeviceMemHandler(_Handle, _DeviceMemHandler*)
     int custatevecSetDeviceMemHandler(_Handle, const _DeviceMemHandler*)
 
@@ -418,7 +445,6 @@ cpdef abs2sum_array(
 
         mask_len (uint32_t): The length of ``mask_ordering``.
 
-
     .. seealso:: `custatevecAbs2SumArray`
     """
     # bit_ordering can be a pointer address, or a Python sequence
@@ -452,6 +478,85 @@ cpdef abs2sum_array(
         status = custatevecAbs2SumArray(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
             <double*>abs2sum, bitOrderingPtr, bit_ordering_len,
+            maskBitStringPtr, maskOrderingPtr, mask_len)
+    check_status(status)
+
+
+cpdef abs2sum_array_batched(
+        intptr_t handle, intptr_t batched_svs, int sv_data_type, uint32_t
+        n_index_bits, uint32_t n_svs, _Index sv_stride,
+        intptr_t abs2sum, _Index abs2sum_stride,
+        bit_ordering, uint32_t bit_ordering_len,
+        mask_bit_string, mask_ordering, uint32_t mask_len):
+    """Calculates the batched sum of squared absolute values for a given set of
+    index bits.
+
+    Args:
+        handle (intptr_t): The library handle.
+        batched_svs (intptr_t): The pointer address (as Python :class:`int`) to
+            the batched statevectors (on device).
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
+        n_index_bits (uint32_t): The number of index bits.
+        n_svs (uint32_t): The number of batched statevectors.
+        sv_stride (int64_t): The stride between each state vector in the batch.
+        abs2sum (intptr_t): The pointer address (as Python :class:`int`) to the
+            array (on either host or device) that would hold the sums.
+        abs2sum_stride (int64_t): The stride between each ``abs2sum`` array in
+            the batch.
+        bit_ordering: A host array of index bit ordering. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of index bit ordering
+
+        bit_ordering_len (uint32_t): The length of ``bit_ordering``.
+        mask_bit_string: An array for specifying mask values. It can be
+
+            - an :class:`int` as the pointer address to the array (on host or
+              device)
+            - a Python sequence of mask values on host
+
+        mask_ordering: A host array of mask ordering. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of index bit ordering
+
+        mask_len (uint32_t): The length of ``mask_ordering``.
+
+    .. seealso:: `custatevecAbs2SumArrayBatched`
+    """
+    # bit_ordering can be a pointer address, or a Python sequence
+    cdef vector[int32_t] bitOrderingData
+    cdef int32_t* bitOrderingPtr
+    if cpython.PySequence_Check(bit_ordering):
+        bitOrderingData = bit_ordering
+        bitOrderingPtr = bitOrderingData.data()
+    else:  # a pointer address
+        bitOrderingPtr = <int32_t*><intptr_t>bit_ordering
+
+    # mask_bit_string can be a pointer address, or a Python sequence
+    cdef vector[_Index] maskBitStringData
+    cdef _Index* maskBitStringPtr
+    if cpython.PySequence_Check(mask_bit_string):
+        maskBitStringData = mask_bit_string
+        maskBitStringPtr = maskBitStringData.data()
+    else:  # a pointer address
+        maskBitStringPtr = <_Index*><intptr_t>mask_bit_string
+
+    # mask_ordering can be a pointer address, or a Python sequence
+    cdef vector[int32_t] maskOrderingData
+    cdef int32_t* maskOrderingPtr
+    if cpython.PySequence_Check(mask_ordering):
+        maskOrderingData = mask_ordering
+        maskOrderingPtr = maskOrderingData.data()
+    else:  # a pointer address
+        maskOrderingPtr = <int32_t*><intptr_t>mask_ordering
+
+    with nogil:
+        status = custatevecAbs2SumArrayBatched(
+            <_Handle>handle, <void*>batched_svs, <DataType>sv_data_type,
+            n_index_bits, n_svs, sv_stride,
+            <double*>abs2sum, abs2sum_stride,
+            bitOrderingPtr, bit_ordering_len,
             maskBitStringPtr, maskOrderingPtr, mask_len)
     check_status(status)
 
@@ -548,6 +653,134 @@ cpdef collapse_by_bitstring(
     check_status(status)
 
 
+cpdef size_t collapse_by_bitstring_batched_get_workspace_size(
+        intptr_t handle, uint32_t n_svs, bit_strings, norms) except*:
+    """Computes the required workspace size for
+    :func:`collapse_by_bitstring_batched`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        n_svs (uint32_t): The number of batched statevectors.
+        bit_strings: An array of bit strings. It can be
+
+            - an :class:`int` as the pointer address to the array (on host or
+              device)
+            - a Python sequence of bits on host
+
+        norms: An array of normalization factors for the statevectors after
+            collapse. It can be
+
+            - an :class:`int` as the pointer address to the array (on host or
+              device)
+            - a Python sequence of normalization factors on host
+
+    .. seealso:: `custatevecCollapseByBitStringBatchedGetWorkspaceSize`
+    """
+    # bit_strings can be a pointer address, or a Python sequence
+    cdef vector[_Index] bitStringsData
+    cdef _Index* bitStringsPtr
+    if cpython.PySequence_Check(bit_strings):
+        bitStringsData = bit_strings
+        bitStringsPtr = bitStringsData.data()
+    else:  # a pointer address
+        bitStringsPtr = <_Index*><intptr_t>bit_strings
+
+    # norms can be a pointer address, or a Python sequence
+    cdef vector[double] normsData
+    cdef double* normsPtr
+    if cpython.PySequence_Check(norms):
+        normsData = norms
+        normsPtr = normsData.data()
+    else:  # a pointer address
+        normsPtr = <double*><intptr_t>norms
+
+    cdef size_t workspace_size
+    with nogil:
+        status = custatevecCollapseByBitStringBatchedGetWorkspaceSize(
+            <_Handle>handle, n_svs, bitStringsPtr, normsPtr, &workspace_size)
+    check_status(status)
+
+    return workspace_size
+
+
+cpdef collapse_by_bitstring_batched(
+        intptr_t handle, intptr_t batched_svs, int sv_data_type, 
+        uint32_t n_index_bits, uint32_t n_svs, _Index sv_stride,
+        bit_strings, bit_ordering, uint32_t bit_string_len, norms,
+        intptr_t workspace, size_t workspace_size):
+    """Collapse the batched statevectors to the states specified by the given
+    bit strings.
+
+    Args:
+        handle (intptr_t): The library handle.
+        batched_svs (intptr_t): The pointer address (as Python :class:`int`) to
+            the batched statevectors (on device).
+        sv_data_type (cuquantum.cudaDataType): The data type of the
+            statevectors.
+        n_index_bits (uint32_t): The number of index bits.
+        n_svs (uint32_t): The number of batched statevectors.
+        sv_stride (int64_t): The stride between each state vector in the batch.
+        bit_strings: An array of bit strings. It can be
+
+            - an :class:`int` as the pointer address to the array (on host or
+              device)
+            - a Python sequence of bits on host
+
+        bit_ordering: A host array of bit string ordering. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of bit ordering
+
+        bit_string_len (uint32_t): The length of individual ``bit_string``.
+        norms: An array of normalization factors for the statevectors after
+            collapse. It can be
+
+            - an :class:`int` as the pointer address to the array (on host or
+              device)
+            - a Python sequence of normalization factors on host
+
+        workspace (intptr_t): The pointer address (as Python :class:`int`) to the
+            workspace (on device).
+        workspace_size (size_t): The workspace size (in bytes).
+
+    .. seealso:: `custatevecCollapseByBitStringBatched`
+    """
+    # bit_strings can be a pointer address, or a Python sequence
+    cdef vector[_Index] bitStringsData
+    cdef _Index* bitStringsPtr
+    if cpython.PySequence_Check(bit_strings):
+        bitStringsData = bit_strings
+        bitStringsPtr = bitStringsData.data()
+    else:  # a pointer address
+        bitStringsPtr = <_Index*><intptr_t>bit_strings
+
+    # bit_ordering can be a pointer address, or a Python sequence
+    cdef vector[int32_t] bitOrderingData
+    cdef int32_t* bitOrderingPtr
+    if cpython.PySequence_Check(bit_ordering):
+        bitOrderingData = bit_ordering
+        bitOrderingPtr = bitOrderingData.data()
+    else:  # a pointer address
+        bitOrderingPtr = <int32_t*><intptr_t>bit_ordering
+
+    # norms can be a pointer address, or a Python sequence
+    cdef vector[double] normsData
+    cdef double* normsPtr
+    if cpython.PySequence_Check(norms):
+        normsData = norms
+        normsPtr = normsData.data()
+    else:  # a pointer address
+        normsPtr = <double*><intptr_t>norms
+
+    with nogil:
+        status = custatevecCollapseByBitStringBatched(
+            <_Handle>handle, <void*>batched_svs, <DataType>sv_data_type,
+            n_index_bits, n_svs, sv_stride,
+            bitStringsPtr, bitOrderingPtr, bit_string_len, normsPtr,
+            <void*>workspace, workspace_size)
+    check_status(status)
+
+
 cpdef int measure_on_z_basis(
         intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
         basis_bits, const uint32_t n_basis_bits, double rand_num,
@@ -632,6 +865,66 @@ cpdef batch_measure(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
             <int32_t*>bit_string, bitOrderingPtr, bit_string_len,
             rand_num, <_CollapseOp>collapse)
+    check_status(status)
+
+
+cpdef measure_batched(
+        intptr_t handle, intptr_t batched_svs, int sv_data_type,
+        uint32_t n_index_bits, uint32_t n_svs, int64_t sv_stride,
+        intptr_t bit_strings, bit_ordering, const uint32_t bit_string_len,
+        rand_nums, int collapse):
+    """Performs measurement of a batched of statevectors.
+
+    Args:
+        handle (intptr_t): The library handle.
+        batched_svs (intptr_t): The pointer address (as Python :class:`int`) to
+            the batched statevectors (on device).
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
+        n_index_bits (uint32_t): The number of index bits.
+        n_svs (uint32_t): The number of batched statevectors.
+        sv_stride (int64_t): The stride between each state vector in the batch.
+        bit_strings (intptr_t): The pointer address (as Python :class:`int`) to
+            a host or device array of measured bit strings.
+        bit_ordering: A host array of bit string ordering. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of bit ordering
+
+        bit_string_len (uint32_t): The length of ``bit_string``.
+        rand_nums (double): An array of random numbers in [0, 1). It can be
+
+            - an :class:`int` as the pointer address to the array (on host or
+              device)
+            - a Python sequence of random numbers
+
+        collapse (Collapse): Indicate the collapse operation.
+
+    .. seealso:: `custatevecMeasureBatched`
+    """
+    # bit_ordering can be a pointer address, or a Python sequence
+    cdef vector[int32_t] bitOrderingData
+    cdef int32_t* bitOrderingPtr
+    if cpython.PySequence_Check(bit_ordering):
+        bitOrderingData = bit_ordering
+        bitOrderingPtr = bitOrderingData.data()
+    else:  # a pointer address
+        bitOrderingPtr = <int32_t*><intptr_t>bit_ordering
+
+    # rand_nums can be a pointer address, or a Python sequence
+    cdef vector[double] randNumsData
+    cdef double* randNumsPtr
+    if cpython.PySequence_Check(rand_nums):
+        randNumsData = rand_nums
+        randNumsPtr = randNumsData.data()
+    else:  # a pointer address
+        randNumsPtr = <double*><intptr_t>rand_nums
+
+    with nogil:
+        status = custatevecMeasureBatched(
+            <_Handle>handle, <void*>batched_svs, <DataType>sv_data_type,
+            n_index_bits, n_svs, sv_stride,
+            <_Index*>bit_strings, bitOrderingPtr, bit_string_len,
+            randNumsPtr, <_CollapseOp>collapse)
     check_status(status)
 
 
@@ -876,6 +1169,171 @@ cpdef apply_matrix(
             <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
             <void*>matrix, <DataType>matrix_data_type,
             <_MatrixLayout>layout, adjoint,
+            targetsPtr, n_targets,
+            controlsPtr, controlBitValuesPtr, n_controls,
+            <_ComputeType>compute_type, <void*>workspace, workspace_size)
+    check_status(status)
+
+
+cpdef size_t apply_matrix_batched_get_workspace_size(
+        intptr_t handle, int sv_data_type, uint32_t n_index_bits,
+        uint32_t n_svs, _Index sv_stride,
+        int map_type, matrix_indices, intptr_t matrices, int matrix_data_type,
+        int layout, int32_t adjoint, uint32_t n_matrices,
+        uint32_t n_targets, uint32_t n_controls, int compute_type) except*:
+    """Computes the required workspace size for :func:`apply_matrix_batched`.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
+        n_index_bits (uint32_t): The number of index bits.
+        n_svs (uint32_t): The number of batched statevectors.
+        sv_stride (int64_t): The stride between each state vector in the batch.
+        map_type (MatrixMapType): Specify the way to assign matrices.
+        matrix_indices: An array of matrix indices to indicate, in order, which
+            matrix is to be applied to the statevectors in the batch. It can be
+
+            - an :class:`int` as the pointer address to the array (on host or
+              device)
+            - a Python sequence of bits on host
+
+        matrices (intptr_t): The pointer address (as Python :class:`int`) to the
+            matrices (on either host or device).
+        matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
+        layout (MatrixLayout): The memory layout the the matrix.
+        adjoint (int32_t): Whether the adjoint of the matrix would be applied.
+        n_matrices (uint32_t): The number of matrices.
+        n_targets (uint32_t): The length of ``targets``.
+        n_controls (uint32_t): The length of ``controls``.
+        compute_type (cuquantum.ComputeType): The compute type of matrix
+            multiplication.
+
+    Returns:
+        size_t: The required workspace size (in bytes).
+
+    .. seealso:: `custatevecApplyMatrixBatchedGetWorkspaceSize`
+    """
+    # matrix_indices can be a pointer address, or a Python sequence
+    cdef vector[int32_t] matrixIndicesData
+    cdef int32_t* matrixIndicesPtr
+    if cpython.PySequence_Check(matrix_indices):
+        matrixIndicesData = matrix_indices
+        matrixIndicesPtr = matrixIndicesData.data()
+    else:  # a pointer address
+        matrixIndicesPtr = <int32_t*><intptr_t>matrix_indices
+
+    cdef size_t extraWorkspaceSizeInBytes
+    with nogil:
+        status = custatevecApplyMatrixBatchedGetWorkspaceSize(
+            <_Handle>handle, <DataType>sv_data_type, n_index_bits,
+            n_svs, sv_stride, <_MatrixMapType>map_type,
+            matrixIndicesPtr, <void*>matrices, <DataType>matrix_data_type,
+            <_MatrixLayout>layout, adjoint, n_matrices,
+            n_targets, n_controls, <_ComputeType>compute_type,
+            &extraWorkspaceSizeInBytes)
+    check_status(status)
+    return extraWorkspaceSizeInBytes
+
+
+cpdef apply_matrix_batched(
+        intptr_t handle, intptr_t batched_svs, int sv_data_type,
+        uint32_t n_index_bits, uint32_t n_svs, _Index sv_stride,
+        int map_type, matrix_indices, intptr_t matrices, int matrix_data_type,
+        int layout, int32_t adjoint, uint32_t n_matrices,
+        targets, uint32_t n_targets,
+        controls, control_bit_values, uint32_t n_controls,
+        int compute_type, intptr_t workspace, size_t workspace_size):
+    """Apply the specified gate matrices to the batched statevectors.
+
+    Args:
+        handle (intptr_t): The library handle.
+        batched_svs (intptr_t): The pointer address (as Python :class:`int`) to
+            the batched statevectors (on device).
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevectors.
+        n_index_bits (uint32_t): The number of index bits.
+        n_svs (uint32_t): The number of batched statevectors.
+        sv_stride (int64_t): The stride between each state vector in the batch.
+        map_type (MatrixMapType): Specify the way to assign matrices.
+        matrix_indices: An array of matrix indices to indicate, in order, which
+            matrix is to be applied to the statevectors in the batch. It can be
+
+            - an :class:`int` as the pointer address to the array (on host or
+              device)
+            - a Python sequence of bits on host
+
+        matrices (intptr_t): The pointer address (as Python :class:`int`) to the
+            matrices (on either host or device).
+        matrix_data_type (cuquantum.cudaDataType): The data type of the matrix.
+        layout (MatrixLayout): The memory layout the the matrix.
+        adjoint (int32_t): Whether the adjoint of the matrix would be applied.
+        n_matrices (uint32_t): The number of matrices.
+        targets: A host array of target bits. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of target bits
+
+        n_targets (uint32_t): The length of ``targets``.
+        controls: A host array of control bits. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of control bits
+
+        control_bit_values: A host array of control bit values. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of control bit values
+
+        n_controls (uint32_t): The length of ``controls``.
+        compute_type (cuquantum.ComputeType): The compute type of matrix
+            multiplication.
+        workspace (intptr_t): The pointer address (as Python :class:`int`) to the
+            workspace (on device).
+        workspace_size (size_t): The workspace size (in bytes).
+
+    .. seealso:: `custatevecApplyMatrixBatched`
+    """
+    # matrix_indices can be a pointer address, or a Python sequence
+    cdef vector[int32_t] matrixIndicesData
+    cdef int32_t* matrixIndicesPtr
+    if cpython.PySequence_Check(matrix_indices):
+        matrixIndicesData = matrix_indices
+        matrixIndicesPtr = matrixIndicesData.data()
+    else:  # a pointer address
+        matrixIndicesPtr = <int32_t*><intptr_t>matrix_indices
+
+    # targets can be a pointer address, or a Python sequence
+    cdef vector[int32_t] targetsData
+    cdef int32_t* targetsPtr
+    if cpython.PySequence_Check(targets):
+        targetsData = targets
+        targetsPtr = targetsData.data()
+    else:  # a pointer address
+        targetsPtr = <int32_t*><intptr_t>targets
+
+    # controls can be a pointer address, or a Python sequence
+    cdef vector[int32_t] controlsData
+    cdef int32_t* controlsPtr
+    if cpython.PySequence_Check(controls):
+        controlsData = controls
+        controlsPtr = controlsData.data()
+    else:  # a pointer address
+        controlsPtr = <int32_t*><intptr_t>controls
+
+    # control_bit_values can be a pointer address, or a Python sequence
+    cdef vector[int32_t] controlBitValuesData
+    cdef int32_t* controlBitValuesPtr
+    if cpython.PySequence_Check(control_bit_values):
+        controlBitValuesData = control_bit_values
+        controlBitValuesPtr = controlBitValuesData.data()
+    else:  # a pointer address
+        controlBitValuesPtr = <int32_t*><intptr_t>control_bit_values
+
+    with nogil:
+        status = custatevecApplyMatrixBatched(
+            <_Handle>handle, <void*>batched_svs, <DataType>sv_data_type,
+            n_index_bits, n_svs, sv_stride, <_MatrixMapType>map_type,
+            matrixIndicesPtr, <void*>matrices, <DataType>matrix_data_type,
+            <_MatrixLayout>layout, adjoint, n_matrices,
             targetsPtr, n_targets,
             controlsPtr, controlBitValuesPtr, n_controls,
             <_ComputeType>compute_type, <void*>workspace, workspace_size)
@@ -1908,6 +2366,26 @@ cpdef double test_matrix_type(
     return residualNorm
 
 
+cpdef initialize_state_vector(
+        intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits,
+        int sv_type):
+    """Initialize the state vector.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sv (intptr_t): The pointer address (as Python :class:`int`) to the
+            statevector (on device).
+        sv_data_type (cuquantum.cudaDataType): The data type of the statevector.
+        n_index_bits (uint32_t): The number of index bits.
+        sv_type (StateVectorType): The target quantum state.
+    """
+    with nogil:
+        status = custatevecInitializeStateVector(
+            <_Handle>handle, <void*>sv, <DataType>sv_data_type, n_index_bits,
+            <_StateVectorType>sv_type)
+    check_status(status)
+
+
 cpdef set_device_mem_handler(intptr_t handle, handler):
     """ Set the device memory handler for cuTensorNet.
 
@@ -2709,6 +3187,11 @@ class MatrixType(IntEnum):
     UNITARY = CUSTATEVEC_MATRIX_TYPE_UNITARY
     HERMITIAN = CUSTATEVEC_MATRIX_TYPE_HERMITIAN
 
+class MatrixMapType(IntEnum):
+    """See `custatevecMatrixMapType_t`."""
+    BROADCAST = CUSTATEVEC_MATRIX_MAP_TYPE_BROADCAST
+    MATRIX_INDEXED = CUSTATEVEC_MATRIX_MAP_TYPE_MATRIX_INDEXED
+
 class Collapse(IntEnum):
     """See `custatevecCollapseOp_t`."""
     NONE = CUSTATEVEC_COLLAPSE_NONE
@@ -2737,6 +3220,12 @@ class DataTransferType(IntEnum):
     RECV = CUSTATEVEC_DATA_TRANSFER_TYPE_RECV
     SEND_RECV = CUSTATEVEC_DATA_TRANSFER_TYPE_SEND_RECV
 
+class StateVectorType(IntEnum):
+    """See `custatevecStateVectorType_t`."""
+    ZERO = CUSTATEVEC_STATE_VECTOR_TYPE_ZERO
+    UNIFORM = CUSTATEVEC_STATE_VECTOR_TYPE_UNIFORM
+    GHZ = CUSTATEVEC_STATE_VECTOR_TYPE_GHZ
+    W = CUSTATEVEC_STATE_VECTOR_TYPE_W
 
 del IntEnum
 

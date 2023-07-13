@@ -13,6 +13,8 @@ import logging
 import re
 from typing import Optional
 
+import numpy
+
 from . import cutensornet as cutn
 from .configuration import NetworkOptions
 from ._internal import decomposition_utils
@@ -21,6 +23,7 @@ from ._internal import utils
 
 DecompositionOptions = dataclasses.make_dataclass("DecompositionOptions", fields=[(field.name, field.type, field) for field in dataclasses.fields(NetworkOptions)], bases=(NetworkOptions,))
 DecompositionOptions.__doc__ = re.sub(":class:`cuquantum.Network` object", ":func:`cuquantum.cutensornet.tensor.decompose` and :func:`cuquantum.cutensornet.experimental.contract_decompose` functions", NetworkOptions.__doc__)
+
 
 def decompose(
     subscripts, 
@@ -252,7 +255,6 @@ def decompose(
 
         # Create workspace descriptor
         workspace_desc = cutn.create_workspace_descriptor(handle)
-        workspace_ptr = None
         
         # Compute required workspace size
         if isinstance(method, QRMethod):
@@ -268,21 +270,24 @@ def decompose(
             ValueError("method must be either a QRMethod/SVDMethod object or a dict that can be used to construct QRMethod/SVDMethod")
         
         # Allocate and set workspace
-        workspace_ptr = decomposition_utils.allocate_and_set_workspace(handle, options.allocator, workspace_desc, 
-                    cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, options.device_id, 
-                    stream, stream_ctx, options.logger, task_name='tensor decomposition')
+        workspaces = dict()
+        for mem_space in (cutn.Memspace.DEVICE, cutn.Memspace.HOST):
+            workspaces[mem_space] = decomposition_utils.allocate_and_set_workspace(handle, options.allocator, workspace_desc, 
+                        cutn.WorksizePref.MIN, mem_space, cutn.WorkspaceKind.SCRATCH, options.device_id, 
+                        stream, stream_ctx, options.logger, task_name='tensor decomposition')
         
         svd_info_obj = None
 
         # Perform QR/SVD computation
         logger.info("Starting tensor decomposition...")
-        if options.blocking:
+        blocking = options.blocking is True or operands_location == 'cpu'
+        if blocking:
             logger.info("This call is blocking and will return only after the operation is complete.")
         else:
             logger.info("This call is non-blocking and will return immediately after the operation is launched on the device.")
         timing =  bool(logger and logger.handlers)
         if isinstance(method, QRMethod):
-            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, options.blocking, timing) as (last_compute_event, elapsed):
+            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, blocking, timing) as (last_compute_event, elapsed):
                 cutn.tensor_qr(handle, 
                     *input_descriptors, wrapped_operands[0].data_ptr,
                     output_descriptors[0], output_operands[0].data_ptr,
@@ -293,7 +298,7 @@ def decompose(
                 logger.info(f"The QR decomposition took {elapsed.data:.3f} ms to complete.")
         elif isinstance(method, SVDMethod):
             svd_info = cutn.create_tensor_svd_info(handle)
-            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, options.blocking, timing) as (last_compute_event, elapsed):
+            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, blocking, timing) as (last_compute_event, elapsed):
                 cutn.tensor_svd(handle, 
                     *input_descriptors, wrapped_operands[0].data_ptr, 
                     output_descriptors[0], output_operands[0].data_ptr, 
@@ -312,6 +317,9 @@ def decompose(
             if s is not None and reduced_extent != mid_extent:
                 s.tensor = s.tensor[:reduced_extent]
     finally:
+        # when host workspace is allocated, synchronize stream before return
+        if workspaces[cutn.Memspace.HOST] is not None:
+            stream.synchronize()
         # Free resources
         if svd_config is not None:
             cutn.destroy_tensor_svd_config(svd_config)
@@ -355,14 +363,36 @@ class SVDInfo:
         full_extent: The total number of singular values after matricization (before truncation). 
         reduced_extent: The number of remaining singular values after truncation. 
         discarded_weight: The discarded weight for the truncation.
+        algorithm: The algorithm used in the SVD execution.
+        gesvdj_residual: The residual for full gesvdj execution. 
+        gesvdj_sweeps: The number of iterations used in the gesvdj execution.
+        gesvdp_err_sigma: The error sigma in the gesvdp execution.
+    
+    .. note::
+        
+        When the SVD algorithm is set to ``"gesvdr"`` with fixed extent truncation enabled in :class:`cuquantum.cutensornet.tensor.SVDMethod`, 
+        the discarded weight will not be computed.
     """
 
     reduced_extent: int 
     full_extent: int
     discarded_weight: float
+    algorithm: str
+    gesvdj_residual: Optional[float] = None
+    gesvdj_sweeps: Optional[int] = None
+    gesvdp_err_sigma: Optional[float] = None
 
     def __str__(self):
+        svd_details = f"Algorithm = {self.algorithm}"      
+        if self.gesvdj_residual is not None:
+            svd_details += f", residual= {self.gesvdj_residual}"
+        if self.gesvdj_sweeps is not None:
+            svd_details += f", sweeps = {self.gesvdj_sweeps}"
+        if self.gesvdp_err_sigma is not None:
+            svd_details += f", sigma error = {self.gesvdp_err_sigma}"
+
         s = f"""SVD Information at Runtime:
+    {svd_details}
     Total number of singular values after matricization = {self.full_extent}
     Number of singular values after truncation = {self.reduced_extent}
     Discarded weight for the truncation = {self.discarded_weight}"""
@@ -384,6 +414,16 @@ class SVDMethod:
             :func:`cuquantum.cutensornet.experimental.contract_decompose` will be `None`.
         normalization: The specified norm of the singular values (after truncation) will be normalized to 1. 
             Currently supports ``None``, ``"L1"``, ``"L2"`` and ``"LInf"``. 
+        algorithm: The SVD algorithm to use. Currently supports ``"gesvd"`` (default), ``"gesvdj"``, ``"gesvdp"`` and ``"gesvdr"``. 
+        gesvdj_tol: The tolerance to use when ``algorithm`` is set to ``"gesvdj"``. Default 0 denotes machine precision.
+        gesvdj_max_sweeps: The maximal number of sweeps when ``algorithm`` is set to ``"gesvdj"``. Default 0 denotes 100.
+        gesvdr_oversampling: The size of oversampling when ``algorithm`` is set to ``"gesvdr"``. Default 0 denotes the lower of 4 times ``max_extent`` and the difference between full rank and ``max_extent``.
+        gesvdr_niters: The number of iteration of power method when ``algorithm`` is set to ``"gesvdr"`` and the default (0) is 10.
+    
+    .. note::
+        
+        For detailed explanation on the different SVD algorithms and the corresponding parameters, 
+        please refer to `cuSolver documentation page <https://docs.nvidia.com/cuda/cusolver/index.html#cusolverdn-dense-lapack-function-reference>`_
     
     .. note::
         
@@ -396,10 +436,26 @@ class SVDMethod:
     rel_cutoff: Optional[float] = 0.0
     partition: Optional[str] = None
     normalization: Optional[str] = None
+    algorithm: Optional[str] = 'gesvd'
+    gesvdj_tol: Optional[float] = 0
+    gesvdj_max_sweeps: Optional[int] = 0
+    gesvdr_oversampling: Optional[int] = 0
+    gesvdr_niters: Optional[int] = 0
 
     def __str__(self):
 
+        svd_details = f"Algorithm = {self.algorithm}"      
+        if self.gesvdj_tol is not None:
+            svd_details += f", tolerance = {self.gesvdj_tol}"
+        if self.gesvdj_max_sweeps is not None:
+            svd_details += f", max sweeps = {self.gesvdj_max_sweeps}"
+        if self.gesvdr_oversampling is not None:
+            svd_details += f", oversampling = {self.gesvdr_oversampling}"
+        if self.gesvdr_niters is not None:
+            svd_details += f", niters = {self.gesvdr_niters}"
+        
         s = f"""SVD Method:
+    {svd_details}
     Maxmial number of singular values = {self.max_extent}
     Absolute value cutoff = {self.abs_cutoff} 
     Relative value cutoff = {self.rel_cutoff}
@@ -407,3 +463,28 @@ class SVDMethod:
     Singular values normalization = {self.normalization}"""
 
         return s
+    
+    def __post_init__(self):
+        if self.algorithm not in ('gesvd', 'gesvdj', 'gesvdr', 'gesvdp'):
+            raise ValueError(f"SVD algorithm {self.algorithm} not supported; currently supports gesvd, gesvdj, gesvdr, gesvdp")
+        
+        if (self.gesvdj_tol !=0 or self.gesvdj_max_sweeps !=0) and self.algorithm != 'gesvdj':
+            raise ValueError(f"gesvdj_tol and gesvdj_max_sweeps can only be set when algorithm is set to gesvdj, found algorithm {self.algorithm}")
+        
+        if (self.gesvdr_oversampling !=0 or self.gesvdr_niters !=0) and self.algorithm != 'gesvdr':
+            raise ValueError(f"gesvdr_oversample and gesvdr_niters can only be set when algorithm is set to gesvdr, found algorithm {self.algorithm}")
+    
+    def _get_algo_params(self):
+        initialized = False
+        if self.algorithm in ('gesvdj', 'gesvdr'):
+            dtype = cutn.tensor_svd_algo_params_get_dtype(decomposition_utils.SVD_ALGORITHM_MAP[self.algorithm])
+            algo_params = numpy.zeros(1, dtype=dtype)
+            for name in dtype.names:
+                value = getattr(self, f'{self.algorithm}_{name}')
+                if value != 0:
+                    algo_params[name] = value
+                    initialized = True
+        if initialized:
+            return algo_params
+        else:
+            return None

@@ -54,7 +54,7 @@ einsum_expressions = (
     ["a,b,c->abc", {}, {}, "float64"],
     ["acdf,jbje,gihb,hfac", {}, {}, "float64"],
     ["acdf,jbje,gihb,hfac,gfac,gifabc,hfac", {}, {}, "float64"],
-    ["chd,bde,agbc,hiad,bdi,cgh,agdb", {}, {}, "float64"],
+    ["chd,bde,agbc,hiad,bdi,cgh,agdb", {"blocking": "auto"}, {}, "float64"],
     ["eb,cb,fb->cef", {}, {}, "float64"],
     ["dd,fb,be,cdb->cef", {}, {}, "float64"],
     ["bca,cdb,dbf,afc->", {}, {}, "float64"],
@@ -62,8 +62,9 @@ einsum_expressions = (
     ["a,ac,ab,ad,cd,bd,bc->", {}, {}, "float64"],
 )
 
+
 # the expression here should be
-#   - a list [decomposition_expression, input_tensor_shapes as a list of tuple]
+#   - a sequence of [decomposition_expression, input_tensor_shapes as a list of tuple]
 tensor_decomp_expressions = (
     ('ab->ax,xb', [(8, 8)]),
     ('ab->ax,bx', [(8, 8)]),
@@ -79,18 +80,20 @@ tensor_decomp_expressions = (
     ('ab->xa,bx', [(8, 6)]),
     ('abcd->cxa,bdx', [(2, 3, 4, 5)]),
     ('abcd->cax,bdx', [(2, 3, 4, 5)]),
-    ('mnijk->jny,kmyi', [(2, 9, 3, 3, 4)])
+    ('mnijk->jny,kmyi', [(2, 9, 3, 3, 4)]),
 )
 
+
 # the expression here should be
-#   - a list [gate_decomposition_expression, input_tensor_shapes as a list of tuple]
+#   - a sequence of [gate_decomposition_expression, input_tensor_shapes as a list of tuple]
 gate_decomp_expressions = (
-    ('ijk,klm,jlpq->ipk,kqm', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2)]),
-    ('ijk,klm,jlpq->kpi,qmk', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2)]),
-    ('ijk,klm,jlpq->pki,mkq', [(4, 2, 4), (4, 2, 4), (2, 2, 2, 2)]),
+    ('ijk,klm,jlpq->ipk,kqm', [(2, 2, 2), (2, 2, 2), (2, 2, 2, 2)]),
+    ('ijk,klm,jlpq->kpi,qmk', [(2, 2, 2), (2, 2, 2), (2, 2, 2, 2)]),
+    ('ijk,klm,jlpq->pki,mkq', [(2, 2, 2), (2, 2, 2), (2, 2, 2, 2)]),
     ('sOD,DdNr,ROrsq->KR,qKdN', [(2, 4, 2), (2, 3, 4, 2), (5, 4, 2, 2, 2)]),
     ('beQ,cey,cbJj->Je,jQey', [(3, 5, 4), (2, 5, 7), (2, 3, 4, 4)])
 )
+
 
 # the expression here can be
 #   - a string as a standard contract and decompose expression
@@ -101,7 +104,7 @@ contract_decompose_expr = (
     'ijk,klm,jlpq->ipk,kqm',
     'abcd,cdef->axb,fex',
     'abcd,cdef->axf,bex',
-    'sOD,DdNr,ROrsq->KR,qKdN',
+    ['sOD,DdNr,ROrsq->KR,qKdN', {'blocking': 'auto'}, {}, {}],
     'beQ,cey,cbJj->Je,jQey',
     'ijlm,jqr,lqsn->imx,xrsn',
     ['ijk,klm,jlpq->ipk,kqm', {}, {}, {'return_info': False}],

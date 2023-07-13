@@ -5,6 +5,8 @@
 import cupy as cp
 try:
     import torch
+    if not torch.cuda.is_available():
+        raise ImportError
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
 except ImportError:

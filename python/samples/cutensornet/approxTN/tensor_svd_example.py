@@ -91,7 +91,21 @@ rel_cutoff = np.array(4e-2, dtype=rel_cutoff_dtype)
 cutn.tensor_svd_config_set_attribute(handle,
     svd_config, cutn.TensorSVDConfigAttribute.REL_CUTOFF, rel_cutoff.ctypes.data, rel_cutoff.dtype.itemsize)
 
-print("Setup SVD truncation parameters.")
+# optional: choose gesvdj algorithm with customized parameters. Default is gesvd.
+algorithm_dtype = cutn.tensor_svd_config_get_attribute_dtype(cutn.TensorSVDConfigAttribute.ALGO)
+algorithm = np.array(cutn.TensorSVDAlgo.GESVDJ, dtype=algorithm_dtype)
+cutn.tensor_svd_config_set_attribute(handle,
+    svd_config, cutn.TensorSVDConfigAttribute.ALGO, algorithm.ctypes.data, algorithm.dtype.itemsize)
+
+algo_params_dtype = cutn.tensor_svd_algo_params_get_dtype(cutn.TensorSVDAlgo.GESVDJ)
+algo_params = np.zeros(1, dtype=algo_params_dtype)
+algo_params['tol'] = 1e-12
+algo_params['max_sweeps'] = 80
+
+cutn.tensor_svd_config_set_attribute(handle,
+    svd_config, cutn.TensorSVDConfigAttribute.ALGO_PARAMS, algo_params.ctypes.data, algo_params.dtype.itemsize)
+
+print("Set up SVDConfig to use gesvdj algorithm with truncation")
 
 # create SVDInfo to record truncation information
 svd_info = cutn.create_tensor_svd_info(handle)
@@ -172,8 +186,14 @@ cutn.tensor_svd_info_get_attribute(handle,
     svd_info, cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT, discarded_weight.ctypes.data, discarded_weight.itemsize)
 discarded_weight = float(discarded_weight)
 
+algo_status_dtype = cutn.tensor_svd_algo_status_get_dtype(cutn.TensorSVDAlgo.GESVDJ)
+algo_status = np.empty(1, dtype=algo_status_dtype)
+cutn.tensor_svd_info_get_attribute(handle, 
+    svd_info, cutn.TensorSVDInfoAttribute.ALGO_STATUS, algo_status.ctypes.data, algo_status.itemsize)
+
 print(f"Execution time: {min_time_cutensornet} ms")
 print("SVD truncation info:")
+print(f"GESVDJ residual: {algo_status['residual'].item()}, runtime sweeps = {algo_status['sweeps'].item()}")
 print(f"For fixed extent truncation of {shared_extent}, an absolute cutoff value of {float(abs_cutoff)}, and a relative cutoff value of {float(rel_cutoff)}, full extent {full_extent} is reduced to {reduced_extent}")
 print(f"Discarded weight: {discarded_weight}")
 

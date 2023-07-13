@@ -32,6 +32,7 @@ largest = i.largest_intermediate
 
 if flops != flops_np or largest != largest_np:
     message = f""" Results don't match.
+path = {path_np}
 flops: NumPy = {flops_np}, cuTensorNet = {flops},
 largest intermediate: NumPy  = {largest_np}, cuTensorNet = {largest}
 """

@@ -532,7 +532,13 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             self._set_optimizer_options(optimize)
             # Find "optimal" path.
             self.logger.info("Finding optimal path as well as sliced modes...")
-            cutn.contraction_optimize(self.handle, self.network, self.optimizer_config_ptr, self.memory_limit, self.optimizer_info_ptr)
+            try:
+                cutn.contraction_optimize(
+                    self.handle, self.network, self.optimizer_config_ptr, self.memory_limit, self.optimizer_info_ptr)
+            except cutn.cuTensorNetError as e:
+                if 'INTERRUPTED' in str(e):
+                    raise KeyboardInterrupt from e
+                raise
             self.logger.info("Finished finding optimal path as well as sliced modes.")
         else:
             self.logger.info("Setting user-provided path...")

@@ -43,12 +43,6 @@ endfunction()
 # cutensornet_example dependencies
 # ##########################################
 
-set_with_fallback(CUTENSOR_ROOT NONE)
-
-if (CUTENSOR_ROOT STREQUAL "")
-    message(FATAL_ERROR "Please set the environment variables CUTENSOR_ROOT to the path of the cuTENSOR installation.")
-endif ()
-
 set_with_fallback(CUTENSORNET_ROOT CUQUANTUM_ROOT)
 
 if (CUTENSORNET_ROOT STREQUAL "")
@@ -84,13 +78,11 @@ function(add_cutensornet_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
     ${EXAMPLE_TARGET}
       PUBLIC
         ${CUDA_INCLUDE_DIRS}
-        ${CUTENSOR_ROOT}/include
         ${CUTENSORNET_ROOT}/include
   )
   target_link_directories(
     ${EXAMPLE_TARGET}
       PUBLIC
-        ${CUTENSOR_ROOT}/lib/11
         ${CUTENSORNET_ROOT}/lib
         ${CUTENSORNET_ROOT}/lib64
   )
@@ -98,17 +90,12 @@ function(add_cutensornet_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
     ${EXAMPLE_TARGET}
       PUBLIC
         cutensornet
-        cutensor
-        cudart
-        cusolver
-        cublasLt
         $<$<BOOL:${MPI_FOUND}>:MPI::MPI_CXX>
   )
   set_target_properties(
     ${EXAMPLE_TARGET}
       PROPERTIES
         POSITION_INDEPENDENT_CODE ON
-        CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES
           "70;75;80"
   )
@@ -129,7 +116,10 @@ endfunction()
 add_custom_target(cutensornet_examples)
 
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example.cu)
-add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example_reuse.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.reuse" tensornet_example_reuse.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gradients" tensornet_example_gradients.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.marginal" high_level/marginal_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.sampler" high_level/sampling_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.svd" approxTN/tensor_svd_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.qr" approxTN/tensor_qr_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gate" approxTN/gate_split_example.cu)

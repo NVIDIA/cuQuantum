@@ -38,6 +38,10 @@ cdef extern from * nogil:
         int32_t, const int64_t[], const int64_t[], const int32_t[],
         DataType, _ComputeType, _NetworkDescriptor*)
     int cutensornetDestroyNetworkDescriptor(_NetworkDescriptor)
+    int cutensornetNetworkGetAttribute(
+        _Handle, _NetworkDescriptor, _NetworkAttribute, void*, size_t)
+    int cutensornetNetworkSetAttribute(
+        _Handle, _NetworkDescriptor, _NetworkAttribute, void*, size_t)
     int cutensornetGetOutputTensorDetails(
         const _Handle, const _NetworkDescriptor,
         int32_t*, size_t*, int32_t*, int64_t*, int64_t*)
@@ -68,15 +72,15 @@ cdef extern from * nogil:
         void* const, uint64_t)
     int cutensornetWorkspaceSetMemory(
         const _Handle, _WorkspaceDescriptor, _Memspace,
-        _WorkspaceKind,
-        void* const, int64_t)
+        _WorkspaceKind, void* const, int64_t)
     int cutensornetWorkspaceGet(
         const _Handle, const _WorkspaceDescriptor, _Memspace,
         void**, uint64_t*)
     int cutensornetWorkspaceGetMemory(
         const _Handle, const _WorkspaceDescriptor, _Memspace,
-        _WorkspaceKind,
-        void**, int64_t*)
+        _WorkspaceKind, void**, int64_t*)
+    int cutensornetWorkspacePurgeCache(
+        _Handle, _WorkspaceDescriptor, _Memspace)
     int cutensornetDestroyWorkspaceDescriptor(_WorkspaceDescriptor)
 
     # optimizer info
@@ -223,6 +227,47 @@ cdef extern from * nogil:
     int cutensornetDistributedGetNumRanks(_Handle, int*)
     int cutensornetDistributedGetProcRank(_Handle, int*)
     int cutensornetDistributedSynchronize(_Handle)
+
+    # gradients
+    int cutensornetComputeGradientsBackward(
+        const _Handle, _ContractionPlan, const void* const[],
+        void*, void* const[], int32_t, _WorkspaceDescriptor, Stream)
+
+    # high level API
+    # state preparation
+    int cutensornetCreateState(
+        const _Handle, _StatePurity, int32_t, const int64_t*, 
+        DataType, _State*)
+    int cutensornetDestroyState(_State)
+    int cutensornetStateApplyTensor(
+        const _Handle, _State, int32_t, const int32_t*, void*, 
+        const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*)
+    int cutensornetStateUpdateTensor(
+        const _Handle, _State, int64_t, void*, int32_t)
+    
+    # marginals
+    int cutensornetCreateMarginal(
+        const _Handle, _State, int32_t, const int32_t*,
+        int32_t, const int32_t*, const int64_t*, _StateMarginal*)
+    int cutensornetMarginalConfigure(
+        const _Handle, _StateMarginal, _MarginalAttribute, const void*, size_t)
+    int cutensornetMarginalPrepare(
+        const _Handle, _StateMarginal, size_t, _WorkspaceDescriptor, Stream)
+    int cutensornetMarginalCompute(
+        const _Handle, _StateMarginal, const int64_t*, _WorkspaceDescriptor, void*, Stream)
+    int cutensornetDestroyMarginal(_StateMarginal)
+
+    # sampling
+    int cutensornetCreateSampler(
+        const _Handle, _State, int32_t, const int32_t*, _StateSampler*)
+    int cutensornetSamplerConfigure(
+        const _Handle, _StateSampler, _SamplerAttribute, const void*, size_t)
+    int cutensornetSamplerPrepare(
+        const _Handle, _StateSampler, size_t, _WorkspaceDescriptor, Stream)
+    int cutensornetSamplerSample(
+        const _Handle, _StateSampler, int64_t,
+        _WorkspaceDescriptor, int64_t*, Stream)
+    int cutensornetDestroySampler(_StateSampler)
 
 
 class cuTensorNetError(RuntimeError):
@@ -516,6 +561,93 @@ cpdef destroy_network_descriptor(intptr_t tn_desc):
     """
     with nogil:
         status = cutensornetDestroyNetworkDescriptor(<_NetworkDescriptor>tn_desc)
+    check_status(status)
+
+
+######################### Python specific utility #########################
+
+tensor_id_list_dtype = _numpy.dtype(
+    {'names':['num_tensors','data'],
+     'formats': (_numpy.int32, _numpy.intp),
+     'itemsize': sizeof(_TensorIDList),
+    }, align=True
+)
+
+cdef dict network_sizes = {
+    CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_CONSTANT: _numpy.int32,
+    CUTENSORNET_NETWORK_INPUT_TENSORS_CONSTANT: tensor_id_list_dtype,
+    CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_CONJUGATED: _numpy.int32,
+    CUTENSORNET_NETWORK_INPUT_TENSORS_CONJUGATED: tensor_id_list_dtype,
+    CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_REQUIRE_GRAD: _numpy.int32,
+    CUTENSORNET_NETWORK_INPUT_TENSORS_REQUIRE_GRAD: tensor_id_list_dtype,
+}
+
+cpdef network_get_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding network descriptor
+    attribute.
+
+    Args:
+        attr (NetworkAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`network_get_attribute` and
+        :func:`network_set_attribute`.
+    """
+    return network_sizes[attr]
+
+###########################################################################
+
+
+cpdef network_get_attribute(
+        intptr_t handle, intptr_t tn_desc, int attr,
+        intptr_t buf, size_t size):
+    """Get the network descriptor attribute.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tn_desc (intptr_t): The tensor network descriptor.
+        attr (NetworkAttribute): The attribute to query.
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the returned attribute value.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`network_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetNetworkGetAttribute`
+    """
+    with nogil:
+        status = cutensornetNetworkGetAttribute(
+            <_Handle>handle, <_NetworkDescriptor>tn_desc,
+            <_NetworkAttribute>attr, <void*>buf, size)
+    check_status(status)
+
+
+cpdef network_set_attribute(
+        intptr_t handle, intptr_t tn_desc, int attr,
+        intptr_t buf, size_t size):
+    """Set the network descriptor attribute.
+
+    Args:
+        handle (intptr_t): The library handle.
+        tn_desc (intptr_t): The tensor network descriptor.
+        attr (NetworkAttribute): The attribute to set.
+        buf (intptr_t): The pointer address (as Python :class:`int`) to the
+            attribute data.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`network_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetNetworkSetAttribute`
+    """
+    with nogil:
+        status = cutensornetNetworkSetAttribute(
+            <_Handle>handle, <_NetworkDescriptor>tn_desc,
+            <_NetworkAttribute>attr, <void*>buf, size)
     check_status(status)
 
 
@@ -875,6 +1007,25 @@ cpdef tuple workspace_get_memory(
     return (<intptr_t>workspace_ptr, workspace_size)
 
 
+cpdef workspace_purge_cache(
+        intptr_t handle, intptr_t workspace, int mem_space):
+    """Purge the cached data in the specified memory space.
+
+    Args:
+        handle (intptr_t): The library handle.
+        workspace (intptr_t): The workspace descriptor.
+        mem_space (Memspace): The memory space for the workspace being
+            queried.
+
+    .. seealso:: `cutensornetWorkspacePurgeCache`
+    """
+    with nogil:
+        status = cutensornetWorkspacePurgeCache(
+            <_Handle>handle, <_WorkspaceDescriptor>workspace,
+            <_Memspace>mem_space)
+    check_status(status)
+
+
 cpdef intptr_t create_contraction_optimizer_info(
         intptr_t handle, intptr_t tn_desc) except*:
     """Create a contraction optimizer info object.
@@ -992,6 +1143,34 @@ slicing_config_dtype = _numpy.dtype(
     {'names': ('num_sliced_modes','data'),
      'formats': (_numpy.uint32, _numpy.intp),
      'itemsize': sizeof(_SlicingConfig),
+    }, align=True
+)
+
+gesvdj_params_dtype = _numpy.dtype(
+    {'names': ('tol','max_sweeps'),
+     'formats': (_numpy.float64, _numpy.int32),
+     'itemsize': sizeof(_GesvdjParams),
+    }, align=True
+)
+
+gesvdr_params_dtype = _numpy.dtype(
+    {'names': ('oversampling','niters'),
+     'formats': (_numpy.int64, _numpy.int64),
+     'itemsize': sizeof(_GesvdrParams),
+    }, align=True
+)
+
+gesvdj_status_dtype = _numpy.dtype(
+    {'names': ('residual', 'sweeps'),
+     'formats': (_numpy.float64, _numpy.int32),
+     'itemsize': sizeof(_GesvdjStatus),
+    }, align=True
+)
+
+gesvdp_status_dtype = _numpy.dtype(
+    {'names': ('err_sigma', ),
+     'formats': (_numpy.float64, ),
+     'itemsize': sizeof(_GesvdpStatus),
     }, align=True
 )
 
@@ -1220,6 +1399,8 @@ cdef dict contract_opti_cfg_sizes = {
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SIMPLIFICATION_DISABLE_DR: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE: _numpy.int32,  # = sizeof(enum value)
+    CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_CACHE_REUSE_NRUNS: _numpy.int32,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION: _numpy.int32,  # = sizeof(enum value)
 }
 
 cpdef contraction_optimizer_config_get_attribute_dtype(int attr):
@@ -1244,6 +1425,9 @@ cpdef contraction_optimizer_config_get_attribute_dtype(int attr):
             warnings.warn("binary size may be incompatible")
     elif attr == CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE:
         if _numpy.dtype(dtype).itemsize != sizeof(_OptimizerCost):
+            warnings.warn("binary size may be incompatible")
+    elif attr == CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION:
+        if _numpy.dtype(dtype).itemsize != sizeof(_SmartOption):
             warnings.warn("binary size may be incompatible")
     return dtype
 
@@ -2028,13 +2212,22 @@ cdef dict tensor_svd_cfg_sizes = {
     CUTENSORNET_TENSOR_SVD_CONFIG_REL_CUTOFF: _numpy.float64,
     CUTENSORNET_TENSOR_SVD_CONFIG_S_NORMALIZATION: _numpy.int32,  # = sizeof(enum value)
     CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION: _numpy.int32,  # = sizeof(enum value)
+    CUTENSORNET_TENSOR_SVD_CONFIG_ALGO: _numpy.int32, # = sizeof(enum value)
+}
+
+cdef dict svd_algo_params_sizes = {
+    CUTENSORNET_TENSOR_SVD_ALGO_GESVDJ: gesvdj_params_dtype,
+    CUTENSORNET_TENSOR_SVD_ALGO_GESVDR: gesvdr_params_dtype
 }
 
 cpdef tensor_svd_config_get_attribute_dtype(int attr):
     """Get the Python data type of the corresponding tensor SVD config attribute.
 
     Args:
-        attr (TensorSVDConfigAttribute): The attribute to query.
+        attr (TensorSVDConfigAttribute): The attribute to query. 
+            The enum CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS is not supported, 
+            the dtype of which can be queried by :func:`tensor_svd_algo_params_get_dtype`.
+
 
     Returns:
         The data type of the queried attribute.
@@ -2043,6 +2236,8 @@ cpdef tensor_svd_config_get_attribute_dtype(int attr):
         allocating memory for :func:`tensor_svd_config_get_attribute`
         and :func:`tensor_svd_config_set_attribute`.
     """
+    if attr == CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS:
+        raise ValueError("For CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS, use `tensor_svd_algo_params_get_dtype` to get the dtype")
     dtype = tensor_svd_cfg_sizes[attr]
     if attr == CUTENSORNET_TENSOR_SVD_CONFIG_S_NORMALIZATION:
         if _numpy.dtype(dtype).itemsize != sizeof(_TensorSVDNormalization):
@@ -2050,7 +2245,27 @@ cpdef tensor_svd_config_get_attribute_dtype(int attr):
     elif attr == CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION:
         if _numpy.dtype(dtype).itemsize != sizeof(_TensorSVDPartition):
             warnings.warn("binary size may be incompatible")
+    elif attr == CUTENSORNET_TENSOR_SVD_CONFIG_ALGO:
+        if _numpy.dtype(dtype).itemsize != sizeof(_TensorSVDAlgo):
+            warnings.warn("binary size may be incompatible")
     return dtype
+
+cpdef tensor_svd_algo_params_get_dtype(int svd_algo):
+    """Get the Python data type of the corresponding tensor SVD parameters attribute.
+    
+    Args:
+        svd_algo (TensorSVDAlgo): The SVD algorithm to query.
+    
+    Returns:
+        The data type of algorithm parameters for the queried SVD algorithm. The returned dtype is always
+        a valid NumPy dtype object.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for `CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS`.
+    """
+    if svd_algo not in svd_algo_params_sizes:
+        raise ValueError(f"Algorithm {svd_algo} does not support tunable parameters.")
+    return svd_algo_params_sizes[svd_algo]
 
 ###########################################################################
 
@@ -2145,6 +2360,12 @@ cdef dict tensor_svd_info_sizes = {
     CUTENSORNET_TENSOR_SVD_INFO_FULL_EXTENT: _numpy.int64,
     CUTENSORNET_TENSOR_SVD_INFO_REDUCED_EXTENT: _numpy.int64,
     CUTENSORNET_TENSOR_SVD_INFO_DISCARDED_WEIGHT: _numpy.float64,
+    CUTENSORNET_TENSOR_SVD_INFO_ALGO: _numpy.int32, # = sizeof(enum value)
+}
+
+cdef dict svd_algo_status_sizes = {
+    CUTENSORNET_TENSOR_SVD_ALGO_GESVDJ: gesvdj_status_dtype,
+    CUTENSORNET_TENSOR_SVD_ALGO_GESVDP: gesvdp_status_dtype
 }
 
 cpdef tensor_svd_info_get_attribute_dtype(int attr):
@@ -2152,6 +2373,8 @@ cpdef tensor_svd_info_get_attribute_dtype(int attr):
 
     Args:
         attr (TensorSVDInfoAttribute): The attribute to query.
+            The enum CUTENSORNET_TENSOR_SVD_INFO_ALGO_STATUS is not supported, 
+            the dtype of which can be queried by :func:`tensor_svd_algo_status_get_dtype`.
 
     Returns:
         The data type of the queried attribute. The returned dtype is always
@@ -2161,7 +2384,26 @@ cpdef tensor_svd_info_get_attribute_dtype(int attr):
         allocating memory for :func:`tensor_svd_info_get_attribute`.
 
     """
+    if attr == CUTENSORNET_TENSOR_SVD_INFO_ALGO_STATUS:
+        raise ValueError("For CUTENSORNET_TENSOR_SVD_INFO_ALGO_STATUS, use `tensor_svd_algo_status_get_dtype` to get the dtype")
     return tensor_svd_info_sizes[attr]
+
+cpdef tensor_svd_algo_status_get_dtype(int svd_algo):
+    """Get the Python data type of the corresponding tensor SVD status attribute.
+    
+    Args:
+        svd_algo (TensorSVDAlgo): The SVD algorithm to query.
+    
+    Returns:
+        The data type of algorithm status for the queried SVD algorithm. The returned dtype is always
+        a valid NumPy dtype object.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for `CUTENSORNET_TENSOR_SVD_INFO_ALGO_STATUS`.
+    """
+    if svd_algo not in svd_algo_status_sizes:
+        raise ValueError(f"Algorithm {svd_algo} does not support tunable parameters.")
+    return svd_algo_status_sizes[svd_algo]
 
 ###########################################################################
 
@@ -2482,6 +2724,557 @@ cpdef distributed_synchronize(intptr_t handle):
     check_status(status)
 
 
+cpdef compute_gradients_backward(
+        intptr_t handle, intptr_t plan,
+        raw_data_in, intptr_t output_gradient, gradients, bint accumulate_output,
+        intptr_t workspace, intptr_t stream):
+    """Compute the gradients of the network w.r.t. the input tensors whose
+    gradients are required.
+
+    The input tensors should form a tensor network that is prescribed by the
+    tensor network descriptor that was used to create the contraction plan.
+
+    .. warning::
+
+        This function is experimental and is subject to change in future
+        releases.
+
+    Args:
+        handle (intptr_t): The library handle.
+        plan (intptr_t): The contraction plan handle.
+        raw_data_in: A host array of pointer addresses (as Python :class:`int`) for
+            each input tensor (on device). It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        output_gradient (intptr_t): The pointer address (as Python :class:`int`)
+            to the gradient w.r.t. the output tensor (on device).
+        gradients: A host array of pointer addresses (as Python :class:`int`) for
+            each gradient tensor (on device). It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        accumulate_output (bool): Whether to accumulate the data in
+            ``gradients``.
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetComputeGradientsBackward`
+    """
+    warnings.warn("compute_gradients_backward() is an experimental API and "
+                  "subject to future changes", stacklevel=2)
+
+    # raw_data_in can be a pointer address, or a Python sequence
+    cdef vector[intptr_t] rawDataInData
+    cdef void** rawDataInPtr
+    if cpython.PySequence_Check(raw_data_in):
+        rawDataInData = raw_data_in
+        rawDataInPtr = <void**>(rawDataInData.data())
+    else:  # a pointer address
+        rawDataInPtr = <void**><intptr_t>raw_data_in
+
+    # gradients can be a pointer address, or a Python sequence
+    cdef vector[intptr_t] gradientsData
+    cdef void** gradientsPtr
+    if cpython.PySequence_Check(gradients):
+        gradientsData = gradients
+        gradientsPtr = <void**>(gradientsData.data())
+    else:  # a pointer address
+        gradientsPtr = <void**><intptr_t>gradients
+
+    with nogil:
+        status = cutensornetComputeGradientsBackward(
+            <_Handle>handle, <_ContractionPlan>plan,
+            rawDataInPtr, <void*>output_gradient, gradientsPtr,
+            <int32_t>accumulate_output,
+            <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef intptr_t create_state(
+        intptr_t handle, 
+        int purity, int32_t n_state_modes, 
+        state_mode_extents, int data_type) except*:
+    """Create a tensor network state.
+
+    Args:
+        handle (intptr_t): The library handle.
+        purity (cuquantum.cutensornet.StatePurity): The tensor network state purity.
+        n_state_modes (int32_t): The number of modes of the tensor network states. 
+        state_mode_extents: A host array of extents for each state mode. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+        
+        data_type (cuquantum.cudaDataType): The data type of the tensor network state.
+
+    Returns:
+        intptr_t: An opaque tensor network state handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateState`
+    """
+    # state_mode_extents can be a pointer address, or a Python sequence
+    cdef vector[int64_t] stateModesExtentsData
+    cdef int64_t* stateModesExtentsPtr
+    if cpython.PySequence_Check(state_mode_extents):
+        if len(state_mode_extents) != n_state_modes:
+            raise ValueError("size of state_mode_extents not matching n_state_modes")
+        stateModesExtentsData = state_mode_extents
+        stateModesExtentsPtr = stateModesExtentsData.data()
+    else:  # a pointer address
+        stateModesExtentsPtr = <int64_t*><intptr_t>state_mode_extents
+    
+    cdef _State state
+    with nogil:
+        status = cutensornetCreateState(
+            <_Handle>handle, <_StatePurity>purity, n_state_modes, 
+            stateModesExtentsPtr, <DataType>data_type, &state)
+    check_status(status)
+    return <intptr_t>state
+
+
+cpdef destroy_state(intptr_t state):
+    """Destroy a tensor network state.
+
+    Args:
+        state (intptr_t): The tensor network state.
+
+    .. seealso:: `cutensornetDestroyState`
+    """
+    with nogil:
+        status = cutensornetDestroyState(<_State>state)
+    check_status(status)
+
+
+cpdef int64_t state_apply_tensor(
+        intptr_t handle, intptr_t state, int32_t n_state_modes, 
+        state_modes, intptr_t tensor_data, tensor_mode_strides, 
+        int32_t immutable, int32_t adjoint, int32_t unitary):
+    """Apply a tensor operator to the tensor network state.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+        n_state_modes (int32_t): The number of state modes that the tensor applies on.
+        state_modes: A host array of modes to specify where the tensor is applied to. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+         
+        tensor_data (intptr_t): The tensor data.
+        tensor_mode_strides: A host array of strides for each mode. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        immutable (int32_t): Whether the tensor is immutable
+        adjoint (int32_t): Whether the tensor should be considered as adjoint.
+        unitary (int32_t): Whether the tensor represents a unitary operation.
+    
+    Returns:
+        tensor_id (int64_t): The id that is assigned to the tensor.
+
+    .. seealso:: `cutensornetStateApplyTensor`
+    """
+    # state_modes can be a pointer address, or a Python sequence
+    cdef int64_t tensor_id
+    cdef vector[int32_t] stateModesData
+    cdef int32_t* stateModesPtr
+    if cpython.PySequence_Check(state_modes):
+        if len(state_modes) != n_state_modes:
+            raise ValueError("size of state_modes not matching n_state_modes")
+        stateModesData = state_modes
+        stateModesPtr = stateModesData.data()
+    else:  # a pointer address
+        stateModesPtr = <int32_t*><intptr_t>state_modes
+    
+    # tensor_mode_strides can be a pointer address, or a Python sequence
+    cdef vector[int64_t] tensorModesStridesData
+    cdef int64_t* tensorModesStridesPtr
+    if cpython.PySequence_Check(tensor_mode_strides):
+        tensorModesStridesData = tensor_mode_strides
+        tensorModesStridesPtr = tensorModesStridesData.data()
+    else:  # a pointer address
+        tensorModesStridesPtr = <int64_t*><intptr_t>tensor_mode_strides
+    
+    with nogil:
+        status = cutensornetStateApplyTensor(
+            <_Handle>handle, <_State>state, n_state_modes, stateModesPtr, <void*>tensor_data, 
+            tensorModesStridesPtr, immutable, adjoint, unitary, &tensor_id)
+    check_status(status)
+    return tensor_id
+
+
+cpdef state_update_tensor(
+        intptr_t handle, intptr_t state, 
+        int64_t tensor_id, intptr_t tensor_data, int32_t unitary):
+    """Update a tensor operand that has been applied to the tensor network state.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+        tensor_id (int64_t): The id that is assigned to the tensor.        
+        tensor_data (intptr_t): The tensor data.
+        adjoint (int32_t): Whether the tensor should be considered as adjoint.
+        unitary (int32_t): Whether the tensor represents a unitary operation.
+
+    .. seealso:: `cutensornetStateUpdateTensor`
+    """
+    with nogil:
+        status = cutensornetStateUpdateTensor(
+            <_Handle>handle, <_State>state, tensor_id, <void*>tensor_data, unitary)
+    check_status(status)
+
+
+cpdef intptr_t create_marginal(
+        intptr_t handle, intptr_t state, 
+        int32_t n_marginal_modes, marginal_modes, 
+        int32_t n_projected_modes, projected_modes, marginal_tensor_strides) except*:
+    """Create a representation for the tensor network state marginal distribution.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+        n_marginal_modes (int32_t): The number of modes for the marginal.
+        marginal_modes: A host array of modes for the marginal. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+        
+        n_projected_modes (int32_t): The number of modes that are projected out for the marginal.
+        projected_modes: A host array of projected modes for the marginal. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+        
+        marginal_tensor_strides: A host array of strides for the marginal modes. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+    Returns:
+        intptr_t: An opaque tensor network state marginal handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateMarginal`
+    """
+    # marginal_modes can be a pointer address, or a Python sequence
+    cdef vector[int32_t] marginalModesData
+    cdef int32_t* marginalModesPtr
+    if cpython.PySequence_Check(marginal_modes):
+        if len(marginal_modes) != n_marginal_modes:
+            raise ValueError("size of marginal_modes not matching n_marginal_modes")
+        marginalModesData = marginal_modes
+        marginalModesPtr = marginalModesData.data()
+    else:  # a pointer address
+        marginalModesPtr = <int32_t*><intptr_t>marginal_modes
+    
+    # projected_modes can be a pointer address, or a Python sequence
+    cdef vector[int32_t] projectedModesData
+    cdef int32_t* projectedModesPtr
+    if cpython.PySequence_Check(projected_modes):
+        if len(projected_modes) != n_projected_modes:
+            raise ValueError("size of projected_modes not matching n_projected_modes")
+        projectedModesData = projected_modes
+        projectedModesPtr = projectedModesData.data()
+    else:  # a pointer address
+        projectedModesPtr = <int32_t*><intptr_t>projected_modes
+    
+    # marginal_tensor_strides can be a pointer address, or a Python sequence
+    cdef vector[int64_t] marginalTensorStridesData
+    cdef int64_t* marginalTensorStridesPtr
+    if cpython.PySequence_Check(marginal_tensor_strides):
+        marginalTensorStridesData = marginal_tensor_strides
+        marginalTensorStridesPtr = marginalTensorStridesData.data()
+    else:  # a pointer address
+        marginalTensorStridesPtr = <int64_t*><intptr_t>marginal_tensor_strides
+    
+    cdef _StateMarginal marginal
+    with nogil:
+        status = cutensornetCreateMarginal(
+            <_Handle>handle, <_State>state, 
+            n_marginal_modes, marginalModesPtr,
+            n_projected_modes, projectedModesPtr, 
+            marginalTensorStridesPtr, &marginal)
+    check_status(status)
+    return <intptr_t>marginal
+
+
+cdef dict marginal_attribute_sizes = {
+    CUTENSORNET_MARGINAL_OPT_NUM_HYPER_SAMPLES: _numpy.int64
+}
+
+
+cpdef marginal_get_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding marginal attribute.
+
+    Args:
+        attr (MarginalAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute. The returned dtype is always
+        a valid NumPy dtype object.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`marginal_configure`.
+    """
+    return marginal_attribute_sizes[attr]
+    
+
+cpdef marginal_configure(intptr_t handle, intptr_t marginal, int attr, intptr_t buf, size_t size):
+    """Configures computation of the tensor network state marginal distribution.
+
+    Args:
+        handle (intptr_t): The library handle.
+        marginal (intptr_t): The tensor network marginal computation handle.
+        attr (MarginalAttribute): The attribute to configure.
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the returned attribute value.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`marginal_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetMarginalConfigure`
+    """
+    with nogil:
+        status = cutensornetMarginalConfigure(
+            <_Handle>handle, <_StateMarginal>marginal,
+            <_MarginalAttribute>attr,
+            <void*>buf, size)
+    check_status(status)
+
+
+cpdef marginal_prepare(
+        intptr_t handle, intptr_t marginal, 
+        size_t max_workspace_size_device, intptr_t workspace, intptr_t stream):
+    """Prepares computation of the tensor network state marginal distribution.
+
+    Args:
+        handle (intptr_t): The library handle.
+        marginal (intptr_t): The tensor network marginal computation handle.
+        max_workspace_size_device (size_t): The maximal device workspace size (in bytes) allowed 
+            for the mariginal computation.
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetMarginalPrepare`
+    """
+    with nogil:
+        status = cutensornetMarginalPrepare(
+            <_Handle>handle, <_StateMarginal>marginal,
+            max_workspace_size_device, <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef marginal_compute(
+        intptr_t handle, intptr_t marginal, projected_mode_values, 
+        intptr_t workspace, intptr_t marginal_tensor, intptr_t stream):
+    """Computes the tensor network state marginal distribution.
+
+    Args:
+        handle (intptr_t): The library handle.
+        marginal (intptr_t): The tensor network marginal computation handle.
+        projected_mode_values: A host array of values for the projected modes. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+        
+        workspace (intptr_t): The workspace descriptor.
+        marginal_tensor (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the computed marginals.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetMarginalCompute`
+    """
+    # projected_mode_values can be a pointer address, or a Python sequence
+    cdef vector[int64_t] projectedModeValuesData
+    cdef int64_t* projectedModeValuesPtr
+    if cpython.PySequence_Check(projected_mode_values):
+        projectedModeValuesData = projected_mode_values
+        projectedModeValuesPtr = projectedModeValuesData.data()
+    else:  # a pointer address
+        projectedModeValuesPtr = <int64_t*><intptr_t>projected_mode_values
+    
+    with nogil:
+        status = cutensornetMarginalCompute(
+            <_Handle>handle, <_StateMarginal>marginal,
+            projectedModeValuesPtr, <_WorkspaceDescriptor>workspace, 
+            <void*>marginal_tensor, <Stream>stream)
+    check_status(status)
+
+
+cpdef destroy_marginal(intptr_t marginal):
+    """Destroy a tensor network marginal representation.
+
+    Args:
+        marginal (intptr_t): The tensor network marginal distribution.
+
+    .. seealso:: `cutensornetDestroyMarginal`
+    """
+    with nogil:
+        status = cutensornetDestroyMarginal(<_StateMarginal>marginal)
+    check_status(status)
+
+
+cpdef intptr_t create_sampler(
+        intptr_t handle, intptr_t state, 
+        int32_t n_modes_to_sample, modes_to_sample) except*:
+    """Creates a tensor network state sampler.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+        n_modes_to_sample (int32_t): The number of modes to sample for the sampler.
+        modes_to_sample: A host array of modes for the sampler. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+        
+    Returns:
+        intptr_t: An opaque tensor network state sampler handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateSampler`
+    """
+    # modes_to_sample can be a pointer address, or a Python sequence
+    cdef vector[int32_t] modesData
+    cdef int32_t* modesPtr
+    if cpython.PySequence_Check(modes_to_sample):
+        if len(modes_to_sample) != n_modes_to_sample:
+            raise ValueError("size of modes_to_sample not matching n_modes_to_sample")
+        modesData = modes_to_sample
+        modesPtr = modesData.data()
+    else:  # a pointer address
+        modesPtr = <int32_t*><intptr_t>modes_to_sample
+    
+    cdef _StateSampler sampler
+    with nogil:
+        status = cutensornetCreateSampler(
+            <_Handle>handle, <_State>state, 
+            n_modes_to_sample, modesPtr, &sampler)
+    check_status(status)
+    return <intptr_t> sampler
+
+
+cdef dict sampler_attribute_sizes = {
+    CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES: _numpy.int64
+}
+
+
+cpdef sampler_get_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding sampler attribute.
+
+    Args:
+        attr (SamplerAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute. The returned dtype is always
+        a valid NumPy dtype object.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`sampler_configure`.
+    """
+    return sampler_attribute_sizes[attr]
+
+
+cpdef sampler_configure(
+        intptr_t handle, intptr_t sampler, int attr, intptr_t buf, size_t size):
+    """Configures the tensor network state sampler.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sampler (intptr_t): The tensor network sampler handle.
+        attr (SamplerAttribute): The attribute to configure.
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the returned attribute value.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`sampler_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetSamplerConfigure`
+    """
+    with nogil:
+        status = cutensornetSamplerConfigure(
+            <_Handle>handle, <_StateSampler>sampler,
+            <_SamplerAttribute>attr,
+            <void*>buf, size)
+    check_status(status)
+
+
+cpdef sampler_prepare(
+        intptr_t handle, intptr_t sampler, size_t max_workspace_size_device, intptr_t workspace, intptr_t stream):
+    """Prepares computation of the tensor network state marginal distribution.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sampler (intptr_t): The tensor network sampler.
+        max_workspace_size_device (size_t): The maximal device workspace size (in bytes) allowed 
+            for the sampling computation.
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetSamplerPrepare`
+    """
+    with nogil:
+        status = cutensornetSamplerPrepare(
+            <_Handle>handle, <_StateSampler>sampler,
+            max_workspace_size_device, <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef sampler_sample(
+        intptr_t handle, intptr_t sampler, int64_t n_shots,
+        intptr_t workspace, intptr_t samples, intptr_t stream):
+    """Computes the tensor network state marginal distribution.
+
+    Args:
+        handle (intptr_t): The library handle.
+        sampler (intptr_t): The tensor network sampler.
+        n_shots (int64_t): The number of shots.
+        workspace (intptr_t): The workspace descriptor.
+        samples (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the computed samples.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetSamplerSample`
+    """
+    with nogil:
+        status = cutensornetSamplerSample(
+            <_Handle>handle, <_StateSampler>sampler, n_shots, 
+            <_WorkspaceDescriptor>workspace, 
+            <int64_t*>samples, <Stream>stream)
+    check_status(status)
+
+
+cpdef destroy_sampler(intptr_t sampler):
+    """Destroy a tensor network state sampler.
+
+    Args:
+        sampler (intptr_t): The tensor network state sampler.
+
+    .. seealso:: `cutensornetDestroySampler`
+    """
+    with nogil:
+        status = cutensornetDestroySampler(<_StateSampler>sampler)
+    check_status(status)
+
+
+class NetworkAttribute(IntEnum):
+    """See `cutensornetNetworkAttributes_t`."""
+    INPUT_TENSORS_NUM_CONSTANT = CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_CONSTANT
+    INPUT_TENSORS_CONSTANT = CUTENSORNET_NETWORK_INPUT_TENSORS_CONSTANT
+    INPUT_TENSORS_NUM_CONJUGATED = CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_CONJUGATED
+    INPUT_TENSORS_CONJUGATED = CUTENSORNET_NETWORK_INPUT_TENSORS_CONJUGATED
+    INPUT_TENSORS_NUM_REQUIRE_GRAD = CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_REQUIRE_GRAD
+    INPUT_TENSORS_REQUIRE_GRAD = CUTENSORNET_NETWORK_INPUT_TENSORS_REQUIRE_GRAD
+
 class GraphAlgo(IntEnum):
     """See `cutensornetGraphAlgo_t`."""
     RB = CUTENSORNET_GRAPH_ALGO_RB
@@ -2518,6 +3311,8 @@ class ContractionOptimizerConfigAttribute(IntEnum):
     SIMPLIFICATION_DISABLE_DR = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SIMPLIFICATION_DISABLE_DR
     SEED = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED
     COST_FUNCTION_OBJECTIVE = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE
+    CACHE_REUSE_NRUNS = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_CACHE_REUSE_NRUNS
+    SMART_OPTION = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION
 
 class ContractionOptimizerInfoAttribute(IntEnum):
     """See `cutensornetContractionOptimizerInfoAttributes_t`."""
@@ -2563,6 +3358,8 @@ class TensorSVDConfigAttribute(IntEnum):
     REL_CUTOFF = CUTENSORNET_TENSOR_SVD_CONFIG_REL_CUTOFF
     S_NORMALIZATION = CUTENSORNET_TENSOR_SVD_CONFIG_S_NORMALIZATION
     S_PARTITION = CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION
+    ALGO = CUTENSORNET_TENSOR_SVD_CONFIG_ALGO
+    ALGO_PARAMS = CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS
 
 class TensorSVDNormalization(IntEnum):
     """See `cutensornetTensorSVDNormalization_t`."""
@@ -2583,11 +3380,32 @@ class TensorSVDInfoAttribute(IntEnum):
     FULL_EXTENT = CUTENSORNET_TENSOR_SVD_INFO_FULL_EXTENT
     REDUCED_EXTENT = CUTENSORNET_TENSOR_SVD_INFO_REDUCED_EXTENT
     DISCARDED_WEIGHT = CUTENSORNET_TENSOR_SVD_INFO_DISCARDED_WEIGHT
+    ALGO = CUTENSORNET_TENSOR_SVD_INFO_ALGO
+    ALGO_STATUS = CUTENSORNET_TENSOR_SVD_INFO_ALGO_STATUS
+
+class TensorSVDAlgo(IntEnum):
+    """See `cutensornetTensorSVDAlgo_t`."""
+    GESVD = CUTENSORNET_TENSOR_SVD_ALGO_GESVD
+    GESVDJ = CUTENSORNET_TENSOR_SVD_ALGO_GESVDJ
+    GESVDP = CUTENSORNET_TENSOR_SVD_ALGO_GESVDP
+    GESVDR = CUTENSORNET_TENSOR_SVD_ALGO_GESVDR
 
 class GateSplitAlgo(IntEnum):
     """See `cutensornetGateSplitAlgo_t`."""
     DIRECT = CUTENSORNET_GATE_SPLIT_ALGO_DIRECT
     REDUCED = CUTENSORNET_GATE_SPLIT_ALGO_REDUCED
+
+class StatePurity(IntEnum):
+    """See `cutensornetStatePurity_t`."""
+    PURE = CUTENSORNET_STATE_PURITY_PURE
+
+class MarginalAttribute(IntEnum):
+    """See `cutensornetMarginalAttributes_t`."""
+    OPT_NUM_HYPER_SAMPLES = CUTENSORNET_MARGINAL_OPT_NUM_HYPER_SAMPLES
+
+class SamplerAttribute(IntEnum):
+    """See `cutensornetSamplerAttributes_t`."""
+    OPT_NUM_HYPER_SAMPLES = CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES
 
 del IntEnum
 
@@ -2600,8 +3418,8 @@ VERSION = CUTENSORNET_VERSION
 
 # numpy dtypes 
 tensor_qualifiers_dtype = _numpy.dtype(
-    {'names':('is_conjugate', 'is_constant', ),
-     'formats': (_numpy.int32, _numpy.int32, ),
+    {'names':('is_conjugate', 'is_constant', 'requires_gradient'),
+     'formats': (_numpy.int32, _numpy.int32, _numpy.int32, ),
      'itemsize': sizeof(_TensorQualifiers),
     }, align=True
 )

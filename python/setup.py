@@ -29,12 +29,17 @@ with open(os.path.join(source_root, "tests/requirements.txt")) as f:
 # - cuTENSOR version is constrained in the cutensornet-cuXX package, so we don't
 #   need to list it
 install_requires = [
-    'numpy',
-    # 'cupy', # TODO: use "cupy-wheel" once it's stablized, see https://github.com/cupy/cupy/issues/6688
+    'numpy>=1.21',
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.3',   # ">=1.3.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.1',  # ">=2.1.0,<3"
-    ]
+    f'custatevec-cu{utils.cuda_major_ver}~=1.4',   # ">=1.4.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.2',  # ">=2.2.0,<3"
+]
+if utils.cuda_major_ver == '11':
+    # CuPy has 3+ wheels for CUDA 11.x, only the cuquantum-python meta package has
+    # a chance to resolve the ambiguity properly
+    pass
+elif utils.cuda_major_ver == '12':
+    install_requires.append('cupy-cuda12x>=10.0')  # no ambiguity
 
 
 # Note: the extension attributes are overwritten in build_extension()
@@ -77,7 +82,7 @@ setup(
     project_urls={
         "Bug Tracker": "https://github.com/NVIDIA/cuQuantum/issues",
         "User Forum": "https://github.com/NVIDIA/cuQuantum/discussions",
-        "Documentation": "https://docs.nvidia.com/cuda/cuquantum/python/",
+        "Documentation": "https://docs.nvidia.com/cuda/cuquantum/latest/python/",
         "Source Code": "https://github.com/NVIDIA/cuQuantum",
     },
     author="NVIDIA Corporation",
@@ -91,7 +96,6 @@ setup(
         "Topic :: Education",
         "Topic :: Scientific/Engineering",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
@@ -104,7 +108,7 @@ setup(
     packages=find_packages(include=['cuquantum', 'cuquantum.*']),
     package_data={"": ["*.pxd", "*.pyx", "*.py"],},
     zip_safe=False,
-    python_requires='>=3.8',
+    python_requires='>=3.9',
     install_requires=install_requires,
     tests_require=install_requires+tests_require,
     cmdclass=cmdclass,

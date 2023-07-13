@@ -2,7 +2,7 @@
 
 ## Documentation
 
-Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com/cuda/cuquantum/python).
+Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com/cuda/cuquantum/latest/python).
 
 
 ## Installation
@@ -13,9 +13,10 @@ If you already have a Conda environment set up, it is the easiest to install cuQ
 ```
 conda install -c conda-forge cuquantum-python
 ```
-The Conda solver will install all required dependencies for you.
-
-**Note**: Currently CUDA 12 support is pending the NVIDIA-led community effort ([conda-forge/staged-recipes#21382](https://github.com/conda-forge/staged-recipes/issues/21382)). Once conda-forge supports CUDA 12 we will make compatible conda packages available.
+The Conda solver will install all required dependencies for you. If you need to select a particular CUDA version, say CUDA 12.0, please issue the following command:
+```
+conda install -c conda-forge cuquantum-python cuda-version=12.0
+```
 
 ### Install cuQuantum Python from PyPI
 
@@ -26,12 +27,12 @@ you can also install cuQuantum Python this way:
 pip install cuquantum-python-cuXX
 ```
 with `XX` being `11` (for CUDA 11) or `12` (for CUDA 12).
-The `pip` solver will also install all dependencies, with the exception of CuPy, for you (including both cuTENSOR and cuQuantum wheels). Please follow
-[CuPy's installation guide](https://docs.cupy.dev/en/stable/install.html).
+The `pip` solver will also install all required dependencies for you (including both cuTENSOR and cuQuantum wheels).
 
 Notes:
 
-- Users can install cuQuantum Python using `pip install cuquantum-python`, which will attempt to detect the current CUDA environment and choose the appropriate wheel to install. In the event of detection failure, CUDA 11 is assumed. This is subject to change in the future. Installing wheels with the `-cuXX` suffix is encouraged.
+- Users can install cuQuantum Python using `pip install --no-cache-dir cuquantum-python`, which will attempt to detect the current CUDA environment and choose the appropriate wheel to install. In the event of detection failure, CUDA 11 is assumed. This is subject to change in the future. Installing wheels with the `-cuXX` suffix is encouraged. `--no-cache-dir` is required when using `pip` 23.1+.
+- CuPy also uses a similar auto-detection mechanism to determine the correct wheel to install. If in doubt, or if installing `cuquantum-python-cu11`, please follow [CuPy's installation guide](https://docs.cupy.dev/en/stable/install.html) and install it manually.
 - To manually manage all Python dependencies, append `--no-deps` to `pip install` to bypass the `pip` solver, see below.
 
 ### Building and installing cuQuantum Python from source
@@ -41,10 +42,10 @@ Notes:
 The build-time dependencies of the cuQuantum Python package include:
 
 * CUDA Toolkit 11.x or 12.x
-* cuStateVec 1.3.0+
-* cuTensorNet 2.1.0+
+* cuStateVec 1.4.0+
+* cuTensorNet 2.2.0+
 * cuTENSOR 1.6.1+
-* Python 3.8+
+* Python 3.9+
 * Cython >=0.29.22,<3
 * pip 21.3.1+
 * [packaging](https://packaging.pypa.io/en/latest/)
@@ -84,12 +85,12 @@ Runtime dependencies of the cuQuantum Python package include:
 * An NVIDIA GPU with compute capability 7.0+
 * Driver: Linux (450.80.02+ for CUDA 11, 525.60.13+ for CUDA 12)
 * CUDA Toolkit 11.x or 12.x
-* cuStateVec 1.3.0+
-* cuTensorNet 2.1.0+
+* cuStateVec 1.4.0+
+* cuTensorNet 2.2.0+
 * cuTENSOR 1.6.1+
-* Python 3.8+
-* NumPy v1.19+
-* CuPy v9.5.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
+* Python 3.9+
+* NumPy v1.21+
+* CuPy v10.0.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
 * PyTorch v1.10+ (optional, see [installation guide](https://pytorch.org/get-started/locally/))
 * Qiskit v0.24.0+ (optional, see [installation guide](https://qiskit.org/documentation/getting_started.html))
 * Cirq v0.6.0+ (optional, see [installation guide](https://quantumai.google/cirq/install))
@@ -100,7 +101,7 @@ If you install everything from conda-forge, all the required dependencies are ta
 If you install the pip wheels, CuPy, cuTENSOR and cuQuantum (but not CUDA Toolkit or the driver,
 please make sure the CUDA libraries are visible through your `LD_LIBRARY_PATH`) are installed for you.
 
-If you build cuQuantum Python from source, please make sure the paths to the CUDA, cuQuantum, and cuTENSOR libraries are added
+If you build cuQuantum Python from source, please make sure that the paths to the CUDA, cuQuantum, and cuTENSOR libraries are added
 to your `LD_LIBRARY_PATH` environment variable, and that a compatible CuPy is installed.
 
 Known issues:

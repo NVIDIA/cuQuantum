@@ -104,7 +104,7 @@ class TestOptimizerInfo(_OptionsBase):
 
     options_type = OptimizerInfo
 
-    # All fileds in OptimizerInfo are required, so we must test
+    # All fields in OptimizerInfo are required, so we must test
     # them at once
     def test_optimizer_info(self):
         self.create_options({

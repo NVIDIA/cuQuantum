@@ -2,12 +2,15 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import types
+
 try:
     import cirq
     from . import circuit_parser_utils_cirq
 except ImportError:
     cirq = circuit_parser_utils_cirq = None
 import cupy as cp
+import numpy as np
 try:
     import qiskit
     from . import circuit_parser_utils_qiskit
@@ -15,14 +18,17 @@ except ImportError:
     qiskit = circuit_parser_utils_qiskit = None
 
 from .tensor_wrapper import _get_backend_asarray_func
+from ...utils import WHITESPACE_UNICODE
+
 
 EINSUM_SYMBOLS_BASE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+WHITESPACE_SYMBOLS_ID = None
 
 CIRQ_MIN_VERSION = '0.6.0'
-QISKIT_MIN_VERSION = '0.24.0' # qiskit metapackage version
+QISKIT_MIN_VERSION = '0.24.0'  # qiskit metapackage version
 
-import types
 EMPTY_DICT = types.MappingProxyType({})
+
 
 def check_version(package_name, version, minimum_version):
     """
@@ -35,15 +41,35 @@ def check_version(package_name, version, minimum_version):
                                   f'current version: {version}')
     return None
 
+
 def _get_symbol(i):
     """
-    Return a Unicode as label for index.
+    Return a unicode as label for index. Whitespace unicode characters are skipped.
 
-    .. note:: This function is adopted from `opt_einsum <https://optimized-einsum.readthedocs.io/en/stable/_modules/opt_einsum/parser.html#get_symbol>`_
+    This function can offer 1113955 (= sys.maxunicode - 140 - 16) unique symbols.
     """
     if i < 52:
         return EINSUM_SYMBOLS_BASE[i]
-    return chr(i + 140)
+
+    global WHITESPACE_SYMBOLS_ID
+    if WHITESPACE_SYMBOLS_ID is None:
+        whitespace = WHITESPACE_UNICODE
+        WHITESPACE_SYMBOLS_ID = np.asarray([ord(c) for c in whitespace], dtype=np.int32)
+        WHITESPACE_SYMBOLS_ID = WHITESPACE_SYMBOLS_ID[WHITESPACE_SYMBOLS_ID >= 192]
+
+    # leave "holes" in the integer -> unicode mapping to avoid using whitespaces as symbols
+    i += 140
+    offset = 0
+    for hole in WHITESPACE_SYMBOLS_ID:  # loop size = 16
+        if i + offset < hole:
+            break
+        offset += 1
+
+    try:
+        return chr(i + offset)
+    except ValueError as e:
+        raise ValueError(f"{i=} would exceed unicode limit") from e
+
 
 def infer_parser(circuit):
     """
