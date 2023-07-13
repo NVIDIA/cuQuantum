@@ -82,7 +82,7 @@ setup(
     project_urls={
         "Bug Tracker": "https://github.com/NVIDIA/cuQuantum/issues",
         "User Forum": "https://github.com/NVIDIA/cuQuantum/discussions",
-        "Documentation": "https://docs.nvidia.com/cuda/cuquantum/python/",
+        "Documentation": "https://docs.nvidia.com/cuda/cuquantum/latest/python/",
         "Source Code": "https://github.com/NVIDIA/cuQuantum",
     },
     author="NVIDIA Corporation",
