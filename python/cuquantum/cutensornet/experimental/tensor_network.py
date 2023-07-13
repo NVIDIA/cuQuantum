@@ -81,19 +81,22 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
             gate_algorithm, svd_config, options.compute_type, workspace_desc)
             
         # Allocate and set workspace
-        workspace_ptr = decomposition_utils.allocate_and_set_workspace(handle, options.allocator, workspace_desc, 
-                    cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, options.device_id, 
+        workspaces = dict()
+        for mem_space in (cutn.Memspace.DEVICE, cutn.Memspace.HOST):
+            workspaces[mem_space] = decomposition_utils.allocate_and_set_workspace(handle, options.allocator, workspace_desc, 
+                    cutn.WorksizePref.MIN, mem_space, cutn.WorkspaceKind.SCRATCH, options.device_id, 
                     stream, stream_ctx, options.logger, task_name='contract decomposition')
 
         options.logger.info("Starting contract-decompose (gate split)...")
         timing =  bool(options.logger and options.logger.handlers)
-        if options.blocking:
+        blocking = options.blocking is True or operands_location == 'cpu'
+        if blocking:
             options.logger.info("This call is blocking and will return only after the operation is complete.")
         else:
             options.logger.info("This call is non-blocking and will return immediately after the operation is launched on the device.")
 
         svd_info = cutn.create_tensor_svd_info(handle)
-        with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, options.blocking, timing) as (last_compute_event, elapsed):
+        with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, blocking, timing) as (last_compute_event, elapsed):
             cutn.gate_split(handle, 
                 input_tensor_descriptors[0], wrapped_operands[0].data_ptr, 
                 input_tensor_descriptors[1], wrapped_operands[1].data_ptr, 
@@ -122,6 +125,9 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
             if reduced_extent != mid_extent:
                 s.tensor = s.tensor[:reduced_extent]
     finally:
+        # when host workspace is allocated, synchronize stream before return
+        if workspaces[cutn.Memspace.HOST] is not None:
+            stream.synchronize()
         # Free resources
         decomposition_utils._destroy_tensor_descriptors(input_tensor_descriptors)
         decomposition_utils._destroy_tensor_descriptors(output_tensor_descriptors)

@@ -33,14 +33,23 @@ NORMALIZATION_MAP = {None: cutn.TensorSVDNormalization.NONE,
                     'L2': cutn.TensorSVDNormalization.L2,
                     'LInf': cutn.TensorSVDNormalization.LINF}
 
+SVD_ALGORITHM_MAP = {'gesvd': cutn.TensorSVDAlgo.GESVD,
+                     'gesvdj': cutn.TensorSVDAlgo.GESVDJ,
+                     'gesvdp': cutn.TensorSVDAlgo.GESVDP,
+                     'gesvdr': cutn.TensorSVDAlgo.GESVDR}
+
+SVD_ALGORITHM_MAP_TO_STRING = dict((val, key) for key, val in SVD_ALGORITHM_MAP.items())
+
 SVD_METHOD_CONFIG_MAP = {'abs_cutoff': cutn.TensorSVDConfigAttribute.ABS_CUTOFF,
                         'rel_cutoff': cutn.TensorSVDConfigAttribute.REL_CUTOFF, 
                         'partition': cutn.TensorSVDConfigAttribute.S_PARTITION, 
-                        'normalization': cutn.TensorSVDConfigAttribute.S_NORMALIZATION}
+                        'normalization': cutn.TensorSVDConfigAttribute.S_NORMALIZATION,
+                        'algorithm': cutn.TensorSVDConfigAttribute.ALGO}
 
 SVD_INFO_MAP = {'full_extent': cutn.TensorSVDInfoAttribute.FULL_EXTENT,
                 'reduced_extent': cutn.TensorSVDInfoAttribute.REDUCED_EXTENT,
-                'discarded_weight': cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT}
+                'discarded_weight': cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT,
+                'algorithm': cutn.TensorSVDInfoAttribute.ALGO}
 
 
 def compute_combined_size(size_dict, modes):
@@ -202,32 +211,44 @@ def parse_decomposition(subscripts, *operands):
     return operands, inputs, outputs, size_dict, mode_map_user_to_ord, mode_map_ord_to_user, mid_extent
 
 
-def get_svd_config_info_scalar_attr(handle, obj_type, obj, attr):
+def get_svd_config_info_scalar_attr(handle, obj_type, obj, attr, svd_algorithm=None):
     """
     Get the data for given attribute of SVDConfig or SVDInfo.
     """
     if obj_type == 'config':
-        dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
+        if attr != cutn.TensorSVDConfigAttribute.ALGO_PARAMS:
+            dtype = cutn.tensor_svd_config_get_attribute_dtype(attr)
+        else:
+            if svd_algorithm not in (cutn.TensorSVDAlgo.GESVDJ, cutn.TensorSVDAlgo.GESVDR):
+                return None
+            dtype = cutn.tensor_svd_algo_params_get_dtype(svd_algorithm)
         getter = cutn.tensor_svd_config_get_attribute
     elif obj_type == 'info':
-        dtype_getter = cutn.tensor_svd_info_get_attribute_dtype
+        if attr != cutn.TensorSVDInfoAttribute.ALGO_STATUS:
+            dtype = cutn.tensor_svd_info_get_attribute_dtype(attr)
+        else:
+            if svd_algorithm not in (cutn.TensorSVDAlgo.GESVDJ, cutn.TensorSVDAlgo.GESVDP):
+                return None
+            dtype = cutn.tensor_svd_algo_status_get_dtype(svd_algorithm)
         getter = cutn.tensor_svd_info_get_attribute
     else:
         raise ValueError("object type must be either config or info")
-
-    dtype = dtype_getter(attr)
     data = numpy.empty((1,), dtype=dtype)
     getter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
     return data
 
 
-def set_svd_config_scalar_attr(handle, obj, attr, data):
+def set_svd_config_scalar_attr(handle, obj, attr, data, svd_algorithm=None):
     """
     Set the data for given attribute of SVDConfig.
     """
-    dtype_getter = cutn.tensor_svd_config_get_attribute_dtype
     setter = cutn.tensor_svd_config_set_attribute
-    dtype = dtype_getter(attr)
+    if attr != cutn.TensorSVDConfigAttribute.ALGO_PARAMS:
+        dtype = cutn.tensor_svd_config_get_attribute_dtype(attr)
+    else:
+        if svd_algorithm not in (cutn.TensorSVDAlgo.GESVDJ, cutn.TensorSVDAlgo.GESVDR):
+            raise ValueError(f"Algorithm specific parameters not supported for {svd_algorithm}")
+        dtype = cutn.tensor_svd_algo_params_get_dtype(svd_algorithm)
     if not isinstance(data, numpy.ndarray):
         data = numpy.asarray(data, dtype=dtype)
     setter(handle, obj, attr, data.ctypes.data, data.dtype.itemsize)
@@ -237,16 +258,24 @@ def parse_svd_config(handle, svd_config, svd_method, logger=None):
     """
     Given an SVDMethod object, set the corresponding attributes in the SVDConfig.
     """
+    svd_algorithm = None
     for method_attr, attr in SVD_METHOD_CONFIG_MAP.items():
         data = getattr(svd_method, method_attr)
         if method_attr == 'partition':
             data = PARTITION_MAP[data]
         elif method_attr == 'normalization':
             data = NORMALIZATION_MAP[data]
+        elif method_attr == 'algorithm':
+            svd_algorithm = data = SVD_ALGORITHM_MAP[data]
         set_svd_config_scalar_attr(handle, svd_config, attr, data)
         if logger is not None:
             logger.info(f"The SVDConfig attribute '{method_attr}' has been set to {data}.")
 
+    algo_params = svd_method._get_algo_params()
+    if algo_params is not None:
+        set_svd_config_scalar_attr(handle, svd_config, cutn.TensorSVDConfigAttribute.ALGO_PARAMS, algo_params, svd_algorithm=svd_algorithm)
+        if logger is not None:
+            logger.info(f"The SVDConfig attribute '{cutn.TensorSVDConfigAttribute.ALGO_PARAMS}' has been set to {algo_params}.")
 
 def get_svd_info_dict(handle, svd_info):
     """
@@ -255,6 +284,13 @@ def get_svd_info_dict(handle, svd_info):
     info = dict()
     for key, attr in SVD_INFO_MAP.items():
         info[key] = get_svd_config_info_scalar_attr(handle, 'info', svd_info, attr).item()
+    svd_algorithm = info['algorithm']
+    algo_status = get_svd_config_info_scalar_attr(handle, 'info', svd_info, cutn.TensorSVDInfoAttribute.ALGO_STATUS, svd_algorithm=svd_algorithm)
+    info['algorithm'] = SVD_ALGORITHM_MAP_TO_STRING[svd_algorithm]
+    if algo_status is not None:
+        for name in algo_status.dtype.names:
+            key = info['algorithm'] + f'_{name}'
+            info[key] = algo_status[name].item()
     return info
 
 
@@ -282,8 +318,6 @@ def parse_decompose_operands_options(options, wrapped_operands, allowed_dtype_na
         with utils.device_ctx(device_id):
             handle = cutn.create()
     
-    blocking = options.blocking is True or operands_location == 'cpu'
-
     dtype_name = utils.get_operands_dtype(wrapped_operands)
     if allowed_dtype_names is not None and dtype_name not in allowed_dtype_names:
         raise ValueError(f"dtype {dtype_name} not supported")
@@ -295,7 +329,7 @@ def parse_decompose_operands_options(options, wrapped_operands, allowed_dtype_na
     internal_options = options.__class__(device_id=device_id,
                                         logger=logger,
                                         handle=handle,
-                                        blocking=blocking,
+                                        blocking=options.blocking,
                                         compute_type=compute_type,
                                         memory_limit=options.memory_limit,
                                         allocator=allocator)
@@ -309,22 +343,31 @@ def allocate_and_set_workspace(handle, allocator, workspace_desc, pref, mem_spac
     """
     workspace_size = cutn.workspace_get_memory_size(handle, workspace_desc, pref, mem_space, workspace_kind)
     # Allocate and set workspace
-    with utils.device_ctx(device_id), stream_ctx:
-        try:
-            logger.debug(f"Allocating memory for {task_name}")
-            workspace_ptr = allocator.memalloc(workspace_size)
-        except TypeError as e:
-            message = "The method 'memalloc' in the allocator object must conform to the interface in the "\
-                    "'BaseCUDAMemoryManager' protocol."
-            raise TypeError(message) from e
-    
-    logger.debug(f"Finished allocating memory of size {formatters.MemoryStr(workspace_size)} for decomposition in the context of stream {stream}.")
-
-    device_ptr = utils.get_ptr_from_memory_pointer(workspace_ptr)
-    cutn.workspace_set_memory(handle, workspace_desc, mem_space, workspace_kind, device_ptr, workspace_size)
-    logger.debug(f"The workspace memory (device pointer = {device_ptr}) has been set in the workspace descriptor.")
-
-    return workspace_ptr
+    if mem_space == cutn.Memspace.DEVICE:
+        with utils.device_ctx(device_id), stream_ctx:
+            try:
+                logger.debug(f"Allocating device memory for {task_name}")
+                workspace_ptr = allocator.memalloc(workspace_size)
+            except TypeError as e:
+                message = "The method 'memalloc' in the allocator object must conform to the interface in the "\
+                        "'BaseCUDAMemoryManager' protocol."
+                raise TypeError(message) from e
+        
+        logger.debug(f"Finished allocating device memory of size {formatters.MemoryStr(workspace_size)} for decomposition in the context of stream {stream}.")
+        device_ptr = utils.get_ptr_from_memory_pointer(workspace_ptr)
+        cutn.workspace_set_memory(handle, workspace_desc, mem_space, workspace_kind, device_ptr, workspace_size)
+        logger.debug(f"The workspace memory (device pointer = {device_ptr}) has been set in the workspace descriptor.")
+        return workspace_ptr
+    elif workspace_size != 0:
+        # host workspace
+        logger.debug(f"Allocating host memory for {task_name}")
+        workspace_host = numpy.empty(workspace_size, dtype=numpy.int8)
+        logger.debug(f"Finished allocating host memory of size {formatters.MemoryStr(workspace_size)} for decomposition.")
+        cutn.workspace_set_memory(handle, workspace_desc, mem_space, workspace_kind, workspace_host.ctypes.data, workspace_size)
+        logger.debug(f"The workspace memory (host pointer = {workspace_host.ctypes.data}) has been set in the workspace descriptor.")
+        return workspace_host
+    else:
+        return None
 
 
 def _destroy_tensor_descriptors(desc_tensors):

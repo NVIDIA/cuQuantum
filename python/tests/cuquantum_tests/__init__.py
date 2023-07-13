@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import atexit
+import glob
 import os
 import sys
 import tempfile
@@ -21,6 +23,15 @@ if cffi:
     # if the Python binding is not installed in the editable mode (pip install
     # -e .), the cffi tests would fail as the modules cannot be imported
     sys.path.append(os.getcwd())
+
+
+def clean_up_cffi_files():
+    files = glob.glob(os.path.join(os.getcwd(), "cuquantum_test_cffi*"))
+    for f in files:
+        try:
+            os.remove(f)
+        except FileNotFoundError:
+            pass
 
 
 dtype_to_data_type = {
@@ -114,6 +125,7 @@ class MemoryResourceFactory:
             self.ffi = ffi
             _cffi_mod1 = importlib.import_module(mod_name)
         self.ffi_mod = _cffi_mod1
+        atexit.register(clean_up_cffi_files)
 
         alloc_addr = self._get_address("my_alloc")
         free_addr = self._get_address("my_free")
@@ -173,6 +185,7 @@ class MemoryResourceFactory:
             self.ffi = ffi
             _cffi_mod2 = importlib.import_module(mod_name)
         self.ffi_mod = _cffi_mod2
+        atexit.register(clean_up_cffi_files)
 
         h = self.handler = self.ffi_mod.ffi.new("myHandler*")
         self.ffi_mod.lib.init_myHandler(h, self.source.encode())

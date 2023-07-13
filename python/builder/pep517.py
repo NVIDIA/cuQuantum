@@ -30,8 +30,8 @@ def get_requires_for_build_wheel(config_settings=None):
     # set up version constraints: note that CalVer like 22.03 is normalized to
     # 22.3 by setuptools, so we must follow the same practice in the constraints;
     # also, we don't need the patch number here
-    cuqnt_require = [f'custatevec-cu{utils.cuda_major_ver}~=1.3',   # ">=1.3.0,<2"
-                     f'cutensornet-cu{utils.cuda_major_ver}~=2.1',  # ">=2.1.0,<3"
+    cuqnt_require = [f'custatevec-cu{utils.cuda_major_ver}~=1.4',   # ">=1.4.0,<2"
+                     f'cutensornet-cu{utils.cuda_major_ver}~=2.2',  # ">=2.2.0,<3"
                     ]
 
     return _build_meta.get_requires_for_build_wheel(config_settings) + cuqnt_require

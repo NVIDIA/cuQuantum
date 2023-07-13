@@ -12,7 +12,7 @@ You can install all optional dependencies via
 ```
 pip install .[all]
 ```
-if running outside of the [cuQuantum Appliance container](https://docs.nvidia.com/cuda/cuquantum/appliance/index.html).
+if running outside of the [cuQuantum Appliance container](https://docs.nvidia.com/cuda/cuquantum/latest/appliance/index.html).
 
 **Note: You may have to build `qsimcirq` and `qiskit-aer` GPU support from source if needed.**
 

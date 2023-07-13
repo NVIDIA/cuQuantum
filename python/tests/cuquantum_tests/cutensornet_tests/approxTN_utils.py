@@ -46,6 +46,8 @@ def parse_split_expression(split_expression):
 
 
 def get_new_modes(used_modes, num):
+    # Note: cannot use _internal.circuit_converter_utils._get_symbol() here, as this
+    # module needs to be standalone. We don't need that many symbols here, anyway.
     base_modes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     new_modes = ""
     for mode in base_modes:
@@ -174,7 +176,7 @@ def split_contract_decompose(subscripts):
 def torch_support_wrapper(func):
     def new_func(T, *args, **kwargs):
         backend = infer_backend(T)
-        if backend not in (cp, np): # torch
+        if backend not in (cp, np):  # torch
             if T.device.type == 'cpu':
                 out = func(T.numpy(), *args, **kwargs)
             else:
@@ -216,7 +218,8 @@ def matrix_svd(
     rel_cutoff=0,
     partition=None,
     normalization=None,
-    return_info=True
+    return_info=True,
+    **kwargs,
 ):
     info = dict()
     backend = infer_backend(T)
@@ -507,13 +510,46 @@ def verify_split_SVD(
     modes_in, left_modes, right_modes, shared_mode = parse_split_expression(split_expression)
     shared_mode_idx = left_modes.index(shared_mode)
     shared_extent = array_u.shape[shared_mode_idx]
-    if is_exact_split(**split_options) and T is not None:
+    try:
+        max_mid_extent = min(array_u.size, array_v.size) // shared_extent
+    except:
+        # for torch
+        max_mid_extent = min(array_u.numel(), array_v.numel()) // shared_extent 
+    max_extent = split_options.pop('max_extent', max_mid_extent)
+    if is_exact_split(**split_options) and max_extent == max_mid_extent and T is not None:
         reference = T
     else:
         reference = reverse_einsum(split_expression, array_u_ref, array_s_ref, array_v_ref)
     out = reverse_einsum(split_expression, array_u, array_s, array_v)
+    if hasattr(out.dtype, "name"):
+        dtype_name = out.dtype.name
+    else:
+        dtype_name = str(out.dtype).split('.')[-1]
     backend = infer_backend(out)
     rtol = get_tolerance("svd", out.dtype) # Note: tolerance for gate and svd is equal
+    if info is not None:
+        algorithm = info['algorithm']
+    else:
+        algorithm = 'gesvd'
+    if algorithm == 'gesvdj':
+        if dtype_name in ['float64', 'complex128']:
+            rtol = 1e-8
+        if 'gesvdj_residual' not in info:
+            logging.warning("gesvdj_residual not recorded in info; verification may fail due to unknown runtime status")
+        else:
+            rtol = max(rtol, info['gesvdj_residual'])
+    elif algorithm == 'gesvdp':
+        if dtype_name in ['float64', 'complex128']:
+            rtol = 1e-8
+        if 'gesvdp_err_sigma' not in info:
+            logging.warning("gesvdp_err_sigma not recorded in info; verification may fail due to unknown runtime status")
+        elif info['gesvdp_err_sigma'] > 1e-4:
+            logging.warning(f"Large err sigma found for gesvdp: {info['gesvdp_err_sigma']}, skipping verification")
+            return True
+    elif algorithm == 'gesvdr':
+        if dtype_name in ['float64', 'complex128']:
+            rtol = 1e-4
+        
     is_equal = verify_close(reference, out, rtol, True, scale_factor=shared_extent, error_message="Contracted output is not close to the expected outcome")
 
     partition = split_options.get("partition", None)
@@ -549,7 +585,9 @@ def verify_split_SVD(
     if info is not None and info_ref is not None:
         for attr in ["full_extent", "reduced_extent"]:
             info_equal = info_equal and info[attr] == info_ref[attr]
-        info_equal = info_equal and (abs(info["discarded_weight"]-info_ref["discarded_weight"]) < rtol)
+        # For gesvdr, discarded weight is only computed when fix extent truncation is not enabled
+        if info['algorithm'] != 'gesvdr' or max_extent == max_mid_extent:
+            info_equal = info_equal and (abs(info["discarded_weight"]-info_ref["discarded_weight"]) < rtol)
     if not info_equal:
         info_details = "".join([f"{key}:({info.get(key)}, {info_ref.get(key)}); " for key in info.keys()])
         logging.error(f"SVD Info not matching the reference: {info_details}")

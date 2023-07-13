@@ -2,10 +2,11 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import copy
+import dataclasses
 import sys
 
 import cupy
-import dataclasses
 import numpy
 import pytest
 
@@ -35,12 +36,17 @@ from .test_utils import get_stream_for_backend
     "xp", backend_names
 )
 @pytest.mark.parametrize(
-    "decompose_expr", list(set([expr[0] for expr in tensor_decomp_expressions])) # filter out duplicated expressions
+    "decompose_expr", tensor_decomp_expressions
+)
+@pytest.mark.parametrize(
+    "blocking", (True, "auto")
 )
 class TestDecompose:
     
-    def _run_decompose(self, decompose_expr, xp, dtype, order, stream, method, **kwargs):
-        factory = DecomposeFactory(decompose_expr)
+    def _run_decompose(
+            self, decompose_expr, xp, dtype, order, stream, method, **kwargs):
+        decompose_expr, shapes = copy.deepcopy(decompose_expr)
+        factory = DecomposeFactory(decompose_expr, shapes=shapes)
         operand = factory.generate_operands(factory.input_shapes, xp, dtype, order)[0]
         backend = sys.modules[infer_object_package(operand)]
 
@@ -49,10 +55,11 @@ class TestDecompose:
         
         return_info = kwargs.pop("return_info", False)        
         outputs = tensor.decompose(decompose_expr, 
-                                operand, 
-                                method=method, 
-                                return_info=return_info, 
-                                stream=stream)
+                                   operand, 
+                                   method=method,
+                                   options={"blocking": kwargs["blocking"]},
+                                   stream=stream,
+                                   return_info=return_info)
         if stream:
             stream.synchronize()
         
@@ -72,7 +79,7 @@ class TestDecompose:
             else:
                 u, s, v = outputs
                 u_ref, s_ref, v_ref = outputs_ref
-                info = None
+                info = {'algorithm': method.algorithm}
                 info_ref = None
             
             assert type(u) is type(v)
@@ -90,18 +97,22 @@ class TestDecompose:
                                     info_ref=info_ref,
                                     **svd_kwargs)
     
-    def test_qr(self, decompose_expr, xp, dtype, order, stream):
-        self._run_decompose(decompose_expr, xp, dtype, order, stream, tensor.QRMethod())
+    def test_qr(self, decompose_expr, xp, dtype, order, stream, blocking):
+        self._run_decompose(
+            decompose_expr, xp, dtype, order, stream, tensor.QRMethod(),
+            blocking=blocking)
     
-    @pytest.mark.parametrize(
-        "svd_method_seed", (None, 0, 1, 2)
-    )
     @pytest.mark.parametrize(
         "return_info", (False, True)
     )
-    def test_svd(self, decompose_expr, xp, dtype, order, stream, return_info, svd_method_seed):
-        method = gen_rand_svd_method(seed=svd_method_seed)
-        self._run_decompose(decompose_expr, xp, dtype, order, stream, method, return_info=return_info)
+    def test_svd(
+            self, decompose_expr, xp, dtype, order, stream, return_info, blocking):
+        rng = numpy.random.default_rng(2021)
+        methods = [tensor.SVDMethod()] + [gen_rand_svd_method(rng) for _ in range(10)]
+        for method in methods:
+            self._run_decompose(
+                decompose_expr, xp, dtype, order, stream, method,
+                blocking=blocking, return_info=return_info)
 
 
 class TestDecompositionOptions(TestNetworkOptions):
@@ -134,11 +145,33 @@ class TestSVDMethod(_OptionsBase):
     def test_normalization(self, normalization):
         self.create_options({'normalization': normalization})
 
+    @pytest.mark.parametrize(
+        'algorithm', ['gesvd', 'gesvdj', 'gesvdp', 'gesvdr']
+    )
+    def test_algorithm(self, algorithm):
+        options = {'algorithm': algorithm}
+        if algorithm == 'gesvdj':
+            options['gesvdj_tol'] = 1e-16
+            options['gesvdj_max_sweeps'] = 80
+        elif algorithm == 'gesvdr':
+            options['gesvdr_oversampling'] = 4
+            options['gesvdr_niters'] = 8
+        self.create_options(options)
+
 
 class TestSVDInfo(_OptionsBase):
 
     options_type = tensor.SVDInfo
 
     # All fields are required. Therefore we test them all at once.
-    def test_svd_info(self):
-        self.create_options({'reduced_extent': 6, 'full_extent': 8, 'discarded_weight': 0.02})
+    @pytest.mark.parametrize(
+        'algorithm', ['gesvd', 'gesvdj', 'gesvdp', 'gesvdr']
+    )
+    def test_svd_info(self, algorithm):
+        info = {'reduced_extent': 6, 'full_extent': 8, 'discarded_weight': 0.02, 'algorithm': algorithm}
+        if algorithm == 'gesvdj':
+            info['gesvdj_sweeps'] = 12
+            info['gesvdj_residual'] = 1e-12
+        elif algorithm == 'gesvdp':
+            info['gesvdp_err_sigma'] = 1e-8
+        self.create_options(info)

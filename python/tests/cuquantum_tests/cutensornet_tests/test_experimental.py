@@ -130,22 +130,20 @@ class TestContractDecompose:
         self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
 
     
-    @pytest.mark.parametrize(
-        "svd_method_seed", (None, 0, 1, 2)
-    )
-    def test_contract_svd_decompose(self, decompose_expr, xp, dtype, order, stream, svd_method_seed):
-        svd_method = gen_rand_svd_method(seed=svd_method_seed)
-        algorithm = ContractDecomposeAlgorithm(qr_method=False, svd_method=svd_method)
-        self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
+    def test_contract_svd_decompose(self, decompose_expr, xp, dtype, order, stream):
+        rng = numpy.random.default_rng(2021)
+        methods = [tensor.SVDMethod()] + [gen_rand_svd_method(rng) for _ in range(10)]
+        for svd_method in methods:
+            algorithm = ContractDecomposeAlgorithm(qr_method=False, svd_method=svd_method)
+            self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
 
     
-    @pytest.mark.parametrize(
-        "svd_method_seed", (None, 0, 1, 2)
-    )
-    def test_contract_qr_assisted_svd_decompose(self, decompose_expr, xp, dtype, order, stream, svd_method_seed):
-        svd_method = gen_rand_svd_method(seed=svd_method_seed)
-        algorithm = ContractDecomposeAlgorithm(qr_method={}, svd_method=svd_method)
-        self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
+    def test_contract_qr_assisted_svd_decompose(self, decompose_expr, xp, dtype, order, stream):
+        rng = numpy.random.default_rng(2021)
+        methods = [tensor.SVDMethod()] + [gen_rand_svd_method(rng) for _ in range(10)]
+        for svd_method in methods:
+            algorithm = ContractDecomposeAlgorithm(qr_method={}, svd_method=svd_method)
+            self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
 
 
 class TestContractDecomposeAlgorithm(_OptionsBase):
@@ -178,7 +176,7 @@ class TestContractDecomposeInfo(_OptionsBase):
                                         intermediate_modes=[(1, 3), (2, 4)])]
     )
     @pytest.mark.parametrize(
-        'svd_info', [None, tensor.SVDInfo(reduced_extent=2, full_extent=4, discarded_weight=0.01)]
+        'svd_info', [None, tensor.SVDInfo(reduced_extent=2, full_extent=4, discarded_weight=0.01, algorithm='gesvdj')]
     )
     @pytest.mark.parametrize(
         'svd_method', [False, {}, tensor.SVDMethod()]

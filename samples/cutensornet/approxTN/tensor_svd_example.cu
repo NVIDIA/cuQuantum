@@ -217,12 +217,14 @@ int main()
    printf("Initialize the cuTensorNet library and create all tensor descriptors.\n");
 
    // Sphinx: #5
-   /********************************
-   * Setup SVD truncation parameters
-   *********************************/
+   /**********************************************
+   * Setup SVD algorithm and truncation parameters
+   ***********************************************/
 
    cutensornetTensorSVDConfig_t svdConfig;
    HANDLE_ERROR( cutensornetCreateTensorSVDConfig(handle, &svdConfig) );
+
+   // set up truncation parameters
    double absCutoff = 1e-2;
    HANDLE_ERROR( cutensornetTensorSVDConfigSetAttribute(handle, 
                                           svdConfig, 
@@ -235,6 +237,21 @@ int main()
                                           CUTENSORNET_TENSOR_SVD_CONFIG_REL_CUTOFF, 
                                           &relCutoff, 
                                           sizeof(relCutoff)) );
+   
+   // optional: choose gesvdj algorithm with customized parameters. Default is gesvd.
+   cutensornetTensorSVDAlgo_t svdAlgo = CUTENSORNET_TENSOR_SVD_ALGO_GESVDJ;
+   HANDLE_ERROR( cutensornetTensorSVDConfigSetAttribute(handle, 
+                                          svdConfig, 
+                                          CUTENSORNET_TENSOR_SVD_CONFIG_ALGO, 
+                                          &svdAlgo, 
+                                          sizeof(svdAlgo)) );
+   cutensornetGesvdjParams_t gesvdjParams{/*tol=*/1e-12, /*maxSweeps=*/80};
+   HANDLE_ERROR( cutensornetTensorSVDConfigSetAttribute(handle, 
+                                          svdConfig, 
+                                          CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS, 
+                                          &gesvdjParams, 
+                                          sizeof(gesvdjParams)) );
+   printf("Set up SVDConfig to use GESVDJ algorithm with truncation\n");
    
    /********************************************************
    * Create SVDInfo to record runtime SVD truncation details
@@ -337,11 +354,14 @@ int main()
 
    double discardedWeight{0};
    int64_t reducedExtent{0};
+   cutensornetGesvdjStatus_t gesvdjStatus;
    cudaDeviceSynchronize(); // device synchronization.
    HANDLE_ERROR( cutensornetTensorSVDInfoGetAttribute( handle, svdInfo, CUTENSORNET_TENSOR_SVD_INFO_DISCARDED_WEIGHT, &discardedWeight, sizeof(discardedWeight)) );
    HANDLE_ERROR( cutensornetTensorSVDInfoGetAttribute( handle, svdInfo, CUTENSORNET_TENSOR_SVD_INFO_REDUCED_EXTENT, &reducedExtent, sizeof(reducedExtent)) );
+   HANDLE_ERROR( cutensornetTensorSVDInfoGetAttribute( handle, svdInfo, CUTENSORNET_TENSOR_SVD_INFO_ALGO_STATUS, &gesvdjStatus, sizeof(gesvdjStatus)) );
 
    printf("elapsed time: %.2f ms\n", minTimeCUTENSOR * 1000.f);
+   printf("GESVDJ residual: %.4f, runtime sweeps = %d\n", gesvdjStatus.residual, gesvdjStatus.sweeps);
    printf("reduced extent found at runtime: %lu\n", reducedExtent);
    printf("discarded weight: %.2f\n", discardedWeight);
 

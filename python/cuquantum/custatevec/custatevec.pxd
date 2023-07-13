@@ -14,6 +14,14 @@ from cuquantum.utils cimport (DataType, DeviceAllocType, DeviceFreeType, int2,
 
 
 cdef extern from '<custatevec.h>' nogil:
+    # cuStateVec consts
+    const int CUSTATEVEC_VER_MAJOR
+    const int CUSTATEVEC_VER_MINOR
+    const int CUSTATEVEC_VER_PATCH
+    const int CUSTATEVEC_VERSION
+    const int CUSTATEVEC_ALLOCATOR_NAME_LEN
+    const int CUSTATEVEC_MAX_SEGMENT_MASK_SIZE
+
     # cuStateVec types
     ctypedef void* _Handle 'custatevecHandle_t'
     ctypedef int64_t _Index 'custatevecIndex_t'
@@ -24,10 +32,7 @@ cdef extern from '<custatevec.h>' nogil:
         void* ctx
         DeviceAllocType device_alloc
         DeviceFreeType device_free
-
-        # Cython limitation: cannot use C defines in declaring a static array,
-        # so we just have to hard-code CUSTATEVEC_ALLOCATOR_NAME_LEN here...
-        char name[64]
+        char name[CUSTATEVEC_ALLOCATOR_NAME_LEN]
     ctypedef void(*LoggerCallbackData 'custatevecLoggerCallbackData_t')(
         int32_t logLevel,
         const char* functionName,
@@ -69,6 +74,10 @@ cdef extern from '<custatevec.h>' nogil:
         CUSTATEVEC_MATRIX_TYPE_UNITARY
         CUSTATEVEC_MATRIX_TYPE_HERMITIAN
 
+    ctypedef enum _MatrixMapType 'custatevecMatrixMapType_t':
+        CUSTATEVEC_MATRIX_MAP_TYPE_BROADCAST
+        CUSTATEVEC_MATRIX_MAP_TYPE_MATRIX_INDEXED
+
     ctypedef enum _CollapseOp 'custatevecCollapseOp_t':
         CUSTATEVEC_COLLAPSE_NONE
         CUSTATEVEC_COLLAPSE_NORMALIZE_AND_ZERO
@@ -92,6 +101,11 @@ cdef extern from '<custatevec.h>' nogil:
         CUSTATEVEC_DATA_TRANSFER_TYPE_RECV
         CUSTATEVEC_DATA_TRANSFER_TYPE_SEND_RECV
 
+    ctypedef enum _StateVectorType 'custatevecStateVectorType_t':
+        CUSTATEVEC_STATE_VECTOR_TYPE_ZERO
+        CUSTATEVEC_STATE_VECTOR_TYPE_UNIFORM
+        CUSTATEVEC_STATE_VECTOR_TYPE_GHZ
+        CUSTATEVEC_STATE_VECTOR_TYPE_W
 
     # cuStateVec consts
     int CUSTATEVEC_VER_MAJOR
