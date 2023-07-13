@@ -2,7 +2,7 @@
 
 ## Documentation
 
-Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com/cuda/cuquantum/python).
+Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com/cuda/cuquantum/latest/python).
 
 
 ## Installation

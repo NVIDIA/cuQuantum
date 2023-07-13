@@ -1,6 +1,6 @@
 # cuTensorNet - Samples
 
-* [Documentation](https://docs.nvidia.com/cuda/cuquantum/cutensornet/index.html)
+* [Documentation](https://docs.nvidia.com/cuda/cuquantum/latest/cutensornet/index.html)
 
 ## Install
 
@@ -54,7 +54,7 @@ The sample for tensor QR, gate split and MPS can also be executed in the same fa
 ```
 export LD_LIBRARY_PATH=$CUDA_PATH/lib64:$CUTENSOR_ROOT/lib/11:$LD_LIBRARY_PATH
 ```
-The cuTENSOR library path would depend on the CUDA major version. Please refer to the [Getting Started](https://docs.nvidia.com/cuda/cuquantum/cutensornet/getting_started.html) page for further detail.
+The cuTENSOR library path would depend on the CUDA major version. Please refer to the [Getting Started](https://docs.nvidia.com/cuda/cuquantum/latest/cutensornet/getting_started.html) page for further detail.
 
 ## Support
 

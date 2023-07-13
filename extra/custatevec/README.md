@@ -1,6 +1,6 @@
 ## MPI Comm Plugin Extension
 
-The first version of [multi-node state vector simulator](https://docs.nvidia.com/cuda/cuquantum/appliance/qiskit.html) has been released in cuQuantum Appliance 22.11.  It currently supports a limited set of versions of OpenMPI and MPICH.  Other MPI libraries are supported by using an extension module called as External CommPlugin.
+The first version of [multi-node state vector simulator](https://docs.nvidia.com/cuda/cuquantum/latest/appliance/qiskit.html) has been released in cuQuantum Appliance 22.11.  It currently supports a limited set of versions of OpenMPI and MPICH.  Other MPI libraries are supported by using an extension module called as External CommPlugin.
 External CommPlugin is a small shared object that wraps MPI functions.  A customer needs to build its own external CommPlugin and link it to the MPI library of its preference to create a shared object.  Then, by specifying appropriate options to the simulator, the compiled shared object is dynamically loaded to use the MPI library for inter-process communications.
 
 ## Prerequisite
@@ -25,7 +25,7 @@ $ ls -l
 
 ## Simulator options
 
-The custom Comm Plugin object is selected by [cusvaer options](https://docs.nvidia.com/cuda/cuquantum/appliance/cusvaer.html#commplugin), `cusvaer_comm_plugin_type` and `cusvaer_comm_plugin_soname`.
+The custom Comm Plugin object is selected by [cusvaer options](https://docs.nvidia.com/cuda/cuquantum/latest/appliance/cusvaer.html#commplugin), `cusvaer_comm_plugin_type` and `cusvaer_comm_plugin_soname`.
 
 - `cusvaer_comm_plugin_type`: The value is `cusvaer.CommPluginType.EXTERNAL`
 - `cusvaer_comm_plugin_soname`  The name of the shared object of an external comm plugin
