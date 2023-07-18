@@ -64,15 +64,6 @@ cutn.distributed_reset_configuration(
 # Compute the contraction (with distributed path finding & contraction execution)
 result = cuquantum.contract(expr, *operands, options={'device_id' : device_id, 'handle': handle})
 
-# Create a new GPU buffer for verification
-result_cp = cp.empty_like(result)
-
-# Sum the partial contribution from each process on root, with GPU
-if rank == root:
-    comm.Reduce(sendbuf=MPI.IN_PLACE, recvbuf=result_cp, op=MPI.SUM, root=root)
-else:
-    comm.Reduce(sendbuf=result_cp, recvbuf=None, op=MPI.SUM, root=root)
-
 # Check correctness.
 if rank == root:
    result_cp = cp.einsum(expr, *operands, optimize=True)

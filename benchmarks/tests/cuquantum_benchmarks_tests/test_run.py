@@ -218,6 +218,8 @@ class TestCmdCircuit:
                 '--verbose']
         if backend == 'cusvaer':
             cmd += ['--cusvaer-global-index-bits', '--cusvaer-p2p-device-bits']
+        if backend == 'cutn':
+            cmd += ['--nhypersamples', '2']
 
         for cmd_prefix in tests:
             result = subprocess.run(cmd_prefix+cmd, env=env, capture_output=True)
@@ -239,38 +241,36 @@ class TestCmdCircuit:
 
 
 # TODO: test invalid cases and ensure we raise errors
-@pytest.mark.parametrize(
-    "args", (
-        ["--nqubits", "4", "--ntargets", "2"],
-        ["--nqubits", "4", "--targets", "2,3"],
-        ["--nqubits", "6", "--ntargets", "3", "--controls", "3"],
-        ["--nqubits", "4", "--targets", "2,3", "--ncontrols", "1"],
-        ["--nqubits", "4", "--targets", "2,3", "--controls", "1"],
-    )
-)
-@pytest.mark.parametrize(
-    "matrix_prop", (
-        [],  # default
-        ["--layout", "column", "--adjoint"],
-    )
-)
-@pytest.mark.parametrize(
-    "precision", ("single", "double")
-)
-@pytest.mark.parametrize(
-    "flush", (True, False)
-)
-class TestCmdApiApplyMatrix:
+class TestCmdApi:
 
-    benchmark = "apply_matrix"
-
+    @pytest.mark.parametrize(
+        "args", (
+            ["--nqubits", "4", "--ntargets", "2"],
+            ["--nqubits", "4", "--targets", "2,3"],
+            ["--nqubits", "6", "--ntargets", "3", "--controls", "3"],
+            ["--nqubits", "4", "--targets", "2,3", "--ncontrols", "1"],
+            ["--nqubits", "4", "--targets", "2,3", "--controls", "1"],
+        )
+    )
+    @pytest.mark.parametrize(
+        "matrix_prop", (
+            [],  # default
+            ["--layout", "column", "--adjoint"],
+        )
+    )
+    @pytest.mark.parametrize(
+        "precision", ("single", "double")
+    )
+    @pytest.mark.parametrize(
+        "flush", (True, False)
+    )
     def test_apply_matrix(self, args, matrix_prop, precision, flush, tmp_path, visible_device):
-
+        benchmark = 'apply_matrix'
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
 
         cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
-                '--benchmark', self.benchmark,
+                '--benchmark', benchmark,
                 '--precision', precision,
                 '--cachedir', str(tmp_path),
                 # speed up the tests...
@@ -286,7 +286,158 @@ class TestCmdApiApplyMatrix:
 
         try:
             assert bool(result.check_returncode()) == False
-            cached_json = [f for f in glob.glob(str(tmp_path / f"data/{self.benchmark}.json")) if os.path.isfile(f)]
+            cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
+            assert len(cached_json) == 1  # TODO: test aggregate behavior too?
+        except:
+            # make debugging easier
+            print("stdout:\n", result.stdout.decode())
+            print("stderr:\n", result.stderr.decode())
+            raise
+        finally:
+            print("cmd:\n", ' '.join(cmd))
+
+    @pytest.mark.parametrize(
+        "args", (
+            ("--nqubits", "4", "--ntargets", "2",),
+            ("--nqubits", "4", "--targets", "2,3",),
+            ("--nqubits", "6", "--ntargets", "2", "--controls", "3",),
+            ("--nqubits", "4", "--targets", "1,2", "--ncontrols", "1",),
+            ("--nqubits", "4", "--targets", "2,3", "--controls", "1",),
+        )
+    )
+    @pytest.mark.parametrize(
+        "diag", (
+            (),
+            ("--has-diag", "--location-diag", "device",),
+            ("--has-diag", "--precision-diag", "double", "--precision", "double",),
+        )
+    )
+    @pytest.mark.parametrize(
+        "perm", (
+            ("--has-perm",),
+            ("--has-perm", "--location-perm", "device",),
+            ("--perm-table", "2,3,0,1",),  # this test assumes ntargets=2 always
+        )
+    )
+    @pytest.mark.parametrize(
+        "matrix_prop", (
+            (),  # default
+            ("--adjoint",),
+        )
+    )
+    def test_apply_generalized_permutation_matrix(
+            self, args, diag, perm, matrix_prop, tmp_path, visible_device):
+        benchmark = 'apply_generalized_permutation_matrix'
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
+
+        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
+               '--benchmark', benchmark,
+               '--cachedir', str(tmp_path),
+               # speed up the tests...
+               '--nwarmups', '1',
+               '--nrepeats', '1',
+               '--verbose']
+        cmd += args
+        cmd += diag
+        cmd += perm
+        cmd += matrix_prop
+        result = subprocess.run(cmd, env=env, capture_output=True)
+
+        try:
+            assert bool(result.check_returncode()) == False
+            cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
+            assert len(cached_json) == 1  # TODO: test aggregate behavior too?
+        except:
+            # make debugging easier
+            print("stdout:\n", result.stdout.decode())
+            print("stderr:\n", result.stderr.decode())
+            raise
+        finally:
+            print("cmd:\n", ' '.join(cmd))
+
+    @pytest.mark.parametrize(
+        "args", (
+            ("--nqubits", "4", "--nbit-ordering", "2", "--nshots", "256"),
+            ("--nqubits", "4", "--bit-ordering", "2,3", "--output-order", "random"),
+        )
+    )
+    @pytest.mark.parametrize(
+        "precision", ("single", "double")
+    )
+    def test_cusv_sampler(self, args, precision, tmp_path, visible_device):
+        benchmark = 'cusv_sampler'
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
+
+        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
+                '--benchmark', benchmark,
+                '--precision', precision,
+                '--cachedir', str(tmp_path),
+                # speed up the tests...
+                '--nwarmups', '1',
+                '--nrepeats', '1',
+                '--verbose']
+        cmd += args
+        result = subprocess.run(cmd, env=env, capture_output=True)
+
+        try:
+            assert bool(result.check_returncode()) == False
+            cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
+            assert len(cached_json) == 1  # TODO: test aggregate behavior too?
+        except:
+            # make debugging easier
+            print("stdout:\n", result.stdout.decode())
+            print("stderr:\n", result.stderr.decode())
+            raise
+        finally:
+            print("cmd:\n", ' '.join(cmd))
+
+    @pytest.mark.parametrize(
+        "args", (
+            ["--expr", "abc->abx,xc", "--shape", "4,8,4"],
+            ["--expr", "abcd->ax,bcdx", "--shape", "4,8,4,2"],
+        )
+    )
+    @pytest.mark.parametrize(
+        "method", (
+            ("--method", "QR",),
+            ("--method", "SVD",),
+            ("--algorithm", "gesvd"),
+            ("--algorithm", "gesvdj"),
+            ("--algorithm", "gesvdr"),
+            ("--algorithm", "gesvdp"),
+        )
+    )
+    @pytest.mark.parametrize(
+        "precision", ("single", "double")
+    )
+    @pytest.mark.parametrize(
+        "is_complex", (True, False)
+    )
+    def test_tensor_decompose(self, args, method, precision, is_complex, tmp_path, visible_device):
+        benchmark = 'tensor_decompose'
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
+
+        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
+                '--benchmark', benchmark,
+                '--precision', precision,
+                '--cachedir', str(tmp_path),
+                # speed up the tests...
+                '--nwarmups', '1',
+                '--nrepeats', '1',
+                '--verbose']
+        cmd += args
+        cmd += method
+        if is_complex:
+            cmd.append('--is-complex')
+
+        result = subprocess.run(cmd, env=env, capture_output=True)
+
+        try:
+            assert bool(result.check_returncode()) == False
+            cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
             assert len(cached_json) == 1  # TODO: test aggregate behavior too?
         except:
             # make debugging easier

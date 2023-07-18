@@ -10,8 +10,9 @@ from cupyx.profiler import benchmark
 
 from cuquantum import custatevec as cusv
 
-from .._utils import (dtype_to_cuda_type, dtype_to_compute_type, precision_str_to_dtype,
-                      random_unitary, L2flush, benchmark_with_prerun)
+from .._utils import (benchmark_with_prerun, check_targets_controls, dtype_to_cuda_type,
+                      dtype_to_compute_type, L2flush, precision_str_to_dtype,
+                      random_unitary, wrap_with_nvtx)
 
 
 # set up a logger
@@ -21,33 +22,26 @@ logger = logging.getLogger(logger_name)
 
 def test_apply_matrix(
         n_qubits, targets, controls, dtype_sv, dtype_mat, layout, adjoint,
-        n_warmup, n_repeat, location, *, flush_l2=False):
-    logger.debug(f"{n_qubits = }")
-    logger.debug(f"{targets = }")
-    logger.debug(f"{controls = }")
-    logger.debug(f"{dtype_sv = }")
-    logger.debug(f"{dtype_mat = }")
-    logger.debug(f"{layout = }")
-    logger.debug(f"{adjoint = }")
-    logger.debug(f"{location = }")
-    logger.debug(f"{n_warmup = }")
-    logger.debug(f"{n_repeat = }")
-    logger.debug(f"{flush_l2 = }")
+        n_warmup, n_repeat, location, *,
+        flush_l2=False, benchmark_data=None):
+    logger.debug(f"{n_qubits=}")
+    logger.debug(f"{targets=}")
+    logger.debug(f"{controls=}")
+    logger.debug(f"{dtype_sv=}")
+    logger.debug(f"{dtype_mat=}")
+    logger.debug(f"{layout=}")
+    logger.debug(f"{adjoint=}")
+    logger.debug(f"{location=}")
+    logger.debug(f"{n_warmup=}")
+    logger.debug(f"{n_repeat=}")
+    logger.debug(f"{flush_l2=}")
     
     dtype_sv = precision_str_to_dtype(dtype_sv)
     dtype_mat = precision_str_to_dtype(dtype_mat)
     xp = cp if location == 'device' else np
     layout = cusv.MatrixLayout.ROW if layout == "row" else cusv.MatrixLayout.COL
 
-    # simple sanity checks
-    assert len(targets) >= 1, "must have at least 1 target qubit"
-    _targets = set(targets)
-    assert len(_targets) == len(targets), "target qubit IDs cannot overlap"
-    _controls = set(controls)
-    assert len(_controls) == len(controls), "control qubits IDs cannot overlap"
-    assert len(_targets & _controls) == 0, "targets and controls cannot overlap"
-    _involved = targets + controls
-    assert 0 <= min(_involved) and max(_involved) < n_qubits, f"involved qubit IDs must be in range [0, {n_qubits})"
+    check_targets_controls(targets, controls, n_qubits)
 
     size_sv = 2**n_qubits
     n_targets = len(targets)
@@ -109,19 +103,21 @@ def test_apply_matrix(
                 controls, 0, n_controls,  # TODO: support control bit values
                 compute_type, workspace_ptr, workspace_size)
 
+        apply_matrix = wrap_with_nvtx(cusv.apply_matrix, "apply_matrix")
+
         if flush_l2:
             l2flusher = L2flush()
             def f(*args, **kwargs):
                 l2flusher.flush()  # clear L2 cache
 
             result = benchmark_with_prerun(
-                cusv.apply_matrix,
+                apply_matrix,
                 args,
                 n_warmup=n_warmup, n_repeat=n_repeat,
                 pre_run=f)
         else:
             result = benchmark(
-                cusv.apply_matrix,
+                apply_matrix,
                 args,
                 n_warmup=n_warmup, n_repeat=n_repeat)
     

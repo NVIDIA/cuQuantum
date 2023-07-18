@@ -7,6 +7,7 @@ import logging
 import os
 import time
 import warnings
+import sys
 
 import numpy as np
 try:
@@ -15,7 +16,7 @@ except ImportError:
     pennylane = None
 
 from .backend import Backend
-from .._utils import is_running_mpi
+from .._utils import call_by_root, EarlyReturnError, is_running_mpi
 
 
 # set up a logger
@@ -80,6 +81,23 @@ class Pennylane(Backend):
             if self.ngpus != 0:
                 raise ValueError(f"cannot specify --ngpus for the backend {self.identifier}")
             dev = pennylane.device("default.qubit", wires=self.nqubits, shots=nshots, c_dtype=self.dtype)
+        elif self.identifier == "pennylane-dumper":
+            import cloudpickle
+            import cuquantum_benchmarks
+            cloudpickle.register_pickle_by_value(cuquantum_benchmarks)
+
+            # note: before loading the pickle, one should check if the Python version agrees
+            # (probably pennylane's version too)
+            py_major_minor = f'{sys.version_info.major}.{sys.version_info.minor}'
+            circuit_filename = kwargs.pop('circuit_filename')
+            circuit_filename += f"_pny_raw_py{py_major_minor}.pickle"
+            def dump():
+                logger.info(f"dumping pennylane (raw) circuit as {circuit_filename} ...")
+                with open(circuit_filename, 'wb') as f:
+                    cloudpickle.dump(circuit, f)  # use highest protocol
+                    logger.info("early exiting as the dumper task is completed")
+            call_by_root(dump)
+            raise EarlyReturnError
         else:
             raise ValueError(f"the backend {self.identifier} is not recognized")
 
@@ -89,9 +107,9 @@ class Pennylane(Backend):
     def preprocess_circuit(self, circuit, *args, **kwargs):
         nshots = kwargs.get('nshots', 1024)
         t1 = time.perf_counter()
-        self.circuit = self._make_qnode(circuit, nshots)
+        self.circuit = self._make_qnode(circuit, nshots, **kwargs)
         t2 = time.perf_counter()
-        time_make_qnode = t2-t1
+        time_make_qnode = t2 - t1
         logger.info(f'make qnode took {time_make_qnode} s')
         return {'make_qnode': time_make_qnode}
 
@@ -107,3 +125,4 @@ PnyLightningGpu = functools.partial(Pennylane, identifier='pennylane-lightning-g
 PnyLightningCpu = functools.partial(Pennylane, identifier='pennylane-lightning-qubit')
 PnyLightningKokkos = functools.partial(Pennylane, identifier='pennylane-lightning-kokkos')
 Pny = functools.partial(Pennylane, identifier='pennylane')
+PnyDumper = functools.partial(Pennylane, identifier='pennylane-dumper')

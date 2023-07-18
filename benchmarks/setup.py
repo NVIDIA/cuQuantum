@@ -32,15 +32,16 @@ install_requires = [
     "psutil",
     "scipy",
     "networkx",
+    "nvtx",
 ]
 if importlib.util.find_spec('cuquantum') is None:
-    install_requires.append("cuquantum-python>=22.7")
+    install_requires.append("cuquantum-python>=23.3")
 
 
 setup(
     name="cuquantum-benchmarks",
     version=version,
-    description="NVIDIA cuQuantum Circuit Performance Benchmark Suite",
+    description="NVIDIA cuQuantum Performance Benchmark Suite",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NVIDIA/cuQuantum",

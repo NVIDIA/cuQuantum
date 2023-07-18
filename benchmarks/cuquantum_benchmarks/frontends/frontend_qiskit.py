@@ -57,12 +57,12 @@ class Qiskit(Frontend):
 
             elif g.id == 'cu':
                 U_gate = UnitaryGate(g.matrix, g.name).control(1)
-                circuit.append(U_gate, [g.controls]+g.targets)
+                circuit.append(U_gate, [g.controls]+g.targets[::-1])
 
             elif g.id == 'u':
                 # TODO: give the gate a name?
                 U_gate = UnitaryGate(g.matrix)
-                circuit.append(U_gate, g.targets)
+                circuit.append(U_gate, g.targets[::-1])
 
             elif g.id == 'measure':
                 circuit.measure(g.targets, g.targets)

@@ -23,12 +23,6 @@ benchmarks = {
 
     'qft': {
         'benchmark': QFT,
-        'nqubits': {
-            'default': list(range(16, 32, 4)) + [30],
-            '3090': list(range(16, 32, 4)) + [30],
-            'A6000': list(range(16, 32, 4)) + [30],
-            'A100-SXM4-80GB': list(range(16, 34, 2)) + [33],
-        },
         'config': {
             'measure': True,
         },
@@ -36,12 +30,6 @@ benchmarks = {
 
     'iqft': {
         'benchmark': IQFT,
-        'nqubits': {
-            'default': list(range(16, 32, 4)) + [30],
-            '3090': list(range(16, 32, 4)) + [30],
-            'A6000': list(range(16, 32, 4)) + [30],
-            'A100-SXM4-80GB': list(range(16, 34, 2)) + [33],
-        },
         'config': {
             'measure': True,
         },
@@ -49,12 +37,6 @@ benchmarks = {
 
     'ghz': {
         'benchmark': GHZ,
-        'nqubits': {
-            'default': list(range(16, 32, 4)) + [30],
-            '3090': list(range(16, 32, 4)) + [30],
-            'A6000': list(range(16, 32, 4)) + [30],
-            'A100-SXM4-80GB': list(range(16, 34, 2)) + [33],
-        },
         'config': {
             'measure': True,
         },
@@ -62,12 +44,6 @@ benchmarks = {
 
     'simon': {
         'benchmark': Simon,
-        'nqubits': {
-            'default': list(range(6, 16, 2)) + [15],
-            '3090': list(range(6, 16, 2)) + [15],
-            'A6000': list(range(6, 16, 2)) + [15],
-            'A100-SXM4-80GB': list(range(6, 17, 1)),
-        },
         'config': {
             'measure': True,
         },
@@ -75,12 +51,6 @@ benchmarks = {
 
     'hidden_shift': {
         'benchmark': HiddenShift,
-        'nqubits': {
-            'default': list(range(16, 32, 4)) + [30],
-            '3090': list(range(16, 32, 4)) + [30],
-            'A6000': list(range(16, 32, 4)) + [30],
-            'A100-SXM4-80GB': list(range(16, 34, 2)) + [33],
-        },
         'config': {
             'measure': True,
         },
@@ -88,12 +58,6 @@ benchmarks = {
 
     'qaoa': {
         'benchmark': QAOA,
-        'nqubits': {
-            'default': list(range(16, 32, 4)) + [30],
-            '3090': list(range(16, 32, 4)) + [30],
-            'A6000': list(range(16, 32, 4)) + [30],
-            'A100-SXM4-80GB': list(range(16, 34, 2)) + [33],
-        },
         'config': {
             'measure': True,
             'p': 1,
@@ -102,12 +66,6 @@ benchmarks = {
 
     'qpe': {
         'benchmark': QPE,
-        'nqubits': {
-            'default': list(range(16, 32, 4)) + [30],
-            '3090': list(range(16, 32, 4)) + [30],
-            'A6000': list(range(16, 32, 4)) + [30],
-            'A100-SXM4-80GB': list(range(16, 34, 2)),
-        },
         'config': {
             'measure': True,
             'unfold': False,
@@ -116,9 +74,6 @@ benchmarks = {
 
     'quantum_volume': {
         'benchmark': QuantumVolume,
-        'nqubits': {
-            'default': list(range(16, 32, 4)) + [30],
-        },
         'config': {
             'measure': True,
         },
@@ -126,12 +81,6 @@ benchmarks = {
 
     'random': {
         'benchmark': Random,
-        'nqubits': {
-            'default': list(range(16, 32, 4)) + [30],
-            '3090': list(range(16, 32, 4)) + [30],
-            'A6000': list(range(16, 32, 4)) + [30],
-            'A100-SXM4-80GB': list(range(16, 34, 2)),
-        },
         'config': {
             'measure': True,
         },
@@ -152,6 +101,7 @@ backends = {
             # TODO: even this may not be a good default
             'ncputhreads': multiprocessing.cpu_count() // 2,
             'precision': 'single',
+            'nhypersamples': 32,
         },
     },
 
@@ -291,6 +241,17 @@ backends = {
             'nfused': None,
             'ngpus': 1,
             'ncputhreads': 0,
+            'precision': 'single',
+        },
+    },
+
+    # dummy
+    'pennylane-dumper': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 0,
+            'ncputhreads': 1,
             'precision': 'single',
         },
     },

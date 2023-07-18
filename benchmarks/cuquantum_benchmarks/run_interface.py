@@ -4,18 +4,21 @@
 
 import functools
 import logging
+import math
+import nvtx
 import os
 import pickle
 import random
 import time
-
 import cupy as cp
 
 from .backends import createBackend
 from .frontends import createFrontend
-from ._utils import (call_by_root, gen_run_env, HashableDict, is_running_mpiexec,
-                     load_benchmark_data, report, save_benchmark_data, reseed,
-                     is_running_mpi)
+from ._utils import (
+    call_by_root, create_cache, EarlyReturnError, gen_run_env, get_mpi_rank, HashableDict,
+    is_running_mpiexec, is_running_mpi, load_benchmark_data, report, reseed,
+    save_benchmark_data,
+)
 
 
 # set up a logger
@@ -23,102 +26,68 @@ logger_name = "cuquantum-benchmarks"
 logger = logging.getLogger(logger_name)
 
 
-def run_interface(
-        benchmarks, nqubits_interface, ngpus_interface, ncpu_threads_interface, frontend, backend, nwarmups, nrepeats, nshots_interface,
-        nfused_interface, precision_interface, new_circ, save, cache_dir,
-        cusvaer_global_index_bits, cusvaer_p2p_device_bits, cusvaer_data_transfer_buffer_bits, cusvaer_comm_plugin_type, cusvaer_comm_plugin_soname):
+class BenchCircuitRunner:
 
-    reseed(1234)  # TODO: use a global seed?
-    backend, backend_config = backend  # unpack
-    ngpus = ngpus_interface if ngpus_interface is not None else backend_config['config']['ngpus']
-    ncpu_threads = ncpu_threads_interface if ncpu_threads_interface is not None else backend_config['config']['ncputhreads']
-    nshots = nshots_interface if nshots_interface is not None else backend_config['config']['nshots']
-    nfused = nfused_interface if nfused_interface is not None else backend_config['config']['nfused']
-    precision = precision_interface if precision_interface is not None else backend_config['config']['precision']
+    # currently we assume the following subdirectories exist
+    required_subdirs = ('circuits', 'data')
 
-    general_interface = GeneralInterface(frontend=frontend,
-                                         backend=backend,
-                                         nshots=nshots,
-                                         nfused=nfused,
-                                         precision=precision,
-                                         #append=append,
-                                         new_circ=new_circ,
-                                         save=save)
+    def __init__(self, **kwargs):
+        # use default backend config unless users want to overwrite it
+        self.backend_config = backend_config = kwargs.pop("backend_config")
+        for k in (# generic backend options
+                  "ngpus", "ncputhreads", "nshots", "nfused", "precision",
+                  # cusvaer options
+                  'cusvaer_global_index_bits', 'cusvaer_p2p_device_bits',
+                  'cusvaer_data_transfer_buffer_bits', 'cusvaer_comm_plugin_type',
+                  'cusvaer_comm_plugin_soname',
+                  # cutn options
+                  'nhypersamples'):
+            v = kwargs.pop(k)
+            if k.startswith('cusvaer') or v is not None:
+                setattr(self, k, v)
+            else:
+                setattr(self, k, backend_config['config'][k])
 
-    for benchmark_name in benchmarks.keys(): # Iterate over diferent benchmarks
-        benchmark = benchmarks[benchmark_name]
+        # To be parsed in run()
+        self._benchmarks = kwargs.pop("benchmarks")
+        self._nqubits = kwargs.pop("nqubits")
 
-        gpu_device_properties = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
-        gpu_name = gpu_device_properties['name'].decode('utf-8').split(' ')[-1]
-        if gpu_name not in benchmark['nqubits']:
-            # Use the default config for this benchmark if there is no GPU-specific config
-            gpu_name = 'default'
-        nqubits_list = [nqubits_interface] if nqubits_interface else benchmark['nqubits'][gpu_name]
+        # other common benchmark args
+        self.frontend = kwargs.pop("frontend")
+        self.backend = kwargs.pop("backend")
+        self.cache_dir = kwargs.pop("cachedir")
+        self.nwarmups = kwargs.pop("nwarmups")
+        self.nrepeats = kwargs.pop("nrepeats")
+        self.new_circ = kwargs.pop("new")
+        self.save = True
+        assert len(kwargs) == 0, f"unhandled cmdline args: {kwargs}"
 
-        benchmark_object = benchmark['benchmark']
-        config = benchmark['config']
-        config['precision'] = precision  # WAR
-
-        for nqubits in nqubits_list: # Iterate over diferent number of qubits
-            run_specific = RunSpecific(benchmark_name=benchmark_name,
-                                       benchmark_object=benchmark_object,
-                                       nqubits=nqubits,
-                                       ngpus=ngpus,
-                                       ncpu_threads=ncpu_threads,
-                                       nwarmups=nwarmups,
-                                       nrepeats=nrepeats,
-                                       config=config,
-                                       general_interface=general_interface,
-                                       cache_dir=cache_dir,
-                                       cusvaer_global_index_bits=cusvaer_global_index_bits,
-                                       cusvaer_p2p_device_bits=cusvaer_p2p_device_bits,
-                                       cusvaer_data_transfer_buffer_bits=cusvaer_data_transfer_buffer_bits,
-                                       cusvaer_comm_plugin_type=cusvaer_comm_plugin_type,
-                                       cusvaer_comm_plugin_soname=cusvaer_comm_plugin_soname)
-            run_specific.run()
-
-
-class GeneralInterface:
-
-    def __init__(self, frontend, backend, nshots, nfused, precision, new_circ, save):
-        self.frontend = frontend
-        self.backend = backend
-        self.nshots = nshots
-        self.nfused = nfused
-        self.precision = precision
-        #self.append = append
-        self.new_circ = new_circ
-        self.save = save
         self.full_data = {}
-
-
-class RunSpecific:
-
-    def __init__(
-            self, benchmark_name, benchmark_object, nqubits, ngpus, ncpu_threads, nwarmups, nrepeats, config,
-            general_interface, cache_dir,
-            cusvaer_global_index_bits, cusvaer_p2p_device_bits, cusvaer_data_transfer_buffer_bits,
-            cusvaer_comm_plugin_type, cusvaer_comm_plugin_soname):
-        self.benchmark_name = benchmark_name
-        self.benchmark_object = benchmark_object
-        self.nqubits = nqubits
-        self.ngpus = ngpus
-        self.ncpu_threads = ncpu_threads
-        self.nwarmups=nwarmups
-        self.nrepeats=nrepeats
-        self.config = config
-        self.general_interface = general_interface
         self.benchmark_data = {}
-        self.cache_dir = cache_dir
-        # cusvaer options
-        self.cusvaer_global_index_bits = cusvaer_global_index_bits
-        self.cusvaer_p2p_device_bits = cusvaer_p2p_device_bits
-        self.cusvaer_data_transfer_buffer_bits = cusvaer_data_transfer_buffer_bits
-        self.cusvaer_comm_plugin_type = cusvaer_comm_plugin_type
-        self.cusvaer_comm_plugin_soname = cusvaer_comm_plugin_soname
 
-        # currently we assume the following subdirectories exist
-        self.required_subdirs = ('circuits', 'data')
+        # it could be that the cache dirs are not created yet
+        call_by_root(functools.partial(create_cache, self.cache_dir, self.required_subdirs))
+
+    def run(self):
+        if self._nqubits is None:
+            gpu_prop = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
+            max_n_qubits = math.floor(math.log2(gpu_prop['totalGlobalMem'] / (8 if self.precision == 'single' else 16)))
+            nqubits_list = list(range(16, max_n_qubits + 4, 4))
+        else:
+            nqubits_list = [self._nqubits]
+
+        for benchmark_name in self._benchmarks.keys():
+            b = self._benchmarks[benchmark_name]
+            benchmark_object = b['benchmark']
+            benchmark_config = b['config']
+            benchmark_config['precision'] = self.precision  # some frontends may need it
+
+            for nqubits in nqubits_list:
+                self.benchmark_name = benchmark_name
+                self.benchmark_object = benchmark_object
+                self.benchmark_config = benchmark_config
+                self.nqubits = nqubits
+                self._run()
 
     def _load_or_generate_circuit(self, circuit_filename):
         # We need a mechanism to ensure any incompatible gate_sequence generated
@@ -131,9 +100,17 @@ class RunSpecific:
         gate_seq_ver = 1
 
         circuit_filename += f"_v{gate_seq_ver}.pickle"
-        frontend = createFrontend(self.general_interface.frontend, self.nqubits, self.config)
+        frontend = createFrontend(self.frontend, self.nqubits, self.benchmark_config)
+
+        dump_only = bool(os.environ.get('CUQUANTUM_BENCHMARKS_DUMP_GATES', False))
+        if dump_only:
+            # hijack & discard user input
+            from .frontends.frontend_dumper import Dumper
+            frontend = Dumper(
+                self.nqubits,
+                {**self.benchmark_config, 'circuit_filename': circuit_filename})
         try:
-            if self.general_interface.new_circ:
+            if self.new_circ:
                 raise ValueError
 
             # If this circuit has been generated previously, load it
@@ -143,13 +120,17 @@ class RunSpecific:
                 logger.debug(f'Circuit loaded from {circuit_filename}')
 
         except:  # Otherwise, generate the circuit and save it
-            gate_sequence = self.benchmark_object.generateGatesSequence(self.nqubits, self.config)
+            gate_sequence = self.benchmark_object.generateGatesSequence(self.nqubits, self.benchmark_config)
             circuit = frontend.generateCircuit(gate_sequence)
             def dump():
                 with open(os.path.join(self.cache_dir, circuit_filename), 'wb') as f:
                     pickle.dump(gate_sequence, f, protocol=pickle.HIGHEST_PROTOCOL)
                     logger.debug(f'Circuit generated and saved to {circuit_filename}')
             call_by_root(dump)
+
+        if dump_only:
+            logger.info("early exiting as the dumper task is completed")
+            raise EarlyReturnError
 
         return circuit
 
@@ -176,6 +157,7 @@ class RunSpecific:
             backend.pre_run(circuit, nshots=nshots)
             backend.run(circuit, nshots)
 
+        annotation_string = f"p{get_mpi_rank()}_run_"
         # actual timing
         for i in range(self.nrepeats):
             backend.pre_run(circuit, nshots=nshots)
@@ -184,7 +166,8 @@ class RunSpecific:
                 start_gpu.record()
             pe1 = time.perf_counter()
 
-            run_dict = backend.run(circuit, nshots)
+            with nvtx.annotate(annotation_string + str(i)):
+                run_dict = backend.run(circuit, nshots)
 
             pe2 = time.perf_counter()
             if self.ngpus > 0:
@@ -212,7 +195,7 @@ class RunSpecific:
 
     def _fix_filename_for_cutn(self, circuit_filename, nqubits):
         target = pauli = None
-        if self.general_interface.backend == 'cutn':
+        if self.backend == 'cutn':
             target = os.environ.get('CUTENSORNET_BENCHMARK_TARGET', 'amplitude')
             circuit_filename += f'_{target}'
             if target == 'expectation':
@@ -221,34 +204,36 @@ class RunSpecific:
         return circuit_filename, target, pauli
 
     def extract_backend_version(self):
-        if 'aer' in self.general_interface.backend:
+        if 'aer' in self.backend:
             import qiskit
             version = qiskit.__qiskit_version__['qiskit-aer']
-        elif 'qsim' in self.general_interface.backend:
+        elif 'qsim' in self.backend:
             import qsimcirq
             version = qsimcirq.__version__
-        elif self.general_interface.backend == 'cutn':
+        elif self.backend == 'cutn':
             import cuquantum
             version = cuquantum.cutensornet.get_version()
-        elif self.general_interface.backend == 'cirq':
+        elif self.backend == 'cirq':
             import cirq
             version = cirq.__version__
-        elif self.general_interface.backend == 'naive':
+        elif self.backend == 'naive':
             from .backends import backends
             version = backends['naive'].version
-        elif self.general_interface.backend == 'pennylane':
+        elif self.backend == 'pennylane':
             import pennylane
             version = pennylane.__version__
-        elif self.general_interface.backend == 'pennylane-lightning-gpu':
+        elif self.backend == 'pennylane-lightning-gpu':
             import pennylane_lightning_gpu
             version = pennylane_lightning_gpu.__version__
-        elif self.general_interface.backend == 'pennylane-lightning-qubit':
+        elif self.backend == 'pennylane-lightning-qubit':
             import pennylane_lightning
             version = pennylane_lightning.__version__
-        elif self.general_interface.backend == 'pennylane-lightning-kokkos':
+        elif self.backend == 'pennylane-lightning-kokkos':
             import pennylane_lightning_kokkos
             version = pennylane_lightning_kokkos.__version__
-        elif self.general_interface.backend in ('qulacs-gpu', 'qulacs-cpu'):
+        elif self.backend == 'pennylane-dumper':
+            version = '0'  # dummy
+        elif self.backend in ('qulacs-gpu', 'qulacs-cpu'):
             import qulacs
             version = qulacs.__version__
         else:
@@ -256,19 +241,19 @@ class RunSpecific:
         return version
 
     def extract_frontend_version(self):
-        if self.general_interface.frontend == 'qiskit':
+        if self.frontend == 'qiskit':
             import qiskit
             version = qiskit.__qiskit_version__['qiskit-terra']
-        elif self.general_interface.frontend == 'cirq':
+        elif self.frontend == 'cirq':
             import cirq
             version = cirq.__version__
-        elif self.general_interface.frontend == 'naive':
+        elif self.frontend == 'naive':
             from .frontends import frontends
             version = frontends['naive'].version
-        elif self.general_interface.frontend == 'pennylane':
+        elif self.frontend == 'pennylane':
             import pennylane
             version = pennylane.__version__
-        elif self.general_interface.frontend == 'qulacs':
+        elif self.frontend == 'qulacs':
             import qulacs
             version = qulacs.__version__
         else:
@@ -276,63 +261,56 @@ class RunSpecific:
         return version
 
     def extract_glue_layer_version(self):
-        if self.general_interface.backend == 'cutn':
+        if self.backend == 'cutn':
             import cuquantum
             glue_ver = f'cuquantum {cuquantum.__version__}'
         else:
             return None
         return glue_ver
 
-    def run(self):
-        measure = self.config['measure']
+    def _run(self):
+        reseed(1234)  # TODO: use a global seed?
+        measure = self.benchmark_config['measure']
 
         # try to load existing perf data, if any
         data_filename = f'{self.benchmark_name}.json'
         filepath = f'{self.cache_dir}/data/{data_filename}'
-        self.general_interface.full_data = load_benchmark_data(
-            filepath, self.cache_dir, self.required_subdirs)
+        self.full_data = load_benchmark_data(filepath)
 
         gpu_device_properties = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
         gpu_name = gpu_device_properties['name'].decode('utf-8').split(' ')[-1]
         num_qubits = str(self.nqubits)
         num_gpus = str(self.ngpus)
 
-        # FIXME: this is buggy (no early return)
-        # try:
-        #     if (self.general_interface.append
-        #             and num_gpus in self.general_interface.full_data[num_qubits][self.general_interface.frontend+'-v'+frontend_version][self.general_interface.backend+'-v'+backend_version][gpu_name]):
-        #         self.general_interface.logger.info(
-        #             f'Skipping {self.benchmark_name} with {self.nqubits} qubits and {self.ngpus} GPUs [{self.general_interface.backend}-v{backend_version}]')
-        # except KeyError:
-        #     # KeyError means this configuration is not currently benchmarked, so we can continue running
-        #     self.general_interface.logger.debug('Benchmark configuration not found in existing data')
-        #     pass
-
         circuit_filename = f'circuits/{self.benchmark_name}_{self.nqubits}'
-
-        if 'unfold' in self.config.keys() and self.config['unfold']:
+        if 'unfold' in self.benchmark_config.keys() and self.benchmark_config['unfold']:
             circuit_filename += '_unfold'
-        if 'p' in self.config.keys():
-            p = self.config['p']
+        if 'p' in self.benchmark_config.keys():
+            p = self.benchmark_config['p']
             circuit_filename += f'_p{p}'
         if measure:
             circuit_filename += '_measure'
         circuit_filename, target, pauli = self._fix_filename_for_cutn(circuit_filename, self.nqubits)
-        self.general_interface.cutn_target = target
+        self.cutn_target = target
 
         # get circuit
         circuit = self.get_circuit(circuit_filename)
 
         # get backend
+        # TODO: use backend config to simplify this...
         backend = createBackend(
-            self.general_interface.backend, self.ngpus, self.ncpu_threads, self.general_interface.precision,
-            nqubits=self.nqubits,                                      # TODO: backend config
-            cusvaer_global_index_bits=self.cusvaer_global_index_bits,  # cusvaer options
+            self.backend, self.ngpus, self.ncputhreads, self.precision,
+            nqubits=self.nqubits,
+            # cusvaer options
+            cusvaer_global_index_bits=self.cusvaer_global_index_bits,
             cusvaer_p2p_device_bits=self.cusvaer_p2p_device_bits,
             cusvaer_data_transfer_buffer_bits=self.cusvaer_data_transfer_buffer_bits,
             cusvaer_comm_plugin_type=self.cusvaer_comm_plugin_type,
             cusvaer_comm_plugin_soname=self.cusvaer_comm_plugin_soname,
-            nfused=self.general_interface.nfused,                      # only qiskit and qsim
+            # qiskit and qsim
+            nfused=self.nfused,
+            # cutn
+            nhypersamples=self.nhypersamples,
         )
 
         # get versions; it's assumed up to this point, the existence of Python modules for
@@ -340,27 +318,33 @@ class RunSpecific:
         backend_version = self.extract_backend_version()
         frontend_version = self.extract_frontend_version()
         glue_layer_version = self.extract_glue_layer_version()
+        if glue_layer_version is not None:
+            ver_str = f'[{self.frontend}-v{frontend_version} | (glue ver: {glue_layer_version}) | {self.backend}-v{backend_version}]'
+        else:
+            ver_str = f'[{self.frontend}-v{frontend_version} | {self.backend}-v{backend_version}]'
 
         if self.ngpus == 0:
             logger.info(
-                f'* Running {self.benchmark_name} with {self.ncpu_threads} CPU threads, and {self.nqubits} qubits [{self.general_interface.backend}-v{backend_version}]:')
+                f'* Running {self.benchmark_name} with {self.ncputhreads} CPU threads, and {self.nqubits} qubits {ver_str}:'
+            )
         else:
             logger.info(
-                f'* Running {self.benchmark_name} with {self.ngpus} GPUs, and {self.nqubits} qubits [{self.general_interface.backend}-v{backend_version}]:')
+                f'* Running {self.benchmark_name} with {self.ngpus} GPUs, and {self.nqubits} qubits {ver_str}:'
+            )
 
         preprocess_data = backend.preprocess_circuit(
             circuit,
             # only cutn needs these, TODO: backend config
             circuit_filename=os.path.join(self.cache_dir, circuit_filename),
             target=target,
-            pauli=pauli
+            pauli=pauli,
         )
 
         for k in preprocess_data.keys():
             self.benchmark_data[k] = preprocess_data[k]
 
         # run benchmark
-        perf_time, cuda_time, post_time, post_process = self.timer(backend, circuit, self.general_interface.nshots) # nsamples -> nshots
+        perf_time, cuda_time, post_time, post_process = self.timer(backend, circuit, self.nshots) # nsamples -> nshots
 
         # report the result
         run_env = gen_run_env(gpu_device_properties)
@@ -371,7 +355,7 @@ class RunSpecific:
         out = self.canonicalize_benchmark_data(frontend_version, backend_version, run_env, glue_layer_version)
         save_benchmark_data(
             *out,
-            self.general_interface.full_data, filepath, self.general_interface.save)
+            self.full_data, filepath, self.save)
 
     def canonicalize_benchmark_data(self, frontend_version, backend_version, run_env, glue_layer_version):
         """
@@ -415,17 +399,17 @@ class RunSpecific:
 
         sim_config = HashableDict({
             'frontend': HashableDict({
-                "name": self.general_interface.frontend,
+                "name": self.frontend,
                 "version": frontend_version,
             }),
             'backend': HashableDict({
-                "name": self.general_interface.backend,
+                "name": self.backend,
                 "version": backend_version,
                 "ngpus": self.ngpus,
-                "ncputhreads": self.ncpu_threads,
-                "nshots": self.general_interface.nshots,
-                "nfused": self.general_interface.nfused,
-                "precision": self.general_interface.precision,
+                "ncputhreads": self.ncputhreads,
+                "nshots": self.nshots,
+                "nfused": self.nfused,
+                "precision": self.precision,
                 "with_mpi": is_running_mpiexec(),
             }),
             'glue_layer': HashableDict({
@@ -439,11 +423,11 @@ class RunSpecific:
         # TODO: record "measure"?
 
         # backend-specific options
-        if self.general_interface.backend == "cusvaer":
+        if self.backend == "cusvaer":
             sim_config["backend"]["cusvaer_global_index_bits"] = self.cusvaer_global_index_bits
             sim_config["backend"]["cusvaer_p2p_device_bits"] = self.cusvaer_p2p_device_bits
-        elif self.general_interface.backend == "cutn":
-            sim_config["backend"]["target"] = self.general_interface.cutn_target
+        elif self.backend == "cutn":
+            sim_config["backend"]["target"] = self.cutn_target
 
         sim_config_hash = sim_config.get_hash()
         self.benchmark_data = {**self.benchmark_data, **sim_config}
@@ -453,35 +437,36 @@ class RunSpecific:
 
 class BenchApiRunner:
 
-    supported_cusv_apis = ('apply_matrix',)
-    supported_cutn_apis = ()
+    supported_cusv_apis = ('apply_matrix', 'apply_generalized_permutation_matrix', 'cusv_sampler', )
+    supported_cutn_apis = ('tensor_decompose',)
     supported_apis = supported_cusv_apis + supported_cutn_apis
 
+    # currently we assume the following subdirectories exist
+    required_subdirs = ('data',)
+
     def __init__(self, **kwargs):
-        self.num_qubits = kwargs.pop("nqubits")
         self.benchmark = kwargs.pop("benchmark")
         self.cache_dir = kwargs.pop("cachedir")
-        kwargs.pop("verbose")  # don't care
         self.args = kwargs  # just hold the entire group of parsed cmdline args, don't unpack all
 
-        # currently we assume the following subdirectories exist
-        self.required_subdirs = ('data',)
+        # it could be that the cache dirs are not created yet
+        call_by_root(functools.partial(create_cache, self.cache_dir, self.required_subdirs))
 
         # load existing json, if any
         self.data_filename = f"{self.benchmark}.json"
         self.file_path = f'{self.cache_dir}/data/{self.data_filename}'
-        self.full_data = load_benchmark_data(
-            self.file_path, self.cache_dir, self.required_subdirs)
+        self.full_data = load_benchmark_data(self.file_path)
 
     def run(self):
         # prep
         if self.benchmark not in self.supported_apis:
             raise NotImplementedError(f"only {self.supported_apis} is supported for now")
         gpu_device_properties = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
-        benchmark_data = {}  # dummy
+        benchmark_data = {}
 
         # time the api
-        perf_time, cuda_time = self._run_apply_matrix()
+        bench_func = getattr(self, f"_run_{self.benchmark}")
+        perf_time, cuda_time = bench_func(benchmark_data)  # update benchmark_data in-place
 
         # report the result
         run_env = gen_run_env(gpu_device_properties)
@@ -492,10 +477,11 @@ class BenchApiRunner:
         out = self.canonicalize_benchmark_data(run_env, benchmark_data)
         save_benchmark_data(*out, self.full_data, self.file_path)
 
-    def _run_apply_matrix(self):
+    def _run_apply_matrix(self, benchmark_data):
         # TODO: It's better to move this method elsewhere, once we support more apis
         from .benchmarks.apply_matrix import test_apply_matrix
         args = self.args
+        self.num_qubits = args.pop("nqubits")
 
         # create targets while keeping args clean for later use
         ntargets = args.pop("ntargets")
@@ -527,6 +513,108 @@ class BenchApiRunner:
             args["nrepeats"],
             args["location"],
             flush_l2=args["flush_cache"],
+            benchmark_data=benchmark_data,
+        )
+
+    def _run_apply_generalized_permutation_matrix(self, benchmark_data):
+        # TODO: It's better to move this method elsewhere, once we support more apis
+        from .benchmarks.apply_gen_perm_matrix import test_apply_generalized_permutation_matrix
+        args = self.args
+        self.num_qubits = args.pop("nqubits")
+
+        # create targets while keeping args clean for later use
+        ntargets = args.pop("ntargets")
+        targets = args.pop("targets")
+        targets = tuple(range(ntargets)) if targets is None else tuple(targets)
+        args["targets"] = targets
+
+        # create controls while keeping args clean for later use
+        ncontrols = args.pop("ncontrols")
+        controls = args.pop("controls")
+        if controls is None and ncontrols is None:
+            controls = ()
+        elif controls is None:
+            controls = tuple(range(ncontrols))
+        else:
+            controls = tuple(controls)
+        args["controls"] = controls
+
+        # create perm_table while keeping args clean for later use
+        has_perm = args.pop("has_perm")
+        perm_table = args.pop("perm_table")
+        if has_perm is False and perm_table is None:
+            perm_table = []
+        elif perm_table is None:
+            # used as a flag to fill perm_table randomly later
+            perm_table = bool(has_perm)
+        else:
+            perm_table = list(perm_table)
+        args["perm_table"] = perm_table
+
+        # run
+        return test_apply_generalized_permutation_matrix(
+            self.num_qubits,
+            args["precision"],
+            targets,
+            controls,
+            int(args["adjoint"]),
+            args["has_diag"],
+            args["precision_diag"],
+            args["location_diag"],
+            args["perm_table"],
+            args["location_perm"],
+            args["nwarmups"],
+            args["nrepeats"],
+            benchmark_data=benchmark_data,
+        )
+
+    def _run_cusv_sampler(self, benchmark_data):
+        from .benchmarks.cusv_sampler import test_cusv_sampler
+        args = self.args
+        self.num_qubits = args.pop("nqubits")
+
+        # create bit_ordering while keeping args clean for later use
+        nbit_ordering = args.pop("nbit_ordering")
+        bit_ordering = args.pop("bit_ordering")
+        bit_ordering = tuple(range(nbit_ordering)) if bit_ordering is None else tuple(bit_ordering)
+        args["bit_ordering"] = bit_ordering
+
+        # run
+        return test_cusv_sampler(
+            self.num_qubits,
+            args["precision"],
+            bit_ordering,
+            args["nshots"],
+            args["output_order"],
+            args["nwarmups"],
+            args["nrepeats"],
+            benchmark_data=benchmark_data,
+        )
+
+    def _run_tensor_decompose(self, benchmark_data):
+        from .benchmarks.tensor_decompose import benchmark_tensor_decompose
+        args = self.args
+        self.num_qubits = 0  # WAR
+
+        # ensure the combination of method/algorithm is meaningful
+        if args["method"] == "SVD":
+            args["algorithm"] = "gesvd"
+        elif args["algorithm"] is not None:
+            # algorithm is set, must be doing SVD
+            args["method"] = "SVD"
+
+        # run
+        return benchmark_tensor_decompose(
+            args["expr"],
+            tuple(args["shape"]),
+            args["precision"],
+            args["is_complex"],
+            args["method"],
+            args["algorithm"],
+            args["nwarmups"],
+            args["nrepeats"],
+            args["check_reference"],
+            benchmark_data=benchmark_data,
         )
 
     def canonicalize_benchmark_data(self, run_env, benchmark_data):

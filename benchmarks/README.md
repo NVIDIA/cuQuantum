@@ -14,7 +14,7 @@ pip install .[all]
 ```
 if running outside of the [cuQuantum Appliance container](https://docs.nvidia.com/cuda/cuquantum/latest/appliance/index.html).
 
-**Note: You may have to build `qsimcirq` and `qiskit-aer` GPU support from source if needed.**
+**Note: You may have to build `qsimcirq`, `qiskit-aer`, and `qulacs` GPU support from source if needed.**
 
 Alternatively, you can choose to manage all (required & optional) dependencies yourself via
 ```
@@ -44,7 +44,7 @@ Starting v0.2.0, we offer subcommands for performing benchmarks at different lev
 
 Alternatively, you can launch the benchmark program via `python -m cuquantum_benchmarks`. This is equivalent to the standalone command, and is useful when, say, `pip` installs this package to the user site-package (so that the `cuquantum-benchmarks` command may not be available without modifying `$PATH`).
 
-For GPU backends, it is preferred that `--ngpus` is explicitly set.
+For GPU backends, it is preferred that `--ngpus N` is explicitly set. On a multi-GPU system, the first `N` GPUs would be used. To limit which GPUs can be accessed by the CUDA runtime, use the environment variable `CUDA_VISIBLE_DEVICES` following the CUDA documentation.
 
 For backends that support MPI parallelism, it is assumed that `MPI_COMM_WORLD` is the communicator, and that `mpi4py` is installed. You can run the benchmarks as you would normally do to launch MPI processes: `mpiexec -n N cuquantum-benchmarks ...`. It is preferred if you fully specify the problem (explicitly set `--benchmark` & `--nqubits`).
 
@@ -70,6 +70,8 @@ Currently all environment variables are reserved for internal use only, and are 
 
 * `CUTENSORNET_DUMP_TN=txt`
 * `CUTENSORNET_BENCHMARK_TARGET={amplitude,state_vector,expectation}` (pick one)
+* `CUTENSORNET_APPROX_TN_UTILS_PATH`
+* `CUQUANTUM_BENCHMARKS_DUMP_GATES`
 
 ## Development Overview
 
