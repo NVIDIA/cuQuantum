@@ -6,7 +6,7 @@ src="https://developer.nvidia.com/sites/default/files/akamai/nvidia-cuquantum-ic
 
 This public repository contains a few sets of files related to the [NVIDIA cuQuantum SDK](https://developer.nvidia.com/cuquantum-sdk):
 
-- `benchmarks`: NVIDIA cuQuantum Performance Benchmark Suite (v0.2.0), see [README](./benchmarks/README.md) for detail.
+- `benchmarks`: NVIDIA cuQuantum Performance Benchmark Suite (v0.3.0), see [README](./benchmarks/README.md) for detail.
 - `extra`: Files to help utilize the cuQuantum SDK and the cuQuantum Appliance container.
 - `python`: The open-sourced cuQuantum Python project.
   - Available for download on
@@ -31,7 +31,7 @@ This public repository contains a few sets of files related to the [NVIDIA cuQua
 ## Installation
 
 The instructions for how to build and install these files are given in both the subfolders and
-the [cuQuantum documentation](https://docs.nvidia.com/cuda/cuquantum/index.html).
+the [cuQuantum documentation](https://docs.nvidia.com/cuda/cuquantum/latest/index.html).
 
 ## License
 
