@@ -6,6 +6,7 @@ import math
 import functools
 import logging
 import time
+from importlib.metadata import version
 
 import numpy as np
 import cupy as cp
@@ -15,7 +16,7 @@ except ImportError:
     qiskit = None
 
 from .backend import Backend
-from .._utils import get_num_processes
+from .._utils import get_mpi_size, get_mpi_rank
 
 
 # set up a logger
@@ -48,8 +49,8 @@ class Qiskit(Backend):
             results = self.backend.run(transpiled_qc, shots=nshots, memory=True)
         else:
             results = self.backend.run(transpiled_qc, shots=0, memory=True)
-        # workaround for memory allocation failure for cusvaer 22.11
-        if self.identifier == 'cusvaer':
+        # workaround for memory allocation failure for cusvaer 22.11/23.03
+        if self.identifier == 'cusvaer' and self._need_sync():
             self._synchronize()
 
         post_res_list = results.result().get_memory()
@@ -169,7 +170,7 @@ class Qiskit(Backend):
         return backend
 
     def get_aer_blocking_setup(self, ngpus=None):
-        size = get_num_processes()  # check if running MPI
+        size = get_mpi_size()  # check if running MPI
         if size > 1:
             blocking_enable = True
             if self.identifier == 'aer':
@@ -182,11 +183,16 @@ class Qiskit(Backend):
             blocking_qubits = None
         return blocking_enable, blocking_qubits
 
+    def _need_sync(self):
+        ver_str = version('cusvaer')
+        ver = [int(num) for num in ver_str.split('.')]
+        return ver[0] == 0 and ver[1] <= 2
+
     def _synchronize(self):
-        nprocs = get_num_processes()
+        my_rank = get_mpi_rank()
         ndevices_in_node = cp.cuda.runtime.getDeviceCount()
         # GPU selected in this process
-        device_id = nprocs % ndevices_in_node
+        device_id = my_rank % ndevices_in_node
         cp.cuda.Device(device_id).synchronize()
 
 

@@ -4,7 +4,8 @@
 
 from .backend_cirq import Cirq
 from .backend_cutn import cuTensorNet
-from .backend_pny import Pny, PnyLightningGpu, PnyLightningCpu, PnyLightningKokkos
+from .backend_pny import (Pny, PnyLightningGpu, PnyLightningCpu,
+                          PnyLightningKokkos, PnyDumper)
 from .backend_qsim import Qsim, QsimCuda, QsimCusv, QsimMgpu
 from .backend_qiskit import Aer, AerCuda, AerCusv, CusvAer
 from .backend_qulacs import QulacsGpu, QulacsCpu
@@ -29,6 +30,7 @@ backends = {
     'pennylane-lightning-gpu': PnyLightningGpu,
     'pennylane-lightning-qubit': PnyLightningCpu,
     'pennylane-lightning-kokkos': PnyLightningKokkos,
+    'pennylane-dumper': PnyDumper,
     'qulacs-cpu': QulacsCpu,
     'qulacs-gpu': QulacsGpu,
 }

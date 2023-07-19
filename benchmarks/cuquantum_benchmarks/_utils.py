@@ -5,6 +5,7 @@
 import argparse
 import ctypes
 from dataclasses import dataclass
+import functools
 import math
 import json
 import hashlib
@@ -19,6 +20,7 @@ import warnings
 
 import cupy as cp
 import numpy as np
+import nvtx
 from cuquantum import cudaDataType, ComputeType
 from cuquantum.cutensornet._internal.einsum_parser import create_size_dict
 import psutil
@@ -27,6 +29,15 @@ import psutil
 # set up a logger
 logger_name = "cuquantum-benchmarks"
 logger = logging.getLogger(logger_name)
+
+
+def wrap_with_nvtx(func, msg):
+    """Add NVTX makers to a function with a message."""
+    @functools.wraps(func)
+    def inner(*args, **kwargs):
+        with nvtx.annotate(msg):
+            return func(*args, **kwargs)
+    return inner
 
 
 def reseed(seed=1234):
@@ -162,9 +173,14 @@ def is_running_mpi():
     return MPI
 
 
-def get_num_processes():
+def get_mpi_size():
     MPI = is_running_mpi()
     return MPI.COMM_WORLD.Get_size() if MPI else 1
+
+
+def get_mpi_rank():
+    MPI = is_running_mpi()
+    return MPI.COMM_WORLD.Get_rank() if MPI else 0
 
 
 def call_by_root(f, root=0):
@@ -409,7 +425,7 @@ def save_benchmark_data(
     return full_data
 
 
-def load_benchmark_data(filepath, cache_dir, required_subdirs=()):
+def load_benchmark_data(filepath):
     try:
         with open(filepath, 'r') as f:
             full_data = json.load(f)
@@ -419,15 +435,14 @@ def load_benchmark_data(filepath, cache_dir, required_subdirs=()):
         full_data = {}
         logger.debug(f'{filepath} not found')
 
-        # it could be that the cache dirs are not created yet
-        def create_cache():
-            for subdir in required_subdirs:
-                path = os.path.join(cache_dir, subdir)
-                if not os.path.isdir(path):
-                    os.makedirs(path, exist_ok=True)
-        call_by_root(create_cache)
-
     return full_data
+
+
+def create_cache(cache_dir, required_subdirs):
+    for subdir in required_subdirs:
+        path = os.path.join(cache_dir, subdir)
+        if not os.path.isdir(path):
+            os.makedirs(path, exist_ok=True)
 
 
 # TODO: upstream this to cupyx.profiler.benchmark
@@ -496,3 +511,32 @@ def benchmark_with_prerun(
         result.gpu_times = gpu_times
 
     return result
+
+
+class EarlyReturnError(RuntimeError): pass
+
+
+is_unique = lambda a: len(set(a)) == len(a)
+is_disjoint = lambda a, b: not bool(set(a) & set(b))
+
+
+def check_targets_controls(targets, controls, n_qubits):
+    # simple checks for targets and controls
+    assert len(targets) >= 1, "must have at least 1 target qubit"
+    assert is_unique(targets), "qubit indices in targets must be unique"
+    assert is_unique(controls), "qubit indices in controls must be unique"
+    assert is_disjoint(targets, controls), "qubit indices in targets and controls must be disjoint"
+    assert all(0 <= q and q < n_qubits for q in targets + controls), f"target and control qubit indices must be in range [0, {n_qubits})"
+
+
+def check_sequence(seq, expected_size=None, max_size=None, name=''):
+    if expected_size is not None:
+        assert len(seq) == expected_size, f"the provided {name} must be of length {expected_size}"
+        size = expected_size
+    elif max_size is not None:
+        assert len(seq) <= max_size, f"the provided {name} must have length <= {max_size}"
+        size = max_size
+    else:
+        assert False
+    assert is_unique(seq), f"the provided {name} must have non-repetitve entries"
+    assert all(0 <= i and i < size for i in seq), f"entries in the {name} must be in [0, {size})"

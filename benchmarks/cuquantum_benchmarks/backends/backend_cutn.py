@@ -50,6 +50,7 @@ class cuTensorNet(Backend):
             # cuQuantum Python 22.07 or below
             opts = cutn.NetworkOptions(handle=self.handle)
         self.network_opts = opts
+        self.n_samples = kwargs.pop('nhypersamples')
 
     def __del__(self):
         cutn.destroy(self.handle)
@@ -104,10 +105,12 @@ class cuTensorNet(Backend):
         t1 = time.perf_counter()
         path, opt_info = self.network.contract_path(
             # TODO: samples may be too large for small circuits
-            optimize={'samples': 512, 'threads': self.ncpu_threads})
+            optimize={'samples': self.n_samples, 'threads': self.ncpu_threads})
         t2 = time.perf_counter()
         time_path = t2 - t1
         logger.info(f'contract_path() took {time_path} s')
+        logger.debug(f'# samples: {self.n_samples}')
+        logger.debug(opt_info)
 
         self.path = path
         self.opt_info = opt_info
