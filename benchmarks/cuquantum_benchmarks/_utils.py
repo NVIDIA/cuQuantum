@@ -456,7 +456,7 @@ class L2flush:
     https://github.com/NVIDIA/nvbench/blob/main/nvbench/detail/l2flush.cuh.
     """
     def __init__(self):
-        self.l2_size = 3 * cp.cuda.Device().attributes['L2CacheSize']
+        self.l2_size = cp.cuda.Device().attributes['L2CacheSize']
         self.mem = cp.cuda.alloc(self.l2_size) if self.l2_size > 0 else None
 
     def flush(self):
