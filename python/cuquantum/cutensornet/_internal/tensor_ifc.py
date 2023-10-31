@@ -45,7 +45,7 @@ class Tensor(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def numpy(self):
+    def numpy(self, stream_holder):
         raise NotImplementedError
 
     @property
@@ -64,7 +64,11 @@ class Tensor(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def to(self, device='cpu'):
+    def to(self, device='cpu', stream_holder=None):
+        raise NotImplementedError
+
+    @abstractmethod
+    def copy_(self, src, stream_holder=None):
         raise NotImplementedError
 
     @staticmethod

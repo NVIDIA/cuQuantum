@@ -52,6 +52,13 @@ gate_cx_strides = 0
 
 # Allocate device memory for the samples
 samples = np.empty((num_qubits, num_samples), dtype='int64', order='F') # samples are stored in F order with shape (num_qubits, num_qubits)
+
+free_mem = dev.mem_info[0]
+# use half of the totol free size
+scratch_size = free_mem // 2
+scratch_space = cp.cuda.alloc(scratch_size)
+print(f"Allocated {scratch_size} bytes of scratch memory on GPU")
+
 # Create the initial quantum state
 quantum_state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits, qubits_dims, data_type)
 print("Created the initial quantum state")
@@ -71,12 +78,7 @@ print("Quantum gates applied")
 # Create the quantum circuit sampler
 sampler = cutn.create_sampler(handle, quantum_state, num_qubits, 0)
 
-free_mem = dev.mem_info[0]
-# use half of the totol free size
-scratch_size = free_mem // 2
-scratch_space = cp.cuda.alloc(scratch_size)
-print(f"Allocated {scratch_size} bytes of scratch memory on GPU")
-
+# Configure the quantum circuit sampler
 num_hyper_samples_dtype = cutn.sampler_get_attribute_dtype(cutn.SamplerAttribute.OPT_NUM_HYPER_SAMPLES)
 num_hyper_samples = np.asarray(8, dtype=num_hyper_samples_dtype)
 cutn.sampler_configure(handle, sampler, 

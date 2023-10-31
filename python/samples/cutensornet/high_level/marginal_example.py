@@ -56,6 +56,12 @@ rdm_shape = (dim, ) * 2 * len(marginal_modes)
 rdm = cp.empty(rdm_shape, dtype='complex128')
 rdm_strides = [stride_in_bytes // rdm.itemsize for stride_in_bytes in rdm.strides]
 
+free_mem = dev.mem_info[0]
+# use half of the totol free size
+scratch_size = free_mem // 2
+scratch_space = cp.cuda.alloc(scratch_size)
+print(f"Allocated {scratch_size} bytes of scratch memory on GPU")
+
 # Create the initial quantum state
 quantum_state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits, qubits_dims, data_type)
 print("Created the initial quantum state")
@@ -74,12 +80,7 @@ print("Quantum gates applied")
 # Specify the desired reduced density matrix (marginal)
 marginal = cutn.create_marginal(handle, quantum_state, num_marginal_modes, marginal_modes, 0, 0, rdm_strides)
 
-free_mem = dev.mem_info[0]
-# use half of the totol free size
-scratch_size = free_mem // 2
-scratch_space = cp.cuda.alloc(scratch_size)
-print(f"Allocated {scratch_size} bytes of scratch memory on GPU")
-
+# Configure the computation of the desired reduced density matrix (marginal)
 num_hyper_samples_dtype = cutn.marginal_get_attribute_dtype(cutn.MarginalAttribute.OPT_NUM_HYPER_SAMPLES)
 num_hyper_samples = np.asarray(8, dtype=num_hyper_samples_dtype)
 cutn.marginal_configure(handle, marginal, 

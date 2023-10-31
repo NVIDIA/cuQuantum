@@ -11,6 +11,7 @@ __all__ = ['TorchTensor']
 import torch
 
 from . import typemaps
+from .package_ifc import StreamHolder
 from .tensor_ifc import Tensor
 from .. import cutensornet as cutn
 
@@ -51,8 +52,9 @@ class TorchTensor(Tensor):
     def strides(self):
         return self.tensor.stride()
 
-    def numpy(self):
-        return self.tensor.get()
+    def numpy(self, stream_holder=StreamHolder()):
+        # We currently do not use this.
+        raise NotImplementedError
 
     @classmethod
     def empty(cls, shape, **context):
@@ -62,28 +64,36 @@ class TorchTensor(Tensor):
         name = context.get('dtype', 'float32')
         dtype = TorchTensor.name_to_dtype[name]
         device = context.get('device', None)
-        tensor = torch.empty(shape, dtype=dtype, device=device)
+        strides = context.get('strides', None)
+        if strides:
+            # note: torch strides is not scaled by bytes
+            tensor = torch.empty_strided(shape, strides, dtype=dtype, device=device)
+        else:
+            tensor = torch.empty(shape, dtype=dtype, device=device)
 
         return tensor
 
-    def to(self, device='cpu'):
+    def to(self, device='cpu', stream_holder=StreamHolder()):
         """
         Create a copy of the tensor on the specified device (integer or 
           'cpu'). Copy to  Numpy ndarray if CPU, otherwise return Cupy type.
         """
-        if not(device == 'cpu' or isinstance(device, int)):
+        if not (device == 'cpu' or isinstance(device, int)):
             raise ValueError(f"The device must be specified as an integer or 'cpu', not '{device}'.")
 
-        tensor_device = self.tensor.to(device=device)
+        non_blocking = False if device == 'cpu' else True
+
+        with stream_holder.ctx:
+            tensor_device = self.tensor.to(device=device, non_blocking=non_blocking)
 
         return tensor_device
 
-    def copy_(self, src):
+    def copy_(self, src, stream_holder=StreamHolder()):
         """
         Inplace copy of src (copy the data from src into self).
         """
-
-        self.tensor.copy_(src)
+        with stream_holder.ctx:
+            self.tensor.copy_(src)
 
     def istensor(self):
         """
@@ -94,6 +104,5 @@ class TorchTensor(Tensor):
     def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
         _, _, extents, strides = cutn.get_tensor_details(handle, desc_tensor)
         if tuple(extents) != self.shape:
-            #note: torch strides is not scaled by bytes
+            # note: torch strides is not scaled by bytes
             self.tensor = torch.as_strided(self.tensor, tuple(extents), tuple(strides))
-

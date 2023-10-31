@@ -157,7 +157,8 @@ class OptimizerInfoInterface:
         if num_contraction != len(network.operands) - 1:
             raise ValueError(f"The length of the contraction path ({num_contraction}) must be one less than the number of operands ({len(network.operands)}).")
 
-        path = reduce(operator.concat, path)
+        if num_contraction > 0:
+            path = reduce(operator.concat, path)
         path_array = np.asarray(path, dtype=np.int32)
 
         # Construct the path type.
@@ -235,7 +236,7 @@ class OptimizerInfoInterface:
         cutn.contraction_optimizer_info_get_attribute(network.handle, network.optimizer_info_ptr, InfoEnum.INTERMEDIATE_MODES, intermediate_modes.ctypes.data, size)
 
         count, out = 0, list()
-        mode_type = tuple if network.is_interleaved else ''.join
+        mode_type = tuple if (network.is_interleaved or network.has_ellipses) else ''.join
         for n in num_intermediate_modes:
             out.append(mode_type(map(lambda m: network.mode_map_ord_to_user[m], intermediate_modes[count:count+n])))    # Convert to user mode labels
             count += n

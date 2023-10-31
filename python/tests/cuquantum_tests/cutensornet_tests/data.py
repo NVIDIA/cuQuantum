@@ -31,6 +31,8 @@ dtype_names = (
 # the second variant is suitable for testing exotic TNs that require further customization
 # TODO: expand the tests
 einsum_expressions = (
+    "ii->",
+    "jii->ij",
     "ij,jb,ah",
     "ea,fb,abcd,gc,hd->efgh",
     "ea,fb,abcd,gc,hd",

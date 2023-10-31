@@ -35,4 +35,3 @@ class TorchPackage(Package):
     def create_stream(device_id):
         stream = torch.cuda.Stream(device=device_id)
         return stream
-

@@ -19,7 +19,7 @@ from cuquantum.cutensornet._internal.utils import infer_object_package
 from .approxTN_utils import split_contract_decompose, tensor_decompose, verify_split_QR, verify_split_SVD
 from .data import backend_names, contract_decompose_expr
 from .test_options import _OptionsBase
-from .test_utils import DecomposeFactory, deselect_contract_decompose_algorithm_tests, deselect_decompose_tests, gen_rand_svd_method
+from .test_utils import DecomposeFactory, deselect_contract_decompose_algorithm_tests, deselect_decompose_tests, get_svd_methods_for_test
 from .test_utils import get_stream_for_backend
 
 
@@ -131,16 +131,14 @@ class TestContractDecompose:
 
     
     def test_contract_svd_decompose(self, decompose_expr, xp, dtype, order, stream):
-        rng = numpy.random.default_rng(2021)
-        methods = [tensor.SVDMethod()] + [gen_rand_svd_method(rng) for _ in range(10)]
+        methods = get_svd_methods_for_test(3, dtype)
         for svd_method in methods:
             algorithm = ContractDecomposeAlgorithm(qr_method=False, svd_method=svd_method)
             self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
 
     
     def test_contract_qr_assisted_svd_decompose(self, decompose_expr, xp, dtype, order, stream):
-        rng = numpy.random.default_rng(2021)
-        methods = [tensor.SVDMethod()] + [gen_rand_svd_method(rng) for _ in range(10)]
+        methods = get_svd_methods_for_test(3, dtype)
         for svd_method in methods:
             algorithm = ContractDecomposeAlgorithm(qr_method={}, svd_method=svd_method)
             self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)

@@ -44,24 +44,24 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
     # placeholder to help avoid resource leak
     handle = workspace_desc = svd_config = svd_info = None
     input_tensor_descriptors = output_tensor_descriptors = []
+    workspaces = dict()
+    own_handle = False
     try:
         # Options converted to an internal option
-        wrapped_operands, options, own_handle, operands_location = decomposition_utils.parse_decompose_operands_options(
-                                        options, wrapped_operands, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
+        wrapped_operands, options, own_handle, operands_location, stream_holder = decomposition_utils.parse_decompose_operands_options(
+            options, wrapped_operands, stream, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
         
         mid_extent = max_mid_extent if algorithm.svd_method.max_extent is None else min(max_mid_extent, algorithm.svd_method.max_extent)
 
         handle = options.handle
-
-        package = utils.infer_object_package(wrapped_operands[0].tensor)
-        stream, stream_ctx, stream_ptr = utils.get_or_create_stream(options.device_id, stream, package)
+        stream_ptr = stream_holder.ptr  # this exists as we always use the ExternalStream from CuPy internally...
 
         options.logger.info("Calling specicialized kernel `cutensornetGateSplit` for contraction and decomposition.")
         
         # Create input/output tensor descriptors and empty output operands 
         input_tensor_descriptors, output_operands, output_tensor_descriptors, s, s_ptr = decomposition_utils.create_operands_and_descriptors(
                                     handle, wrapped_operands, size_dict, inputs, outputs, 
-                                    mid_extent, algorithm.svd_method, options.device_id, stream_ctx, options.logger)
+                                    mid_extent, algorithm.svd_method, options.device_id, stream_holder, options.logger)
 
         # Parse SVDConfig
         svd_config = cutn.create_tensor_svd_config(handle)
@@ -75,17 +75,16 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
         workspace_ptr = None
 
         options.logger.debug("Querying workspace size...")
-
+        
         cutn.workspace_compute_gate_split_sizes(handle, 
             *input_tensor_descriptors, *output_tensor_descriptors, 
             gate_algorithm, svd_config, options.compute_type, workspace_desc)
-            
+
         # Allocate and set workspace
-        workspaces = dict()
         for mem_space in (cutn.Memspace.DEVICE, cutn.Memspace.HOST):
             workspaces[mem_space] = decomposition_utils.allocate_and_set_workspace(handle, options.allocator, workspace_desc, 
                     cutn.WorksizePref.MIN, mem_space, cutn.WorkspaceKind.SCRATCH, options.device_id, 
-                    stream, stream_ctx, options.logger, task_name='contract decomposition')
+                    stream_holder, options.logger, task_name='contract decomposition')
 
         options.logger.info("Starting contract-decompose (gate split)...")
         timing =  bool(options.logger and options.logger.handlers)
@@ -96,7 +95,7 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
             options.logger.info("This call is non-blocking and will return immediately after the operation is launched on the device.")
 
         svd_info = cutn.create_tensor_svd_info(handle)
-        with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, blocking, timing) as (last_compute_event, elapsed):
+        with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
             cutn.gate_split(handle, 
                 input_tensor_descriptors[0], wrapped_operands[0].data_ptr, 
                 input_tensor_descriptors[1], wrapped_operands[1].data_ptr, 
@@ -126,8 +125,8 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
                 s.tensor = s.tensor[:reduced_extent]
     finally:
         # when host workspace is allocated, synchronize stream before return
-        if workspaces[cutn.Memspace.HOST] is not None:
-            stream.synchronize()
+        if workspaces.get(cutn.Memspace.HOST) is not None:
+            stream_holder.obj.synchronize()
         # Free resources
         decomposition_utils._destroy_tensor_descriptors(input_tensor_descriptors)
         decomposition_utils._destroy_tensor_descriptors(output_tensor_descriptors)
@@ -141,7 +140,7 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
         if own_handle and handle is not None:
             cutn.destroy(handle)
 
-    u, v, s = [decomposition_utils.get_return_operand_data(t, operands_location) for t in output_operands + [s, ]]
+    u, v, s = [decomposition_utils.get_return_operand_data(t, operands_location, stream_holder) for t in output_operands + [s, ]]
     
     if return_info:
         info = ContractDecomposeInfo(qr_method=algorithm.qr_method,
@@ -288,9 +287,15 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
     algorithm = utils.check_or_create_options(ContractDecomposeAlgorithm, algorithm, "Contract Decompose Algorithm")
     options = utils.check_or_create_options(NetworkOptions, options, "Network Options")
 
+    # Get cuTensorNet version (as seen at run-time)
+    cutn_ver = cutn.get_version()
+    cutn_major = cutn_ver // 10000
+    cutn_minor = (cutn_ver % 10000) // 100
+    cutn_patch = cutn_ver % 100
+
+    # Logger
     logger = logging.getLogger() if options.logger is None else options.logger
-    logger.info(f"CUDA runtime version = {cutn.get_cudart_version()}")
-    logger.info(f"cuTensorNet version = {cutn.MAJOR_VER}.{cutn.MINOR_VER}.{cutn.PATCH_VER}")
+    logger.info(f"cuTensorNet version = {cutn_major}.{cutn_minor}.{cutn_patch}")
     logger.info("Beginning operands parsing...")
     
     # Parse subscipts and operands
@@ -299,11 +304,12 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
     if is_gate_split(inputs, outputs, algorithm):
         # dedicated kernel for GateSplit problem
         return _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, algorithm, options, stream, return_info)
-    
+
+    own_handle = False
     try:
         # contraction followed by decomposition
-        wrapped_operands, options, own_handle, operands_location = decomposition_utils.parse_decompose_operands_options(
-                                        options, wrapped_operands, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
+        wrapped_operands, options, own_handle, operands_location, stream_holder = decomposition_utils.parse_decompose_operands_options(
+            options, wrapped_operands, stream, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
         
         intermediate_modes = einsum_parser.infer_output_mode_labels(outputs)
 
@@ -348,17 +354,21 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
         logger.info("Beginning decomposition of the intermediate tensor...")
         if algorithm.qr_method and algorithm.svd_method is False:
             # contract and QR decompose
-            results = decompose(decompose_subscripts, intm_output, method=algorithm.qr_method, options=dataclasses.asdict(options), stream=stream, return_info=False)
+            results = decompose(
+                decompose_subscripts, intm_output, method=algorithm.qr_method, options=dataclasses.asdict(options),
+                stream=stream, return_info=False)
             results = maybe_truncate_qr_output_operands(results, outputs, max_mid_extent)
             if operands_location == 'cpu':
-                results = [tensor_wrapper.wrap_operand(o).to('cpu') for o in results]
+                results = [tensor_wrapper.wrap_operand(o).to('cpu', stream_holder=stream_holder) for o in results]
         elif algorithm.svd_method and algorithm.qr_method is False:
             # contract and SVD decompose
             
             use_max_mid_extent = algorithm.svd_method.max_extent is None
             if use_max_mid_extent:
                 algorithm.svd_method.max_extent = max_mid_extent
-            results = decompose(decompose_subscripts, intm_output, method=algorithm.svd_method, options=dataclasses.asdict(options), stream=stream, return_info=return_info)
+            results = decompose(
+                decompose_subscripts, intm_output, method=algorithm.svd_method, options=dataclasses.asdict(options),
+                stream=stream, return_info=return_info)
             if use_max_mid_extent:
                 # revert back
                 algorithm.svd_method.max_extent = None
@@ -366,7 +376,9 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
             if return_info:
                 results, info_dict['svd_info'] = results[:-1], results[-1]
             if operands_location == 'cpu':
-                results = [o if o is None else tensor_wrapper.wrap_operand(o).to('cpu') for o in results]
+                results = [o if o is None else tensor_wrapper.wrap_operand(o).to(
+                               'cpu', stream_holder=stream_holder)
+                           for o in results]
         else:
             raise NotImplementedError("contract_decompose currently doesn't support QR assisted SVD contract decomposition for more than 3 operands")
         logger.info("Decomposition of the intermediate tensor is completed.")

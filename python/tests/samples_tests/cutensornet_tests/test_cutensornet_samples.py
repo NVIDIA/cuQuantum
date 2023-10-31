@@ -7,10 +7,6 @@ import os
 import re
 import sys
 
-try:
-    import nbmake
-except ImportError:
-    nbmake = None
 # we could use packaging.version.Version too, but NumPy is our required
 # dependency, packaging is not.
 from numpy.lib import NumpyVersion as Version
@@ -70,10 +66,6 @@ class TestcuTensorNetSamples:
 notebook_files = glob.glob(samples_path+'/**/*.ipynb', recursive=True)
 
 
-@pytest.mark.skipif(
-    nbmake is None,
-    reason="testing Jupyter notebooks requires nbmake"
-)
 @pytest.mark.parametrize(
     'notebook', notebook_files
 )
@@ -84,6 +76,4 @@ class TestNotebooks:
         if circuit_type in notebook_skip_messages:
             pytest.skip(notebook_skip_messages[circuit_type])
         else:
-            status = pytest.main(['--nbmake', notebook])
-            if status != 0:
-                raise cuQuantumSampleTestError(f'{notebook} failed')
+            run_sample(samples_path, notebook)

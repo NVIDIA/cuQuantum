@@ -7,7 +7,6 @@ import logging
 import os
 import time
 import warnings
-import sys
 
 import numpy as np
 try:
@@ -15,8 +14,11 @@ try:
 except ImportError:
     pennylane = None
 
+try:
+    from .. import _internal_utils
+except ImportError:
+    _internal_utils = None
 from .backend import Backend
-from .._utils import call_by_root, EarlyReturnError, is_running_mpi
 
 
 # set up a logger
@@ -35,16 +37,36 @@ class Pennylane(Backend):
         self.ncpu_threads = ncpu_threads
         self.nqubits = kwargs.pop('nqubits')
         self.circuit = None
+        self.version = self.find_version(identifier) 
 
-    def _make_qnode(self, circuit, nshots=1024, **kwargs):
-        if self.identifier == "pennylane-lightning-gpu":
+    def find_version(self, identifier):
+        if identifier == "pennylane-lightning-gpu":
             if self.ngpus == 1:
                 try:
                     import pennylane_lightning_gpu
                 except ImportError as e:
                     raise RuntimeError("PennyLane-Lightning-GPU plugin is not installed") from e
             else:
-                raise ValueError(f"cannot specify --ngpus > 1 for the backend {self.identifier}")
+                raise ValueError(f"cannot specify --ngpus > 1 for the backend {identifier}")
+            ver = pennylane_lightning_gpu.__version__
+        elif identifier == "pennylane-lightning-kokkos":
+            try:
+                import pennylane_lightning_kokkos
+            except ImportError as e:
+                raise RuntimeError("PennyLane-Lightning-Kokkos plugin is not installed") from e
+            ver = pennylane_lightning_kokkos.__version__
+        elif identifier == "pennylane-lightning-qubit":
+            try:
+                from pennylane_lightning import lightning_qubit
+            except ImportError as e:
+                raise RuntimeError("PennyLane-Lightning plugin is not installed") from e
+            ver = lightning_qubit.__version__
+        else: # identifier == "pennylane"
+            ver = pennylane.__version__
+        return ver
+
+    def _make_qnode(self, circuit, nshots=1024, **kwargs):
+        if self.identifier == "pennylane-lightning-gpu":
             dev = pennylane.device("lightning.gpu", wires=self.nqubits, shots=nshots, c_dtype=self.dtype)
         elif self.identifier == "pennylane-lightning-kokkos":
             # there's no way for us to query what execution space (=backend) that kokkos supports at runtime,
@@ -67,10 +89,6 @@ class Pennylane(Backend):
                 sync=False,
                 kokkos_args=args)
         elif self.identifier == "pennylane-lightning-qubit":
-            try:
-                import pennylane_lightning
-            except ImportError as e:
-                raise RuntimeError("PennyLane-Lightning plugin is not installed") from e
             if self.ngpus != 0:
                 raise ValueError(f"cannot specify --ngpus for the backend {self.identifier}")
             if self.ncpu_threads > 1 and self.ncpu_threads != int(os.environ.get("OMP_NUM_THREADS", "-1")):
@@ -81,23 +99,6 @@ class Pennylane(Backend):
             if self.ngpus != 0:
                 raise ValueError(f"cannot specify --ngpus for the backend {self.identifier}")
             dev = pennylane.device("default.qubit", wires=self.nqubits, shots=nshots, c_dtype=self.dtype)
-        elif self.identifier == "pennylane-dumper":
-            import cloudpickle
-            import cuquantum_benchmarks
-            cloudpickle.register_pickle_by_value(cuquantum_benchmarks)
-
-            # note: before loading the pickle, one should check if the Python version agrees
-            # (probably pennylane's version too)
-            py_major_minor = f'{sys.version_info.major}.{sys.version_info.minor}'
-            circuit_filename = kwargs.pop('circuit_filename')
-            circuit_filename += f"_pny_raw_py{py_major_minor}.pickle"
-            def dump():
-                logger.info(f"dumping pennylane (raw) circuit as {circuit_filename} ...")
-                with open(circuit_filename, 'wb') as f:
-                    cloudpickle.dump(circuit, f)  # use highest protocol
-                    logger.info("early exiting as the dumper task is completed")
-            call_by_root(dump)
-            raise EarlyReturnError
         else:
             raise ValueError(f"the backend {self.identifier} is not recognized")
 
@@ -105,6 +106,9 @@ class Pennylane(Backend):
         return qnode
 
     def preprocess_circuit(self, circuit, *args, **kwargs):
+        if _internal_utils is not None:
+            _internal_utils.preprocess_circuit(self.identifier, circuit, *args, **kwargs)
+        
         nshots = kwargs.get('nshots', 1024)
         t1 = time.perf_counter()
         self.circuit = self._make_qnode(circuit, nshots, **kwargs)
@@ -125,4 +129,3 @@ PnyLightningGpu = functools.partial(Pennylane, identifier='pennylane-lightning-g
 PnyLightningCpu = functools.partial(Pennylane, identifier='pennylane-lightning-qubit')
 PnyLightningKokkos = functools.partial(Pennylane, identifier='pennylane-lightning-kokkos')
 Pny = functools.partial(Pennylane, identifier='pennylane')
-PnyDumper = functools.partial(Pennylane, identifier='pennylane-dumper')

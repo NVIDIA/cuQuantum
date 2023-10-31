@@ -15,6 +15,7 @@ from cuquantum.utils cimport cuqnt_alloc_wrapper
 from cuquantum.utils cimport cuqnt_free_wrapper
 from cuquantum.utils cimport get_buffer_pointer
 from cuquantum.utils cimport logger_callback_with_data
+from cuquantum.utils cimport cuDoubleComplex
 
 from enum import IntEnum
 import warnings
@@ -244,7 +245,37 @@ cdef extern from * nogil:
         const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*)
     int cutensornetStateUpdateTensor(
         const _Handle, _State, int64_t, void*, int32_t)
+    int cutensornetStateConfigure(
+        const _Handle, _State, _StateAttribute, const void*, size_t)
+    int cutensornetStatePrepare(
+        const _Handle, _State, size_t, _WorkspaceDescriptor, Stream)
+    int cutensornetStateCompute(
+        const _Handle, _State, _WorkspaceDescriptor, int64_t*[], int64_t*[], void*[], Stream)
+    int cutensornetGetOutputStateDetails(
+        const _Handle, const _State, int32_t*, int32_t*, int64_t*[], int64_t*[])
     
+    # expectation value
+    int cutensornetCreateExpectation(
+        const _Handle, _State, _NetworkOperator, _StateExpectation*)
+    int cutensornetExpectationConfigure(
+        const _Handle, _StateExpectation, _ExpectationAttribute, const void*, size_t)
+    int cutensornetExpectationPrepare(
+        const _Handle, _StateExpectation, size_t, _WorkspaceDescriptor, Stream)
+    int cutensornetExpectationCompute(
+        const _Handle, _StateExpectation, _WorkspaceDescriptor, void*, void*, Stream)
+    int cutensornetDestroyExpectation(_StateExpectation)
+    # accessor
+    int cutensornetCreateAccessor(
+        const _Handle, _State, int32_t, const int32_t*, 
+        const int64_t*, _StateAccessor*)
+    int cutensornetAccessorConfigure(
+        const _Handle, _StateAccessor, _AccessorAttribute, const void*, size_t)
+    int cutensornetAccessorPrepare(
+        const _Handle, _StateAccessor, size_t, _WorkspaceDescriptor, Stream)
+    int cutensornetAccessorCompute(
+        const _Handle, _StateAccessor, const int64_t*, _WorkspaceDescriptor, void*, void*, Stream)
+    int cutensornetDestroyAccessor(_StateAccessor)
+
     # marginals
     int cutensornetCreateMarginal(
         const _Handle, _State, int32_t, const int32_t*,
@@ -269,6 +300,16 @@ cdef extern from * nogil:
         _WorkspaceDescriptor, int64_t*, Stream)
     int cutensornetDestroySampler(_StateSampler)
 
+    # mps-specific
+    int cutensornetStateFinalizeMPS(
+        const _Handle handle, _State, _BoundaryCondition, const int64_t* const[], const int64_t* const[])
+
+    # network operator
+    int cutensornetCreateNetworkOperator(
+        const _Handle, int32_t, const int64_t[], DataType, _NetworkOperator*)
+    int cutensornetNetworkOperatorAppendProduct(
+        const _Handle, _NetworkOperator, cuDoubleComplex, int32_t, const int32_t[], const int32_t* const[], const int64_t* const[], const void* const[], int64_t*)
+    int cutensornetDestroyNetworkOperator(_NetworkOperator)
 
 class cuTensorNetError(RuntimeError):
     def __init__(self, status):
@@ -2213,6 +2254,7 @@ cdef dict tensor_svd_cfg_sizes = {
     CUTENSORNET_TENSOR_SVD_CONFIG_S_NORMALIZATION: _numpy.int32,  # = sizeof(enum value)
     CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION: _numpy.int32,  # = sizeof(enum value)
     CUTENSORNET_TENSOR_SVD_CONFIG_ALGO: _numpy.int32, # = sizeof(enum value)
+    CUTENSORNET_TENSOR_SVD_CONFIG_DISCARDED_WEIGHT_CUTOFF: _numpy.float64,
 }
 
 cdef dict svd_algo_params_sizes = {
@@ -3003,7 +3045,7 @@ cpdef intptr_t create_marginal(
 
 
 cdef dict marginal_attribute_sizes = {
-    CUTENSORNET_MARGINAL_OPT_NUM_HYPER_SAMPLES: _numpy.int64
+    CUTENSORNET_MARGINAL_OPT_NUM_HYPER_SAMPLES: _numpy.int32
 }
 
 
@@ -3030,8 +3072,7 @@ cpdef marginal_configure(intptr_t handle, intptr_t marginal, int attr, intptr_t 
         handle (intptr_t): The library handle.
         marginal (intptr_t): The tensor network marginal computation handle.
         attr (MarginalAttribute): The attribute to configure.
-        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
-            the returned attribute value.
+        buf (intptr_t): The pointer address (as Python :class:`int`) of the attribute value.
         size (size_t): The size of ``buf`` (in bytes).
 
     .. note:: To compute ``size``, use the itemsize of the corresponding data
@@ -3161,7 +3202,7 @@ cpdef intptr_t create_sampler(
 
 
 cdef dict sampler_attribute_sizes = {
-    CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES: _numpy.int64
+    CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES: _numpy.int32
 }
 
 
@@ -3266,6 +3307,767 @@ cpdef destroy_sampler(intptr_t sampler):
     check_status(status)
 
 
+cdef dict state_attribute_sizes = {
+    CUTENSORNET_STATE_MPS_CANONICAL_CENTER: _numpy.int32,
+    CUTENSORNET_STATE_MPS_SVD_CONFIG_ABS_CUTOFF: _numpy.float64,
+    CUTENSORNET_STATE_MPS_SVD_CONFIG_REL_CUTOFF: _numpy.float64,
+    CUTENSORNET_STATE_MPS_SVD_CONFIG_S_NORMALIZATION: _numpy.int32, # = sizeof(enum value)
+    CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO: _numpy.int32, # = sizeof(enum value)
+    CUTENSORNET_STATE_MPS_SVD_CONFIG_DISCARDED_WEIGHT_CUTOFF: _numpy.float64,
+    CUTENSORNET_STATE_NUM_HYPER_SAMPLES: _numpy.int32
+}
+
+
+cpdef state_get_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding state attribute.
+
+    Args:
+        attr (StateAttribute): The attribute to query. The enum CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO is not supported,
+            the dtype of which can be queried by :func:`tensor_svd_algo_params_get_dtype`.
+
+    Returns:
+        The data type of the queried attribute. The returned dtype is always
+        a valid NumPy dtype object.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`state_configure`.
+    """
+    if attr == CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO_PARAMS:
+        raise ValueError("For CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO_PARAMS, use `tensor_svd_algo_params_get_dtype` to get the dtype")
+    dtype = state_attribute_sizes[attr]
+    if attr == CUTENSORNET_STATE_MPS_SVD_CONFIG_S_NORMALIZATION:
+        if _numpy.dtype(dtype).itemsize != sizeof(_TensorSVDNormalization):
+            warnings.warn("binary size may be incompatible")
+    elif attr == CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO:
+        if _numpy.dtype(dtype).itemsize != sizeof(_TensorSVDAlgo):
+            warnings.warn("binary size may be incompatible")
+    return dtype
+
+
+cpdef state_configure(intptr_t handle, intptr_t state, int attr, intptr_t buf, size_t size):
+    """Configures computation of the tensor network state.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+        attr (StateAttribute): The attribute to configure.
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the returned attribute value.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`state_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetStateConfigure`
+    """
+    with nogil:
+        status = cutensornetStateConfigure(
+            <_Handle>handle, <_State>state,
+            <_StateAttribute>attr,
+            <void*>buf, size)
+    check_status(status)
+
+
+cpdef state_prepare(
+        intptr_t handle, intptr_t state,
+        size_t max_workspace_size_device, intptr_t workspace, intptr_t stream):
+    """Prepares computation of the tensor network state representation.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state handle.
+        max_workspace_size_device (size_t): The maximal device workspace size (in bytes) allowed
+            for the mariginal computation.
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetStatePrepare`
+    """
+    with nogil:
+        status = cutensornetStatePrepare(
+            <_Handle>handle, <_State>state,
+            max_workspace_size_device, <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef tuple state_compute(
+        intptr_t handle, intptr_t state, intptr_t workspace,
+        state_tensors_out, intptr_t stream):
+    """Computes the tensor network state representation.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+        workspace (intptr_t): The workspace descriptor.
+        state_tensors_out: A host array of pointer addresses (as Python :class:`int`) for
+            each output tensor (on device). It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    Returns:
+        tuple:
+            The metadata of the output tensors: ``(extents_out, strides_out)``.
+
+    .. seealso:: `cutensornetStateCompute`
+    """
+    cdef int32_t num_tensors = 0
+    with nogil:
+        status = cutensornetGetOutputStateDetails(
+            <_Handle>handle, <_State>state,
+            &num_tensors, NULL, NULL, NULL)
+    check_status(status)
+
+    num_modes = _numpy.empty(num_tensors, dtype=_numpy.int32)
+    cdef int32_t* numModesPtr = <int32_t*><intptr_t>num_modes.ctypes.data
+    with nogil:
+        status = cutensornetGetOutputStateDetails(
+            <_Handle>handle, <_State>state,
+            &num_tensors, numModesPtr, NULL, NULL)
+    check_status(status)
+
+    extents_out_py = [_numpy.empty(num_modes[i], dtype=_numpy.int64) for i in range(num_tensors)]
+    strides_out_py = [_numpy.empty(num_modes[i], dtype=_numpy.int64) for i in range(num_tensors)]
+
+    cdef vector[intptr_t] extentsOut
+    cdef vector[intptr_t] stridesOut
+    for i in range(num_tensors):
+        extentsOut.push_back(<intptr_t>extents_out_py[i].ctypes.data)
+        stridesOut.push_back(<intptr_t>strides_out_py[i].ctypes.data)
+
+    cdef int64_t** extentsOutPtr = <int64_t**>(extentsOut.data())
+    cdef int64_t** stridesOutPtr = <int64_t**>(stridesOut.data())
+
+    cdef vector[intptr_t] stateTensorsOutData
+    cdef void** stateTensorsOutPtr
+    if cpython.PySequence_Check(state_tensors_out):
+        stateTensorsOutData = state_tensors_out
+        stateTensorsOutPtr = <void**>(stateTensorsOutData.data())
+    else:  # a pointer address
+        stateTensorsOutPtr = <void**><intptr_t>state_tensors_out
+
+    with nogil:
+        status = cutensornetStateCompute(
+            <_Handle>handle, <_State>state, <_WorkspaceDescriptor>workspace,
+            extentsOutPtr, stridesOutPtr, stateTensorsOutPtr, <Stream>stream)
+    check_status(status)
+    return (extents_out_py, strides_out_py)
+
+
+cpdef tuple get_output_state_details(intptr_t handle, intptr_t state):
+    """Get the output state tensors' metadata.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+
+    Returns:
+        tuple:
+            The metadata of the output tensor: ``(num_tensors, num_modes, extents,
+            strides)``.
+
+    .. seealso:: `cutensornetGetOutputStateDetails`
+    """
+    cdef int32_t num_tensors = 0
+    with nogil:
+        status = cutensornetGetOutputStateDetails(
+            <_Handle>handle, <_State>state,
+            &num_tensors, NULL, NULL, NULL)
+    check_status(status)
+
+    num_modes = _numpy.empty(num_tensors, dtype=_numpy.int32)
+    cdef int32_t* numModesPtr = <int32_t*><intptr_t>num_modes.ctypes.data
+    with nogil:
+        status = cutensornetGetOutputStateDetails(
+            <_Handle>handle, <_State>state,
+            &num_tensors, numModesPtr, NULL, NULL)
+    check_status(status)
+    extents_out_py = [_numpy.empty(num_modes[i], dtype=_numpy.int64) for i in range(num_tensors)]
+    strides_out_py = [_numpy.empty(num_modes[i], dtype=_numpy.int64) for i in range(num_tensors)]
+
+    cdef vector[intptr_t] extentsOut
+    cdef vector[intptr_t] stridesOut
+    for i in range(num_tensors):
+        extentsOut.push_back(<intptr_t>extents_out_py[i].ctypes.data)
+        stridesOut.push_back(<intptr_t>strides_out_py[i].ctypes.data)
+
+    cdef int64_t** extentsOutPtr = <int64_t**>(extentsOut.data())
+    cdef int64_t** stridesOutPtr = <int64_t**>(stridesOut.data())
+    with nogil:
+        status = cutensornetGetOutputStateDetails(
+            <_Handle>handle, <_State>state,
+            &num_tensors, NULL, extentsOutPtr, stridesOutPtr)
+    check_status(status)
+    return (num_tensors, num_modes, extents_out_py, strides_out_py)
+
+cpdef state_finalize_mps(
+        intptr_t handle, intptr_t state, int boundary_condition, extents_out, strides_out):
+    """Set the target MPS representation.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+        boundary_condition (BoundaryCondition): The boundary condition of the initial MPS state.
+        extents_out: A host array of extents for all target MPS tensors. It can be
+
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
+              to the corresponding tensor's extents
+            - a nested Python sequence of :class:`int`
+
+        strides_out: A host array of strides for all target MPS tensors. It can be
+
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
+              to the corresponding tensor's strides
+            - a nested Python sequence of :class:`int`
+
+
+    .. seealso:: `cutensornetStateFinalizeMPS`
+    """
+    # extents_out can be:
+    #   - a plain pointer address
+    #   - a Python sequence (of pointer addresses)
+    #   - a nested Python sequence (of int64_t)
+    # Note: it cannot be a mix of sequences and ints.
+    cdef vector[intptr_t] extentsOutCData
+    cdef int64_t** extentsOutPtr
+    if is_nested_sequence(extents_out):
+        # flatten the 2D sequence
+        extentsOutPyData = []
+        for i in extents_out:
+            # too bad a Python list can't hold C++ vectors, so we use NumPy
+            # arrays as the container here to keep data alive
+            data = _numpy.asarray(i, dtype=_numpy.int64)
+            assert data.ndim == 1
+            extentsOutPyData.append(data)
+            extentsOutCData.push_back(<intptr_t>data.ctypes.data)
+        extentsOutPtr = <int64_t**>(extentsOutCData.data())
+    elif cpython.PySequence_Check(extents_out):
+        # handle 1D sequence
+        extentsOutCData = extents_out
+        extentsOutPtr = <int64_t**>(extentsOutCData.data())
+    else:
+        # a pointer address, take it as is
+        extentsOutPtr = <int64_t**><intptr_t>extents_out
+
+    # strides_out can be:
+    #   - a plain pointer address
+    #   - a Python sequence (of pointer addresses)
+    #   - a nested Python sequence (of int64_t)
+    # Note: it cannot be a mix of sequences and ints.
+    cdef vector[intptr_t] stridesOutCData
+    cdef int64_t** stridesOutPtr
+    if is_nested_sequence(strides_out):
+        # flatten the 2D sequence
+        stridesOutPyData = []
+        for i in strides_out:
+            # too bad a Python list can't hold C++ vectors, so we use NumPy
+            # arrays as the container here to keep data alive
+            data = _numpy.asarray(i, dtype=_numpy.int64)
+            assert data.ndim == 1
+            stridesOutPyData.append(data)
+            stridesOutCData.push_back(<intptr_t>data.ctypes.data)
+        stridesOutPtr = <int64_t**>(stridesOutCData.data())
+    elif cpython.PySequence_Check(strides_out):
+        # handle 1D sequence
+        stridesOutCData = strides_out
+        stridesOutPtr = <int64_t**>(stridesOutCData.data())
+    else:
+        # a pointer address, take it as is
+        stridesOutPtr = <int64_t**><intptr_t>strides_out
+
+    with nogil:
+        status = cutensornetStateFinalizeMPS(
+            <_Handle>handle, <_State>state, <_BoundaryCondition>boundary_condition,
+            extentsOutPtr, stridesOutPtr)
+    check_status(status)
+
+
+cpdef intptr_t create_network_operator(
+        intptr_t handle, int32_t n_state_modes, state_mode_extents, int data_type) except*:
+    """Create a tensor network operator of a given shape.
+
+    Args:
+        handle (intptr_t): The library handle.
+        n_state_modes (int32_t): The total number of state modes the operator will act on.
+        state_mode_extents:  A host array of extents of each state mode. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        data_type (cuquantum.cudaDataType): The data type of the operator.
+    Returns:
+        intptr_t: An opaque tensor network operator handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateNetworkOperator`
+    """
+    # state_mode_extents can be a pointer address, or a Python sequence
+    cdef vector[int64_t] stateModeExtentsData
+    cdef int64_t* stateModeExtentsPtr
+    if cpython.PySequence_Check(state_mode_extents):
+        if len(state_mode_extents) != n_state_modes:
+            raise ValueError("size of state_mode_extents not matching num_state_modes")
+        stateModeExtentsData = state_mode_extents
+        stateModeExtentsPtr = stateModeExtentsData.data()
+    else:  # a pointer address
+        stateModeExtentsPtr = <int64_t*><intptr_t>state_mode_extents
+
+    cdef _NetworkOperator operator
+    with nogil:
+        status = cutensornetCreateNetworkOperator(
+            <_Handle>handle, n_state_modes, stateModeExtentsPtr, <DataType>data_type
+            , &operator)
+    check_status(status)
+    return <intptr_t>operator
+
+
+cpdef int64_t network_operator_append_product(
+        intptr_t handle, intptr_t network_operator, coefficient,
+        int32_t num_tensors, num_modes, state_modes, tensor_mode_strides,
+        tensor_data) except*:
+    """Appends a tensor product component to the tensor network operator.
+
+    Args:
+        handle (intptr_t): The library handle.
+        network_operator (intptr_t): The tensor network operator the product will be appended to.
+        coefficient: Complex coefficient associated with the appended operator component.
+        num_tensors: Number of tensor factors in the tensor product.
+        num_modes: A host array of number of state modes each appended tensor factor acts on. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        state_modes: A host array of modes each appended tensor factor acts on (length = nModes). It can be
+
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
+              to the corresponding tensor's modes
+            - a nested Python sequence of :class:`int`
+
+        tensor_modes_strides: Tensor mode strides for each tensor factor (length = nModes * 2). It can be
+
+            - an :class:`int` as the pointer address to the nested sequence
+            - a Python sequence of :class:`int`, each of which is a pointer address
+              to the corresponding tensor's strides
+            - a nested Python sequence of :class:`int`
+
+        tensor_data: A host array of pointer addresses (as Python :class:`int`) for
+            each tensor data (on device). It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+    Returns:
+        int64_t: A unique sequential integer identifier of the appended tensor network operator component.
+
+    .. seealso:: `cutensornetNetworkOperatorAppendProduct`
+    """
+    # num_modes can be a pointer address, or a Python sequence
+    cdef vector[int32_t] numModesData
+    cdef const int32_t* numModesPtr
+    if cpython.PySequence_Check(num_modes):
+        numModesData = num_modes
+        numModesPtr = numModesData.data()
+    else:  # a pointer address
+        numModesPtr = <const int32_t*><intptr_t>num_modes
+
+    # state_modes can be:
+    #   - a plain pointer address
+    #   - a Python sequence (of pointer addresses)
+    #   - a nested Python sequence (of int32_t)
+    # Note: it cannot be a mix of sequences and ints.
+    cdef vector[intptr_t] stateModesCData
+    cdef const int32_t** stateModesPtr
+    if is_nested_sequence(state_modes):
+        # flatten the 2D sequence
+        stateModesPyData = []
+        for i in state_modes:
+            # too bad a Python list can't hold C++ vectors, so we use NumPy
+            # arrays as the container here to keep data alive
+            data = _numpy.asarray(i, dtype=_numpy.int32)
+            assert data.ndim == 1
+            stateModesPyData.append(data)
+            stateModesCData.push_back(<intptr_t>data.ctypes.data)
+        stateModesPtr = <const int32_t**>(stateModesCData.data())
+    elif cpython.PySequence_Check(state_modes):
+        # handle 1D sequence
+        stateModesCData = state_modes
+        stateModesPtr = <const int32_t**>(stateModesCData.data())
+    else:
+        # a pointer address, take it as is
+        stateModesPtr = <const int32_t**><intptr_t>state_modes
+
+    # tensor_mode_strides can be:
+    #   - a plain pointer address
+    #   - a Python sequence (of pointer addresses)
+    #   - a nested Python sequence (of int64_t)
+    # Note: it cannot be a mix of sequences and ints.
+    cdef vector[intptr_t] tensorModeStridesCData
+    cdef const int64_t** tensorModeStridesPtr
+    if is_nested_sequence(tensor_mode_strides):
+        # flatten the 2D sequence
+        tensorModeStridesPyData = []
+        for i in tensor_mode_strides:
+            # too bad a Python list can't hold C++ vectors, so we use NumPy
+            # arrays as the container here to keep data alive
+            data = _numpy.asarray(i, dtype=_numpy.int64)
+            assert data.ndim == 1
+            tensorModeStridesPyData.append(data)
+            tensorModeStridesCData.push_back(<intptr_t>data.ctypes.data)
+        tensorModeStridesPtr = <const int64_t**>(tensorModeStridesCData.data())
+    elif cpython.PySequence_Check(tensor_mode_strides):
+        # handle 1D sequence
+        tensorModeStridesCData = tensor_mode_strides
+        tensorModeStridesPtr = <const int64_t**>(tensorModeStridesCData.data())
+    else:
+        # a pointer address, take it as is
+        tensorModeStridesPtr = <const int64_t**><intptr_t>tensor_mode_strides
+
+    # tensor_data can be a pointer address, or a Python sequence
+    cdef vector[intptr_t] tensorDataData
+    cdef const void** tensorDataPtr
+    if cpython.PySequence_Check(tensor_data):
+        tensorDataData = tensor_data
+        tensorDataPtr = <const void**>(tensorDataData.data())
+    else:  # a pointer address
+        tensorDataPtr = <const void**><intptr_t>tensor_data
+
+    cdef cuDoubleComplex coeff
+    coeff.x = coefficient.real
+    coeff.y = coefficient.imag
+
+    cdef int64_t componentId = 0
+    with nogil:
+        status = cutensornetNetworkOperatorAppendProduct(
+                <_Handle>handle, <_NetworkOperator>network_operator,
+                coeff, num_tensors, numModesPtr, stateModesPtr,
+                tensorModeStridesPtr, tensorDataPtr
+                , &componentId)
+    check_status(status)
+    return componentId
+
+
+cpdef intptr_t create_accessor(
+        intptr_t handle, intptr_t state,
+        int32_t n_projected_modes, projected_modes, amplitudes_tensor_strides) except*:
+    """Create a representation for the tensor network state accessor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+        n_projected_modes (int32_t): The number of modes that are projected out for the state.
+        projected_modes: A host array of projected modes for the marginal. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        amplitudes_tensor_strides: A host array of strides for the amplitudes tensor. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+    Returns:
+        intptr_t: An opaque tensor network state accessor handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateAccessor`
+    """
+
+    # projected_modes can be a pointer address, or a Python sequence
+    cdef vector[int32_t] projectedModesData
+    cdef int32_t* projectedModesPtr
+    if cpython.PySequence_Check(projected_modes):
+        if len(projected_modes) != n_projected_modes:
+            raise ValueError("size of projected_modes not matching n_projected_modes")
+        projectedModesData = projected_modes
+        projectedModesPtr = projectedModesData.data()
+    else:  # a pointer address
+        projectedModesPtr = <int32_t*><intptr_t>projected_modes
+
+    # amplitudes_tensor_strides can be a pointer address, or a Python sequence
+    cdef vector[int64_t] amplitudesTensorStridesData
+    cdef int64_t* amplitudesTensorStridesPtr
+    if cpython.PySequence_Check(amplitudes_tensor_strides):
+        amplitudesTensorStridesData = amplitudes_tensor_strides
+        amplitudesTensorStridesPtr = amplitudesTensorStridesData.data()
+    else:  # a pointer address
+        amplitudesTensorStridesPtr = <int64_t*><intptr_t>amplitudes_tensor_strides
+
+    cdef _StateAccessor accessor
+    with nogil:
+        status = cutensornetCreateAccessor(
+            <_Handle>handle, <_State>state,
+            n_projected_modes, projectedModesPtr,
+            amplitudesTensorStridesPtr, &accessor)
+    check_status(status)
+    return <intptr_t>accessor
+
+
+cdef dict accessor_attribute_sizes = {
+    CUTENSORNET_ACCESSOR_OPT_NUM_HYPER_SAMPLES: _numpy.int32
+}
+
+
+cpdef accessor_get_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding accessor attribute.
+
+    Args:
+        attr (AccessorAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute. The returned dtype is always
+        a valid NumPy dtype object.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`accessor_configure`.
+    """
+    return accessor_attribute_sizes[attr]
+
+
+cpdef accessor_configure(intptr_t handle, intptr_t accessor, int attr, intptr_t buf, size_t size):
+    """Configures computation of the tensor network state accessor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        accessor (intptr_t): The tensor network state accessor computation handle.
+        attr (AccessorAttribute): The attribute to configure.
+        buf (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the returned attribute value.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`accessor_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetAccessorConfigure`
+    """
+    with nogil:
+        status = cutensornetAccessorConfigure(
+            <_Handle>handle, <_StateAccessor>accessor,
+            <_AccessorAttribute>attr,
+            <void*>buf, size)
+    check_status(status)
+
+
+cpdef accessor_prepare(
+        intptr_t handle, intptr_t accessor,
+        size_t max_workspace_size_device, intptr_t workspace, intptr_t stream):
+    """Prepares computation of the tensor network state accessor.
+
+    Args:
+        handle (intptr_t): The library handle.
+        accessor (intptr_t): The tensor network state accessor handle.
+        max_workspace_size_device (size_t): The maximal device workspace size (in bytes) allowed
+            for the accessor computation.
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetAccessorPrepare`
+    """
+    with nogil:
+        status = cutensornetAccessorPrepare(
+            <_Handle>handle, <_StateAccessor>accessor,
+            max_workspace_size_device, <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef accessor_compute(
+        intptr_t handle, intptr_t accessor, projected_mode_values,
+        intptr_t workspace, intptr_t amplitudes_tensor, intptr_t state_norm, intptr_t stream):
+    """Computes the tensor network state amplitudes.
+
+    Args:
+        handle (intptr_t): The library handle.
+        accessor (intptr_t): The tensor network state accessor handle.
+        projected_mode_values: A host array of values for the projected modes. It can be
+
+            - an :class:`int` as the pointer address to the array
+            - a Python sequence of :class:`int`
+
+        workspace (intptr_t): The workspace descriptor.
+        amplitudes_tensor (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the computed amplitudes.
+        state_norm (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the 2-norm of the underlying state. If set to 0 (`NULL` pointer), the norm calculation will be ignored.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetAccessorCompute`
+    """
+    # projected_mode_values can be a pointer address, or a Python sequence
+    cdef vector[int64_t] projectedModeValuesData
+    cdef int64_t* projectedModeValuesPtr
+    if cpython.PySequence_Check(projected_mode_values):
+        projectedModeValuesData = projected_mode_values
+        projectedModeValuesPtr = projectedModeValuesData.data()
+    else:  # a pointer address
+        projectedModeValuesPtr = <int64_t*><intptr_t>projected_mode_values
+
+    with nogil:
+        status = cutensornetAccessorCompute(
+            <_Handle>handle, <_StateAccessor>accessor,
+            projectedModeValuesPtr, <_WorkspaceDescriptor>workspace,
+            <void*>amplitudes_tensor, <void*>state_norm, <Stream>stream)
+    check_status(status)
+
+
+cpdef destroy_accessor(intptr_t accessor):
+    """Destroy a tensor network state accessor handle.
+
+    Args:
+        marginal (intptr_t): The tensor network state accessor handle.
+
+    .. seealso:: `cutensornetDestroyAccessor`
+    """
+    with nogil:
+        status = cutensornetDestroyAccessor(<_StateAccessor>accessor)
+    check_status(status)
+
+
+cpdef destroy_network_operator(intptr_t network_operator):
+    """Destroy a tensor network operator.
+
+    Args:
+        network_operator (intptr_t): The tensor network operator.
+
+    .. seealso:: `cutensornetDestroyNetworkOperator`
+    """
+    with nogil:
+        status = cutensornetDestroyNetworkOperator(<_NetworkOperator>network_operator)
+    check_status(status)
+
+
+cpdef intptr_t create_expectation(
+        intptr_t handle, intptr_t state, intptr_t operator) except*:
+    """Create a representation for the tensor network state expectation value.
+
+    Args:
+        handle (intptr_t): The library handle.
+        state (intptr_t): The tensor network state.
+
+    Returns:
+        intptr_t: An opaque tensor network state expectation handle (as Python :class:`int`).
+
+    .. seealso:: `cutensornetCreateExpectation`
+    """
+    cdef _StateExpectation expectation
+    with nogil:
+        status = cutensornetCreateExpectation(
+            <_Handle>handle, <_State>state, <_NetworkOperator>operator
+            , &expectation)
+    check_status(status)
+    return <intptr_t>expectation
+
+
+cdef dict expectation_attribute_sizes = {
+    CUTENSORNET_EXPECTATION_OPT_NUM_HYPER_SAMPLES: _numpy.int32
+}
+
+
+cpdef expectation_get_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding expectation attribute.
+
+    Args:
+        attr (ExpectationAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute. The returned dtype is always
+        a valid NumPy dtype object.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`expectation_configure`.
+    """
+    return expectation_attribute_sizes[attr]
+
+
+cpdef expectation_configure(intptr_t handle, intptr_t expectation, int attr, intptr_t buf, size_t size):
+    """Configures computation of the tensor network state expectation value.
+
+    Args:
+        handle (intptr_t): The library handle.
+        expectation (intptr_t): The tensor network expectation computation handle.
+        attr (ExpectationAttribute): The attribute to configure.
+        buf (intptr_t): The pointer address (as Python :class:`int`) of the attribute value.
+        size (size_t): The size of ``buf`` (in bytes).
+
+    .. note:: To compute ``size``, use the itemsize of the corresponding data
+        type, which can be queried using :func:`expectation_get_attribute_dtype`.
+
+    .. seealso:: `cutensornetExpectationConfigure`
+    """
+    with nogil:
+        status = cutensornetExpectationConfigure(
+            <_Handle>handle, <_StateExpectation>expectation,
+            <_ExpectationAttribute>attr,
+            <void*>buf, size)
+    check_status(status)
+
+
+cpdef expectation_prepare(
+        intptr_t handle, intptr_t expectation,
+        size_t max_workspace_size_device, intptr_t workspace, intptr_t stream):
+    """Prepares computation of the tensor network state expectation.
+
+    Args:
+        handle (intptr_t): The library handle.
+        expectation (intptr_t): The tensor network expectation computation handle.
+        max_workspace_size_device (size_t): The maximal device workspace size (in bytes) allowed
+            for the expectation value computation.
+        workspace (intptr_t): The workspace descriptor.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetExpectationPrepare`
+    """
+    with nogil:
+        status = cutensornetExpectationPrepare(
+            <_Handle>handle, <_StateExpectation>expectation,
+            max_workspace_size_device, <_WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef expectation_compute(
+        intptr_t handle, intptr_t expectation,
+        intptr_t workspace, intptr_t expectation_value, intptr_t state_norm, intptr_t stream):
+    """Computes the tensor network state expectation value.
+
+    Args:
+        handle (intptr_t): The library handle.
+        expectation (intptr_t): The tensor network expectation computation handle.
+        workspace (intptr_t): The workspace descriptor.
+        expectation_value (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the computed expectation_value (stored on host).
+        state_norm (intptr_t): The pointer address (as Python :class:`int`) for storing
+            the 2-norm of the underlying state. If set to 0 (`NULL` pointer), the norm calculation will be ignored.
+        stream (intptr_t): The CUDA stream handle (``cudaStream_t`` as Python
+            :class:`int`).
+
+    .. seealso:: `cutensornetExpectationCompute`
+    """
+    with nogil:
+        status = cutensornetExpectationCompute(
+            <_Handle>handle, <_StateExpectation>expectation,
+            <_WorkspaceDescriptor>workspace, <void*>expectation_value, <void*>state_norm, <Stream>stream)
+    check_status(status)
+
+
+cpdef destroy_expectation(intptr_t expectation):
+    """Destroy a tensor network expectation value representation.
+
+    Args:
+        expectation (intptr_t): The tensor network expectation value representation.
+
+    .. seealso:: `cutensornetDestroyExpectation`
+    """
+    with nogil:
+        status = cutensornetDestroyExpectation(<_StateExpectation>expectation)
+    check_status(status)
+
+
 class NetworkAttribute(IntEnum):
     """See `cutensornetNetworkAttributes_t`."""
     INPUT_TENSORS_NUM_CONSTANT = CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_CONSTANT
@@ -3360,6 +4162,7 @@ class TensorSVDConfigAttribute(IntEnum):
     S_PARTITION = CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION
     ALGO = CUTENSORNET_TENSOR_SVD_CONFIG_ALGO
     ALGO_PARAMS = CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS
+    DISCARDED_WEIGHT_CUTOFF = CUTENSORNET_TENSOR_SVD_CONFIG_DISCARDED_WEIGHT_CUTOFF
 
 class TensorSVDNormalization(IntEnum):
     """See `cutensornetTensorSVDNormalization_t`."""
@@ -3406,6 +4209,29 @@ class MarginalAttribute(IntEnum):
 class SamplerAttribute(IntEnum):
     """See `cutensornetSamplerAttributes_t`."""
     OPT_NUM_HYPER_SAMPLES = CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES
+
+class AccessorAttribute(IntEnum):
+    """See `cutensornetAccessorAttributes_t`."""
+    OPT_NUM_HYPER_SAMPLES = CUTENSORNET_ACCESSOR_OPT_NUM_HYPER_SAMPLES
+
+class ExpectationAttribute(IntEnum):
+    """See `cutensornetExpectationAttributes_t`."""
+    OPT_NUM_HYPER_SAMPLES = CUTENSORNET_EXPECTATION_OPT_NUM_HYPER_SAMPLES
+
+class BoundaryCondition(IntEnum):
+    """See `cutensornetBoundaryCondition_t`."""
+    OPEN = CUTENSORNET_BOUNDARY_CONDITION_OPEN
+
+class StateAttribute(IntEnum):
+    """See `cutensornetStateAttributes_t`."""
+    MPS_CANONICAL_CENTER = CUTENSORNET_STATE_MPS_CANONICAL_CENTER
+    MPS_SVD_CONFIG_ABS_CUTOFF = CUTENSORNET_STATE_MPS_SVD_CONFIG_ABS_CUTOFF
+    MPS_SVD_CONFIG_REL_CUTOFF = CUTENSORNET_STATE_MPS_SVD_CONFIG_REL_CUTOFF
+    MPS_SVD_CONFIG_S_NORMALIZATION = CUTENSORNET_STATE_MPS_SVD_CONFIG_S_NORMALIZATION
+    MPS_SVD_CONFIG_ALGO = CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO
+    MPS_SVD_CONFIG_ALGO_PARAMS = CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO_PARAMS
+    MPS_SVD_CONFIG_DISCARDED_WEIGHT_CUTOFF = CUTENSORNET_STATE_MPS_SVD_CONFIG_DISCARDED_WEIGHT_CUTOFF
+    NUM_HYPER_SAMPLES = CUTENSORNET_STATE_NUM_HYPER_SAMPLES
 
 del IntEnum
 

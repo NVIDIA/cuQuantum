@@ -6,6 +6,7 @@ import copy
 
 import cupy as cp
 from cupy import testing
+import cupyx as cpx
 import numpy as np
 try:
     from mpi4py import MPI  # init!
@@ -204,18 +205,24 @@ class TestLibHelper:
 
     def test_get_version(self):
         ver = cusv.get_version()
-        assert ver == (cusv.MAJOR_VER * 1000
+        major = ver // 1000
+        minor = (ver % 1000) // 100
+
+        # run-time version must be compatible with build-time version
+        assert major == cusv.MAJOR_VER
+        assert minor >= cusv.MINOR_VER
+
+        # sanity check (build-time versions should agree)
+        assert cusv.VERSION == (cusv.MAJOR_VER * 1000
             + cusv.MINOR_VER * 100
             + cusv.PATCH_VER)
-        assert ver == cusv.VERSION
 
     def test_get_property(self):
+        # run-time version must be compatible with build-time version
         assert cusv.MAJOR_VER == cusv.get_property(
             cuquantum.libraryPropertyType.MAJOR_VERSION)
-        assert cusv.MINOR_VER == cusv.get_property(
+        assert cusv.MINOR_VER <= cusv.get_property(
             cuquantum.libraryPropertyType.MINOR_VERSION)
-        assert cusv.PATCH_VER == cusv.get_property(
-            cuquantum.libraryPropertyType.PATCH_LEVEL)
 
 
 class TestHandle:
@@ -1788,6 +1795,94 @@ class TestScheduler:
         elif param_form == "int":
             # nothing to compare against...
             pass
+
+
+class TestSubSVMigrator:
+    ''' This class runs random tests to check all API arguemnts
+        are correctly passed to C-API
+    '''
+    @classmethod
+    def setup_class(cls):
+        np.random.seed(20231003)
+
+    @pytest.mark.parametrize(
+        'dtype', (np.complex64, np.complex128)
+    )
+    @pytest.mark.parametrize(
+        'exec_num', range(5)
+    )
+    def test_sub_sv_migrator(self, handle, dtype, exec_num):
+        n_local_index_bits = np.random.randint(low=1, high=22)
+        n_device_slots = np.random.randint(low=2, high=16)
+        device_slot_idx = np.random.randint(n_device_slots)
+        check_in_out = np.random.randint(4)
+        randnum_dtype = np.float32 if dtype == np.complex64 else np.float64
+
+        data_type = dtype_to_data_type[dtype]
+        sub_sv_size = 2 ** n_local_index_bits
+        device_slot_size = sub_sv_size * n_device_slots
+
+        randnums = np.random.rand(device_slot_size) + 1.j * np.random.rand(device_slot_size)
+        host_slots_ref = np.asarray(randnums, dtype=dtype)
+        device_slots = cp.array(host_slots_ref)
+        begin = np.random.randint(low=0, high=sub_sv_size-1)
+        end = np.random.randint(low=begin + 1, high=sub_sv_size)
+
+        src_sub_sv_ptr = 0
+        dst_sub_sv_ptr = 0
+        if check_in_out == 0:
+            # swap
+            check_in = check_out = True
+            randnums = np.random.rand(sub_sv_size) + 1.j * np.random.rand(sub_sv_size)
+            src_sub_sv_ref = np.asarray(randnums, dtype=dtype)
+            src_sub_sv = cpx.empty_pinned(sub_sv_size, dtype=dtype)
+            src_sub_sv[:] = src_sub_sv_ref[:]
+            # src and dst are the same memory chunk
+            dst_sub_sv = src_sub_sv
+            dst_sub_sv_ref = src_sub_sv_ref
+            src_sub_sv_ptr = dst_sub_sv_ptr = src_sub_sv.ctypes.data
+        else:
+            # check-in / check-out
+            check_in = (check_in_out & 1) != 0
+            check_out = (check_in_out & 2) != 0
+            if check_out:
+                randnums = np.random.rand(sub_sv_size) + 1.j * np.random.rand(sub_sv_size)
+                src_sub_sv_ref = np.asarray(randnums, dtype=dtype)
+                src_sub_sv = cpx.empty_pinned(sub_sv_size, dtype=dtype)
+                src_sub_sv[:] = src_sub_sv_ref[:]
+                src_sub_sv_ptr = src_sub_sv.ctypes.data
+            if check_in:
+                randnums = np.random.rand(sub_sv_size) + 1.j * np.random.rand(sub_sv_size)
+                dst_sub_sv_ref = np.asarray(randnums, dtype=dtype)
+                dst_sub_sv = cpx.empty_pinned(sub_sv_size, dtype=dtype)
+                dst_sub_sv[:] = dst_sub_sv_ref[:]
+                dst_sub_sv_ptr = dst_sub_sv.ctypes.data
+
+        # create SubStateVectorMigrator
+        migrator = cusv.sub_sv_migrator_create(
+            handle, device_slots.data.ptr, data_type, n_device_slots, n_local_index_bits)
+        # migrate
+        cusv.sub_sv_migrator_migrate(
+            handle, migrator, device_slot_idx, src_sub_sv_ptr, dst_sub_sv_ptr, begin, end)
+        # destroy
+        cp.cuda.Stream().synchronize()
+        cusv.sub_sv_migrator_destroy(handle, migrator)
+
+        # reference
+        offset = sub_sv_size * device_slot_idx
+        if check_in:
+            # copy values for swap
+            tmp = host_slots_ref[offset+begin:offset+end].copy()
+        if check_out:
+            host_slots_ref[offset+begin:offset+end] = src_sub_sv_ref[begin:end]
+        if check_in:
+            dst_sub_sv_ref[begin:end] = tmp[:]
+
+        assert cp.all(cp.asarray(host_slots_ref) == device_slots)
+        if check_out:
+            assert np.all(src_sub_sv == src_sub_sv_ref)
+        if check_in:
+            assert np.all(dst_sub_sv == dst_sub_sv_ref)
 
 
 class TestMemHandler(MemHandlerTestBase):

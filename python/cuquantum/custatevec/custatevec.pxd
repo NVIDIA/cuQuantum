@@ -53,6 +53,7 @@ cdef extern from '<custatevec.h>' nogil:
         _Index transferSize
     ctypedef void* _DistIndexBitSwapSchedulerDescriptor 'custatevecDistIndexBitSwapSchedulerDescriptor_t'
     ctypedef void* _SVSwapWorkerDescriptor 'custatevecSVSwapWorkerDescriptor_t'
+    ctypedef void* _SubSVMigratorDescriptor 'custatevecSubSVMigratorDescriptor_t'
 
 
     # cuStateVec enums

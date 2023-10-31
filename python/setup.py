@@ -29,10 +29,10 @@ with open(os.path.join(source_root, "tests/requirements.txt")) as f:
 # - cuTENSOR version is constrained in the cutensornet-cuXX package, so we don't
 #   need to list it
 install_requires = [
-    'numpy>=1.21',
+    'numpy~=1.21',  # ">=1.21,<2"
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.4',   # ">=1.4.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.2',  # ">=2.2.0,<3"
+    f'custatevec-cu{utils.cuda_major_ver}~=1.5',   # ">=1.5.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.3',  # ">=2.3.0,<3"
 ]
 if utils.cuda_major_ver == '11':
     # CuPy has 3+ wheels for CUDA 11.x, only the cuquantum-python meta package has

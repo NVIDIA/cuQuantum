@@ -1,4 +1,4 @@
-# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -6,6 +6,7 @@ cmake_minimum_required(VERSION 3.13.0 FATAL_ERROR)
 project(cutensornet_example LANGUAGES C CXX CUDA)
 
 include(GNUInstallDirs)
+find_package(CUDA 11.0 REQUIRED)
 
 # ##########################################
 # cutensornet_example build mode
@@ -92,13 +93,19 @@ function(add_cutensornet_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
         cutensornet
         $<$<BOOL:${MPI_FOUND}>:MPI::MPI_CXX>
   )
-  set_target_properties(
-    ${EXAMPLE_TARGET}
-      PROPERTIES
-        POSITION_INDEPENDENT_CODE ON
-        CUDA_ARCHITECTURES
-          "70;75;80"
-  )
+  if((${CUDA_VERSION_MAJOR} GREATER_EQUAL 12) OR (${CUDA_VERSION_MAJOR} EQUAL 11 AND ${CUDA_VERSION_MINOR} GREATER_EQUAL 8))
+    set_target_properties(
+      ${EXAMPLE_TARGET}
+        PROPERTIES
+          POSITION_INDEPENDENT_CODE ON
+          CUDA_ARCHITECTURES "70;75;80;86;90")
+  else()
+    set_target_properties(
+      ${EXAMPLE_TARGET}
+        PROPERTIES
+          POSITION_INDEPENDENT_CODE ON
+          CUDA_ARCHITECTURES "70;75;80;86")
+  endif()
   # Install example
   install(
       TARGETS ${EXAMPLE_TARGET}
@@ -118,8 +125,14 @@ add_custom_target(cutensornet_examples)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.reuse" tensornet_example_reuse.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gradients" tensornet_example_gradients.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.amplitudes" high_level/amplitudes_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.expectation" high_level/expectation_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.marginal" high_level/marginal_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.sampler" high_level/sampling_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_amplitudes" high_level/mps_amplitudes_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_expectation" high_level/mps_expectation_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_marginal" high_level/mps_marginal_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_sampler" high_level/mps_sampling_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.svd" approxTN/tensor_svd_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.qr" approxTN/tensor_qr_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gate" approxTN/gate_split_example.cu)
@@ -129,6 +142,7 @@ find_package(MPI)
 if (MPI_FOUND)
   add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi" tensornet_example_mpi.cu)
   add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi.auto" tensornet_example_mpi_auto.cu)
+  add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi.sampling" high_level/sampling_mpi_example.cu)
 else ()
   message(WARNING "An MPI installation was not detected. Please install CUDA-aware MPI if you would like to build the distributed example(s).")
 endif ()

@@ -30,6 +30,8 @@
 
 int main(int argc, char **argv)
 {
+  static_assert(sizeof(size_t) == sizeof(int64_t), "Please build this sample on a 64-bit architecture!");
+
   constexpr std::size_t fp64size = sizeof(double);
 
   // Sphinx: Sampler #2

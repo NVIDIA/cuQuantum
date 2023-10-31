@@ -176,7 +176,7 @@ cdef extern from * nogil:
         _Handle, _DistIndexBitSwapSchedulerDescriptor, int32_t, int32_t,
         _SVSwapParameters*)
     int custatevecSVSwapWorkerCreate(
-        _Handle, _SVSwapWorkerDescriptor, _CommunicatorDescriptor, void*,
+        _Handle, _SVSwapWorkerDescriptor*, _CommunicatorDescriptor, void*,
         int32_t, Event, DataType, Stream, size_t*, size_t*)
     int custatevecSVSwapWorkerDestroy(
         _Handle, _SVSwapWorkerDescriptor)
@@ -190,6 +190,12 @@ cdef extern from * nogil:
         _Handle, _SVSwapWorkerDescriptor, _SVSwapParameters*, int)
     int custatevecSVSwapWorkerExecute(
         _Handle, _SVSwapWorkerDescriptor, _Index, _Index)
+    int custatevecSubSVMigratorCreate(
+        _Handle, _SubSVMigratorDescriptor*, void*, DataType, int, int)
+    int custatevecSubSVMigratorDestroy(
+        _Handle, _SubSVMigratorDescriptor)
+    int custatevecSubSVMigratorMigrate(
+        _Handle, _SubSVMigratorDescriptor, int, const void*, void*, _Index, _Index)
 
 
 # TODO: make this cpdef?
@@ -3091,6 +3097,74 @@ cpdef sv_swap_worker_execute(
     with nogil:
         status = custatevecSVSwapWorkerExecute(
             <_Handle>handle, <_SVSwapWorkerDescriptor>worker, begin, end)
+    check_status(status)
+
+
+cpdef intptr_t sub_sv_migrator_create(
+        intptr_t handle, intptr_t device_slots, int sv_data_type,
+        int n_device_slots, int n_local_index_bits) except*:
+    """Create a cuStateVec sub state vector migrator.
+
+    Args:
+        handle (intptr_t): The library handle.
+        device_slots (intptr_t): The pointer address to a device slots.
+        sv_data_type (cuquantum.cudaDataType): The data type of the device slots
+        n_device_slots (int): The number of device slots
+        n_local_index_bits (int): The number of index bits of sub state vectors.
+
+    Returns:
+            An instance of the opaque migrator descriptor (as Python :class:`int`).
+
+    .. seealso:: `custatevecSubSVMigratorCreate`
+    """
+    cdef _SubSVMigratorDescriptor migrator
+    with nogil:
+        status = custatevecSubSVMigratorCreate(
+            <_Handle>handle, &migrator, <void*>device_slots,
+            <DataType>sv_data_type, n_device_slots, n_local_index_bits)
+    check_status(status)
+    return <intptr_t>migrator
+
+
+cpdef sub_sv_migrator_destroy(
+        intptr_t handle, intptr_t migrator):
+    """Destroy the sub state vector migrator.
+
+    Args:
+        handle (intptr_t): The library handle.
+        migrator (intptr_t): The sub state vector migrator descriptor.
+
+    .. seealso:: `custatevecSubSVMigratorDestroy`
+    """
+    with nogil:
+        status = custatevecSubSVMigratorDestroy(
+            <_Handle>handle, <_SubSVMigratorDescriptor>migrator)
+    check_status(status)
+
+
+cpdef sub_sv_migrator_migrate(
+        intptr_t handle, intptr_t migrator, int device_slot_idx,
+	intptr_t src_sub_sv, intptr_t dst_sub_sv, _Index begin, _Index end):
+    """Performs state vector migration between device slots and given sub state vectors
+
+    Args:
+        handle (intptr_t): The library handle.
+        migrator (intptr_t): The sub state vector migrator descriptor.
+        device_slot_idx (int): The slot index of a device slot
+        src_sub_sv (intptr_t): The pointer address (as Python :class:`int`) to the
+            src sub state vector pointer.
+        dst_sub_sv (intptr_t): The pointer address (as Python :class:`int`) to the
+            dst sub state vector pointer.
+        begin (int64_t): The index in a device slot to start sub state vector migration
+        end (int64_t): The index in a device slot to end sub state vector migration
+
+    .. seealso:: `custatevecSubSVMigratorMigrate`
+    """
+    with nogil:
+        status = custatevecSubSVMigratorMigrate(
+            <_Handle>handle, <_SubSVMigratorDescriptor>migrator,
+	    device_slot_idx, <void*>src_sub_sv, <void*>dst_sub_sv,
+	    begin, end)
     check_status(status)
 
 

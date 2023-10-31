@@ -229,7 +229,7 @@ def get_cpu_name():
     if m:
         return m.group(0).split(':')[-1].strip()
     else:
-        assert False, f"getting cpu info failed"
+        return f"unknown"
 
 
 def get_gpu_driver_version():

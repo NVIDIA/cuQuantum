@@ -20,6 +20,11 @@ cdef extern from "vector_types.h" nogil:
     ctypedef struct int2 'int2':
         pass
 
+cdef extern from "cuComplex.h" nogil:
+    ctypedef struct cuDoubleComplex:
+        double x
+        double y
+
 
 # Cython limitation: need standalone typedef if we wanna use it for casting
 ctypedef int (*DeviceAllocType)(void*, void**, size_t, Stream)

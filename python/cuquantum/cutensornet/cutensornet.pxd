@@ -34,8 +34,11 @@ cdef extern from '<cutensornet.h>' nogil:
     ctypedef void* _TensorSVDConfig 'cutensornetTensorSVDConfig_t'
     ctypedef void* _TensorSVDInfo 'cutensornetTensorSVDInfo_t'
     ctypedef void* _State 'cutensornetState_t'
+    ctypedef void* _StateAccessor 'cutensornetStateAccessor_t'
+    ctypedef void* _StateExpectation 'cutensornetStateExpectation_t'
     ctypedef void* _StateMarginal 'cutensornetStateMarginal_t'
     ctypedef void* _StateSampler 'cutensornetStateSampler_t'
+    ctypedef void* _NetworkOperator 'cutensornetNetworkOperator_t'
 
     # cuTensorNet structs
     ctypedef struct _NodePair 'cutensornetNodePair_t':
@@ -175,6 +178,7 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_TENSOR_SVD_CONFIG_S_PARTITION
         CUTENSORNET_TENSOR_SVD_CONFIG_ALGO
         CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS
+        CUTENSORNET_TENSOR_SVD_CONFIG_DISCARDED_WEIGHT_CUTOFF
     
     ctypedef enum _TensorSVDAlgo 'cutensornetTensorSVDAlgo_t':
         CUTENSORNET_TENSOR_SVD_ALGO_GESVD
@@ -208,6 +212,12 @@ cdef extern from '<cutensornet.h>' nogil:
     ctypedef enum _StatePurity 'cutensornetStatePurity_t':
         CUTENSORNET_STATE_PURITY_PURE
     
+    ctypedef enum _ExpectationAttribute 'cutensornetExpectationAttributes_t':
+        CUTENSORNET_EXPECTATION_OPT_NUM_HYPER_SAMPLES
+
+    ctypedef enum _AccessorAttribute 'cutensornetAccessorAttributes_t':
+        CUTENSORNET_ACCESSOR_OPT_NUM_HYPER_SAMPLES
+    
     ctypedef enum _MarginalAttribute 'cutensornetMarginalAttributes_t':
         CUTENSORNET_MARGINAL_OPT_NUM_HYPER_SAMPLES
     
@@ -221,3 +231,16 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_NETWORK_INPUT_TENSORS_CONJUGATED
         CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_REQUIRE_GRAD
         CUTENSORNET_NETWORK_INPUT_TENSORS_REQUIRE_GRAD
+
+    ctypedef enum _BoundaryCondition 'cutensornetBoundaryCondition_t':
+        CUTENSORNET_BOUNDARY_CONDITION_OPEN
+    
+    ctypedef enum _StateAttribute 'cutensornetStateAttributes_t':
+        CUTENSORNET_STATE_MPS_CANONICAL_CENTER
+        CUTENSORNET_STATE_MPS_SVD_CONFIG_ABS_CUTOFF
+        CUTENSORNET_STATE_MPS_SVD_CONFIG_REL_CUTOFF
+        CUTENSORNET_STATE_MPS_SVD_CONFIG_S_NORMALIZATION
+        CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO
+        CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO_PARAMS
+        CUTENSORNET_STATE_MPS_SVD_CONFIG_DISCARDED_WEIGHT_CUTOFF
+        CUTENSORNET_STATE_NUM_HYPER_SAMPLES

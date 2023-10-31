@@ -2,7 +2,9 @@ pytest >=6.2
 pytest-xdist
 opt_einsum
 cffi >=1.0.0
-nbmake ==1.3.0
+nbformat
+nbconvert
 cirq >=0.6.0
 qiskit >=0.24.0
+qiskit-aer
 pylatexenc

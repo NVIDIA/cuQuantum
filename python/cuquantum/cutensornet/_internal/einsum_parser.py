@@ -371,6 +371,8 @@ The output term {morpher(output)} contains ellipsis while none of the input term
     # Map data to ordinals for cutensornet.
     inputs, output, mode_map_user_to_ord, mode_map_ord_to_user, label_end = map_modes(inputs, output, num_extra_labels, morpher)
 
+    has_user_output = (output is not None)
+
     mapper = ModeLabelMapper(mode_map_ord_to_user)
     mapping_morpher = select_morpher(interleaved, mapper)
 
@@ -383,4 +385,4 @@ The output term {morpher(output)} contains ellipsis while none of the input term
     # Create mode-extent map based on internal mode numbers.
     size_dict = create_size_dict(inputs, operands)
 
-    return operands, inputs, output, size_dict, mode_map_user_to_ord, mode_map_ord_to_user, interleaved or ellipses
+    return operands, inputs, output, has_user_output, size_dict, mode_map_user_to_ord, mode_map_ord_to_user, interleaved, ellipses

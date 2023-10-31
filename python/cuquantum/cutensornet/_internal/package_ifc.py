@@ -9,6 +9,9 @@ An abstract interface to certain package-provided operations.
 __all__ = ['Package']
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from contextlib import nullcontext
+from typing import Any
 
 
 class Package(ABC):
@@ -68,3 +71,21 @@ class Package(ABC):
             device_id: The id (ordinal) of the device.
         """
         raise NotImplementedError
+
+
+@dataclass
+class StreamHolder:
+    """A data class for easing CUDA stream manipulation.
+
+    Attributes:
+        ctx: A context manager for using the specified stream.
+        device_id (int): The device ID where the encapsulated stream locates.
+        obj: A foreign object that holds the stream alive.
+        package (str):
+        ptr (int): The address of the underlying ``cudaStream_t`` object.
+    """
+    ctx: Any = nullcontext()
+    device_id: int = -2
+    obj: Any = None
+    package: str = ""
+    ptr: int = 0

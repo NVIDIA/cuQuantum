@@ -5,9 +5,9 @@
 import re
 import sys
 
-import cupy
+import cupy as cp
 from cupy.testing import shaped_random
-import numpy
+import numpy as np
 try:
     import torch
     if not torch.cuda.is_available():
@@ -15,19 +15,21 @@ try:
 except ImportError:
     torch = None
 
+from cuquantum import cutensornet as cutn
 from cuquantum import OptimizerOptions
 from cuquantum import tensor
 from cuquantum.cutensornet._internal.circuit_converter_utils import EINSUM_SYMBOLS_BASE
+from cuquantum.cutensornet._internal.decomposition_utils import DECOMPOSITION_DTYPE_NAMES
 from cuquantum.cutensornet._internal.einsum_parser import infer_output_mode_labels
 
 from .data import dtype_names
 
 
-machine_epsilon_values = [numpy.finfo(dtype).eps for dtype in dtype_names]
+machine_epsilon_values = [np.finfo(dtype).eps for dtype in dtype_names]
 
 rtol_mapper = dict(zip(
     dtype_names,
-    [numpy.sqrt(m_eps) for m_eps in machine_epsilon_values]
+    [np.sqrt(m_eps) for m_eps in machine_epsilon_values]
 ))
 
 atol_mapper = dict(zip(
@@ -50,7 +52,7 @@ def set_path_to_optimizer_options(optimizer_opts, path):
 def compute_and_normalize_numpy_path(data, num_operands):
     try:
         # this can fail if the TN is too large (ex: containing unicode)
-        path, _ = numpy.einsum_path(*data, optimize=True)
+        path, _ = np.einsum_path(*data, optimize=True)
     except:
         raise NotImplementedError
     path = path[1:]
@@ -220,18 +222,18 @@ class ExpressionFactory:
     def output_modes(self):
         return self.modes[self.num_inputs:]
 
-    def generate_operands(self, shapes, xp, dtype, order):
+    def generate_operands(self, shapes, xp, dtype, order, seed=0):
         # we always generate data from shaped_random as CuPy fixes
         # the RNG seed for us
         if xp == "torch-cpu":
-            _xp = numpy
+            _xp = np
         elif xp == "torch-gpu":
-            _xp = cupy
+            _xp = cp
         else:
             _xp = sys.modules[xp]
 
         operands = [
-            shaped_random(shape, xp=_xp, dtype=dtype, order=order)
+            shaped_random(shape, xp=_xp, dtype=dtype, order=order, seed=seed)
             for shape in shapes
         ]
 
@@ -272,7 +274,7 @@ class EinsumFactory(ExpressionFactory):
         if dummy:
             # create dummy NumPy arrays to bypass the __array_function__
             # dispatcher, see numpy/numpy#21379 for discussion
-            operands = [numpy.broadcast_to(0, arr.shape) for arr in operands]
+            operands = [np.broadcast_to(0, arr.shape) for arr in operands]
 
         if self.expr_format == "subscript":
             data = [self.expr, *operands]
@@ -282,6 +284,44 @@ class EinsumFactory(ExpressionFactory):
             data.append(tuple(self.output_modes[0]))
 
         return data
+
+    def generate_qualifiers(self, xp, gradient):
+        if not gradient:
+            qualifiers = None
+            picks = None
+        elif gradient == "random":
+            # picks could be all false, and torch would not be happy during
+            # backprop
+            while True:
+                picks = np.random.choice(2, size=self.num_inputs)
+                if any(picks):
+                    break
+            if "torch" in xp:
+                # for torch, test auto-detect, will set up torch operands later
+                qualifiers = None
+            else:
+                qualifiers = np.zeros(
+                    self.num_inputs, dtype=cutn.tensor_qualifiers_dtype)
+                qualifiers[:]["requires_gradient"] = picks
+        elif gradient == "all":
+            # for torch, test overwrite
+            qualifiers = np.zeros(
+                self.num_inputs, dtype=cutn.tensor_qualifiers_dtype)
+            qualifiers[:]["requires_gradient"] = True
+            picks = tuple(True for i in range(self.num_inputs))
+
+        return qualifiers, picks
+
+    def setup_torch_grads(self, xp, picks, operands):
+        if not "torch" in xp or picks is None:
+            return
+
+        for op, pick in zip(operands, picks):
+            if pick:
+                op.requires_grad_(True)
+            else:
+                op.requires_grad_(False)
+            op.grad = None  # reset
 
 
 class DecomposeFactory(ExpressionFactory):
@@ -314,26 +354,47 @@ class DecomposeFactory(ExpressionFactory):
         return self._modes
 
 
-def gen_rand_svd_method(rng):
+def gen_rand_svd_method(rng, dtype, fixed=None):
+    assert dtype in DECOMPOSITION_DTYPE_NAMES, f"dtype {dtype} not supported"
     method = {"max_extent": rng.choice(range(1, 7)), 
               "abs_cutoff": rng.random() / 2.0,  # [0, 0.5)
-              "rel_cutoff": 0.1 + rng.random() / 2.5 ,  # [0.1, 0.5)
+              "rel_cutoff": 0.1 + rng.random() / 2.5,  # [0.1, 0.5)
               "normalization": rng.choice([None, "L1", "L2", "LInf"]),
               "partition": rng.choice([None, "U", "V", "UV"]),
               "algorithm": rng.choice(['gesvd', 'gesvdj', 'gesvdp', 'gesvdr'])}
-    if method["algorithm"] == 'gesvdj':
-        method["gesvdj_tol"] = rng.choice([0, 1e-14])
+    algorithm = method["algorithm"]
+    if fixed is not None and "algorithm" in fixed:
+        algorithm = fixed["algorithm"]
+    if algorithm != 'gesvdr':
+        # gesvdr + max_extent can't be used with discarded weight truncation
+        method["discarded_weight_cutoff"] = rng.random() / 10.0  # [0, 0.1)
+    if algorithm == 'gesvdj':
+        if dtype in ("float32", "complex64"):
+            # for single precision, lowered down gesvdj_tol for convergence
+            method["gesvdj_tol"] = rng.choice([0, 1e-7])
+        else:
+            method["gesvdj_tol"] = rng.choice([0, 1e-14])
         method["gesvdj_max_sweeps"] = rng.choice([0, 100])
-    elif method["algorithm"] == 'gesvdr':
+    elif algorithm == 'gesvdr':
         method["gesvdr_niters"] = rng.choice([0, 40])
         # we can't set oversampling as it depends on matrix size here
+    # updating method again in case svd_params are already
+    if fixed is not None:
+        method.update(fixed)
     return tensor.SVDMethod(**method)
 
+def get_svd_methods_for_test(num, dtype):
+    # single dw cutoff to verify dw < dw_cutoff
+    methods = [tensor.SVDMethod(), tensor.SVDMethod(discarded_weight_cutoff=0.05)]
+    rng = np.random.default_rng(2021)
+    for _ in range(num):
+        methods.append(gen_rand_svd_method(rng, dtype))
+    return methods
 
 # We want to avoid fragmenting the stream-ordered mempools
 _predefined_streams = {
-    numpy: cupy.cuda.Stream(),  # implementation detail
-    cupy: cupy.cuda.Stream(),
+    np: cp.cuda.Stream(),  # implementation detail
+    cp: cp.cuda.Stream(),
 }
 if torch is not None:
     _predefined_streams[torch] = torch.cuda.Stream()
@@ -360,6 +421,18 @@ def deselect_contract_tests(
         _, _, _, overwrite_dtype = einsum_expr_pack
         if dtype != overwrite_dtype:
             return True
+    return False
+
+def deselect_gradient_tests(
+        einsum_expr_pack, xp, dtype, order, stream,
+        use_numpy_path, gradient, *args, **kwargs):
+    if xp.startswith('torch') and torch is None:
+        return True
+    assert gradient in (False, "random", "all", "skip")
+    if gradient == "skip":
+        return True
+    if gradient and "torch" not in xp:
+        return True
     return False
 
 def deselect_decompose_tests(

@@ -6,7 +6,7 @@
 Entry point to using tensors from different libraries seamlessly.
 """
 
-__all__ = [ 'infer_tensor_package', 'wrap_operands', 'wrap_operands', 'to', 'copy_']
+__all__ = [ 'infer_tensor_package', 'wrap_operand', 'wrap_operands', 'to', 'copy_']
 
 import functools
 
@@ -103,23 +103,21 @@ def wrap_operands(native_operands):
     return wrapped_operands
 
 
-def to(operands, device):
+def to(operands, device, stream_holder):
     """
     Copy the wrapped operands to the specified device ('cpu' or int) and return the 
     wrapped operands on the device.
     """
-    operands = tuple(o.to(device) for o in operands)
+    operands = tuple(o.to(device, stream_holder) for o in operands)
                
     return wrap_operands(operands)
 
 
-def copy_(src, dest):
+def copy_(src, dest, stream_holder):
     """
     Copy the wrapped operands in dest to the corresponding wrapped operands in src.
     """
     for s, d in zip(src, dest):
         if s.device_id is None:
-            s = wrap_operand(s.to(d.device_id))
-        d.copy_(s.tensor)
-
-
+            s = wrap_operand(s.to(d.device_id, stream_holder=stream_holder))
+        d.copy_(s.tensor, stream_holder=stream_holder)

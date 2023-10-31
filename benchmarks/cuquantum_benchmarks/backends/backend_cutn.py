@@ -51,6 +51,7 @@ class cuTensorNet(Backend):
             opts = cutn.NetworkOptions(handle=self.handle)
         self.network_opts = opts
         self.n_samples = kwargs.pop('nhypersamples')
+        self.version = cutn.get_version()
 
     def __del__(self):
         cutn.destroy(self.handle)

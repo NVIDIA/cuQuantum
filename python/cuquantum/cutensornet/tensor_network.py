@@ -11,6 +11,7 @@ __all__ = ['contract', 'contract_path', 'einsum', 'einsum_path', 'Network']
 import collections
 import dataclasses
 import logging
+import warnings
 
 import cupy as cp
 import numpy as np
@@ -20,6 +21,7 @@ from . import configuration
 from . import memory
 from ._internal import einsum_parser
 from ._internal import formatters
+from ._internal import grad_torch
 from ._internal import optimizer_ifc
 from ._internal import tensor_wrapper
 from ._internal import typemaps
@@ -33,7 +35,7 @@ class InvalidNetworkState(Exception):
 class Network:
 
     """
-    Network(subscripts, *operands, options=None)
+    Network(subscripts, *operands, qualifiers=None, options=None, stream=None)
 
     Create a tensor network object specified as an Einstein summation expression.
 
@@ -78,6 +80,9 @@ class Network:
         options: Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
+        stream: Provide the CUDA stream to use for network construction, which is needed for stream-ordered operations such as allocating memory. Acceptable inputs include ``cudaStream_t`` (as
+            Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided, the
+            current stream will be used.
 
     See Also:
         :meth:`~Network.contract_path`, :meth:`autotune`, :meth:`~Network.contract`, :meth:`reset_operands`
@@ -98,28 +103,28 @@ class Network:
 
         Create a :class:`Network` object:
 
-        >>> n = Network(expr, *operands)
+        >>> tn = Network(expr, *operands)
 
         Find the best contraction order:
 
-        >>> path, info = n.contract_path({'samples': 500})
+        >>> path, info = tn.contract_path({'samples': 500})
 
         Autotune the network:
 
-        >>> n.autotune(iterations=5)
+        >>> tn.autotune(iterations=5)
 
         Perform the contraction. The result is of the same type and on the same device as the operands:
 
-        >>> r1 = n.contract()
+        >>> r1 = tn.contract()
 
         Reset operands to new values:
 
         >>> operands = [i*operand for i, operand in enumerate(operands, start=1)]
-        >>> n.reset_operands(*operands)
+        >>> tn.reset_operands(*operands)
 
         Get the result of the new contraction:
 
-        >>> r2 = n.contract()
+        >>> r2 = tn.contract()
         >>> from math import factorial
         >>> np.allclose(r2, factorial(len(operands))*r1)
         True
@@ -128,7 +133,7 @@ class Network:
         network is large) since the memory will be released only when the object goes out of scope. (*To avoid having
         to explicitly make this call, it is recommended to use the* :class:`Network` *object as a context manager*.)
 
-        >>> n.free()
+        >>> tn.free()
 
         If the operands are on the GPU, they can also be updated using in-place operations. In this case, the call
         to :meth:`reset_operands` can be skipped -- subsequent :meth:`~Network.contract` calls will use the same
@@ -140,19 +145,19 @@ class Network:
         >>> shapes = [(8, 2, 5), (5, 7), (8, 8, 2, 5), (8, 6, 3), (8,), (6,), (5,), (6, 5, 5, 7), (6, 3), (3,)]
         >>> operands = [cp.random.rand(*shape) for shape in shapes]
         >>>
-        >>> with Network(expr, *operands) as n:
-        ...     path, info = n.contract_path({'samples': 500})
-        ...     n.autotune(iterations=5)
+        >>> with Network(expr, *operands) as tn:
+        ...     path, info = tn.contract_path({'samples': 500})
+        ...     tn.autotune(iterations=5)
         ...
         ...     # Perform the contraction
-        ...     r1 = n.contract()
+        ...     r1 = tn.contract()
         ...
         ...     # Update the operands in place
         ...     for i, operand in enumerate(operands, start=1):
         ...         operand *= i
         ...
         ...     # Perform the contraction with the updated operand values
-        ...     r2 = n.contract()
+        ...     r2 = tn.contract()
         ...
         ... # The resources used by the network are automatically released when the context ends.
         >>>
@@ -162,34 +167,83 @@ class Network:
 
         PyTorch CPU and GPU tensors can be passed as input operands in the same fashion.
 
+        To compute the gradients of the network w.r.t. the input operands (NumPy/CuPy/PyTorch), the :meth:`gradients` method can
+        be used. To enable the gradient computation, one should
+
+          1. create the network with the ``qualifiers`` argument
+          2. call the :meth:`contract` method prior to the :meth:`gradients` method
+          3. seed the :meth:`gradients` method with the output gradient (see the docs for the requirements)
+
+        Below is a minimal example:
+
+        >>> from cuquantum import cutensornet as cutn
+        >>> expr = "ijk,jkl,klm,lmn"
+        >>> shapes = ((3, 4, 5), (4, 5, 3), (5, 3, 2), (3, 2, 6))
+        >>> operands = [cp.random.rand(*shape) for shape in shapes]
+        >>> qualifiers = np.zeros(len(shapes), dtype=cutn.tensor_qualifiers_dtype)
+        >>> qualifiers[:]["requires_gradient"] = 1  # request gradients for all input tensors
+        >>>
+        >>> with Network(expr, *operands, qualifiers=qualifiers) as tn:
+        ...     path, info = tn.contract_path()
+        ...
+        ...     # Perform the contraction
+        ...     r = tn.contract()
+        ...
+        ...     # Perform the backprop
+        ...     input_grads = tn.gradients(cp.ones_like(r))
+        ...
+        >>>
+
+        For PyTorch CPU/GPU tensors with the ``requires_grad`` attribute set up, one does not need to pass the ``qualifiers``
+        argument. Note that this :class:`Network` class and its methods are **not** PyTorch operators and do **not** add any
+        node to PyTorch's autograd graph. For a native, differentiable PyTorch operator, use the :func:`cuquantum.contract`
+        function.
+
         See :func:`contract` for more examples on specifying the Einstein summation expression as well
         as specifying options for the tensor network and the optimizer.
     """
 
-    def __init__(self, *operands, qualifiers=None, options=None):
+    def __init__(self, *operands, qualifiers=None, options=None, stream=None):
         """
-        __init__(subscripts, *operands, options=None)
+        __init__(subscripts, *operands, qualifiers=None, options=None, stream=None)
         """
 
         options = utils.check_or_create_options(configuration.NetworkOptions, options, "network options")
         self.options = options
 
+        # Get cuTensorNet version (as seen at run-time).
+        cutn_ver = cutn.get_version()
+        cutn_major = cutn_ver // 10000
+        cutn_minor = (cutn_ver % 10000) // 100
+        cutn_patch = cutn_ver % 100
+
         # Logger.
         self.logger = options.logger if options.logger is not None else logging.getLogger()
-        self.logger.info(f"CUDA runtime version = {cutn.get_cudart_version()}")
-        self.logger.info(f"cuTensorNet version = {cutn.MAJOR_VER}.{cutn.MINOR_VER}.{cutn.PATCH_VER}")
+        self.logger.info(f"cuTensorNet version = {cutn_major}.{cutn_minor}.{cutn_patch}")
         self.logger.info("Beginning network creation...")
 
         # Parse Einsum expression.
-        self.operands, self.inputs, self.output, self.size_dict, self.mode_map_user_to_ord, self.mode_map_ord_to_user, self.is_interleaved = einsum_parser.parse_einsum(*operands)
+        self.operands, self.inputs, self.output, self.has_user_output, \
+            self.size_dict, self.mode_map_user_to_ord, self.mode_map_ord_to_user, \
+            self.is_interleaved, self.has_ellipses = einsum_parser.parse_einsum(*operands)
 
-        # Copy operands to device if needed.
+        # Infer the library package & device ID the operands belong to.
+        self.package = utils.get_operands_package(self.operands)
         self.network_location = 'cuda'
         self.device_id = utils.get_network_device_id(self.operands)
         if self.device_id is None:
+            self.package = self.operands[0].name
+            if self.package == 'numpy':
+                self.package = 'cupy'
             self.network_location = 'cpu'
             self.device_id = options.device_id
-            self.operands = tensor_wrapper.to(self.operands, self.device_id)
+
+        # Allocate device memory (in stream context) if needed.
+        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
+
+        # Copy operands to device if needed.
+        if self.network_location == 'cpu':
+            self.operands = tensor_wrapper.to(self.operands, self.device_id, stream_holder)
 
         # Set blocking or non-blocking behavior.
         self.blocking = self.options.blocking is True or self.network_location == 'cpu'
@@ -197,9 +251,6 @@ class Network:
             self.call_prologue = "This call is blocking and will return only after the operation is complete."
         else:
             self.call_prologue = "This call is non-blocking and will return immediately after the operation is launched on the device."
-
-        # Infer the library package the operands belong to.
-        self.package = utils.get_operands_package(self.operands)
 
         # The output class is that of the first wrapped device operand.
         self.output_class = self.operands[0].__class__
@@ -226,18 +277,32 @@ The data type '{self.data_type}' is currently not supported.
         num_inputs = len(self.inputs)
         num_modes_out = len(self.output)
 
-        extents_in = tuple(o.shape for o in self.operands)
-        strides_in = tuple(o.strides for o in self.operands)
+        extents_in = self.extents_in = tuple(o.shape for o in self.operands)
+        strides_in = self.strides_in = tuple(o.strides for o in self.operands)
         self.operands_data = utils.get_operands_data(self.operands)
         modes_in = tuple(tuple(m for m in _input) for _input in self.inputs)
         num_modes_in = tuple(len(m) for m in modes_in)
         self.qualifiers_in = utils.check_tensor_qualifiers(qualifiers, cutn.tensor_qualifiers_dtype, num_inputs)
 
+        # For torch tensors, if qualifiers are explicitly passed, we ignore the tensor attrs.
+        # Otherwise, we look up the tensor attrs and populate qualifiers.
+        if self.package == 'torch' and isinstance(self.qualifiers_in, int):  # = 0
+            self.qualifiers_in = np.zeros(num_inputs, dtype=cutn.tensor_qualifiers_dtype)
+            self.logger.debug("Checking input tensors' requires_grad attribute")
+            for i, t in enumerate(self.operands):
+                self.qualifiers_in[i]['requires_gradient'] = self.operands[i].tensor.requires_grad
+                self.qualifiers_in[i]['is_conjugate'] = self.operands[i].tensor.is_conj()
+
+        # Check if gradient computation is required
+        if isinstance(self.qualifiers_in, np.ndarray):
+            self.require_grad = any(self.qualifiers_in['requires_gradient'])
+        else:
+            self.require_grad = False
+
         # Create the output in the context of the current stream to work around a performance issue with CuPy's memory pool.
-        stream = None
         self.logger.debug("Beginning output tensor creation...")
         self.contraction, self.contraction_output_event, modes_out, extents_out, strides_out = utils.create_output_tensor(
-                self.output_class, self.package, self.output, self.size_dict, self.device_id, stream, self.data_type)
+                self.output_class, self.output, self.size_dict, self.device_id, stream_holder, self.data_type)
         self.logger.debug("The output tensor has been created.")
 
         # Create/set handle.
@@ -257,6 +322,7 @@ The data type '{self.data_type}' is currently not supported.
 
         # Keep output extents for creating new tensors, if needed.
         self.extents_out = extents_out
+        self.strides_out = strides_out
 
         # Path optimization attributes.
         self.optimizer_config_ptr, self.optimizer_info_ptr = None, None
@@ -264,7 +330,10 @@ The data type '{self.data_type}' is currently not supported.
 
         # Workspace attributes.
         self.workspace_desc = cutn.create_workspace_descriptor(self.handle)
-        self.workspace_ptr, self.workspace_size = None, None
+        self.workspace_scratch_ptr, self.workspace_scratch_size = None, None
+        self.workspace_cache_ptr, self.workspace_cache_size = None, None
+        self.workspace_h_scratch_ptr, self.workspace_h_scratch_size = None, None
+        self.workspace_h_cache_ptr, self.workspace_h_cache_size = None, None
 
         # Contraction plan attributes.
         self.plan = None
@@ -279,6 +348,7 @@ The data type '{self.data_type}' is currently not supported.
         self.last_compute_event = None
 
         self.valid_state = True
+        self.contracted = False
 
         self.logger.info("The network has been created.")
 
@@ -308,6 +378,21 @@ The data type '{self.data_type}' is currently not supported.
         if not self.planned:
             raise RuntimeError(f"Internal Error: {what} cannot be performed before planning has been done.")
 
+    def _check_contracted(self, *args, **kwargs):
+        """
+        """
+        what = kwargs['what']
+        if not self.contracted:
+            raise RuntimeError(f"{what} cannot be performed before contraction has been done.")
+
+    def _check_qualifiers(self, *args, **kwargs):
+        """
+        """
+        what = kwargs['what']
+        # cannot perform equality check (a == 0) if a is a numpy ndarray
+        if isinstance(self.qualifiers_in, int):
+            raise RuntimeError(f"{what} cannot be performed without creating the Network object with tensor qualifiers")
+
     def _free_plan_resources(self, exception=None):
         """
         Free resources allocated in network contraction planning.
@@ -323,7 +408,10 @@ The data type '{self.data_type}' is currently not supported.
         """
         Free workspace by releasing the MemoryPointer object.
         """
-        self.workspace_ptr = None
+        self.workspace_scratch_ptr = None
+        self.workspace_cache_ptr = None
+        self.workspace_h_scratch_ptr = None
+        self.workspace_h_cache_ptr = None
 
         return True
 
@@ -341,7 +429,10 @@ The data type '{self.data_type}' is currently not supported.
             self.optimizer_info_ptr = None
 
         self._free_workspace_memory()
-        self.workspace_size = None
+        self.workspace_scratch_size = None
+        self.workspace_cache_size = None
+        self.workspace_h_scratch_size = None
+        self.workspace_h_cache_size = None
 
         self._free_plan_resources()
 
@@ -350,26 +441,50 @@ The data type '{self.data_type}' is currently not supported.
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Workspace memory allocation")
     @utils.atomic(_free_workspace_memory, method=True)
-    def _allocate_workspace_memory_perhaps(self, stream, stream_ctx):
-        if self.workspace_ptr is not None:
+    def _allocate_workspace_memory_perhaps(self, stream_holder, kind):
+        assert kind == "scratch" or kind == "cache", "Internal Error."
+
+        if getattr(self, f"workspace_{kind}_ptr") is not None and getattr(self, f"workspace_h_{kind}_ptr") is not None:
             return
 
-        assert self.workspace_size is not None, "Internal Error."
+        assert getattr(self, f"workspace_{kind}_size") is not None, "Internal Error."
+        assert getattr(self, f"workspace_h_{kind}_size") is not None, "Internal Error."
 
-        self.logger.debug("Allocating memory for contracting the tensor network...")
-        with utils.device_ctx(self.device_id), stream_ctx:
+        self.logger.debug(f"Allocating {kind} workspace for contracting the tensor network...")
+
+        # Allocate device workspace.
+        device_size = getattr(self, f"workspace_{kind}_size")
+        with utils.device_ctx(self.device_id), stream_holder.ctx:
             try:
-                self.workspace_ptr = self.allocator.memalloc(self.workspace_size)
+                setattr(self, f"workspace_{kind}_ptr", self.allocator.memalloc(device_size))
             except TypeError as e:
                 message = "The method 'memalloc' in the allocator object must conform to the interface in the "\
                           "'BaseCUDAMemoryManager' protocol."
                 raise TypeError(message) from e
-        self.workspace_stream = stream
-        self.logger.debug(f"Finished allocating memory of size {formatters.MemoryStr(self.workspace_size)} for contraction in the context of stream {self.workspace_stream}.")
+        self.workspace_stream = stream_holder.obj
+        # Allocate host workspace.
+        # TODO: ideally we should use a memory manager, as we did for device memory, but...
+        host_size = getattr(self, f"workspace_h_{kind}_size")
+        setattr(self, f"workspace_h_{kind}_ptr", np.empty(host_size, dtype=np.int8))
+        self.logger.debug("Finished allocating "
+                          f"device memory of size {formatters.MemoryStr(device_size)} and "
+                          f"host memory of size {formatters.MemoryStr(host_size)} "
+                          f"for contraction in the context of stream {self.workspace_stream}.")
 
-        device_ptr = utils.get_ptr_from_memory_pointer(self.workspace_ptr)
-        cutn.workspace_set_memory(self.handle, self.workspace_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, device_ptr, self.workspace_size)
-        self.logger.debug(f"The workspace memory (device pointer = {device_ptr}) has been set in the workspace descriptor.")
+        # Set device workspace.
+        device_ptr = utils.get_ptr_from_memory_pointer(getattr(self, f"workspace_{kind}_ptr"))
+        cutn.workspace_set_memory(self.handle, self.workspace_desc, cutn.Memspace.DEVICE,
+                                  cutn.WorkspaceKind.SCRATCH if kind == "scratch" else cutn.WorkspaceKind.CACHE,
+                                  device_ptr, device_size)
+        # Set host workspace.
+        # TODO: ideally we should be manipulating a MemoryPointer object here, but ...
+        host_ptr = getattr(self, f"workspace_h_{kind}_ptr").ctypes.data
+        cutn.workspace_set_memory(self.handle, self.workspace_desc, cutn.Memspace.HOST,
+                                  cutn.WorkspaceKind.SCRATCH if kind == "scratch" else cutn.WorkspaceKind.CACHE,
+                                  # WAR: empty numpy arrays still have nonzero ptr addresses
+                                  host_ptr if host_size > 0 else 0, host_size)
+        self.logger.debug(f"The {kind} workspace memory (device pointer = {device_ptr}, "
+                          f"host pointer = {host_ptr}) has been set in the workspace descriptor.")
 
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Workspace size calculation")
@@ -379,26 +494,59 @@ The data type '{self.data_type}' is currently not supported.
         """
 
         # Release workspace already allocated, if any, because the new requirements are likely different.
-        self.workspace_ptr = None
+        self.workspace_scratch_ptr = None
+        self.workspace_cache_ptr = None
+        self.workspace_h_scratch_ptr = None
+        self.workspace_h_cache_ptr = None
 
         cutn.workspace_compute_contraction_sizes(self.handle, self.network, self.optimizer_info_ptr, self.workspace_desc)
 
-        min_size = cutn.workspace_get_memory_size(self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
-        max_size = cutn.workspace_get_memory_size(self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        # Deal with device workspaces.
+        min_scratch_size = cutn.workspace_get_memory_size(
+            self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        max_scratch_size = cutn.workspace_get_memory_size(
+            self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        min_cache_size = cutn.workspace_get_memory_size(
+            self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.CACHE)
+        max_cache_size = cutn.workspace_get_memory_size(
+            self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE, cutn.WorkspaceKind.CACHE)
 
-        if self.memory_limit < min_size:
+        if self.memory_limit < min_scratch_size + min_cache_size:
             message = f"""Insufficient memory.
-The memory limit specified is {self.memory_limit}, while the minimum workspace size needed is {min_size}.
+The memory limit specified is {self.memory_limit}, while the minimum workspace size needed is {min_scratch_size + min_cache_size}.
 """
             raise RuntimeError(message)
 
-        self.workspace_size = max_size if max_size < self.memory_limit else self.memory_limit
-        self.logger.info(f"The workspace size requirements range from {formatters.MemoryStr(min_size)} to "\
-                         f"{formatters.MemoryStr(max_size)}.")
-        self.logger.info(f"The workspace size has been set to {formatters.MemoryStr(self.workspace_size)}.")
+        if self.memory_limit - max_scratch_size >= min_cache_size:
+            self.workspace_scratch_size = max_scratch_size
+        else:
+            self.workspace_scratch_size = min_scratch_size
+        if min_cache_size > 0 and self.require_grad:
+            self.workspace_cache_size = min(max_cache_size, self.memory_limit - self.workspace_scratch_size)
+        else:
+            self.workspace_cache_size = 0
+        self.logger.info(f"The workspace size requirements range from {formatters.MemoryStr(min_scratch_size + min_cache_size)} to "\
+                         f"{formatters.MemoryStr(max_scratch_size + max_cache_size)}.")
+        self.logger.info(f"The scratch workspace size has been set to {formatters.MemoryStr(self.workspace_scratch_size)}.")
+        self.logger.info(f"The cache workspace size has been set to {formatters.MemoryStr(self.workspace_cache_size)}.")
 
         # Set workspace size to enable contraction planning. The device pointer will be set later during allocation.
-        cutn.workspace_set_memory(self.handle, self.workspace_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, 0, self.workspace_size)
+        cutn.workspace_set_memory(
+            self.handle, self.workspace_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, 0, self.workspace_scratch_size)
+        cutn.workspace_set_memory(
+            self.handle, self.workspace_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.CACHE, 0, self.workspace_cache_size)
+
+        # Deal with device workspaces. For now we don't care how much host memory is used.
+        self.workspace_h_scratch_size = cutn.workspace_get_memory_size(
+            self.handle, self.workspace_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH)
+        self.workspace_h_cache_size = cutn.workspace_get_memory_size(
+            self.handle, self.workspace_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.HOST, cutn.WorkspaceKind.CACHE)
+
+        # Set workspace size to enable contraction planning. The host pointer will be set later during allocation.
+        cutn.workspace_set_memory(
+            self.handle, self.workspace_desc, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH, 0, self.workspace_h_scratch_size)
+        cutn.workspace_set_memory(
+            self.handle, self.workspace_desc, cutn.Memspace.HOST, cutn.WorkspaceKind.CACHE, 0, self.workspace_h_cache_size)
 
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Planning")
@@ -637,34 +785,35 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         self._set_autotune_options(options)
 
         # Allocate device memory (in stream context) if needed.
-        stream, stream_ctx, stream_ptr = utils.get_or_create_stream(self.device_id, stream, self.package)
-        self._allocate_workspace_memory_perhaps(stream, stream_ctx)
+        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
+        self._allocate_workspace_memory_perhaps(stream_holder, "scratch")
+        self._allocate_workspace_memory_perhaps(stream_holder, "cache")
 
         # Check if we still hold an output tensor; if not, create a new one.
         if self.contraction is None:
             self.logger.debug("Beginning output (empty) tensor creation...")
-            self.contraction = utils.create_empty_tensor(self.output_class, self.extents_out, self.data_type, self.device_id, stream_ctx)
+            self.contraction = utils.create_empty_tensor(self.output_class, self.extents_out, self.data_type, self.device_id, stream_holder)
             self.logger.debug("The output (empty) tensor has been created.")
         elif self.contraction_output_event is not None:
-            stream.wait_event(self.contraction_output_event)
+            stream_holder.obj.wait_event(self.contraction_output_event)
             self.contraction_output_event = None
             self.logger.debug("Established ordering with output tensor creation event.")
 
         timing =  bool(self.logger and self.logger.handlers)
         self.logger.info(f"Starting autotuning...")
         self.logger.info(f"{self.call_prologue}")
-        with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream, self.blocking, timing) as (self.last_compute_event, elapsed):
-            cutn.contraction_autotune(self.handle, self.plan, self.operands_data, self.contraction.data_ptr,
-                 self.workspace_desc, self.autotune_pref_ptr, stream_ptr)
+        with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream_holder, self.blocking, timing) as (self.last_compute_event, elapsed):
+            cutn.contraction_autotune(
+                self.handle, self.plan, self.operands_data, self.contraction.data_ptr,
+                self.workspace_desc, self.autotune_pref_ptr, stream_holder.ptr)
 
         if elapsed.data is not None:
             self.logger.info(f"The autotuning took {elapsed.data:.3f} ms to complete.")
 
         self.autotuned = True
 
-
     @utils.precondition(_check_valid_network)
-    def reset_operands(self, *operands):
+    def reset_operands(self, *operands, stream=None):
         """Reset the operands held by this :class:`Network` instance.
 
         This method is not needed when the operands
@@ -678,11 +827,19 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         Args:
             operands: See :class:`Network`'s documentation.
+            stream: Provide the CUDA stream to use for resetting operands (this is used to copy the operands to the GPU if they are provided on the CPU). Acceptable inputs include ``cudaStream_t``
+                (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
+                the current stream will be used.
         """
 
         if len(operands) != len(self.operands):
             message = f"Mismatch in the number of operands ({len(operands)} provided, need {len(self.operands)})."
             raise ValueError(message)
+
+        # Future operations on the workspace stream should be ordered after the computation.
+        # Also, we should ensure self.operands is overwritten only after work using them is done.
+        if self.last_compute_event is not None:
+            self.workspace_stream.wait_event(self.last_compute_event)
 
         self.logger.info("Resetting operands...")
         # First wrap operands.
@@ -691,10 +848,12 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         utils.check_operands_match(self.operands, operands, 'dtype', "data type")
         utils.check_operands_match(self.operands, operands, 'shape', 'shape')
 
+        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
+
         device_id = utils.get_network_device_id(operands)
         if device_id is None:
-            # Copy to existing device pointers because the new operands are on the CPU.
-            tensor_wrapper.copy_(operands, self.operands)
+            # In-place copy to existing device pointers because the new operands are on the CPU.
+            tensor_wrapper.copy_(operands, self.operands, stream_holder)
         else:
             utils.check_operands_match(self.operands, operands, 'strides', 'strides')
             package = utils.get_operands_package(operands)
@@ -708,7 +867,16 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
             # Finally, replace the original data pointers by the new ones.
             self.operands_data = utils.get_operands_data(operands)
+            self.operands = operands
         self.logger.info("The operands have been reset.")
+
+        self.contracted = False
+        if not self.require_grad:
+            return
+
+        # The cache workspace is invalidated.
+        cutn.workspace_purge_cache(self.handle, self.workspace_desc, cutn.Memspace.DEVICE)
+        cutn.workspace_purge_cache(self.handle, self.workspace_desc, cutn.Memspace.HOST)
 
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Contraction")
@@ -728,16 +896,18 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         """
 
         # Allocate device memory (in stream context) if needed.
-        stream, stream_ctx, stream_ptr = utils.get_or_create_stream(self.device_id, stream, self.package)
-        self._allocate_workspace_memory_perhaps(stream, stream_ctx)
+        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
+        self._allocate_workspace_memory_perhaps(stream_holder, "scratch")
+        self._allocate_workspace_memory_perhaps(stream_holder, "cache")
 
         # Check if we still hold an output tensor; if not, create a new one.
         if self.contraction is None:
             self.logger.debug("Beginning output (empty) tensor creation...")
-            self.contraction = utils.create_empty_tensor(self.output_class, self.extents_out, self.data_type, self.device_id, stream_ctx)
+            self.contraction = utils.create_empty_tensor(
+                self.output_class, self.extents_out, self.data_type, self.device_id, stream_holder)
             self.logger.debug("The output (empty) tensor has been created.")
         elif self.contraction_output_event is not None:
-            stream.wait_event(self.contraction_output_event)
+            stream_holder.obj.wait_event(self.contraction_output_event)
             self.contraction_output_event = None
             self.logger.debug("Established ordering with output tensor creation event.")
 
@@ -759,9 +929,10 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         timing =  bool(self.logger and self.logger.handlers)
         self.logger.info("Starting network contraction...")
         self.logger.info(f"{self.call_prologue}")
-        with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream, self.blocking, timing) as (self.last_compute_event, elapsed):
-            cutn.contract_slices(self.handle, self.plan, self.operands_data, self.contraction.data_ptr, False,
-                    self.workspace_desc, slice_group, stream_ptr)
+        with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream_holder, self.blocking, timing) as (self.last_compute_event, elapsed):
+            cutn.contract_slices(
+                self.handle, self.plan, self.operands_data, self.contraction.data_ptr, False,
+                self.workspace_desc, slice_group, stream_holder.ptr)
 
         if elapsed.data is not None:
             self.logger.info(f"The contraction took {elapsed.data:.3f} ms to complete.")
@@ -772,12 +943,101 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
            self.logger.debug(f"Slice group ({slice_group}) has been destroyed.")
 
         if self.network_location == 'cpu':
-            out = self.contraction.to('cpu')
+            out = self.contraction.to('cpu', stream_holder=stream_holder)
         else:
             out = self.contraction.tensor
         self.contraction = None    # We cannot overwrite what we've already handed to users.
+        self.contracted = True
 
         return out
+
+    @utils.precondition(_check_valid_network)
+    @utils.precondition(_check_optimized, "Gradient")
+    @utils.precondition(_check_planned, "Gradient")
+    @utils.precondition(_check_contracted, "Gradient")
+    @utils.precondition(_check_qualifiers, "Gradient")
+    def gradients(self, output_gradient, *, stream=None):
+        """Compute the gradients of the network (w.r.t. the input operands whose gradients are required).
+
+        Before calling this method, a full contraction must have been performed (by calling :meth:`contract`), otherwise an
+        error is raised.
+
+        Args:
+            output_gradient: A tensor of the same package (NumPy/CuPy/PyTorch), shape, dtype, strides, and location (CPU/GPU)
+                as the contraction output (as returned by :meth:`contract`), which in turn shares the same properties with the
+                input operands. In a chain-rule setting, ``output_gradient`` is the gradient w.r.t. the output tensor.
+            stream: Provide the CUDA stream to use for the gradient computation. Acceptable inputs include ``cudaStream_t``
+                (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
+                the current stream will be used.
+
+        Returns:
+            A sequence of gradient tensors. The result is of the same length and type and on the same device as the input operands.
+            For the gradient components that are not requested, ``None`` is returned.
+
+        .. note:: For PyTorch operands, calling this method is **not** tracked by the autograd graph.
+
+        .. warning:: This API is experimental and subject to future changes.
+        """
+        warnings.warn("Network.gradients() is an experimental API and subject to future changes",
+                      stacklevel=2)
+
+        # At this point, both scratch and cache workspaces are allocated/populated.
+        assert self.workspace_scratch_ptr is not None and self.workspace_cache_ptr is not None, "Internal error."
+        assert self.workspace_h_scratch_ptr is not None and self.workspace_h_cache_ptr is not None, "Internal error."
+
+        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
+        # Future operations on the workspace stream should be ordered after the computation.
+        if self.last_compute_event is not None:
+            self.workspace_stream.wait_event(self.last_compute_event)
+            stream_holder.obj.wait_event(self.last_compute_event)
+
+        # Wrap output_gradient
+        output_grad = tensor_wrapper.wrap_operand(output_gradient)
+        if output_grad.device_id != self.device_id:
+            output_grad = tensor_wrapper.to([output_grad], self.device_id, stream_holder)[0]
+        if output_grad.shape != self.extents_out:
+            raise ValueError(f"output_gradient shape incorrect (given {output_grad.shape}, expected {self.extents_out})")
+        if output_grad.dtype != self.data_type:
+            raise ValueError(f"output_gradient dtype incorrect (given {output_grad.dtype}, expected {self.data_type}")
+        if output_grad.strides != self.strides_out:
+            # output_gradient could be a view, but we need a full buffer for now
+            if any(s == 0 for s in output_grad.strides):
+                buf = utils.create_empty_tensor(
+                    self.output_class, self.extents_out, self.data_type, self.device_id, stream_holder, strides=self.strides_out)
+                buf.copy_(output_grad.tensor, stream_holder=stream_holder)
+                output_grad = buf
+            else:
+                raise ValueError(f"output_gradient strides incorrect (given {output_grad.strides}, expected {self.strides_out}")
+
+        # Allocate grad tensors, as needed
+        input_grads = []
+        for i, extents, strides, requires_grad in zip(
+                range(len(self.inputs)), self.extents_in, self.strides_in, self.qualifiers_in['requires_gradient']):
+            if requires_grad:
+                input_grads.append(
+                    utils.create_empty_tensor(self.output_class, extents, self.data_type, self.device_id, stream_holder, strides=strides)
+                )
+            else:
+                input_grads.append(None)
+        input_grads_data = utils.get_operands_data(input_grads)
+
+        timing = bool(self.logger and self.logger.handlers)
+        self.logger.info("Starting gradient computation...")
+        self.logger.info(f"{self.call_prologue}")
+        with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream_holder, self.blocking, timing) as (self.last_compute_event, elapsed):
+            cutn.compute_gradients_backward(
+                self.handle, self.plan, self.operands_data, output_grad.data_ptr,
+                input_grads_data, False, self.workspace_desc, stream_holder.ptr)
+
+        if elapsed.data is not None:
+            self.logger.info(f"The backprop took {elapsed.data:.3f} ms to complete.")
+
+        if self.network_location == 'cpu':
+            op = lambda t: t.to('cpu', stream_holder=stream_holder) if t is not None else None
+        else:
+            op = lambda t: t.tensor if t is not None else None
+
+        return tuple(map(op, input_grads))
 
     def free(self):
         """Free network resources.
@@ -950,7 +1210,11 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
         ...     b = cupy.arange(6.).reshape(2, 3)
         >>> r = contract('ij,jk', a, b)
 
-        Use PyTorch operands. The result ``r`` is a PyTorch tensor on the same device (``dev``) as the operands:
+        For PyTorch operands, this function **works like a native PyTorch operator** out of box that will be tracked by the
+        autograd graph so as to enable backpropagation. The result ``r`` is a PyTorch tensor on the same device (``dev``) as
+        the operands. To enable gradient computation, just set the target operands' ``requires_grad`` attribute to ``True``,
+        as usual. If ``stream`` is explicitly passed, the user must establish the stream ordering following the requirements
+        outlined in PyTorch's `CUDA Semantics <https://pytorch.org/docs/stable/notes/cuda.html>`_.
 
     .. doctest::
         :skipif: torch is None
@@ -958,12 +1222,28 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
         >>> import torch
         >>> dev = 0
         >>> a = torch.arange(6., device=f'cuda:{dev}').reshape(3, 2)
+        >>> a.requires_grad_(True)
         >>> b = torch.arange(6., device=f'cuda:{dev}').reshape(2, 3)
+        >>> b.requires_grad_(True)
         >>> r = contract('ij,jk', a, b)
+        >>> r.backward(torch.ones_like(r))  # gradient w.r.t self is 1
+        >>> a.grad
+        tensor([[ 3., 12.],
+                [ 3., 12.],
+                [ 3., 12.]], device='cuda:0')
+        >>> b.grad
+        tensor([[6., 6., 6.],
+                [9., 9., 9.]], device='cuda:0')
     """
 
     # Create network.
-    with Network(*operands, qualifiers=qualifiers, options=options) as network:
+    network = Network(*operands, qualifiers=qualifiers, options=options, stream=stream)
+
+    # For PyTorch tensors, we ensure contract() is differentiable.
+    if network.package == "torch":
+        return grad_torch._TorchContract.apply(network, optimize, stream, return_info, *operands)
+
+    with network:
 
         # Compute path.
         opt_info = network.contract_path(optimize=optimize)
@@ -1094,6 +1374,8 @@ def einsum(*operands, out=None, dtype=None, order='K', casting='safe', optimize=
         output:
             A tensor (ndarray-like object) of the same type and on the same device as the operands containing the result of
             the contraction.
+
+    .. note:: For PyTorch operands, calling this method is **not** tracked by the autograd graph.
     """
 
     _check_einsum_options(out, dtype, order, casting, optimize)

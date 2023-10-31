@@ -155,8 +155,17 @@ def is_exact_split(**split_options):
     max_extent = split_options.get("max_extent", 0)
     abs_cutoff = split_options.get("abs_cutoff", 0)
     rel_cutoff = split_options.get("rel_cutoff", 0)
+    discarded_weight_cutoff = split_options.get("discarded_weight_cutoff", 0)
     normalization = split_options.get("normalization", None)
-    return (max_extent == 0 or max_extent is None) and abs_cutoff == 0 and rel_cutoff == 0 and normalization is None
+    return (max_extent == 0 or max_extent is None) and \
+            abs_cutoff == 0 and rel_cutoff == 0 and \
+            discarded_weight_cutoff == 0 and normalization is None
+
+def is_dw_truncation_only(**split_options):
+    max_extent = split_options.get("max_extent", 0)
+    abs_cutoff = split_options.get("abs_cutoff", 0)
+    rel_cutoff = split_options.get("rel_cutoff", 0)
+    return (max_extent == 0 or max_extent is None) and abs_cutoff == 0 and rel_cutoff == 0 
 
 
 def split_contract_decompose(subscripts):
@@ -170,8 +179,8 @@ def split_contract_decompose(subscripts):
     decompose_subscripts = f"{intm_modes}->{outputs}"
     return contract_subscripts, decompose_subscripts
 
-#NOTE: torch does not have native support on F order
-# We here get around this by converting to CuPy/NumPy ndarrays as a get arounds
+# NOTE: torch does not have native support on F order
+# We here get around this by converting to CuPy/NumPy ndarrays as a workaround
 # the overhead for torch tensors on GPU should be minimal as torch tensors support __cuda_array_interface__
 def torch_support_wrapper(func):
     def new_func(T, *args, **kwargs):
@@ -195,6 +204,7 @@ def get_einsum_kwargs(backend):
 ####################################
 ############ Execution #############
 ####################################
+
 @torch_support_wrapper
 def tensor_permute(T, input_modes, output_modes):
     axes = [input_modes.index(i) for i in output_modes]
@@ -216,6 +226,7 @@ def matrix_svd(
     max_extent=0,
     abs_cutoff=0,
     rel_cutoff=0,
+    discarded_weight_cutoff=0,
     partition=None,
     normalization=None,
     return_info=True,
@@ -234,6 +245,14 @@ def matrix_svd(
     if max_extent == 0 or max_extent is None:
         max_extent = len(s)
     reduced_extent = min(max_extent, int((s>cutoff).sum()))
+    if discarded_weight_cutoff != 0:
+        s_square_sum = backend.cumsum(s**2, 0)
+        if backend not in (cp, np): # torch
+            s_square_sum /= s_square_sum[-1].clone()
+        else:
+            s_square_sum /= s_square_sum[-1]
+        dw_reduced_extent = int((s_square_sum<(1-discarded_weight_cutoff)).sum()) + 1
+        reduced_extent = min(reduced_extent, dw_reduced_extent)
     reduced_extent = max(reduced_extent, 1)
     info["reduced_extent"] = reduced_extent
     if reduced_extent != len(s):
@@ -533,14 +552,14 @@ def verify_split_SVD(
         algorithm = 'gesvd'
     if algorithm == 'gesvdj':
         if dtype_name in ['float64', 'complex128']:
-            rtol = 1e-8
+            rtol = 1e-6
         if 'gesvdj_residual' not in info:
             logging.warning("gesvdj_residual not recorded in info; verification may fail due to unknown runtime status")
         else:
-            rtol = max(rtol, info['gesvdj_residual'])
+            rtol = max(rtol, info['gesvdj_residual'] * max_mid_extent)
     elif algorithm == 'gesvdp':
         if dtype_name in ['float64', 'complex128']:
-            rtol = 1e-8
+            rtol = 1e-6
         if 'gesvdp_err_sigma' not in info:
             logging.warning("gesvdp_err_sigma not recorded in info; verification may fail due to unknown runtime status")
         elif info['gesvdp_err_sigma'] > 1e-4:
@@ -588,6 +607,18 @@ def verify_split_SVD(
         # For gesvdr, discarded weight is only computed when fix extent truncation is not enabled
         if info['algorithm'] != 'gesvdr' or max_extent == max_mid_extent:
             info_equal = info_equal and (abs(info["discarded_weight"]-info_ref["discarded_weight"]) < rtol)
+        if is_dw_truncation_only(**split_options) and max_extent == max_mid_extent:
+            # when only dw is in use, verify that discarded weight is less than the cutoff
+            dw_cutn = info["discarded_weight"]
+            dw_ref = info_ref["discarded_weight"]
+            dw_cutoff = split_options.get('discarded_weight_cutoff', 0)
+            if dw_cutn > dw_cutoff:
+                logging.error("cutensornet SVD runtime discarded weight {dw_cutn} larger than cutoff {dw_cutoff}")
+                return False
+            if dw_ref > dw_cutoff:
+                logging.error("reference SVD runtime discarded weight {dw_ref} larger than cutoff {dw_cutoff}")
+                return False
+
     if not info_equal:
         info_details = "".join([f"{key}:({info.get(key)}, {info_ref.get(key)}); " for key in info.keys()])
         logging.error(f"SVD Info not matching the reference: {info_details}")

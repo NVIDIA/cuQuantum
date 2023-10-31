@@ -3,16 +3,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-truncated SVD Example using NumPy ndarray with various SVD algorithms.
+truncated SVD Example using CuPy ndarray with various SVD algorithms.
 
-The decomposition results are also NumPy ndarrays.
+The decomposition results are also CuPy ndarrays.
 """
-import numpy as np
+import cupy as cp
 
 from cuquantum import tensor
 
-
-a = np.ones((3,2,4,5))
+a = cp.ones((3,2,4,5))
 
 base_options = {'max_extent': 4,
                 'abs_cutoff': 0.1,

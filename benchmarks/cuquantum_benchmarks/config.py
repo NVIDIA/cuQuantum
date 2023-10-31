@@ -195,16 +195,6 @@ backends = {
         },
     },
 
-    'naive': {
-        'config': {
-            'nshots': 1024,
-            'nfused': None,
-            'ngpus': 1,
-            'ncputhreads': 0,
-            'precision': 'single',
-        },
-    },
-    
     'pennylane': {
         'config': {
             'nshots': 1024,
@@ -241,17 +231,6 @@ backends = {
             'nfused': None,
             'ngpus': 1,
             'ncputhreads': 0,
-            'precision': 'single',
-        },
-    },
-
-    # dummy
-    'pennylane-dumper': {
-        'config': {
-            'nshots': 1024,
-            'nfused': None,
-            'ngpus': 0,
-            'ncputhreads': 1,
             'precision': 'single',
         },
     },

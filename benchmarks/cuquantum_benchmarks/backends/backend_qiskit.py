@@ -15,8 +15,13 @@ try:
 except ImportError:
     qiskit = None
 
+try:
+    from .. import _internal_utils
+except ImportError:
+    _internal_utils = None
 from .backend import Backend
 from .._utils import get_mpi_size, get_mpi_rank
+from .._utils import call_by_root, EarlyReturnError
 
 
 # set up a logger
@@ -32,9 +37,18 @@ class Qiskit(Backend):
         self.precision = precision
         self.identifier = identifier
         self.nqubits = kwargs.pop('nqubits')
-        self.backend = self.create_aer_backend(identifier, ngpus, ncpu_threads, *args, **kwargs)
+        self.version = self.find_version(identifier)
+        self.backend = self.create_aer_backend(self.identifier, ngpus, ncpu_threads, *args, **kwargs)
 
+    def find_version(self, identifier):
+        if identifier == 'cusvaer':
+            return version('cusvaer')
+        return qiskit.__qiskit_version__['qiskit-aer']
+    
     def preprocess_circuit(self, circuit, *args, **kwargs):
+        if _internal_utils is not None:
+            _internal_utils.preprocess_circuit(self.identifier, circuit, *args, **kwargs)
+        
         t0 = time.perf_counter()
         self.transpiled_qc = qiskit.transpile(circuit, self.backend) # (circuit, basis_gates=['u3', 'cx'], backend=self.backend)
         t1 = time.perf_counter()
@@ -165,8 +179,7 @@ class Qiskit(Backend):
                     blocking_enable=blocking_enable, blocking_qubits=blocking_qubits,
                     fusion_max_qubit=nfused, precision=self.precision)
         else:
-            raise ValueError(f"the backend {identifier} is not recognized")
-
+            backend = None
         return backend
 
     def get_aer_blocking_setup(self, ngpus=None):

@@ -32,15 +32,17 @@
 
 int main(int argc, char **argv)
 {
+  static_assert(sizeof(size_t) == sizeof(int64_t), "Please build this sample on a 64-bit architecture!");
+
   constexpr std::size_t fp64size = sizeof(double);
 
   // Sphinx: Marginal #2
 
   // Quantum state configuration
-  constexpr int32_t numQubits = 16;
+  constexpr int32_t numQubits = 16; // number of qubits
   const std::vector<int64_t> qubitDims(numQubits,2); // qubit dimensions
-  constexpr int32_t numMarginalModes = 2; // rank of the marginal (reduced density matrix)
-  const std::vector<int32_t> marginalModes({0,1}); // open qubits (must be in acsending order)
+  const std::vector<int32_t> marginalModes({0,1}); // open qubits defining the marginal (must be in acsending order)
+  const int32_t numMarginalModes = marginalModes.size(); // rank of the marginal (reduced density matrix)
   std::cout << "Quantum circuit: " << numQubits << " qubits\n";
 
   // Sphinx: Marginal #3
@@ -75,12 +77,14 @@ int main(int argc, char **argv)
 
   // Sphinx: Marginal #5
 
-  // Allocate the specified quantum circuit reduced density matrix (marginal) in Device memory
+  // Allocate Device memory for the specified quantum circuit reduced density matrix (marginal)
   void *d_rdm{nullptr};
   std::size_t rdmDim = 1;
   for(const auto & mode: marginalModes) rdmDim *= qubitDims[mode];
   const std::size_t rdmSize = rdmDim * rdmDim;
   HANDLE_CUDA_ERROR(cudaMalloc(&d_rdm, rdmSize * (2 * fp64size)));
+  std::cout << "Allocated memory for the specified quantum circuit reduced density matrix (marginal) of size "
+            << rdmSize << " elements\n";
 
   // Sphinx: Marginal #6
 
@@ -114,7 +118,7 @@ int main(int argc, char **argv)
 
   // Sphinx: Marginal #9
 
-  // Specify the desired reduced density matrix (marginal)
+  // Specify the quantum circuit reduced density matrix (marginal)
   cutensornetStateMarginal_t marginal;
   HANDLE_CUTN_ERROR(cutensornetCreateMarginal(cutnHandle, quantumState, numMarginalModes, marginalModes.data(),
                     0, nullptr, std::vector<int64_t>{{1,2,4,8}}.data(), &marginal)); // using explicit strides
@@ -129,12 +133,12 @@ int main(int argc, char **argv)
 
   // Sphinx: Marginal #11
 
-  // Prepare the specified quantum circuit reduced densitry matrix (marginal)
+  // Prepare the computation of the specified quantum circuit reduced densitry matrix (marginal)
   cutensornetWorkspaceDescriptor_t workDesc;
   HANDLE_CUTN_ERROR(cutensornetCreateWorkspaceDescriptor(cutnHandle, &workDesc));
   std::cout << "Created the workspace descriptor\n";
   HANDLE_CUTN_ERROR(cutensornetMarginalPrepare(cutnHandle, marginal, scratchSize, workDesc, 0x0));
-  std::cout << "Prepared the specified quantum circuit reduced density matrix (marginal)\n";
+  std::cout << "Prepared the computation of the specified quantum circuit reduced density matrix (marginal)\n";
 
   // Sphinx: Marginal #12
 
@@ -159,7 +163,7 @@ int main(int argc, char **argv)
   // Sphinx: Marginal #13
 
   // Compute the specified quantum circuit reduced densitry matrix (marginal)
-  HANDLE_CUTN_ERROR(cutensornetMarginalCompute(cutnHandle, marginal, nullptr, workDesc, d_rdm, 0));
+  HANDLE_CUTN_ERROR(cutensornetMarginalCompute(cutnHandle, marginal, nullptr, workDesc, d_rdm, 0x0));
   std::cout << "Computed the specified quantum circuit reduced density matrix (marginal)\n";
   std::vector<std::complex<double>> h_rdm(rdmSize);
   HANDLE_CUDA_ERROR(cudaMemcpy(h_rdm.data(), d_rdm, rdmSize * (2 * fp64size), cudaMemcpyDeviceToHost));

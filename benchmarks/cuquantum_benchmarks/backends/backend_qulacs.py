@@ -27,6 +27,7 @@ class Qulacs(Backend):
         self.ncpu_threads = ncpu_threads
         self.nqubits = kwargs.pop('nqubits')
         self.state = self.create_qulacs_state()
+        self.version = qulacs.__version__
 
     def create_qulacs_state(self):
         if self.identifier == 'qulacs-gpu':

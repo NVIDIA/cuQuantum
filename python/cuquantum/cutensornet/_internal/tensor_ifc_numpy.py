@@ -12,6 +12,7 @@ import cupy
 import numpy
 
 from . import utils
+from .package_ifc import StreamHolder
 from .tensor_ifc import Tensor
 
 
@@ -51,7 +52,7 @@ class NumpyTensor(Tensor):
     def strides(self):
         return tuple(stride_in_bytes // self.tensor.itemsize for stride_in_bytes in self.tensor.strides)
 
-    def numpy(self):
+    def numpy(self, stream_holder=StreamHolder()):
         return self.tensor
 
     @classmethod
@@ -61,9 +62,11 @@ class NumpyTensor(Tensor):
         """
         name = context.get('dtype', 'float32')
         dtype = NumpyTensor.name_to_dtype[name]
-        return cls(module.empty(shape, dtype=dtype))
+        strides = context.get('strides', None)
+        # when strides is not None, it should be of unit counts not bytes
+        return cls(module.ndarray(shape, dtype=dtype, strides=(tuple(s * dtype.itemsize for s in strides) if strides else None)))
 
-    def to(self, device='cpu'):
+    def to(self, device='cpu', stream_holder=StreamHolder()):
         """
         Create a copy of the tensor on the specified device (integer or 
           'cpu'). Copy to  Cupy ndarray on the specified device if it 
@@ -75,10 +78,13 @@ class NumpyTensor(Tensor):
         if not isinstance(device, int):
             raise ValueError(f"The device must be specified as an integer or 'cpu', not '{device}'.")
 
-        with utils.device_ctx(device):
+        with utils.device_ctx(device), stream_holder.ctx:
             tensor_device = cupy.asarray(self.tensor)
 
         return tensor_device
+
+    def copy_(self, src, stream_holder=StreamHolder()):
+        raise NotImplementedError
 
     def istensor(self):
         """

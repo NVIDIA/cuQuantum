@@ -14,6 +14,14 @@ from .frontends import frontends
 from .run_interface import BenchApiRunner, BenchCircuitRunner
 from ._utils import (EarlyReturnError, MPHandler, RawTextAndDefaultArgFormatter,
                      str_to_seq,)
+try:
+    from . import _internal_utils
+except ImportError:
+    _internal_utils = None
+
+
+if _internal_utils is not None:
+    _internal_utils.init()
 
 
 frontend_names = [f for f in frontends.keys()]
@@ -300,8 +308,8 @@ def run(args=None):
         del args.benchmark
         config = backend_config[args.backend]
 
-        if ((args.frontend == 'cirq' and args.backend not in ('cirq', 'cutn', *[k for k in backends.keys() if k.startswith('qsim')]))
-                or (args.frontend == 'qiskit' and args.backend not in ('cutn', *[k for k in backends.keys() if 'aer' in k]))
+        if ((args.frontend == 'cirq' and args.backend not in (*[k for k in backends.keys() if k.startswith('cirq')], 'cutn', *[k for k in backends.keys() if k.startswith('qsim')]))
+                or (args.frontend == 'qiskit' and args.backend not in ('cutn', *[k for k in backends.keys() if k.startswith('qiskit')], *[k for k in backends.keys() if 'aer' in k]))
                 or (args.frontend == 'naive' and args.backend != 'naive')
                 or (args.frontend == 'pennylane' and not args.backend.startswith('pennylane'))
                 or (args.frontend == 'qulacs' and not args.backend.startswith('qulacs'))):
