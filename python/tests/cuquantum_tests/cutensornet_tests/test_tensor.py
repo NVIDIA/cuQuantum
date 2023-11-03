@@ -18,7 +18,7 @@ from .approxTN_utils import tensor_decompose, verify_split_QR, verify_split_SVD
 from .data import backend_names, tensor_decomp_expressions
 from .test_options import _OptionsBase, TestNetworkOptions
 from .test_utils import DecomposeFactory
-from .test_utils import deselect_decompose_tests, gen_rand_svd_method
+from .test_utils import deselect_decompose_tests, get_svd_methods_for_test
 from .test_utils import get_stream_for_backend
 
 
@@ -107,8 +107,7 @@ class TestDecompose:
     )
     def test_svd(
             self, decompose_expr, xp, dtype, order, stream, return_info, blocking):
-        rng = numpy.random.default_rng(2021)
-        methods = [tensor.SVDMethod()] + [gen_rand_svd_method(rng) for _ in range(10)]
+        methods = get_svd_methods_for_test(3, dtype)
         for method in methods:
             self._run_decompose(
                 decompose_expr, xp, dtype, order, stream, method,
@@ -132,6 +131,9 @@ class TestSVDMethod(_OptionsBase):
     
     def test_rel_cutoff(self):
         self.create_options({'rel_cutoff': 0.1})
+    
+    def test_discarded_weight_cutoff(self):
+        self.create_options({'discarded_weight_cutoff': 0.1})
     
     @pytest.mark.parametrize(
         'partition', [None, 'U', 'V', 'UV']

@@ -18,6 +18,7 @@ from . import formatters
 from . import mem_limit
 from . import package_wrapper
 from . import tensor_wrapper
+from .package_ifc import StreamHolder
 
 
 def infer_object_package(obj):
@@ -98,30 +99,34 @@ def get_or_create_stream(device_id, stream, op_package):
         op_package: The package the tensor network operands belong to.
 
     Returns:
-        tuple: CuPy stream object, package stream context, stream pointer.
+        StreamHolder: Hold a CuPy stream object, package stream context, stream pointer, ...
     """
 
     op_package_ifc = package_wrapper.PACKAGE[op_package]
     if stream is None:
         stream = op_package_ifc.get_current_stream(device_id)
-        return _create_stream_ctx_ptr_cupy_stream(op_package_ifc, stream)
+        obj, ctx, ptr = _create_stream_ctx_ptr_cupy_stream(op_package_ifc, stream)
+        return StreamHolder(
+            **{'ctx': ctx, 'obj': obj, 'ptr': ptr, 'device_id': device_id, 'package': op_package})
 
     if isinstance(stream, int):
-        stream_ptr = stream
+        ptr = stream
         if op_package == 'torch':
             message = "A stream object must be provided for PyTorch operands, not stream pointer."
             raise TypeError(message)
-        stream_ctx = op_package_ifc.to_stream_context(stream)
-        stream = cp.cuda.ExternalStream(stream_ptr)
-
-        return stream, stream_ctx, stream_ptr
+        obj = cp.cuda.ExternalStream(ptr)
+        ctx = op_package_ifc.to_stream_context(obj)
+        return StreamHolder(
+            **{'ctx': ctx, 'obj': obj, 'ptr': ptr, 'device_id': device_id, 'package': op_package})
 
     stream_package = infer_object_package(stream)
     if stream_package != op_package:
         message = "The stream object must belong to the same package as the tensor network operands."
         raise TypeError(message)
 
-    return _create_stream_ctx_ptr_cupy_stream(op_package_ifc, stream)
+    obj, ctx, ptr = _create_stream_ctx_ptr_cupy_stream(op_package_ifc, stream)
+    return StreamHolder(
+        **{'ctx': ctx, 'obj': obj, 'ptr': ptr, 'device_id': device_id, 'package': op_package})
 
 
 def get_memory_limit(memory_limit, device):
@@ -167,11 +172,11 @@ def get_operands_data(operands):
     """
     Get the raw data pointer of the input operands for cuTensorNet.
     """
-    op_data = tuple(o.data_ptr for o in operands)    
+    op_data = tuple(o.data_ptr if o is not None else 0 for o in operands)
     return op_data
 
 
-def create_empty_tensor(cls, extents, dtype, device_id, stream_ctx):
+def create_empty_tensor(cls, extents, dtype, device_id, stream_holder, strides=None):
     """
     Create a wrapped tensor of the same type as (the wrapped) cls on the specified device having the 
     specified extents and dtype.
@@ -179,13 +184,13 @@ def create_empty_tensor(cls, extents, dtype, device_id, stream_ctx):
     The tensor is created within a stream context to allow for asynchronous memory allocators like 
     CuPy's MemoryAsyncPool.
     """
-    with stream_ctx:
-        tensor = cls.empty(extents, dtype=dtype, device=device_id)
+    with stream_holder.ctx:
+        tensor = cls.empty(extents, dtype=dtype, device=device_id, strides=strides)
     tensor = tensor_wrapper.wrap_operand(tensor)
     return tensor
 
 
-def create_output_tensor(cls, package, output, size_dict, device_id, stream, data_type):
+def create_output_tensor(cls, output, size_dict, device_id, stream_holder, data_type):
     """
     Create output tensor and associated data (modes, extents, strides). This operation is
     ordered through events and is safe to use with asynchronous memory pools.
@@ -193,11 +198,9 @@ def create_output_tensor(cls, package, output, size_dict, device_id, stream, dat
     modes = tuple(m for m in output)
     extents = tuple(size_dict[m] for m in output)
 
-    stream, stream_ctx, _ = get_or_create_stream(device_id, stream, package)
-
     with device_ctx(device_id):
-        output = create_empty_tensor(cls, extents, data_type, device_id, stream_ctx)
-        output_event = stream.record()
+        output = create_empty_tensor(cls, extents, data_type, device_id, stream_holder)
+        output_event = stream_holder.obj.record()
 
     strides = output.strides
     return output, output_event, modes, extents, strides
@@ -375,7 +378,7 @@ def check_and_set_options(required: Mapping[str, Value], provided: Mapping[str, 
 
 
 @contextlib.contextmanager
-def cuda_call_ctx(stream, blocking=True, timing=True):
+def cuda_call_ctx(stream_holder, blocking=True, timing=True):
     """
     A simple context manager that provides (non-)blocking behavior depending on the `blocking` parameter for CUDA calls.
       The call is timed only for blocking behavior when timing is requested.
@@ -384,6 +387,8 @@ def cuda_call_ctx(stream, blocking=True, timing=True):
     event is returned together with a `Value` object that stores the elapsed time if the call is blocking and timing is
     requested, or None otherwise.
     """
+    stream = stream_holder.obj
+
     if blocking:
        start = cp.cuda.Event(disable_timing = False if timing else True)
        stream.record(start)

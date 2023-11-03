@@ -6,10 +6,6 @@ from .frontend_cirq import Cirq
 from .frontend_qiskit import Qiskit
 from .frontend_pny import Pennylane
 from .frontend_qulacs import Qulacs
-try:
-    from .frontend_naive import Naive
-except ImportError:
-    Naive = None
 
 
 frontends = {
@@ -18,8 +14,7 @@ frontends = {
     'pennylane': Pennylane,
     'qulacs': Qulacs
 }
-if Naive:
-    frontends['naive'] = Naive
+
 
 def createFrontend(frontend_name, nqubits, config):
     return frontends[frontend_name](nqubits, config)

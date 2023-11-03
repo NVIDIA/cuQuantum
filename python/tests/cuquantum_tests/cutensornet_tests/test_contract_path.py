@@ -62,7 +62,7 @@ class TestContractPath:
 
         # sanity checks; the correctness checks are done in the contract() tests
         assert len(path) == len(operands)-1
-        operand_ids = list(range(len(operands)))
+        operand_ids = list(range(len(operands))) if path else [-1]    # handle single operand case.
         for i, j in path:
             op_i, op_j = operand_ids[i], operand_ids[j]
             operand_ids.remove(op_i)

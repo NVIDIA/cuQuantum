@@ -22,6 +22,7 @@ class QsimCirq(Backend):
             raise ValueError("all qsim backends only support single precision")
         self.identifier = identifier
         qsim_options = self.create_qsim_options(identifier, ngpus, ncpu_threads, **kwargs)
+        self.version = qsimcirq.__version__
         self.backend = qsimcirq.QSimSimulator(qsim_options=qsim_options)
 
     def run(self, circuit, nshots=1024):

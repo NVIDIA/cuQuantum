@@ -145,3 +145,4 @@ add_custatevec_example(custatevec_examples "cuStateVec.example.swap_index_bits" 
 add_custatevec_example(custatevec_examples "cuStateVec.example.mgpu_swap_index_bits"      mgpu_swap_index_bits.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.mgpu_sampler"              mgpu_sampler.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.mgpu_batch_measure"        mgpu_batch_measure.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.subsv_migration"           subsv_migration.cu)

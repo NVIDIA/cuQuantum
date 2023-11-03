@@ -155,10 +155,17 @@ class TestLibHelper:
 
     def test_get_version(self):
         ver = cutn.get_version()
-        assert ver == (cutn.MAJOR_VER * 10000
+        major = ver // 10000
+        minor = (ver % 10000) // 100
+
+        # run-time version must be compatible with build-time version
+        assert major == cutn.MAJOR_VER
+        assert minor >= cutn.MINOR_VER
+
+        # sanity check (build-time versions should agree)
+        assert cutn.VERSION == (cutn.MAJOR_VER * 10000
             + cutn.MINOR_VER * 100
             + cutn.PATCH_VER)
-        assert ver == cutn.VERSION
 
     def test_get_cudart_version(self):
         # CUDA runtime is statically linked, so we can't compare
@@ -734,8 +741,6 @@ class TestContraction(TestTensorNetworkBase):
             # compare gradients
             for grad_cutn, in_torch in zip(tn.gradients, inputs):
                 grad_torch = in_torch.grad
-                if torch.is_complex(grad_torch):
-                    grad_torch = grad_torch.conj().resolve_conj()
                 # zero-copy if on GPU
                 assert cp.allclose(grad_cutn, cp.asarray(grad_torch))
 
@@ -959,6 +964,7 @@ class TestTensorQR:
     'options': (
         {}, # standard exact svd
         {'max_extent': 4, 'normalization':'L1', 'partition':'U', 'algorithm': 'gesvdr', 'gesvdr_niters': 40}, # fix extent truncation
+        {'abs_cutoff': 0.1, 'discarded_weight_cutoff': 0.05, 'normalization': 'L2'}, # discarded weight truncation
         {'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'algorithm': 'gesvdj', 'gesvdj_tol':1e-14, 'gesvdj_max_sweeps': 80}, # value based truncation
         {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V', 'algorithm': 'gesvdj'}, # absolute value based truncation
         {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # relative value based truncation
@@ -981,6 +987,13 @@ class TestTensorSVD:
         svd_config, svd_info = self.svd_config, self.svd_info
         dtype = cp.dtype(self.dtype)
 
+        # relax gesvdj_tol for single precision operand
+        algorithm = self.options.get('algorithm', None)
+        if algorithm == 'gesvdj' and self.dtype in [np.float32, np.complex64]:
+            gesvdj_tol = self.options.get('gesvdj_tol', None)
+            if gesvdj_tol is not None:
+                self.options['gesvdj_tol'] = 1e-7
+            
         # parse svdConfig
         svd_method = check_or_create_options(tensor.SVDMethod, self.options, "SVDMethod")
         parse_svd_config(handle, svd_config, svd_method, logger=None)
@@ -1075,6 +1088,7 @@ class TestTensorSVD:
     'options': (
         {}, # standard exact svd
         {'max_extent': 4, 'normalization':'L1', 'partition':'U', 'algorithm': 'gesvdr', 'gesvdr_niters': 40}, # fix extent truncation
+        {'abs_cutoff': 0.1, 'discarded_weight_cutoff': 0.05, 'normalization': 'L2'}, # discarded weight truncation
         {'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'algorithm': 'gesvdj', 'gesvdj_tol':1e-14, 'gesvdj_max_sweeps': 80}, # value based truncation
         {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V', 'algorithm': 'gesvdj'}, # absolute value based truncation
         {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # relative value based truncation
@@ -1101,6 +1115,13 @@ class TestTensorGate:
         gate_algorithm = self.GATE_ALGO_MAP[algo]
         svd_config, svd_info = self.svd_config, self.svd_info
 
+        # relax gesvdj_tol for single precision operand
+        algorithm = self.options.get('algorithm', None)
+        if algorithm == 'gesvdj' and self.dtype in [np.float32, np.complex64]:
+            gesvdj_tol = self.options.get('gesvdj_tol', None)
+            if gesvdj_tol is not None:
+                self.options['gesvdj_tol'] = 1e-7
+        
         # parse svdConfig
         svd_method = check_or_create_options(tensor.SVDMethod, self.options, "SVDMethod")
         parse_svd_config(handle, svd_config, svd_method, logger=None)

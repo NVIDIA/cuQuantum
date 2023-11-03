@@ -203,43 +203,6 @@ class BenchCircuitRunner:
                 circuit_filename += f"_{''.join(pauli)}"
         return circuit_filename, target, pauli
 
-    def extract_backend_version(self):
-        if 'aer' in self.backend:
-            import qiskit
-            version = qiskit.__qiskit_version__['qiskit-aer']
-        elif 'qsim' in self.backend:
-            import qsimcirq
-            version = qsimcirq.__version__
-        elif self.backend == 'cutn':
-            import cuquantum
-            version = cuquantum.cutensornet.get_version()
-        elif self.backend == 'cirq':
-            import cirq
-            version = cirq.__version__
-        elif self.backend == 'naive':
-            from .backends import backends
-            version = backends['naive'].version
-        elif self.backend == 'pennylane':
-            import pennylane
-            version = pennylane.__version__
-        elif self.backend == 'pennylane-lightning-gpu':
-            import pennylane_lightning_gpu
-            version = pennylane_lightning_gpu.__version__
-        elif self.backend == 'pennylane-lightning-qubit':
-            import pennylane_lightning
-            version = pennylane_lightning.__version__
-        elif self.backend == 'pennylane-lightning-kokkos':
-            import pennylane_lightning_kokkos
-            version = pennylane_lightning_kokkos.__version__
-        elif self.backend == 'pennylane-dumper':
-            version = '0'  # dummy
-        elif self.backend in ('qulacs-gpu', 'qulacs-cpu'):
-            import qulacs
-            version = qulacs.__version__
-        else:
-            assert False
-        return version
-
     def extract_frontend_version(self):
         if self.frontend == 'qiskit':
             import qiskit
@@ -315,7 +278,7 @@ class BenchCircuitRunner:
 
         # get versions; it's assumed up to this point, the existence of Python modules for
         # both frontend and backend is confirmed
-        backend_version = self.extract_backend_version()
+        backend_version = backend.version
         frontend_version = self.extract_frontend_version()
         glue_layer_version = self.extract_glue_layer_version()
         if glue_layer_version is not None:
@@ -337,7 +300,7 @@ class BenchCircuitRunner:
             # only cutn needs these, TODO: backend config
             circuit_filename=os.path.join(self.cache_dir, circuit_filename),
             target=target,
-            pauli=pauli,
+            pauli=pauli
         )
 
         for k in preprocess_data.keys():

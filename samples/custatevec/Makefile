@@ -41,6 +41,7 @@ all: check-env
 	nvcc mgpu_swap_index_bits.cu     -o mgpu_swap_index_bits     ${CXX_FLAGS}
 	nvcc mgpu_batch_measure.cu       -o mgpu_batch_measure       ${CXX_FLAGS}
 	nvcc mgpu_sampler.cu             -o mgpu_sampler             ${CXX_FLAGS}
+	nvcc subsv_migration.cu          -o subsv_migration          ${CXX_FLAGS}
 
 
 check-env:
@@ -77,4 +78,5 @@ clean:
 		swap_index_bits \
 		mgpu_swap_index_bits \
 		mgpu_batch_measure \
-		mgpu_sampler
+		mgpu_sampler \
+		subsv_migration

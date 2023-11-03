@@ -44,7 +44,8 @@ SVD_METHOD_CONFIG_MAP = {'abs_cutoff': cutn.TensorSVDConfigAttribute.ABS_CUTOFF,
                         'rel_cutoff': cutn.TensorSVDConfigAttribute.REL_CUTOFF, 
                         'partition': cutn.TensorSVDConfigAttribute.S_PARTITION, 
                         'normalization': cutn.TensorSVDConfigAttribute.S_NORMALIZATION,
-                        'algorithm': cutn.TensorSVDConfigAttribute.ALGO}
+                        'algorithm': cutn.TensorSVDConfigAttribute.ALGO,
+                        'discarded_weight_cutoff': cutn.TensorSVDConfigAttribute.DISCARDED_WEIGHT_CUTOFF}
 
 SVD_INFO_MAP = {'full_extent': cutn.TensorSVDInfoAttribute.FULL_EXTENT,
                 'reduced_extent': cutn.TensorSVDInfoAttribute.REDUCED_EXTENT,
@@ -294,20 +295,20 @@ def get_svd_info_dict(handle, svd_info):
     return info
 
 
-def parse_decompose_operands_options(options, wrapped_operands, allowed_dtype_names=None):
+def parse_decompose_operands_options(options, wrapped_operands, stream, allowed_dtype_names=None):
     """
     Given initially wrapped tensors and network options, wrap the operands to device and create an internal NetworkOptions object. 
     If cutensornet library handle is not provided in `options`, one will be created in the internal options.
     """
-    device_id = utils.get_network_device_id(wrapped_operands)
-    logger = logging.getLogger() if options.logger is None else options.logger
+    package = utils.get_operands_package(wrapped_operands)
     operands_location = 'cuda'
+    device_id = utils.get_network_device_id(wrapped_operands)
     if device_id is None:
+        package = wrapped_operands[0].name
+        if package == 'numpy':
+            package = 'cupy'
         operands_location = 'cpu'
         device_id = options.device_id
-        logger.info(f"Begin transferring input data from host to device {device_id}")
-        wrapped_operands = tensor_wrapper.to(wrapped_operands, device_id)
-        logger.info("Input data transfer finished")
     
     # initialize handle once if not provided
     if options.handle is not None:
@@ -323,7 +324,14 @@ def parse_decompose_operands_options(options, wrapped_operands, allowed_dtype_na
         raise ValueError(f"dtype {dtype_name} not supported")
     compute_type = options.compute_type if options.compute_type is not None else typemaps.NAME_TO_COMPUTE_TYPE[dtype_name]
 
-    package = utils.get_operands_package(wrapped_operands)
+    stream_holder = utils.get_or_create_stream(options.device_id, stream, package)
+
+    logger = logging.getLogger() if options.logger is None else options.logger
+    if operands_location == 'cpu':
+        logger.info(f"Begin transferring input data from host to device {device_id}")
+        wrapped_operands = tensor_wrapper.to(wrapped_operands, device_id, stream_holder)
+        logger.info("Input data transfer finished")
+
     allocator = options.allocator if options.allocator is not None else memory._MEMORY_MANAGER[package](device_id, logger)
 
     internal_options = options.__class__(device_id=device_id,
@@ -334,17 +342,17 @@ def parse_decompose_operands_options(options, wrapped_operands, allowed_dtype_na
                                         memory_limit=options.memory_limit,
                                         allocator=allocator)
 
-    return wrapped_operands, internal_options, own_handle, operands_location
+    return wrapped_operands, internal_options, own_handle, operands_location, stream_holder
 
 
-def allocate_and_set_workspace(handle, allocator, workspace_desc, pref, mem_space, workspace_kind, device_id, stream, stream_ctx, logger, task_name=''):
+def allocate_and_set_workspace(handle, allocator, workspace_desc, pref, mem_space, workspace_kind, device_id, stream_holder, logger, task_name=''):
     """
     Allocate and set the workspace in the workspace descriptor.
     """
     workspace_size = cutn.workspace_get_memory_size(handle, workspace_desc, pref, mem_space, workspace_kind)
     # Allocate and set workspace
     if mem_space == cutn.Memspace.DEVICE:
-        with utils.device_ctx(device_id), stream_ctx:
+        with utils.device_ctx(device_id), stream_holder.ctx:
             try:
                 logger.debug(f"Allocating device memory for {task_name}")
                 workspace_ptr = allocator.memalloc(workspace_size)
@@ -353,7 +361,7 @@ def allocate_and_set_workspace(handle, allocator, workspace_desc, pref, mem_spac
                         "'BaseCUDAMemoryManager' protocol."
                 raise TypeError(message) from e
         
-        logger.debug(f"Finished allocating device memory of size {formatters.MemoryStr(workspace_size)} for decomposition in the context of stream {stream}.")
+        logger.debug(f"Finished allocating device memory of size {formatters.MemoryStr(workspace_size)} for decomposition in the context of stream {stream_holder.obj}.")
         device_ptr = utils.get_ptr_from_memory_pointer(workspace_ptr)
         cutn.workspace_set_memory(handle, workspace_desc, mem_space, workspace_kind, device_ptr, workspace_size)
         logger.debug(f"The workspace memory (device pointer = {device_ptr}) has been set in the workspace descriptor.")
@@ -376,7 +384,8 @@ def _destroy_tensor_descriptors(desc_tensors):
             cutn.destroy_tensor_descriptor(t)
 
 
-def create_operands_and_descriptors(handle, wrapped_operands, size_dict, inputs, outputs, mid_extent, method, device_id, stream_ctx, logger):
+def create_operands_and_descriptors(
+        handle, wrapped_operands, size_dict, inputs, outputs, mid_extent, method, device_id, stream_holder, logger):
     """
     Create empty tensor operands and corresponding tensor descriptors for a decomposition problem.
     """
@@ -402,7 +411,7 @@ def create_operands_and_descriptors(handle, wrapped_operands, size_dict, inputs,
         output_operands = []
         with utils.device_ctx(device_id):
             for extent, tensor_modes in zip(output_extents, outputs):
-                operand = utils.create_empty_tensor(output_class, extent, dtype_name, device_id, stream_ctx) 
+                operand = utils.create_empty_tensor(output_class, extent, dtype_name, device_id, stream_holder)
                 output_operands.append(operand)
                 output_tensor_descriptors.append(operand.create_tensor_descriptor(handle, tensor_modes))
             
@@ -413,7 +422,7 @@ def create_operands_and_descriptors(handle, wrapped_operands, size_dict, inputs,
                     s_dtype_name = 'float64'
                 else:
                     raise ValueError(f"{dtype_name} data type not supported")
-                s = utils.create_empty_tensor(output_class, (mid_extent, ), s_dtype_name, device_id, stream_ctx)
+                s = utils.create_empty_tensor(output_class, (mid_extent, ), s_dtype_name, device_id, stream_holder)
                 s_ptr = s.data_ptr
         logger.debug("The output tensors and descriptors have been created.")
     except: 
@@ -423,13 +432,13 @@ def create_operands_and_descriptors(handle, wrapped_operands, size_dict, inputs,
 
     return input_tensor_descriptors, output_operands, output_tensor_descriptors, s, s_ptr
 
-def get_return_operand_data(tensor, target_location):
+def get_return_operand_data(tensor, target_location, stream_holder):
     """
     Given wrapped tensors, fetch the return operands based on target location.
     """
     if tensor is None: # potentially for s
         return tensor
     if target_location == 'cpu':
-        return tensor.to('cpu')
+        return tensor.to('cpu', stream_holder=stream_holder)
     else: # already on device
         return tensor.tensor

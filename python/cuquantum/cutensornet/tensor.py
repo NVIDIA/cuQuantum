@@ -230,13 +230,15 @@ def decompose(
     # placeholder to help avoid resource leak
     handle = workspace_desc = svd_config = svd_info = None
     input_descriptors = output_descriptors = []
-
+    workspaces = dict()
+    own_handle = False
     try:
         # wrap operands to be consistent with options.
         # options is a new instance of DecompositionOptions with all entries initialized
-        wrapped_operands, options, own_handle, operands_location = decomposition_utils.parse_decompose_operands_options(options, 
-                wrapped_operands, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
+        wrapped_operands, options, own_handle, operands_location, stream_holder = decomposition_utils.parse_decompose_operands_options(
+                options, wrapped_operands, stream, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
         handle = options.handle
+        stream_ptr = stream_holder.ptr  # this exists as we always use the ExternalStream from CuPy internally...
 
         if isinstance(method, QRMethod):
             mid_extent = max_mid_extent
@@ -248,10 +250,8 @@ def decompose(
             raise ValueError("method must be either SVDMethod or QRMethod")
         
         # # Create input/output tensor descriptors and empty output operands 
-        package = utils.infer_object_package(wrapped_operands[0].tensor)
-        stream, stream_ctx, stream_ptr = utils.get_or_create_stream(options.device_id, stream, package)
-        input_descriptors, output_operands, output_descriptors, s, s_ptr = decomposition_utils.create_operands_and_descriptors(options.handle, 
-                    wrapped_operands, size_dict, inputs, outputs, mid_extent, method, options.device_id, stream_ctx, options.logger)
+        input_descriptors, output_operands, output_descriptors, s, s_ptr = decomposition_utils.create_operands_and_descriptors(
+            options.handle, wrapped_operands, size_dict, inputs, outputs, mid_extent, method, options.device_id, stream_holder, options.logger)
 
         # Create workspace descriptor
         workspace_desc = cutn.create_workspace_descriptor(handle)
@@ -270,11 +270,10 @@ def decompose(
             ValueError("method must be either a QRMethod/SVDMethod object or a dict that can be used to construct QRMethod/SVDMethod")
         
         # Allocate and set workspace
-        workspaces = dict()
         for mem_space in (cutn.Memspace.DEVICE, cutn.Memspace.HOST):
             workspaces[mem_space] = decomposition_utils.allocate_and_set_workspace(handle, options.allocator, workspace_desc, 
-                        cutn.WorksizePref.MIN, mem_space, cutn.WorkspaceKind.SCRATCH, options.device_id, 
-                        stream, stream_ctx, options.logger, task_name='tensor decomposition')
+                cutn.WorksizePref.MIN, mem_space, cutn.WorkspaceKind.SCRATCH, options.device_id,
+                stream_holder, options.logger, task_name='tensor decomposition')
         
         svd_info_obj = None
 
@@ -287,7 +286,7 @@ def decompose(
             logger.info("This call is non-blocking and will return immediately after the operation is launched on the device.")
         timing =  bool(logger and logger.handlers)
         if isinstance(method, QRMethod):
-            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, blocking, timing) as (last_compute_event, elapsed):
+            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
                 cutn.tensor_qr(handle, 
                     *input_descriptors, wrapped_operands[0].data_ptr,
                     output_descriptors[0], output_operands[0].data_ptr,
@@ -298,7 +297,7 @@ def decompose(
                 logger.info(f"The QR decomposition took {elapsed.data:.3f} ms to complete.")
         elif isinstance(method, SVDMethod):
             svd_info = cutn.create_tensor_svd_info(handle)
-            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream, blocking, timing) as (last_compute_event, elapsed):
+            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
                 cutn.tensor_svd(handle, 
                     *input_descriptors, wrapped_operands[0].data_ptr, 
                     output_descriptors[0], output_operands[0].data_ptr, 
@@ -318,8 +317,8 @@ def decompose(
                 s.tensor = s.tensor[:reduced_extent]
     finally:
         # when host workspace is allocated, synchronize stream before return
-        if workspaces[cutn.Memspace.HOST] is not None:
-            stream.synchronize()
+        if workspaces.get(cutn.Memspace.HOST) is not None:
+            stream_holder.obj.synchronize()
         # Free resources
         if svd_config is not None:
             cutn.destroy_tensor_svd_config(svd_config)
@@ -335,7 +334,9 @@ def decompose(
             cutn.destroy(handle)
         logger.info(f"All resources for the decomposition are freed.")
     
-    left_output, right_output, s = [decomposition_utils.get_return_operand_data(o, operands_location) for o in output_operands + [s, ]]
+    left_output, right_output, s = [decomposition_utils.get_return_operand_data(
+                                        o, operands_location, stream_holder)
+                                    for o in output_operands + [s, ]]
     
     if isinstance(method, QRMethod):
         return left_output, right_output
@@ -407,6 +408,7 @@ class SVDMethod:
         max_extent: Keep no more than the largest ``max_extent`` singular values in the output operands (the rest will be truncated). 
         abs_cutoff: Singular values below this value will be trimmed in the output operands. 
         rel_cutoff: Singular values below the product of this value and the largest singular value will be trimmed in the output operands.
+        discarded_weight_cutoff: Singular values with discarded weight (square sum dividied by total square sum) below this value will be trimmed.
         partition: Singular values S will be explictly returned by default (``partition=None``). 
             Alternatively, singular values may be factorized onto output tensor U (``partition="U"``), output tensor V (``partition="V"``) or 
             equally onto output tensor U and output tensor V (``partition="UV"``). When any of these three partition schemes is selected,
@@ -421,6 +423,10 @@ class SVDMethod:
         gesvdr_niters: The number of iteration of power method when ``algorithm`` is set to ``"gesvdr"`` and the default (0) is 10.
     
     .. note::
+
+        If multiple truncation paramters are set, e.g, ``max_extent`` and ``discarded_weight_cutoff``, the truncated extent will be determined as the lowest among all.
+
+    .. note::
         
         For detailed explanation on the different SVD algorithms and the corresponding parameters, 
         please refer to `cuSolver documentation page <https://docs.nvidia.com/cuda/cusolver/index.html#cusolverdn-dense-lapack-function-reference>`_
@@ -434,6 +440,7 @@ class SVDMethod:
     max_extent: Optional[int] = None
     abs_cutoff: Optional[float] = 0.0
     rel_cutoff: Optional[float] = 0.0
+    discarded_weight_cutoff: Optional[float] = 0.0
     partition: Optional[str] = None
     normalization: Optional[str] = None
     algorithm: Optional[str] = 'gesvd'
@@ -459,6 +466,7 @@ class SVDMethod:
     Maxmial number of singular values = {self.max_extent}
     Absolute value cutoff = {self.abs_cutoff} 
     Relative value cutoff = {self.rel_cutoff}
+    Discarded weight cutoff = {self.discarded_weight_cutoff}
     Singular values partition = {self.partition}
     Singular values normalization = {self.normalization}"""
 
@@ -473,6 +481,9 @@ class SVDMethod:
         
         if (self.gesvdr_oversampling !=0 or self.gesvdr_niters !=0) and self.algorithm != 'gesvdr':
             raise ValueError(f"gesvdr_oversample and gesvdr_niters can only be set when algorithm is set to gesvdr, found algorithm {self.algorithm}")
+        
+        if self.algorithm == 'gesvdr' and self.discarded_weight_cutoff != 0 and self.max_extent is not None:
+            raise ValueError("Discarded weight truncation is not supported for gesvdr algorithm with fixed extent truncation")
     
     def _get_algo_params(self):
         initialized = False

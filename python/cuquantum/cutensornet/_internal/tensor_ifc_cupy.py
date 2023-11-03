@@ -12,6 +12,7 @@ import cupy
 import numpy
 
 from . import utils
+from .package_ifc import StreamHolder
 from .tensor_ifc import Tensor
 from .. import cutensornet as cutn
 
@@ -52,8 +53,13 @@ class CupyTensor(Tensor):
     def strides(self):
         return tuple(stride_in_bytes // self.tensor.itemsize for stride_in_bytes in self.tensor.strides)
 
-    def numpy(self):
-        return self.tensor.get()
+    def numpy(self, stream_holder=StreamHolder()):
+        stream = stream_holder.obj
+        out = self.tensor.get(stream=stream)
+        # cupy/cupy#7820
+        if stream is not None:
+            stream.synchronize()
+        return out
 
     @classmethod
     def empty(cls, shape, **context):
@@ -63,6 +69,7 @@ class CupyTensor(Tensor):
         name = context.get('dtype', 'float32')
         dtype = CupyTensor.name_to_dtype[name]
         device = context.get('device', None)
+        strides = context.get('strides', None)
 
         if isinstance(device, cupy.cuda.Device):
            device_id = device.id
@@ -72,32 +79,42 @@ class CupyTensor(Tensor):
             raise ValueError(f"The device must be specified as an integer or cupy.cuda.Device instance, not '{device}'.")
 
         with utils.device_ctx(device_id):
-            tensor = cupy.empty(shape, dtype=dtype)
+            if strides:
+                # need an explicit allocation due to cupy/cupy#7818
+                size = dtype.itemsize
+                for s in shape:
+                    size = size * s
+                ptr = cupy.cuda.alloc(size)
+                # when strides is not None, it should be of unit counts not bytes
+                strides = tuple(s * dtype.itemsize for s in strides)
+                tensor = cupy.ndarray(shape, dtype=dtype, strides=strides, memptr=ptr)
+            else:
+                tensor = cupy.ndarray(shape, dtype=dtype)
 
         return tensor
 
-    def to(self, device='cpu'):
+    def to(self, device='cpu', stream_holder=StreamHolder()):
         """
         Create a copy of the tensor on the specified device (integer or 
           'cpu'). Copy to  Numpy ndarray if CPU, otherwise return Cupy type.
         """
         if device == 'cpu':
-            return self.numpy()
+            return self.numpy(stream_holder=stream_holder)
 
         if not isinstance(device, int):
             raise ValueError(f"The device must be specified as an integer or 'cpu', not '{device}'.")
 
-        with utils.device_ctx(device):
+        with utils.device_ctx(device), stream_holder.ctx:
             tensor_device = cupy.asarray(self.tensor)
 
         return tensor_device
 
-    def copy_(self, src):
+    def copy_(self, src, stream_holder=StreamHolder()):
         """
         Inplace copy of src (copy the data from src into self).
         """
-
-        cupy.copyto(self.tensor, src)
+        with stream_holder.ctx:
+            cupy.copyto(self.tensor, src)
 
     def istensor(self):
         """
@@ -110,4 +127,3 @@ class CupyTensor(Tensor):
         if tuple(extents) != self.shape:
             strides = [i * self.tensor.itemsize for i in strides]
             self.tensor = cupy.ndarray(extents, dtype=self.tensor.dtype, memptr=self.tensor.data, strides=strides)
-        

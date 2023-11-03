@@ -25,7 +25,7 @@ class Pennylane(Frontend):
     def generateCircuit(self, gateSeq):
         last_g = gateSeq[-1]
         assert last_g.id == "measure"  # TODO: relax this?
-
+        
         def circuit():
             measured_qs = None
 
@@ -71,5 +71,5 @@ class Pennylane(Frontend):
                     raise NotImplementedError(f"The gate type {g.id} is not defined")
             
             return pennylane.sample(wires=measured_qs) 
- 
+    
         return circuit
