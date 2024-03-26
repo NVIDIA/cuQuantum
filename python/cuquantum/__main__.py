@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -7,14 +7,21 @@ import os
 import site
 import sys
 
-import cuquantum  # get the shared libraries loaded
-
 
 def get_lib_path(name):
     """Get the loaded shared library path."""
     # Ideally we should call dl_iterate_phdr or dladdr to do the job, but this
     # is simpler and not bad; the former two are not strictly portable anyway
     # (not part of POSIX). Obviously this only works on Linux!
+
+    # We have switched to use dlopen, force library loading via internal API
+    if "custatevec" in name:
+        from cuquantum import custatevec as cusv
+        cusv._internal.custatevec._inspect_function_pointers()
+    elif "cutensor" in name:  # cutensor or cutensornet
+        from cuquantum import cutensornet as cutn
+        cutn._internal.cutensornet._inspect_function_pointers()
+
     try:
         with open('/proc/self/maps') as f:
             lib_map = f.read()

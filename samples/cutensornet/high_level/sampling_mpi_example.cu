@@ -1,4 +1,4 @@
-/* Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+/* Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -143,10 +143,10 @@ int main(int argc, char **argv)
 
   // Construct the quantum circuit state (apply quantum gates)
   int64_t id;
-  HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
+  HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
                     d_gateH, nullptr, 1, 0, 1, &id));
   for(int32_t i = 1; i < numQubits; ++i) {
-    HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
+    HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
                       d_gateCX, nullptr, 1, 0, 1, &id));
   }
   if (verbose)
@@ -162,34 +162,31 @@ int main(int argc, char **argv)
 
   // Sphinx: Sampler #10
 
-  // Query the free memory on Device
-  std::size_t freeSize {0}, totalSize {0};
-  HANDLE_CUDA_ERROR(cudaMemGetInfo(&freeSize, &totalSize));
-  std::size_t scratchSize = size_t(double(freeSize) * 0.9) / 8; // assume max of 8 GPUs per node
-  scratchSize -= scratchSize % 4096;
-  void *d_scratch {nullptr};
-  HANDLE_CUDA_ERROR(cudaMalloc(&d_scratch, scratchSize));
-  if (verbose)
-   std::cout << "Allocated " << scratchSize << " bytes of scratch memory on GPU: "
-             << "[" << d_scratch << ":" << (void*)(((char*)(d_scratch))  + scratchSize) << ")\n";
-
-  // Sphinx: Sampler #11
-
   // Configure the quantum circuit sampler
   const int32_t numHyperSamples = 8; // desired number of hyper samples used in the tensor network contraction path finder
   HANDLE_CUTN_ERROR(cutensornetSamplerConfigure(cutnHandle, sampler,
-                    CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
+                    CUTENSORNET_SAMPLER_CONFIG_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
 
-  // Sphinx: Sampler #12
+  // Sphinx: Sampler #11
+  // Query the free memory on Device
+  std::size_t freeSize {0}, totalSize {0};
+  HANDLE_CUDA_ERROR(cudaMemGetInfo(&freeSize, &totalSize));
+  std::size_t workSizeAvailable = size_t(double(freeSize) * 0.9) / 8; // assume max of 8 GPUs per node
+  workSizeAvailable -= workSizeAvailable % 4096;
 
   // Prepare the quantum circuit sampler
   cutensornetWorkspaceDescriptor_t workDesc;
   HANDLE_CUTN_ERROR(cutensornetCreateWorkspaceDescriptor(cutnHandle, &workDesc));
-  HANDLE_CUTN_ERROR(cutensornetSamplerPrepare(cutnHandle, sampler, scratchSize, workDesc, 0x0));
+  HANDLE_CUTN_ERROR(cutensornetSamplerPrepare(cutnHandle, sampler, workSizeAvailable, workDesc, 0x0));
   if (verbose)
    std::cout << "Prepared the quantum circuit state sampler\n";
+  double flops {0.0};
+  HANDLE_CUTN_ERROR(cutensornetSamplerGetInfo(cutnHandle, sampler,
+                    CUTENSORNET_SAMPLER_INFO_FLOPS, &flops, sizeof(flops)));
+  if (verbose)
+   std::cout << "Total flop count per sample = " << (flops/1e9) << " GFlop\n";
 
-  // Sphinx: Sampler #13
+  // Sphinx: Sampler #12
 
   // Attach the workspace buffer
   int64_t worksize {0};
@@ -200,17 +197,35 @@ int main(int argc, char **argv)
                                                       CUTENSORNET_WORKSPACE_SCRATCH,
                                                       &worksize));
   assert(worksize > 0);
-  if(worksize <= scratchSize) {
+
+  void *d_scratch {nullptr};
+  if(worksize <= workSizeAvailable) {
+    HANDLE_CUDA_ERROR(cudaMalloc(&d_scratch, worksize));
+    if (verbose)
+     std::cout << "Allocated " << worksize << " bytes of scratch memory on GPU: "
+               << "[" << d_scratch << ":" << (void*)(((char*)(d_scratch))  + worksize) << ")\n";
     HANDLE_CUTN_ERROR(cutensornetWorkspaceSetMemory(cutnHandle, workDesc, CUTENSORNET_MEMSPACE_DEVICE,
                       CUTENSORNET_WORKSPACE_SCRATCH, d_scratch, worksize));
   }else{
     std::cout << "ERROR: Insufficient workspace size on Device!\n";
     std::abort();
   }
+  const std::size_t cacheSizeAvailable = (workSizeAvailable - worksize);
+  void *d_cache {nullptr};
+  HANDLE_CUDA_ERROR(cudaMalloc(&d_cache, cacheSizeAvailable));
+  if (verbose)
+    std::cout << "Allocated " << cacheSizeAvailable << " bytes of cache memory on GPU: "
+              << "[" << d_cache << ":" << (void*)(((char*)(d_cache))  + cacheSizeAvailable) << ")\n";
+  HANDLE_CUTN_ERROR(cutensornetWorkspaceSetMemory(cutnHandle,
+                                                  workDesc,
+                                                  CUTENSORNET_MEMSPACE_DEVICE,
+                                                  CUTENSORNET_WORKSPACE_CACHE,
+                                                  d_cache,
+                                                  cacheSizeAvailable));
   if (verbose)
    std::cout << "Set the workspace buffer\n";
 
-  // Sphinx: Sampler #14
+  // Sphinx: Sampler #13
 
   // Sample the quantum circuit state
   std::vector<int64_t> samples(numQubits * numSamples); // samples[SampleId][QubitId] reside in Host memory
@@ -224,7 +239,7 @@ int main(int argc, char **argv)
     }
   }
 
-  // Sphinx: Sampler #15
+  // Sphinx: Sampler #14
 
   // Destroy the workspace descriptor
   HANDLE_CUTN_ERROR(cutensornetDestroyWorkspaceDescriptor(workDesc));
@@ -242,6 +257,7 @@ int main(int argc, char **argv)
    std::cout << "Destroyed the quantum circuit state\n";
 
   HANDLE_CUDA_ERROR(cudaFree(d_scratch));
+  HANDLE_CUDA_ERROR(cudaFree(d_cache));
   HANDLE_CUDA_ERROR(cudaFree(d_gateCX));
   HANDLE_CUDA_ERROR(cudaFree(d_gateH));
   if (verbose)

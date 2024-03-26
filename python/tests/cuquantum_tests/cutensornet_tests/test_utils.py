@@ -1,9 +1,10 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import re
 import sys
+from types import MappingProxyType
 
 import cupy as cp
 from cupy.testing import shaped_random
@@ -37,6 +38,8 @@ atol_mapper = dict(zip(
     [10 * m_eps for m_eps in machine_epsilon_values]
 ))
 
+EMPTY_DICT = MappingProxyType(dict())
+DEFAULT_RNG = np.random.default_rng(2023)
 
 def set_path_to_optimizer_options(optimizer_opts, path):
     if optimizer_opts is None:
@@ -354,7 +357,7 @@ class DecomposeFactory(ExpressionFactory):
         return self._modes
 
 
-def gen_rand_svd_method(rng, dtype, fixed=None):
+def gen_rand_svd_method(rng, dtype, fixed=None, exclude=None):
     assert dtype in DECOMPOSITION_DTYPE_NAMES, f"dtype {dtype} not supported"
     method = {"max_extent": rng.choice(range(1, 7)), 
               "abs_cutoff": rng.random() / 2.0,  # [0, 0.5)
@@ -365,30 +368,36 @@ def gen_rand_svd_method(rng, dtype, fixed=None):
     algorithm = method["algorithm"]
     if fixed is not None and "algorithm" in fixed:
         algorithm = fixed["algorithm"]
-    if algorithm != 'gesvdr':
-        # gesvdr + max_extent can't be used with discarded weight truncation
-        method["discarded_weight_cutoff"] = rng.random() / 10.0  # [0, 0.1)
-    if algorithm == 'gesvdj':
-        if dtype in ("float32", "complex64"):
-            # for single precision, lowered down gesvdj_tol for convergence
-            method["gesvdj_tol"] = rng.choice([0, 1e-7])
-        else:
-            method["gesvdj_tol"] = rng.choice([0, 1e-14])
-        method["gesvdj_max_sweeps"] = rng.choice([0, 100])
-    elif algorithm == 'gesvdr':
-        method["gesvdr_niters"] = rng.choice([0, 40])
+    skip_svd_params = exclude is not None and "algorithm" in exclude
+    if not skip_svd_params:
+        if algorithm != 'gesvdr':
+            # gesvdr + max_extent can't be used with discarded weight truncation
+            method["discarded_weight_cutoff"] = rng.random() / 10.0  # [0, 0.1)
+        if algorithm == 'gesvdj':
+            if dtype in ("float32", "complex64"):
+                # for single precision, lowered down gesvdj_tol for convergence
+                method["gesvdj_tol"] = rng.choice([0, 1e-7])
+            else:
+                method["gesvdj_tol"] = rng.choice([0, 1e-14])
+            method["gesvdj_max_sweeps"] = rng.choice([0, 100])
+        elif algorithm == 'gesvdr':
+            method["gesvdr_niters"] = rng.choice([0, 40])
         # we can't set oversampling as it depends on matrix size here
     # updating method again in case svd_params are already
     if fixed is not None:
         method.update(fixed)
-    return tensor.SVDMethod(**method)
+    if exclude is not None:
+        for key in exclude:
+            method.pop(key, None)
+    return method
 
 def get_svd_methods_for_test(num, dtype):
     # single dw cutoff to verify dw < dw_cutoff
     methods = [tensor.SVDMethod(), tensor.SVDMethod(discarded_weight_cutoff=0.05)]
     rng = np.random.default_rng(2021)
     for _ in range(num):
-        methods.append(gen_rand_svd_method(rng, dtype))
+        svd_method = gen_rand_svd_method(rng, dtype)
+        methods.append(tensor.SVDMethod(**svd_method))
     return methods
 
 # We want to avoid fragmenting the stream-ordered mempools

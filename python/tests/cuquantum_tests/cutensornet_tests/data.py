@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -49,6 +49,7 @@ einsum_expressions = (
     [((5, 4, 3), (3, 4, 6), (6, 5), None), {}, {}, "float32"],
     ["abc,bcd,ade", {}, {"slicing": {"min_slices": 4}}, "float64"],
     # TODO: need >8 operand tests (from L0)
+    # next network might request huge workspace for a non-optimized/sequential path, in such case it should be waived
     ["ao,bp,cq,dr,es,ft,gu,hv,iw,jx,ky,lz,mA,nB,oP,pO,qN,rM,sL,tK,uJ,vI,wH,xG,yF,zE,AD,BC,DC,FC,PC,CQ,FD,ID,DR,JE,KE,PE,ES,GF,FT,LG,NG,GU,IH,JH,MH,HV,KI,IW,KJ,JX,KY,NL,OL,LZ,NM,OM,MÀ,NÁ,PO,OÂ,PÃ,RQ,TQ,ÃQ,QÄ,TR,WR,RÅ,XS,YS,ÃS,SÆ,UT,TÇ,ZU,ÁU,UÈ,WV,XV,ÀV,VÉ,YW,WÊ,YX,XË,YÌ,ÁZ,ÂZ,ZÍ,ÁÀ,ÂÀ,ÀÎ,ÁÏ,ÃÂ,ÂÐ,ÃÑ,Äß,ÅÞ,ÆÝ,ÇÜ,ÈÛ,ÉÚ,ÊÙ,ËØ,Ì×,ÍÖ,ÎÕ,ÏÔ,ÐÓ,ÑÒ->", {}, {}, "float64"],  # QAOA MaxCut
     ["ab,bc->ac", {'compute_type': cuquantum.ComputeType.COMPUTE_64F}, {}, "complex128"],
 

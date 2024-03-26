@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -29,13 +29,16 @@ all: check-env
 	${CUDA_PATH}/bin/nvcc approxTN/gate_split_example.cu -o gate_split_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc approxTN/mps_example.cu -o mps_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/amplitudes_example.cu -o amplitudes_example ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc high_level/amplitudes_mcg_example.cu -o amplitudes_mcg_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/expectation_example.cu -o expectation_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/marginal_example.cu -o marginal_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/sampling_example.cu -o sampling_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/mps_amplitudes_example.cu -o mps_amplitudes_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/mps_expectation_example.cu -o mps_expectation_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/mps_marginal_example.cu -o mps_marginal_example ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc high_level/mpo_mps_sampling_example.cu -o mpo_mps_sampling_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/mps_sampling_example.cu -o mps_sampling_example ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc high_level/qft_mps_sampling_example.cu -o qft_mps_sampling_example ${CXX_FLAGS}
     ifdef MPI_ROOT
 		${CUDA_PATH}/bin/nvcc tensornet_example_mpi.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi ${CXX_FLAGS} -lmpi
 		${CUDA_PATH}/bin/nvcc tensornet_example_mpi_auto.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi_auto ${CXX_FLAGS} -lmpi
@@ -70,13 +73,16 @@ clean:
 	rm -f gate_split_example gate_split_example.o
 	rm -f mps_example mps_example.o
 	rm -f amplitudes_example amplitudes_example.o
+	rm -f amplitudes_mcg_example amplitudes_mcg_example.o
 	rm -f expectation_example expectation_example.o
 	rm -f marginal_example marginal_example.o
 	rm -f sampling_example sampling_example.o
-	rm -f mps_amplitudes_example mps_amplitudes_example
-	rm -f mps_expectation_example mps_expectation_example
-	rm -f mps_marginal_example mps_marginal_example
-	rm -f mps_sampling_example mps_sampling_example
+	rm -f mps_amplitudes_example mps_amplitudes_example.o
+	rm -f mps_expectation_example mps_expectation_example.o
+	rm -f mps_marginal_example mps_marginal_example.o
+	rm -f mps_sampling_example mps_sampling_example.o
+	rm -f mpo_mps_sampling_example mpo_mps_sampling_example.o
+	rm -f qft_mps_sampling_example qft_mps_sampling_example.o
 	rm -f tensornet_example_mpi tensornet_example_mpi.o
 	rm -f tensornet_example_mpi_auto tensornet_example_mpi_auto.o
 	rm -f sampling_mpi_example sampling_mpi_example.o

@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -12,7 +12,7 @@ import pytest
 
 from cuquantum.cutensornet import _internal
 from cuquantum.cutensornet._internal import utils
-from cuquantum.utils import WHITESPACE_UNICODE
+from cuquantum._utils import WHITESPACE_UNICODE
 
 
 class TestDeviceCtx:

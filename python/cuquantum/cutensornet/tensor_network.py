@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -334,6 +334,7 @@ The data type '{self.data_type}' is currently not supported.
         self.workspace_cache_ptr, self.workspace_cache_size = None, None
         self.workspace_h_scratch_ptr, self.workspace_h_scratch_size = None, None
         self.workspace_h_cache_ptr, self.workspace_h_cache_size = None, None
+        self.workspace_scratch_allocated_here, self.workspace_cache_allocated_here = False, False
 
         # Contraction plan attributes.
         self.plan = None
@@ -364,6 +365,13 @@ The data type '{self.data_type}' is currently not supported.
         if not self.valid_state:
             raise InvalidNetworkState("The network cannot be used after resources are free'd")
 
+    def _check_valid_operands(self, *args, **kwargs):
+        """
+        """
+        what = kwargs['what']
+        if self.operands is None:
+            raise RuntimeError(f"{what} cannot be performed if the input operands have been set to None. Use reset_operand() to set the desired input before using performing the {what.lower()}.")
+
     def _check_optimized(self, *args, **kwargs):
         """
         """
@@ -380,10 +388,11 @@ The data type '{self.data_type}' is currently not supported.
 
     def _check_contracted(self, *args, **kwargs):
         """
+        This function ensures that gradients are not called before contract() or after the cache workspace has been released without calling contract() again.
         """
         what = kwargs['what']
         if not self.contracted:
-            raise RuntimeError(f"{what} cannot be performed before contraction has been done.")
+            raise RuntimeError(f"{what} cannot be performed before contraction has been done. Note that a new contraction is required once the cache workspace has been released.")
 
     def _check_qualifiers(self, *args, **kwargs):
         """
@@ -412,8 +421,18 @@ The data type '{self.data_type}' is currently not supported.
         self.workspace_cache_ptr = None
         self.workspace_h_scratch_ptr = None
         self.workspace_h_cache_ptr = None
+        self.logger.debug(f"[_free_workspace_memory] The scratch and cache workspace memory has been released.")
 
         return True
+
+    def _reset_workspace_allocation_tracking(self):
+        """
+        Reset workspace allocation tracking attributes to False at the end of the methods where workspace memory is
+        potentially allocated. This is necessary to prevent any exceptions raised before method entry from using
+        stale tracking values.
+        """
+        self.workspace_scratch_allocated_here = False
+        self.workspace_cache_allocated_here = False
 
     def _free_path_resources(self, exception=None):
         """
@@ -443,6 +462,7 @@ The data type '{self.data_type}' is currently not supported.
     @utils.atomic(_free_workspace_memory, method=True)
     def _allocate_workspace_memory_perhaps(self, stream_holder, kind):
         assert kind == "scratch" or kind == "cache", "Internal Error."
+        assert getattr(self, f"workspace_{kind}_allocated_here") is False, "Internal Error."
 
         if getattr(self, f"workspace_{kind}_ptr") is not None and getattr(self, f"workspace_h_{kind}_ptr") is not None:
             return
@@ -457,6 +477,7 @@ The data type '{self.data_type}' is currently not supported.
         with utils.device_ctx(self.device_id), stream_holder.ctx:
             try:
                 setattr(self, f"workspace_{kind}_ptr", self.allocator.memalloc(device_size))
+                setattr(self, f"workspace_{kind}_allocated_here", True)
             except TypeError as e:
                 message = "The method 'memalloc' in the allocator object must conform to the interface in the "\
                           "'BaseCUDAMemoryManager' protocol."
@@ -486,6 +507,48 @@ The data type '{self.data_type}' is currently not supported.
         self.logger.debug(f"The {kind} workspace memory (device pointer = {device_ptr}, "
                           f"host pointer = {host_ptr}) has been set in the workspace descriptor.")
 
+    def _release_workspace_memory_perhaps(self, kind, release_workspace):
+        """
+        Free scratch or cache workspace memory if 'release_workspace' is True.
+        """
+        assert kind == "scratch" or kind == "cache", "Internal Error."
+        assert isinstance(release_workspace, bool), "Internal Error."
+
+        if not release_workspace:
+            return
+
+        # Establish ordering wrt the computation before releasing cache or scratch workspace.
+        if self.last_compute_event is not None:
+            self.workspace_stream.wait_event(self.last_compute_event)
+            self.logger.debug(f"Established ordering with respect to the computation before releasing the {kind} workspace.")
+
+        if kind == "cache":
+            cutn.workspace_purge_cache(self.handle, self.workspace_desc, cutn.Memspace.DEVICE)
+            cutn.workspace_purge_cache(self.handle, self.workspace_desc, cutn.Memspace.HOST)
+            # Set contracted to False to require a new contraction if the cache workspace is released.
+            self.contracted = False
+        setattr(self, f"workspace_{kind}_ptr", None)
+        setattr(self, f"workspace_h_{kind}_ptr", None)
+        self.logger.debug(f"[_release_workspace_memory_perhaps] The {kind} workspace memory has been released.")
+
+    def _release_scratch_memory_perhaps(self, exception=None):
+        """
+        Free scratch workspace memory if it was allocated in this call (self.workspace_scratch_allocated_here == True) when an exception occurs.
+        """
+        release_workspace = self.workspace_scratch_allocated_here
+        self.logger.debug(f"[_release_scratch_memory_perhaps] The release_workspace flag is set to {release_workspace} based upon the value of 'workspace_scratch_allocated_here'.")
+        self._release_workspace_memory_perhaps("scratch", release_workspace)
+        return True
+
+    def _release_cache_memory_perhaps(self, exception=None):
+        """
+        Free cache workspace memory if it was allocated in this call (self.workspace_cache_allocated_here == True) when an exception occurs.
+        """
+        release_workspace = self.workspace_cache_allocated_here
+        self.logger.debug(f"[_release_cache_memory_perhaps] The release_workspace flag is set to {release_workspace} based upon the value of 'workspace_cache_allocated_here'.")
+        self._release_workspace_memory_perhaps("cache", release_workspace)
+        return True
+
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Workspace size calculation")
     def _calculate_workspace_size(self):
@@ -506,25 +569,31 @@ The data type '{self.data_type}' is currently not supported.
             self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
         max_scratch_size = cutn.workspace_get_memory_size(
             self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        rec_scratch_size = cutn.workspace_get_memory_size(
+            self.handle, self.workspace_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
         min_cache_size = cutn.workspace_get_memory_size(
             self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.CACHE)
         max_cache_size = cutn.workspace_get_memory_size(
             self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE, cutn.WorkspaceKind.CACHE)
 
-        if self.memory_limit < min_scratch_size + min_cache_size:
+        if (self.memory_limit < min_scratch_size + self.require_grad * min_cache_size):
             message = f"""Insufficient memory.
-The memory limit specified is {self.memory_limit}, while the minimum workspace size needed is {min_scratch_size + min_cache_size}.
+The memory limit specified is {self.memory_limit}, while the minimum workspace size needed is {min_scratch_size + self.require_grad * min_cache_size}.
 """
-            raise RuntimeError(message)
+            # such failure is due to problem configuration, not due to implementation or runtime factors
+            raise MemoryError(message)
 
-        if self.memory_limit - max_scratch_size >= min_cache_size:
-            self.workspace_scratch_size = max_scratch_size
-        else:
-            self.workspace_scratch_size = min_scratch_size
-        if min_cache_size > 0 and self.require_grad:
-            self.workspace_cache_size = min(max_cache_size, self.memory_limit - self.workspace_scratch_size)
+        if min_cache_size > 0:
+            if self.require_grad:
+                self.workspace_cache_size = min_cache_size
+                self.workspace_scratch_size = min(self.memory_limit - self.workspace_cache_size, max_scratch_size)
+            else:
+                self.workspace_scratch_size = rec_scratch_size if rec_scratch_size < self.memory_limit else min_scratch_size
+                self.workspace_cache_size = min(self.memory_limit - self.workspace_scratch_size, min_cache_size)
         else:
             self.workspace_cache_size = 0
+            self.workspace_scratch_size = min(self.memory_limit, max_scratch_size)
+
         self.logger.info(f"The workspace size requirements range from {formatters.MemoryStr(min_scratch_size + min_cache_size)} to "\
                          f"{formatters.MemoryStr(max_scratch_size + max_cache_size)}.")
         self.logger.info(f"The scratch workspace size has been set to {formatters.MemoryStr(self.workspace_scratch_size)}.")
@@ -630,6 +699,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         enum = ConfEnum.COST_FUNCTION_OBJECTIVE
         self._set_opt_config_option('cost_function', enum, optimize.cost_function)
 
+        enum = ConfEnum.SMART_OPTION
+        self._set_opt_config_option('smart', enum, optimize.smart)
+
     @utils.precondition(_check_valid_network)
     @utils.atomic(_free_path_resources, method=True)
     def contract_path(self, optimize=None, **kwargs):
@@ -656,7 +728,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             - If the path is provided, the user has to set the sliced modes too if slicing is desired.
         """
 
-        binary_contraction_optimization = len(self.operands) == 2 and optimize is None
+        binary_contraction_optimization = len(self.inputs) == 2 and optimize is None
         optimize = utils.check_or_create_options(configuration.OptimizerOptions, optimize, "path optimizer options")
 
         internal_options = dict()
@@ -763,7 +835,10 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_optimized, "Autotuning")
     @utils.precondition(_check_planned, "Autotuning")
-    def autotune(self, *, iterations=3, stream=None):
+    @utils.precondition(_check_valid_operands, "Autotuning")
+    @utils.atomic(_release_cache_memory_perhaps, method=True)
+    @utils.atomic(_release_scratch_memory_perhaps, method=True)
+    def autotune(self, *, iterations=3, stream=None, release_workspace=False):
         """Autotune the network to reduce the contraction cost.
 
         This is an optional step that is recommended if the :class:`Network` object is used to perform multiple contractions.
@@ -773,6 +848,12 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             stream: Provide the CUDA stream to use for the autotuning operation. Acceptable inputs include ``cudaStream_t``
                 (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
                 the current stream will be used.
+            release_workspace: A value of `True` specifies that the :class:`Network` object should release workspace memory back to
+                the package memory pool on function return, while a value of `False` specifies that the :class:`Network` object
+                should retain the memory. This option may be set to `True` if the application performs other operations that consume
+                a lot of memory between successive calls to the (same or different) execution API such as :meth:`autotune`,
+                :meth:`contract`, or :meth:`gradients`, but incurs a small overhead due to obtaining and releasing workspace
+                memory from and to the package memory pool on every call. The default is `False`.
         """
 
         message = utils.check_autotune_params(iterations)
@@ -810,14 +891,23 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         if elapsed.data is not None:
             self.logger.info(f"The autotuning took {elapsed.data:.3f} ms to complete.")
 
+        # Establish ordering wrt the computation and free scratch and cache workspace based on user request.
+        self._release_workspace_memory_perhaps("scratch", release_workspace=release_workspace)
+        self._release_workspace_memory_perhaps("cache", release_workspace=release_workspace)
+
+        self._reset_workspace_allocation_tracking()
         self.autotuned = True
 
     @utils.precondition(_check_valid_network)
     def reset_operands(self, *operands, stream=None):
         """Reset the operands held by this :class:`Network` instance.
 
-        This method is not needed when the operands
-        reside on the GPU and in-place operations are used to update the operand values.
+        This method has two use cases: (1) it can be used to provide new operands for execution when the
+           original operands are on the CPU, or (2) it can be used to release the internal reference to the previous operands and make their memory available for
+           other use by passing ``None`` for the ``operands`` argument. In this case, this method must be called again to provide the desired operands before another
+           call to execution APIs like :meth:`autotune`, :meth:`contract`, or :meth:`gradients`.
+
+        This method is not needed when the operands reside on the GPU and in-place operations are used to update the operand values.
 
         This method will perform various checks on the new operands to make sure:
 
@@ -832,8 +922,15 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 the current stream will be used.
         """
 
-        if len(operands) != len(self.operands):
-            message = f"Mismatch in the number of operands ({len(operands)} provided, need {len(self.operands)})."
+        # Note the we don't need to invalidate cache workspace when setting operands to None, since this will be done when the operands are reset to new ones.
+        if len(operands) == 1 and operands[0] is None:
+            self.operands_data = None
+            self.operands = None
+            self.logger.info(f"The operands have been reset to None.")
+            return
+
+        if len(operands) != len(self.inputs):
+            message = f"Mismatch in the number of operands ({len(operands)} provided, need {len(self.inputs)})."
             raise ValueError(message)
 
         # Future operations on the workspace stream should be ordered after the computation.
@@ -845,22 +942,29 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         # First wrap operands.
         operands = tensor_wrapper.wrap_operands(operands)
 
-        utils.check_operands_match(self.operands, operands, 'dtype', "data type")
-        utils.check_operands_match(self.operands, operands, 'shape', 'shape')
+        utils.check_attributes_match([self.data_type] * len(self.inputs), [o.dtype for o in operands], "data type")
+        utils.check_attributes_match(self.extents_in, [o.shape for o in operands], 'shape')
 
         stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
 
+        package = utils.get_operands_package(operands)
+        package = 'cupy' if package == 'numpy' else package   # Handle the NumPy <=> CuPy asymmetry.
+        if self.package != package:
+            message = f"Library package mismatch: '{self.package}' => '{package}'"
+            raise TypeError(message)
+
         device_id = utils.get_network_device_id(operands)
         if device_id is None:
-            # In-place copy to existing device pointers because the new operands are on the CPU.
-            tensor_wrapper.copy_(operands, self.operands, stream_holder)
+            if self.operands is None:
+                # Copy operands across memory spaces (CPU to GPU).
+                self.operands = tensor_wrapper.to(operands, self.device_id, stream_holder)
+                # Update the device pointers after copying operands to the GPU.
+                self.operands_data = utils.get_operands_data(self.operands)
+            else:
+                # In-place copy to existing device pointers because the new operands are on the CPU.
+                tensor_wrapper.copy_(operands, self.operands, stream_holder)
         else:
-            utils.check_operands_match(self.operands, operands, 'strides', 'strides')
-            package = utils.get_operands_package(operands)
-            if self.package != package:
-                message = f"Library package mismatch: '{self.package}' => '{package}'"
-                raise TypeError(message)
-
+            utils.check_attributes_match(self.strides_in, [o.strides for o in operands], 'strides')
             if self.device_id != device_id:
                 raise ValueError(f"The new operands must be on the same device ({device_id}) as the original operands "
                                  f"({self.device_id}).")
@@ -879,9 +983,12 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         cutn.workspace_purge_cache(self.handle, self.workspace_desc, cutn.Memspace.HOST)
 
     @utils.precondition(_check_valid_network)
+    @utils.precondition(_check_valid_operands, "Contraction")
     @utils.precondition(_check_optimized, "Contraction")
     @utils.precondition(_check_planned, "Contraction")
-    def contract(self, *, slices=None, stream=None):
+    @utils.atomic(_release_cache_memory_perhaps, method=True)
+    @utils.atomic(_release_scratch_memory_perhaps, method=True)
+    def contract(self, *, slices=None, stream=None, release_workspace=False):
         """Contract the network and return the result.
 
         Args:
@@ -890,11 +997,16 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             stream: Provide the CUDA stream to use for the contraction operation. Acceptable inputs include ``cudaStream_t``
                 (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
                 the current stream will be used.
+            release_workspace: A value of `True` specifies that the :class:`Network` object should release workspace memory back to
+                the package memory pool on function return, while a value of `False` specifies that the :class:`Network` object
+                should retain the memory. This option may be set to `True` if the application performs other operations that consume
+                a lot of memory between successive calls to the (same or different) execution API such as :meth:`autotune`,
+                :meth:`contract`, or :meth:`gradients`, but incurs a small overhead due to obtaining and releasing workspace
+                memory from and to the package memory pool on every call. The default is `False`.
 
         Returns:
             The result is of the same type and on the same device as the operands.
         """
-
         # Allocate device memory (in stream context) if needed.
         stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
         self._allocate_workspace_memory_perhaps(stream_holder, "scratch")
@@ -937,6 +1049,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         if elapsed.data is not None:
             self.logger.info(f"The contraction took {elapsed.data:.3f} ms to complete.")
 
+        # Establish ordering wrt the computation and free scratch workspace based on user request.
+        self._release_workspace_memory_perhaps("scratch", release_workspace=release_workspace)
+
         # Destroy slice group, if created.
         if slice_group != 0:
            cutn.destroy_slice_group(slice_group)
@@ -946,7 +1061,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             out = self.contraction.to('cpu', stream_holder=stream_holder)
         else:
             out = self.contraction.tensor
+
         self.contraction = None    # We cannot overwrite what we've already handed to users.
+        self._reset_workspace_allocation_tracking()
         self.contracted = True
 
         return out
@@ -956,7 +1073,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     @utils.precondition(_check_planned, "Gradient")
     @utils.precondition(_check_contracted, "Gradient")
     @utils.precondition(_check_qualifiers, "Gradient")
-    def gradients(self, output_gradient, *, stream=None):
+    @utils.precondition(_check_valid_operands, "Gradient")
+    @utils.atomic(_release_scratch_memory_perhaps, method=True)
+    def gradients(self, output_gradient, *, stream=None, release_workspace=False):
         """Compute the gradients of the network (w.r.t. the input operands whose gradients are required).
 
         Before calling this method, a full contraction must have been performed (by calling :meth:`contract`), otherwise an
@@ -969,6 +1088,12 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             stream: Provide the CUDA stream to use for the gradient computation. Acceptable inputs include ``cudaStream_t``
                 (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
                 the current stream will be used.
+            release_workspace: A value of `True` specifies that the :class:`Network` object should release workspace memory back to
+                the package memory pool on function return, while a value of `False` specifies that the :class:`Network` object
+                should retain the memory. This option may be set to `True` if the application performs other operations that consume
+                a lot of memory between successive calls to the (same or different) execution API such as :meth:`autotune`,
+                :meth:`contract`, or :meth:`gradients`, but incurs a small overhead due to obtaining and releasing workspace
+                memory from and to the package memory pool on every call. The default is `False`.
 
         Returns:
             A sequence of gradient tensors. The result is of the same length and type and on the same device as the input operands.
@@ -981,11 +1106,14 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         warnings.warn("Network.gradients() is an experimental API and subject to future changes",
                       stacklevel=2)
 
+        # Allocate scratch memory (in stream context) if needed.
+        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
+        self._allocate_workspace_memory_perhaps(stream_holder, "scratch")
+
         # At this point, both scratch and cache workspaces are allocated/populated.
         assert self.workspace_scratch_ptr is not None and self.workspace_cache_ptr is not None, "Internal error."
         assert self.workspace_h_scratch_ptr is not None and self.workspace_h_cache_ptr is not None, "Internal error."
 
-        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.package)
         # Future operations on the workspace stream should be ordered after the computation.
         if self.last_compute_event is not None:
             self.workspace_stream.wait_event(self.last_compute_event)
@@ -1032,11 +1160,16 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         if elapsed.data is not None:
             self.logger.info(f"The backprop took {elapsed.data:.3f} ms to complete.")
 
+        # Establish ordering wrt the computation and free scratch and cache workspace based on user request.
+        self._release_workspace_memory_perhaps("scratch", release_workspace=release_workspace)
+        self._release_workspace_memory_perhaps("cache", release_workspace=release_workspace)
+
         if self.network_location == 'cpu':
             op = lambda t: t.to('cpu', stream_holder=stream_holder) if t is not None else None
         else:
             op = lambda t: t.tensor if t is not None else None
 
+        self._reset_workspace_allocation_tracking()
         return tuple(map(op, input_grads))
 
     def free(self):
@@ -1051,6 +1184,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         try:
             # Future operations on the workspace stream should be ordered after the computation.
+            # The last_compute_event is created by the CUDA execution context (utils.cuda_call_ctx) in an execution method
+            # like autotune, contract, or gradients and is used to ensure that workspace memory (scratch or cache) is made
+            #  available for another operation only after the operation that uses it is complete.
             if self.last_compute_event is not None:
                 self.workspace_stream.wait_event(self.last_compute_event)
 
@@ -1305,7 +1441,11 @@ def contract_path(*operands, qualifiers=None, options=None, optimize=None):
             # ... the same handle can be reused for further calls ...
             # when it's done, remember to destroy the handle
             cutn.destroy(handle)
-
+    
+    .. note::
+        Users may use this API to compute path without device memory allocation. 
+        One way to achieve this is via dummy :class:`cupy.ndarray` operands, e.g, 
+        `path finding without dummy arrays <https://github.com/NVIDIA/cuQuantum/blob/main/python/samples/cutensornet/coarse/example24.py>`_. 
     """
 
     # Create network.

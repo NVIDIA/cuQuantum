@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -11,7 +11,7 @@ __all__ = ['NAME_TO_DATA_TYPE', 'NAME_TO_COMPUTE_TYPE']
 import re
 
 # hack to break circular import
-from cuquantum.utils import ComputeType, cudaDataType
+from cuquantum._utils import ComputeType, cudaDataType
 
 
 def create_cuda_data_type_map(cuda_data_type_enum_class):
@@ -22,6 +22,8 @@ def create_cuda_data_type_map(cuda_data_type_enum_class):
 
     type_code_map = { 'i' : 'int', 'u' : 'uint', 'f' : 'float', 'bf' : 'bfloat' }
 
+    complex_types = { 'float' : 'complex', 'bfloat' : 'bcomplex' }
+
     cuda_data_type_map = dict()
     for d in cuda_data_type_enum_class:
         m = cuda_data_type_pattern.match(d.name)
@@ -29,13 +31,14 @@ def create_cuda_data_type_map(cuda_data_type_enum_class):
         is_complex = m.group('cr').lower() == 'c'
         type_code = type_code_map[m.group('type').lower()]
 
-        if is_complex and type_code != 'float':
+        # We'll generalize this if and when we support Gaussian integers.
+        if is_complex and type_code not in complex_types:
             continue
 
         width = int(m.group('width'))
         if is_complex:
             width *= 2
-            type_code = 'complex'
+            type_code = complex_types[type_code]
 
         name = type_code + str(width)
         cuda_data_type_map[name] = d
@@ -68,6 +71,8 @@ def create_cuda_compute_type_map(cuda_compute_type_enum_class):
         cuda_compute_type_map[name] = c
 
     # Treat complex types as special case.
+    cuda_compute_type_map['bcomplex32'] = cuda_compute_type_enum_class.COMPUTE_16BF
+    cuda_compute_type_map['complex32'] = cuda_compute_type_enum_class.COMPUTE_16F
     cuda_compute_type_map['complex64'] = cuda_compute_type_enum_class.COMPUTE_32F
     cuda_compute_type_map['complex128'] = cuda_compute_type_enum_class.COMPUTE_64F
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -19,9 +19,8 @@ import cuquantum
 from cuquantum import cutensornet as cutn
 from ._internal import enum_utils
 from ._internal import formatters
-from ._internal.mem_limit import MEM_LIMIT_RE_PCT, MEM_LIMIT_RE_VAL, MEM_LIMIT_DOC
+from ._internal.mem_limit import check_memory_str
 from .memory import BaseCUDAMemoryManager
-
 
 @dataclass
 class NetworkOptions(object):
@@ -33,7 +32,7 @@ class NetworkOptions(object):
         handle: cuTensorNet library handle. A handle will be created if one is not provided.
         logger (logging.Logger): Python Logger object. The root logger will be used if a logger object is not provided.
         memory_limit: Maximum memory available to cuTensorNet. It can be specified as a value (with optional suffix like
-            K[iB], M[iB], G[iB]) or as a percentage. The default is 80%.
+            K[iB], M[iB], G[iB]) or as a percentage. The default is 80% of the device memory.
         blocking: A flag specifying the behavior of the execution functions and methods,
             such as :meth:`Network.autotune` and :meth:`Network.contract`.
             When ``blocking`` is ``True``, these methods do not return until the operation is complete. When blocking is ``"auto"``,
@@ -60,15 +59,7 @@ class NetworkOptions(object):
         if self.device_id is None:
             self.device_id = 0
 
-        if not isinstance(self.memory_limit, (int, float)):
-            m1 = MEM_LIMIT_RE_PCT.match(self.memory_limit)
-            if m1:
-                factor = float(m1.group('value'))
-                if factor <= 0 or factor > 100:
-                    raise ValueError("The memory limit percentage must be in the range (0, 100].")
-            m2 = MEM_LIMIT_RE_VAL.match(self.memory_limit)
-            if not (m1 or m2):
-                raise ValueError(MEM_LIMIT_DOC % self.memory_limit)
+        check_memory_str(self.memory_limit, "memory limit")
 
         if self.blocking != True and self.blocking != "auto":
             raise ValueError("The value specified for blocking must be either True or 'auto'.")
@@ -115,6 +106,8 @@ class OptimizerOptions(object):
         seed: Optional seed for the random number generator. See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED`.
         cost_function: The objective function to use for finding the optimal contraction path.
             See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE`.
+        smart: Whether the optimizer can execute the pre-defined, intelligent heuristics to accelerate path optimization.
+            See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION`.
     """
     samples : Optional[int] = None
     threads : Optional[int] = None
@@ -123,6 +116,7 @@ class OptimizerOptions(object):
     reconfiguration : Optional[ReconfigOptions] = None
     seed : Optional[int] = None
     cost_function: Optional[int] = None
+    smart: Optional[bool] = None
 
     def _check_option(self, option, option_class, checker=None):
         if isinstance(option, option_class):
@@ -174,6 +168,8 @@ class OptimizerOptions(object):
         self._check_int(self.seed, "seed")
         if self.cost_function is not None:
             self.cost_function = cuquantum.cutensornet.OptimizerCost(self.cost_function)
+        if self.smart is not None:
+            self.smart = cuquantum.cutensornet.SmartOption(self.smart)
 
 
 @dataclass

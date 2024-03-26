@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -24,7 +24,11 @@ except ImportError:
 
 try:
     import qiskit
-    circuit_versions['qiskit'] = Version(qiskit.__qiskit_version__['qiskit'])  # meta package version
+    if hasattr(qiskit, '__qiskit_version__'):
+        circuit_versions['qiskit'] = Version(qiskit.__qiskit_version__['qiskit']) # meta package version
+    else:
+        # qiskit 1.0
+        circuit_versions['qiskit'] = Version(qiskit.__version__)
 except ImportError:
     circuit_versions['qiskit'] = Version('0.0.0')  # no qiskit
 

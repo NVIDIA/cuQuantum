@@ -18,7 +18,7 @@ except ImportError:
     qiskit = circuit_parser_utils_qiskit = None
 
 from .tensor_wrapper import _get_backend_asarray_func
-from ...utils import WHITESPACE_UNICODE
+from ..._utils import WHITESPACE_UNICODE
 
 
 EINSUM_SYMBOLS_BASE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"

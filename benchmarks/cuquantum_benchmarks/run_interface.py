@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -206,7 +206,10 @@ class BenchCircuitRunner:
     def extract_frontend_version(self):
         if self.frontend == 'qiskit':
             import qiskit
-            version = qiskit.__qiskit_version__['qiskit-terra']
+            if hasattr(qiskit, "__version__") and qiskit.__version__ >= "1.0.0":
+                version = qiskit.__version__
+            else:
+                version = qiskit.__qiskit_version__['qiskit-terra']
         elif self.frontend == 'cirq':
             import cirq
             version = cirq.__version__

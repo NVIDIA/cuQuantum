@@ -1,8 +1,13 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+from libcpp.utility cimport move
+from cython.operator cimport dereference as deref
+
 from enum import IntEnum
+
+from numpy import ndarray as _np_ndarray
 
 
 cdef bint is_nested_sequence(data):
@@ -53,7 +58,7 @@ cdef int cuqnt_free_wrapper(void* ctx, void* ptr, size_t size, Stream stream) wi
 
 
 cdef void logger_callback_with_data(
-        int log_level, const char* func_name, const char* message,
+        int32_t log_level, const char* func_name, const char* message,
         void* func_arg) with gil:
     func, args, kwargs = <object>func_arg
     cdef bytes function_name = func_name
@@ -62,10 +67,12 @@ cdef void logger_callback_with_data(
          *args, **kwargs)
 
 
-cdef void* get_buffer_pointer(buf, Py_ssize_t size) except*:
+cdef void* get_buffer_pointer(buf, Py_ssize_t size, readonly=True) except*:
     """The caller must ensure ``buf`` is alive when the returned pointer is in use.""" 
     cdef void* bufPtr
-    cdef int flags = cpython.PyBUF_ANY_CONTIGUOUS | cpython.PyBUF_WRITABLE
+    cdef int flags = cpython.PyBUF_ANY_CONTIGUOUS
+    if not readonly:
+        flags |= cpython.PyBUF_WRITABLE
     cdef int status = -1
     cdef cpython.Py_buffer view
 
@@ -77,10 +84,11 @@ cdef void* get_buffer_pointer(buf, Py_ssize_t size) except*:
             assert view.len == size
             assert view.ndim == 1
         except Exception as e:
+            adj = "writable " if not readonly else ""
             raise ValueError(
-                "buf must be either a Python int representing the pointer "
-                "address to a valid buffer, or a 1D contiguous writable "
-                "buffer, of size bytes") from e
+                 "buf must be either a Python int representing the pointer "
+                f"address to a valid buffer, or a 1D contiguous {adj}"
+                 "buffer, of size bytes") from e
         else:
             bufPtr = view.buf
         finally:
@@ -138,11 +146,13 @@ class cudaDataType(IntEnum):
     CUDA_R_64U  = 26
     CUDA_C_64U  = 27
 
+
 class libraryPropertyType(IntEnum):
     """An enumeration of library version information."""
     MAJOR_VERSION = 0
     MINOR_VERSION = 1
     PATCH_LEVEL = 2
+
 
 del IntEnum
 
@@ -183,3 +193,77 @@ cdef int[29] _WHITESPACE_UNICODE_INTS = [
 
 
 WHITESPACE_UNICODE = ''.join(chr(s) for s in _WHITESPACE_UNICODE_INTS)
+
+
+# Cython can't infer the overload by return type alone, so we need a dummy
+# input argument to help it
+cdef nullable_unique_ptr[ vector[ResT] ] get_resource_ptr(object obj, ResT* __unused):
+    cdef nullable_unique_ptr[ vector[ResT] ] ptr
+    cdef vector[ResT]* vec
+    if isinstance(obj, _np_ndarray):
+        # TODO: can we do "assert obj.dtype == some_dtype" here? it seems we have no
+        # way to check the dtype...
+        # TODO: how about buffer protocol?
+        assert <size_t>(obj.dtype.itemsize) == sizeof(ResT)
+        ptr.reset(<vector[ResT]*><intptr_t>(obj.ctypes.data), False)
+    elif cpython.PySequence_Check(obj):
+        vec = new vector[ResT](len(obj))
+        for i in range(len(obj)):
+            deref(vec)[i] = obj[i]
+        ptr.reset(vec, True)
+    else:
+        ptr.reset(<vector[ResT]*><intptr_t>obj, False)
+    return move(ptr)
+
+
+cdef nullable_unique_ptr[ vector[PtrT*] ] get_resource_ptrs(object obj, PtrT* __unused):
+    cdef nullable_unique_ptr[ vector[PtrT*] ] ptr
+    cdef vector[PtrT*]* vec
+    if cpython.PySequence_Check(obj):
+        vec = new vector[PtrT*](len(obj))
+        for i in range(len(obj)):
+            deref(vec)[i] = <PtrT*><intptr_t>(obj[i])
+        ptr.reset(vec, True)
+    else:
+        ptr.reset(<vector[PtrT*]*><intptr_t>obj, False)
+    return move(ptr)
+
+
+cdef nested_resource[ResT] get_nested_resource_ptr(object obj, ResT* __unused):
+    cdef nested_resource[ResT] res
+    cdef nullable_unique_ptr[ vector[intptr_t] ] nested_ptr
+    cdef nullable_unique_ptr[ vector[vector[ResT]] ] nested_res_ptr
+    cdef vector[intptr_t]* nested_vec = NULL
+    cdef vector[vector[ResT]]* nested_res_vec = NULL
+    cdef size_t i = 0, length = 0
+    cdef intptr_t addr
+
+    if is_nested_sequence(obj):
+        length = len(obj)
+        nested_res_vec = new vector[vector[ResT]](length)
+        nested_vec = new vector[intptr_t](length)
+        for i, obj_i in enumerate(obj):
+            deref(nested_res_vec)[i] = obj_i
+            deref(nested_vec)[i] = <intptr_t>(deref(nested_res_vec)[i].data())
+        nested_res_ptr.reset(nested_res_vec, True)
+        nested_ptr.reset(nested_vec, True)
+    elif cpython.PySequence_Check(obj):
+        length = len(obj)
+        nested_vec = new vector[intptr_t](length)
+        for i, addr in enumerate(obj):
+            deref(nested_vec)[i] = addr
+        nested_res_ptr.reset(NULL, False)
+        nested_ptr.reset(nested_vec, True)
+    else:
+        # obj is an int (ResT**)
+        nested_res_ptr.reset(NULL, False)
+        nested_ptr.reset(<vector[intptr_t]*><intptr_t>obj, False)
+
+    res.ptrs = move(nested_ptr)
+    res.nested_resource_ptr = move(nested_res_ptr)
+    return move(res)
+
+
+class FunctionNotFoundError(RuntimeError): pass
+
+class NotSupportedError(RuntimeError): pass

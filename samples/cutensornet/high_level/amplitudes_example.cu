@@ -1,4 +1,4 @@
-/* Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+/* Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -30,7 +30,7 @@
 };
 
 
-int main(int argc, char **argv)
+int main()
 {
   static_assert(sizeof(size_t) == sizeof(int64_t), "Please build this sample on a 64-bit architecture!");
 
@@ -109,10 +109,10 @@ int main(int argc, char **argv)
 
   // Construct the final quantum circuit state (apply quantum gates) for the GHZ circuit
   int64_t id;
-  HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
+  HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
                     d_gateH, nullptr, 1, 0, 1, &id));
   for(int32_t i = 1; i < numQubits; ++i) {
-    HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
+    HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
                       d_gateCX, nullptr, 1, 0, 1, &id));
   }
   std::cout << "Applied quantum gates\n";
@@ -130,7 +130,7 @@ int main(int argc, char **argv)
   // Configure the computation of the slice of the specified quantum circuit amplitudes tensor
   const int32_t numHyperSamples = 8; // desired number of hyper samples used in the tensor network contraction path finder
   HANDLE_CUTN_ERROR(cutensornetAccessorConfigure(cutnHandle, accessor,
-                    CUTENSORNET_ACCESSOR_OPT_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
+                    CUTENSORNET_ACCESSOR_CONFIG_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
 
   // Sphinx: Amplitudes #11
 
@@ -140,6 +140,10 @@ int main(int argc, char **argv)
   std::cout << "Created the workspace descriptor\n";
   HANDLE_CUTN_ERROR(cutensornetAccessorPrepare(cutnHandle, accessor, scratchSize, workDesc, 0x0));
   std::cout << "Prepared the computation of the specified slice of the quantum circuit amplitudes tensor\n";
+  double flops {0.0};
+  HANDLE_CUTN_ERROR(cutensornetAccessorGetInfo(cutnHandle, accessor,
+                    CUTENSORNET_ACCESSOR_INFO_FLOPS, &flops, sizeof(flops)));
+  std::cout << "Total flop count = " << (flops/1e9) << " GFlop\n";
 
   // Sphinx: Amplitudes #12
 
@@ -164,9 +168,9 @@ int main(int argc, char **argv)
   // Sphinx: Amplitudes #13
 
   // Compute the specified slice of the quantum circuit amplitudes tensor
-  std::complex<double> stateNorm{0.0,0.0};
+  std::complex<double> stateNorm2{0.0,0.0};
   HANDLE_CUTN_ERROR(cutensornetAccessorCompute(cutnHandle, accessor, fixedValues.data(),
-                    workDesc, d_amp, static_cast<void*>(&stateNorm), 0x0));
+                    workDesc, d_amp, static_cast<void*>(&stateNorm2), 0x0));
   std::cout << "Computed the specified slice of the quantum circuit amplitudes tensor\n";
   std::vector<std::complex<double>> h_amp(ampSize);
   HANDLE_CUDA_ERROR(cudaMemcpy(h_amp.data(), d_amp, ampSize * (2 * fp64size), cudaMemcpyDeviceToHost));
@@ -174,7 +178,7 @@ int main(int argc, char **argv)
   for(std::size_t i = 0; i < ampSize; ++i) {
     std::cout << " " << h_amp[i] << std::endl;
   }
-  std::cout << "State 2-norm = (" << stateNorm.real() << ", " << stateNorm.imag() << ")\n";
+  std::cout << "Squared 2-norm of the state = (" << stateNorm2.real() << ", " << stateNorm2.imag() << ")\n";
 
   // Sphinx: Amplitudes #14
 

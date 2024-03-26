@@ -15,7 +15,7 @@ import numpy as np
 
 from . import formatters
 from .tensor_wrapper import wrap_operands
-from ...utils import WHITESPACE_UNICODE
+from ..._utils import WHITESPACE_UNICODE
 
 
 DISALLOWED_LABELS = set(['.', '-', '>'])

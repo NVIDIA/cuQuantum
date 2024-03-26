@@ -1,4 +1,4 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -244,7 +244,11 @@ def matrix_svd(
     cutoff = max(abs_cutoff, rel_cutoff*s[0])
     if max_extent == 0 or max_extent is None:
         max_extent = len(s)
-    reduced_extent = min(max_extent, int((s>cutoff).sum()))
+    if cutoff != 0:
+        reduced_extent = min(max_extent, int((s>cutoff).sum()))
+    else:
+        reduced_extent = max_extent
+    
     if discarded_weight_cutoff != 0:
         s_square_sum = backend.cumsum(s**2, 0)
         if backend not in (cp, np): # torch

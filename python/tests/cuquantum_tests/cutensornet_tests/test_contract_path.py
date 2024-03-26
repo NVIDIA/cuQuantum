@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -45,20 +45,27 @@ class TestContractPath:
                 pytest.skip("NumPy path is either not found or invalid")
 
         data = factory.convert_by_format(operands)
-        if func is cuquantum.contract_path:
-            if path is not None:
-                optimizer_opts = set_path_to_optimizer_options(
-                    optimizer_opts, path)
-            path, info = func(
-                *data, options=network_opts, optimize=optimizer_opts)
-            assert isinstance(path, list)
-            assert isinstance(info, cuquantum.OptimizerInfo)
-        else:  # cuquantum.einsum_path()
-            optimize = kwargs.pop('optimize')
-            assert optimize == True
-            path, info = func(*data, optimize=optimize)
-            assert path[0] == "einsum_path"
-            path = path[1:]
+        try:
+            if func is cuquantum.contract_path:
+                if path is not None:
+                    optimizer_opts = set_path_to_optimizer_options(
+                        optimizer_opts, path)
+                path, info = func(
+                    *data, options=network_opts, optimize=optimizer_opts)
+                assert isinstance(path, list)
+                assert isinstance(info, cuquantum.OptimizerInfo)
+            else:  # cuquantum.einsum_path()
+                optimize = kwargs.pop('optimize')
+                assert optimize == True
+                path, info = func(*data, optimize=optimize)
+                assert path[0] == "einsum_path"
+                path = path[1:]
+        except MemoryError as e:
+            if "Insufficient memory" in str(e):
+                # not enough memory available to process, just skip
+                pytest.skip("Insufficient workspace memory available.")
+            else:
+                raise
 
         # sanity checks; the correctness checks are done in the contract() tests
         assert len(path) == len(operands)-1

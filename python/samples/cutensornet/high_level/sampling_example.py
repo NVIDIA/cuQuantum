@@ -1,4 +1,4 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -40,7 +40,7 @@ handle = cutn.create()
 stream = cp.cuda.Stream()
 data_type = cuquantum.cudaDataType.CUDA_C_64F
 
-# Define quantum gate tensors in host memory
+# Define quantum gate tensors in device memory
 gate_h = 2**-0.5 * cp.asarray([[1,1], [1,-1]], dtype='complex128', order='F')
 gate_h_strides = 0
 
@@ -64,13 +64,13 @@ quantum_state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits, qub
 print("Created the initial quantum state")
 
 # Construct the quantum circuit state with gate application
-tensor_id = cutn.state_apply_tensor(
+tensor_id = cutn.state_apply_tensor_operator(
         handle, quantum_state, 1, (0, ), 
         gate_h.data.ptr, gate_h_strides, 1, 0, 1)
 
 for i in range(1, num_qubits):
-    tensor_id = cutn.state_apply_tensor(
-        handle, quantum_state, 2, (i-1, i),  # target on i-1 while control on i
+    tensor_id = cutn.state_apply_tensor_operator(
+        handle, quantum_state, 2, (i-1, i),  # control on i-1 while target on i
         gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)
 
 print("Quantum gates applied")
@@ -78,17 +78,22 @@ print("Quantum gates applied")
 # Create the quantum circuit sampler
 sampler = cutn.create_sampler(handle, quantum_state, num_qubits, 0)
 
-# Configure the quantum circuit sampler
-num_hyper_samples_dtype = cutn.sampler_get_attribute_dtype(cutn.SamplerAttribute.OPT_NUM_HYPER_SAMPLES)
+# Configure the quantum circuit sampler with hyper samples for the contraction optimizer
+num_hyper_samples_dtype = cutn.sampler_get_attribute_dtype(cutn.SamplerAttribute.CONFIG_NUM_HYPER_SAMPLES)
 num_hyper_samples = np.asarray(8, dtype=num_hyper_samples_dtype)
 cutn.sampler_configure(handle, sampler, 
-    cutn.SamplerAttribute.OPT_NUM_HYPER_SAMPLES, 
+    cutn.SamplerAttribute.CONFIG_NUM_HYPER_SAMPLES, 
     num_hyper_samples.ctypes.data, num_hyper_samples.dtype.itemsize)
 
 # Prepare the quantum circuit sampler
 work_desc = cutn.create_workspace_descriptor(handle)
 cutn.sampler_prepare(handle, sampler, scratch_size, work_desc, stream.ptr)
 print("Prepared the specified quantum circuit state sampler")
+
+flops_dtype = cutn.sampler_get_attribute_dtype(cutn.SamplerAttribute.INFO_FLOPS)
+flops = np.zeros(1, dtype=flops_dtype)
+cutn.sampler_get_info(handle, sampler, cutn.SamplerAttribute.INFO_FLOPS, flops.ctypes.data, flops.dtype.itemsize)
+print(f"Total flop count for sampling = {flops.item()/1e9} GFlop")
 
 workspace_size_d = cutn.workspace_get_memory_size(handle, 
     work_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
@@ -111,7 +116,10 @@ cutn.sampler_sample(handle, sampler, num_samples, work_desc, samples.ctypes.data
 stream.synchronize()
 print("Performed quantum circuit state sampling")
 print("Bit-string samples:")
-print(samples.T)
+hist = np.unique(samples.T, axis=0, return_counts=True)
+for bitstring, count in zip(*hist):
+    bitstring = np.array2string(bitstring, separator='')[1:-1]
+    print(f"{bitstring}: {count}")
 
 cutn.destroy_workspace_descriptor(work_desc)
 cutn.destroy_sampler(sampler)

@@ -1,4 +1,4 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -86,28 +86,13 @@ quantum_state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits, qub
 print("Created the initial quantum state")
 
 # Construct the quantum circuit state with gate application
-tensor_id = cutn.state_apply_tensor(
+tensor_id = cutn.state_apply_tensor_operator(
         handle, quantum_state, 1, (0, ), 
         gate_h.data.ptr, gate_h_strides, 1, 0, 1)
 
 for i in range(1, num_qubits):
-    tensor_id = cutn.state_apply_tensor(
-        handle, quantum_state, 2, (i-1, i),  # target on i-1 while control on i
-        gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)
-print("Quantum gates applied")
-
-# Create the vacuum quantum state
-quantum_state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits, qubits_dims, data_type)
-print("Created the initial quantum state")
-
-# Construct the quantum circuit state with gate application
-tensor_id = cutn.state_apply_tensor(
-        handle, quantum_state, 1, (0, ), 
-        gate_h.data.ptr, gate_h_strides, 1, 0, 1)
-
-for i in range(1, num_qubits):
-    tensor_id = cutn.state_apply_tensor(
-        handle, quantum_state, 2, (i-1, i),  # target on i-1 while control on i
+    tensor_id = cutn.state_apply_tensor_operator(
+        handle, quantum_state, 2, (i-1, i),  # control on i-1 while target on i
         gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)
 print("Quantum gates applied")
 
@@ -126,6 +111,11 @@ work_desc = cutn.create_workspace_descriptor(handle)
 cutn.state_prepare(handle, quantum_state, scratch_size, work_desc, stream.ptr)
 print("Prepared the specified quantum circuit for MPS computation")
 
+flops_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.INFO_FLOPS)
+flops = np.zeros(1, dtype=flops_dtype)
+cutn.state_get_info(handle, quantum_state, cutn.StateAttribute.INFO_FLOPS, flops.ctypes.data, flops.dtype.itemsize)
+print(f"Total flop count for state computation = {flops.item()/1e9} GFlop")
+
 workspace_size_d = cutn.workspace_get_memory_size(handle, 
     work_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
 if workspace_size_d <= scratch_size:
@@ -133,7 +123,6 @@ if workspace_size_d <= scratch_size:
 else:
     print("Error:Insufficient workspace size on Device")
     cutn.destroy_workspace_descriptor(work_desc)
-    cutn.destroy_marginal(marginal)
     cutn.destroy_state(quantum_state)
     cutn.destroy(handle)
     del scratch
@@ -184,15 +173,21 @@ print("Constructed a tensor network operator: (0.5 * Z1 * Z2) + (0.25 * Y3) + (0
 # Specify the quantum circuit expectation value
 expectation = cutn.create_expectation(handle, quantum_state, hamiltonian)
 
-num_hyper_samples_dtype = cutn.expectation_get_attribute_dtype(cutn.ExpectationAttribute.OPT_NUM_HYPER_SAMPLES)
+# Configure the expectation value computation with hyper samples for the contraction optimizer
+num_hyper_samples_dtype = cutn.expectation_get_attribute_dtype(cutn.ExpectationAttribute.CONFIG_NUM_HYPER_SAMPLES)
 num_hyper_samples = np.asarray(8, dtype=num_hyper_samples_dtype)
 cutn.expectation_configure(handle, expectation, 
-    cutn.ExpectationAttribute.OPT_NUM_HYPER_SAMPLES, 
+    cutn.ExpectationAttribute.CONFIG_NUM_HYPER_SAMPLES, 
     num_hyper_samples.ctypes.data, num_hyper_samples.dtype.itemsize)
 
 # Prepare the computation of the specified quantum circuit expectation value
 cutn.expectation_prepare(handle, expectation, scratch_size, work_desc, stream.ptr)
 print("Prepare the computation of the specified quantum circuit expectation value")
+
+flops_dtype = cutn.expectation_get_attribute_dtype(cutn.ExpectationAttribute.INFO_FLOPS)
+flops = np.zeros(1, dtype=flops_dtype)
+cutn.expectation_get_info(handle, expectation, cutn.ExpectationAttribute.INFO_FLOPS, flops.ctypes.data, flops.dtype.itemsize)
+print(f"Total flop count = {flops.item()/1e9} GFlop")
 
 workspace_size_d = cutn.workspace_get_memory_size(handle, 
     work_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)

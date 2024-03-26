@@ -1,5 +1,5 @@
 /*  
- * Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES.
  * 
  * SPDX-License-Identifier: BSD-3-Clause
  */  
@@ -191,7 +191,7 @@ class MPSHelper
       std::vector<int32_t> virtualModes_; ///< A vector of length \p numSites_+1; For site i, virtualModes_[i] and virtualModes_[i+1] represents the left and right virtual mode.
       std::vector<int64_t> extentsPerSite_; ///< A vector of length \p numSites_+1; For site i, extentsPerSite_[i] and extentsPerSite_[i+1] represents the left and right virtual extent. 
 
-      cutensornetHandle_t handle_;
+      cutensornetHandle_t handle_{nullptr};
       std::vector<cutensornetTensorDescriptor_t> descTensors_; /// A vector of length \p numSites_ storing the cutensornetTensorDescriptor_t for each site
       cutensornetWorkspaceDescriptor_t workDesc_{nullptr};
       cutensornetTensorSVDConfig_t svdConfig_{nullptr};

@@ -5,6 +5,7 @@ cffi >=1.0.0
 nbformat
 nbconvert
 cirq >=0.6.0
-qiskit >=0.24.0
+qiskit
 qiskit-aer
 pylatexenc
+jsonschema == 4.17.3
