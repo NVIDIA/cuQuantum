@@ -205,7 +205,7 @@ class MemoryResourceFactory:
 class MemHandlerTestBase:
 
     mod = None
-    prefix = None
+    prefix = None  # TODO: remove me
     error = None
 
     def _test_set_get_device_mem_handler(self, source, handle):
@@ -228,7 +228,7 @@ class MemHandlerTestBase:
         else:
             with pytest.raises(self.error) as e:
                 queried_handler = self.mod.get_device_mem_handler(handle)
-            assert f'{self.prefix.upper()}_STATUS_NO_DEVICE_ALLOCATOR' in str(e.value)
+            assert 'NO_DEVICE_ALLOCATOR' in str(e.value), f"{str(e.value)=}"
 
 
 class LoggerTestBase:

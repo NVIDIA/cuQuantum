@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -79,7 +79,7 @@ class bdist_wheel(_bdist_wheel):
 class build_ext(_build_ext):
 
     def _set_library_roots(self):
-        custatevec_root = cutensornet_root = cutensor_root = None
+        custatevec_root = cutensornet_root = cuquantum_root = None
         # Note that we need sys.path because of build isolation (since PEP 517)
         py_paths = sys.path + [site.getusersitepackages()] + site.getsitepackages()
 
@@ -102,53 +102,43 @@ class build_ext(_build_ext):
                 if cuquantum_root is None:
                     raise RuntimeError('cuStateVec is not found, please set $CUQUANTUM_ROOT '
                                        'or $CUSTATEVEC_ROOT') from e
-                else:
-                    custatevec_root = cuquantum_root
             try:
                 cutensornet_root = os.environ['CUTENSORNET_ROOT']
             except KeyError as e:
                 if cuquantum_root is None:
                     raise RuntimeError('cuTensorNet is not found, please set $CUQUANTUM_ROOT '
                                        'or $CUTENSORNET_ROOT') from e
-                else:
-                    cutensornet_root = cuquantum_root
 
-        return custatevec_root, cutensornet_root
+        return custatevec_root, cutensornet_root, cuquantum_root
 
     def _prep_includes_libs_rpaths(self):
         """
-        Set global vars cusv_incl_dir, cutn_incl_dir, cusv_lib_dir, cutn_lib_dir,
-        cusv_lib, cutn_lib, and extra_linker_flags.
+        Set global vars cusv_incl_dir, cutn_incl_dir, and extra_linker_flags.
+
+        With the new bindings, we no longer need to link to cuQuantum DSOs.
         """
-        custatevec_root, cutensornet_root = self._set_library_roots()
+        custatevec_root, cutensornet_root, cuquantum_root = self._set_library_roots()
 
-        global cusv_incl_dir, cutn_incl_dir
-        cusv_incl_dir = [os.path.join(cuda_path, 'include'),
-                         os.path.join(custatevec_root, 'include')]
-        cutn_incl_dir = [os.path.join(cuda_path, 'include'),
-                         os.path.join(cutensornet_root, 'include')]
+        global cusv_incl_dir, cutn_incl_dir, cuqnt_incl_dir
+        cusv_incl_dir = cutn_incl_dir = cuqnt_incl_dir = None
+        base_incl_dir = (os.path.join(cuda_path, 'include'),)
+        if cuquantum_root is not None:
+            cuqnt_incl_dir = base_incl_dir + (os.path.join(cuquantum_root, 'include'),)
+        if custatevec_root is not None:
+            cusv_incl_dir = base_incl_dir + (os.path.join(custatevec_root, 'include'),)
+        if cutensornet_root is not None:
+            cutn_incl_dir = base_incl_dir + (os.path.join(cutensornet_root, 'include'),)
 
-        global cusv_lib_dir, cutn_lib_dir
-        # we include both lib64 and lib to accommodate all possible sources
-        cusv_lib_dir = [os.path.join(custatevec_root, 'lib'),
-                        os.path.join(custatevec_root, 'lib64')]
-        cutn_lib_dir = [os.path.join(cutensornet_root, 'lib'),
-                        os.path.join(cutensornet_root, 'lib64')]
-
-        global cusv_lib, cutn_lib, extra_linker_flags
+        global extra_linker_flags
         if not building_wheel:
             # Note: with PEP-517 the editable mode would not build a wheel for installation
             # (and we purposely do not support PEP-660).
-            cusv_lib = ['custatevec']
-            cutn_lib = ['cutensornet']
             extra_linker_flags = []
         else:
             # Note: soname = library major version
             # We don't need to link to cuBLAS/cuSOLVER/cuTensor at build time
-            cusv_lib = [':libcustatevec.so.1']
-            cutn_lib = [':libcutensornet.so.2']
             # The rpaths must be adjusted given the following full-wheel installation:
-            # - cuquantum-python: site-packages/cuquantum/{custatevec, cutensornet}/  [=$ORIGIN]
+            # - cuquantum-python: site-packages/cuquantum/{custatevec, cutensornet}/_internal/  [=$ORIGIN]
             # - cusv & cutn:      site-packages/cuquantum/lib/
             # - cutensor:         site-packages/cutensor/lib/
             # - cublas:           site-packages/nvidia/cublas/lib/
@@ -156,29 +146,27 @@ class build_ext(_build_ext):
             # (Note that starting v22.11 we use the new wheel format, so all lib wheels have suffix -cuXX,
             #  and cuBLAS/cuSOLVER additionally have prefix nvidia-.)
             ldflag = "-Wl,--disable-new-dtags,"
-            ldflag += "-rpath,$ORIGIN/../lib,"
-            ldflag += "-rpath,$ORIGIN/../../cutensor/lib,"
-            ldflag += "-rpath,$ORIGIN/../../nvidia/cublas/lib,"
-            ldflag += "-rpath,$ORIGIN/../../nvidia/cusolver/lib"
+            ldflag += "-rpath,$ORIGIN/../../lib,"
+            ldflag += "-rpath,$ORIGIN/../../../cutensor/lib,"
+            ldflag += "-rpath,$ORIGIN/../../../nvidia/cublas/lib,"
+            ldflag += "-rpath,$ORIGIN/../../../nvidia/cusolver/lib"
             extra_linker_flags = [ldflag]
 
         print("\n"+"*"*80)
         print("CUDA version:", cuda_ver)
         print("CUDA path:", cuda_path)
-        print("cuStateVec path:", custatevec_root)
-        print("cuTensorNet path:", cutensornet_root)
+        print("cuStateVec path:", custatevec_root if custatevec_root else cuquantum_root)
+        print("cuTensorNet path:", cutensornet_root if cutensornet_root else cuquantum_root)
         print("*"*80+"\n")
 
     def build_extension(self, ext):
+        ext.include_dirs = ()
+        for include_dir in (cusv_incl_dir, cutn_incl_dir, cuqnt_incl_dir):
+            if include_dir is not None:
+                ext.include_dirs += include_dir
         if ext.name.endswith("custatevec"):
-            ext.include_dirs = cusv_incl_dir
-            ext.library_dirs = cusv_lib_dir
-            ext.libraries = cusv_lib
             ext.extra_link_args = extra_linker_flags
         elif ext.name.endswith("cutensornet"):
-            ext.include_dirs = cutn_incl_dir
-            ext.library_dirs = cutn_lib_dir
-            ext.libraries = cutn_lib
             ext.extra_link_args = extra_linker_flags
 
         super().build_extension(ext)

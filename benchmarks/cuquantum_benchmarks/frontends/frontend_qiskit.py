@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -6,7 +6,10 @@ from math import pi
 
 try:
     import qiskit
-    from qiskit.extensions import UnitaryGate
+    if hasattr(qiskit, "__version__") and qiskit.__version__ >= "1.0.0":
+        from qiskit.circuit.library import UnitaryGate
+    else:
+        from qiskit.extensions import UnitaryGate
 except ImportError:
     qiskit = UnitaryGate = None
 
@@ -35,7 +38,7 @@ class Qiskit(Frontend):
                 circuit.x(g.targets)
 
             elif g.id == 'cnot':
-                circuit.cnot(g.controls, g.targets)
+                circuit.cx(g.controls, g.targets)
 
             elif g.id == 'cz':
                 circuit.cz(g.controls, g.targets)

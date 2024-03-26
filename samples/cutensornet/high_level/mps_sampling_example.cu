@@ -1,4 +1,4 @@
-/* Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+/* Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */  
@@ -28,7 +28,7 @@
 };
 
 
-int main(int argc, char **argv)
+int main()
 {
   static_assert(sizeof(size_t) == sizeof(int64_t), "Please build this sample on a 64-bit architecture!");
 
@@ -66,10 +66,8 @@ int main(int argc, char **argv)
   // Copy quantum gates to Device memory
   void *d_gateH{nullptr}, *d_gateCX{nullptr};
   HANDLE_CUDA_ERROR(cudaMalloc(&d_gateH, 4 * (2 * fp64size)));
-  std::cout << "H gate buffer allocated on GPU: " << d_gateH << std::endl; //debug
   HANDLE_CUDA_ERROR(cudaMalloc(&d_gateCX, 16 * (2 * fp64size)));
-  std::cout << "CX gate buffer allocated on GPU: " << d_gateCX << std::endl; //debug
-  std::cout << "Allocated quantum gate memory on GPU\n";
+  std::cout << "Allocated GPU memory for quantum gates\n";
   HANDLE_CUDA_ERROR(cudaMemcpy(d_gateH, h_gateH.data(), 4 * (2 * fp64size), cudaMemcpyHostToDevice));
   HANDLE_CUDA_ERROR(cudaMemcpy(d_gateCX, h_gateCX.data(), 16 * (2 * fp64size), cudaMemcpyHostToDevice));
   std::cout << "Copied quantum gates to GPU memory\n";
@@ -120,10 +118,10 @@ int main(int argc, char **argv)
 
   // Construct the quantum circuit state (apply quantum gates)
   int64_t id;
-  HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
+  HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
                     d_gateH, nullptr, 1, 0, 1, &id));
   for(int32_t i = 1; i < numQubits; ++i) {
-    HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
+    HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
                       d_gateCX, nullptr, 1, 0, 1, &id));
   }
   std::cout << "Applied quantum gates\n";
@@ -139,7 +137,7 @@ int main(int argc, char **argv)
   // Optional, set up the SVD method for truncation.
   cutensornetTensorSVDAlgo_t algo = CUTENSORNET_TENSOR_SVD_ALGO_GESVDJ; 
   HANDLE_CUTN_ERROR(cutensornetStateConfigure(cutnHandle, quantumState, 
-                    CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO, &algo, sizeof(algo)));
+                    CUTENSORNET_STATE_CONFIG_MPS_SVD_ALGO, &algo, sizeof(algo)));
   std::cout << "Configured the MPS computation\n";
 
   // Sphinx: MPS Sampler #11
@@ -149,6 +147,17 @@ int main(int argc, char **argv)
   HANDLE_CUTN_ERROR(cutensornetCreateWorkspaceDescriptor(cutnHandle, &workDesc));
   std::cout << "Created the workspace descriptor\n";
   HANDLE_CUTN_ERROR(cutensornetStatePrepare(cutnHandle, quantumState, scratchSize, workDesc, 0x0));
+  std::cout << "Prepared the computation of the quantum circuit state\n";
+  double flops {0.0};
+  HANDLE_CUTN_ERROR(cutensornetStateGetInfo(cutnHandle, quantumState,
+                    CUTENSORNET_STATE_INFO_FLOPS, &flops, sizeof(flops)));
+  if(flops > 0.0) {
+    std::cout << "Total flop count = " << (flops/1e9) << " GFlop\n";
+  }else if(flops < 0.0) {
+    std::cout << "ERROR: Negative Flop count!\n";
+    std::abort();
+  }
+
   int64_t worksize {0};
   HANDLE_CUTN_ERROR(cutensornetWorkspaceGetMemorySize(cutnHandle,
                                                       workDesc,
@@ -171,7 +180,8 @@ int main(int argc, char **argv)
   // Execute MPS computation
   HANDLE_CUTN_ERROR(cutensornetStateCompute(cutnHandle, quantumState, 
                     workDesc, extentsPtr.data(), /*strides=*/nullptr, d_mpsTensors.data(), 0));
-  
+  std::cout << "Computed MPS factorization\n";
+
   // Sphinx: MPS Sampler #13
 
   // Create the quantum circuit sampler
@@ -184,13 +194,22 @@ int main(int argc, char **argv)
   // Configure the quantum circuit sampler
   const int32_t numHyperSamples = 8; // desired number of hyper samples used in the tensor network contraction path finder
   HANDLE_CUTN_ERROR(cutensornetSamplerConfigure(cutnHandle, sampler,
-                    CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
+                    CUTENSORNET_SAMPLER_CONFIG_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
+  std::cout << "Configured the quantum circuit sampler\n";
 
   // Sphinx: MPS Sampler #15
 
   // Prepare the quantum circuit sampler
   HANDLE_CUTN_ERROR(cutensornetSamplerPrepare(cutnHandle, sampler, scratchSize, workDesc, 0x0));
   std::cout << "Prepared the quantum circuit state sampler\n";
+  flops = 0.0;
+  HANDLE_CUTN_ERROR(cutensornetSamplerGetInfo(cutnHandle, sampler,
+                    CUTENSORNET_SAMPLER_INFO_FLOPS, &flops, sizeof(flops)));
+  std::cout << "Total flop count per sample = " << (flops/1e9) << " GFlop\n";
+  if(flops <= 0.0) {
+    std::cout << "ERROR: Invalid Flop count!\n";
+    std::abort();
+  }
 
   // Sphinx: MPS Sampler #16
 

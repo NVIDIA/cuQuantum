@@ -1,9 +1,13 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import atexit
+import glob
 import os
+import shutil
 import sys
+import tempfile
 
 from Cython.Build import cythonize
 from setuptools import setup, Extension, find_packages
@@ -31,15 +35,43 @@ with open(os.path.join(source_root, "tests/requirements.txt")) as f:
 install_requires = [
     'numpy~=1.21',  # ">=1.21,<2"
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.5',   # ">=1.5.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.3',  # ">=2.3.0,<3"
+    f'custatevec-cu{utils.cuda_major_ver}~=1.6',   # ">=1.6.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.4',  # ">=2.4.0,<3"
 ]
 if utils.cuda_major_ver == '11':
-    # CuPy has 3+ wheels for CUDA 11.x, only the cuquantum-python meta package has
-    # a chance to resolve the ambiguity properly
-    pass
+    install_requires.append('cupy-cuda11x>=13.0')  # no ambiguity
 elif utils.cuda_major_ver == '12':
-    install_requires.append('cupy-cuda12x>=10.0')  # no ambiguity
+    install_requires.append('cupy-cuda12x>=13.0')  # no ambiguity
+
+
+# WAR: Check if this is still valid
+# TODO: can this support cross-compilation?
+if sys.platform == 'linux':
+    src_files = glob.glob('**/**/_internal/*_linux.pyx')
+elif sys.platform == 'win32':
+    src_files = glob.glob('**/**/_internal/*_windows.pyx')
+else:
+    raise RuntimeError(f'platform is unrecognized: {sys.platform}')
+dst_files = []
+for src in src_files:
+    # Set up a temporary file; it must be under the cache directory so
+    # that atomic moves within the same filesystem can be guaranteed
+    with tempfile.NamedTemporaryFile(delete=False, dir='.') as f:
+        shutil.copy2(src, f.name)
+        f_name = f.name
+    dst = src.replace('_linux', '').replace('_windows', '')
+    # atomic move with the destination guaranteed to be overwritten
+    os.replace(f_name, f"./{dst}")
+    dst_files.append(dst)
+
+
+@atexit.register
+def cleanup_dst_files():
+    for dst in dst_files:
+        try:
+            os.remove(dst)
+        except FileNotFoundError:
+            pass
 
 
 # Note: the extension attributes are overwritten in build_extension()
@@ -47,15 +79,38 @@ ext_modules = [
     Extension(
         "cuquantum.custatevec.custatevec",
         sources=["cuquantum/custatevec/custatevec.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.custatevec.cycustatevec",
+        sources=["cuquantum/custatevec/cycustatevec.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.custatevec._internal.custatevec",
+        sources=["cuquantum/custatevec/_internal/custatevec.pyx"],
+        language="c++",
     ),
     Extension(
         "cuquantum.cutensornet.cutensornet",
         sources=["cuquantum/cutensornet/cutensornet.pyx"],
+        language="c++",
     ),
     Extension(
-        "cuquantum.utils",
-        sources=["cuquantum/utils.pyx"],
+        "cuquantum.cutensornet.cycutensornet",
+        sources=["cuquantum/cutensornet/cycutensornet.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.cutensornet._internal.cutensornet",
+        sources=["cuquantum/cutensornet/_internal/cutensornet.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum._utils",
+        sources=["cuquantum/_utils.pyx"],
         include_dirs=[os.path.join(utils.cuda_path, 'include')],
+        language="c++",
     ),
 ]
 
@@ -99,6 +154,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: Implementation :: CPython",
         "Environment :: GPU :: NVIDIA CUDA",
     ] + cuda_classifier,
@@ -106,7 +162,10 @@ setup(
         verbose=True, language_level=3,
         compiler_directives={'embedsignature': True}),
     packages=find_packages(include=['cuquantum', 'cuquantum.*']),
-    package_data={"": ["*.pxd", "*.pyx", "*.py"],},
+    package_data=dict.fromkeys(
+        find_packages(include=["cuquantum.*"]),
+        ["*.pxd", "*.pyx", "*.py"],
+    ),
     zip_safe=False,
     python_requires='>=3.9',
     install_requires=install_requires,

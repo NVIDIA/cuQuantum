@@ -1,4 +1,4 @@
-# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -26,6 +26,7 @@ all: check-env
 	nvcc batched_gate_application.cu -o batched_gate_application ${CXX_FLAGS}
 	nvcc exponential_pauli.cu        -o exponential_pauli        ${CXX_FLAGS}
 	nvcc expectation.cu              -o expectation              ${CXX_FLAGS}
+	nvcc batched_expectation.cu      -o batched_expectation      ${CXX_FLAGS}
 	nvcc expectation_pauli.cu        -o expectation_pauli        ${CXX_FLAGS}
 	nvcc sampler.cu                  -o sampler                  ${CXX_FLAGS}
 	nvcc measure_zbasis.cu           -o measure_zbasis           ${CXX_FLAGS}
@@ -64,13 +65,14 @@ clean:
 		batched_gate_application \
 		exponential_pauli \
 		expectation \
+		batched_expectation \
 		expectation_pauli \
 		sampler \
 		measure_zbasis \
 		batch_measure \
 		batched_collapse \
-		abs2sum_batched \
-		measure_batched \
+		batched_abs2sum \
+		batched_measure \
 		accessor_get \
 		accessor_set \
 		test_matrix_type \

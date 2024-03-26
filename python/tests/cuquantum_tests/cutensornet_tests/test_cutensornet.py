@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -343,32 +343,23 @@ class TestTensorNetworkBase:
 
 class TestTensorNetworkDescriptor(TestTensorNetworkBase):
 
-    @pytest.mark.parametrize(
-        'API', ('old', 'new')
-    )
     @manage_resource('handle')
     @manage_resource('dscr')
-    def test_descriptor_create_destroy(self, API):
+    def test_descriptor_create_destroy(self):
         # we could just do a simple round-trip test, but let's also get
         # this helper API tested
         handle, dscr = self.handle, self.dscr
 
-        if API == 'old':
-            # TODO: remove this branch
-            num_modes, modes, extents, strides = cutn.get_output_tensor_details(
-                handle, dscr)
-        else:
-            tensor_dscr = cutn.get_output_tensor_descriptor(handle, dscr)
-            num_modes, modes, extents, strides = cutn.get_tensor_details(
-                handle, tensor_dscr)
+        tensor_dscr = cutn.get_output_tensor_descriptor(handle, dscr)
+        num_modes, modes, extents, strides = cutn.get_tensor_details(
+            handle, tensor_dscr)
 
         assert num_modes == self.tn.output_n_modes
         assert (modes == np.asarray(self.tn.output_mode, dtype=np.int32)).all()
         assert (extents == np.asarray(self.tn.output_extent, dtype=np.int64)).all()
         assert (strides == np.asarray(self.tn.output_stride, dtype=np.int64)).all()
 
-        if API == 'new':
-            cutn.destroy_tensor_descriptor(tensor_dscr)
+        cutn.destroy_tensor_descriptor(tensor_dscr)
 
 
 class TestOptimizerInfo(TestTensorNetworkBase):
@@ -569,7 +560,7 @@ class TestAutotunePreference:
     'autotune', (True, False)
 )
 @pytest.mark.parametrize(
-    'contract', ("legacy", "slice_group", "gradient")
+    'contract', ("slice_group", "gradient")
 )
 @pytest.mark.parametrize(
     'stream', (cp.cuda.Stream.null, get_stream_for_backend(cp))
@@ -645,7 +636,7 @@ class TestContraction(TestTensorNetworkBase):
                     cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
                     kind)
                 if contract != "gradient":
-                    cutn.workspace_compute_sizes(handle, dscr, info, workspace)
+                    cutn.workspace_compute_contraction_sizes(handle, dscr, info, workspace)
                     required_size_deprecated = cutn.workspace_get_memory_size(
                         handle, workspace,
                         getattr(cutn.WorksizePref, f"{workspace_pref.upper()}"),
@@ -689,13 +680,7 @@ class TestContraction(TestTensorNetworkBase):
 
             # we don't care about correctness here, so just contract 1 slice
             # TODO(leofang): check correctness?
-            if contract == "legacy":
-                cutn.contraction(
-                    handle, plan,
-                    tn.get_input_tensors(**input_form),
-                    tn.get_output_tensor(),
-                    workspace, 0, stream.ptr)
-            elif contract in ("slice_group", "gradient"):
+            if contract in ("slice_group", "gradient"):
                 accumulate = 0
                 cutn.contract_slices(
                     handle, plan,
@@ -987,12 +972,10 @@ class TestTensorSVD:
         svd_config, svd_info = self.svd_config, self.svd_info
         dtype = cp.dtype(self.dtype)
 
-        # relax gesvdj_tol for single precision operand
+        # switch to default gesvdj_tol for single precision operand
         algorithm = self.options.get('algorithm', None)
         if algorithm == 'gesvdj' and self.dtype in [np.float32, np.complex64]:
-            gesvdj_tol = self.options.get('gesvdj_tol', None)
-            if gesvdj_tol is not None:
-                self.options['gesvdj_tol'] = 1e-7
+            self.options.pop('gesvdj_tol', None)
             
         # parse svdConfig
         svd_method = check_or_create_options(tensor.SVDMethod, self.options, "SVDMethod")
@@ -1115,12 +1098,10 @@ class TestTensorGate:
         gate_algorithm = self.GATE_ALGO_MAP[algo]
         svd_config, svd_info = self.svd_config, self.svd_info
 
-        # relax gesvdj_tol for single precision operand
+        # switch to default gesvdj_tol for single precision operand
         algorithm = self.options.get('algorithm', None)
         if algorithm == 'gesvdj' and self.dtype in [np.float32, np.complex64]:
-            gesvdj_tol = self.options.get('gesvdj_tol', None)
-            if gesvdj_tol is not None:
-                self.options['gesvdj_tol'] = 1e-7
+            self.options.pop('gesvdj_tol', None)
         
         # parse svdConfig
         svd_method = check_or_create_options(tensor.SVDMethod, self.options, "SVDMethod")

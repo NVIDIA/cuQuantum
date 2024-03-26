@@ -1,4 +1,4 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -67,30 +67,35 @@ quantum_state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits, qub
 print("Created the initial quantum state")
 
 # Construct the quantum circuit state with gate application
-tensor_id = cutn.state_apply_tensor(
+tensor_id = cutn.state_apply_tensor_operator(
         handle, quantum_state, 1, (0, ), 
         gate_h.data.ptr, gate_h_strides, 1, 0, 1)
 
 for i in range(1, num_qubits):
-    tensor_id = cutn.state_apply_tensor(
-        handle, quantum_state, 2, (i-1, i),  # target on i-1 while control on i
+    tensor_id = cutn.state_apply_tensor_operator(
+        handle, quantum_state, 2, (i-1, i),  # control on i-1 while target on i
         gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)
 print("Quantum gates applied")
 
 # Specify the desired reduced density matrix (marginal)
 marginal = cutn.create_marginal(handle, quantum_state, num_marginal_modes, marginal_modes, 0, 0, rdm_strides)
 
-# Configure the computation of the desired reduced density matrix (marginal)
-num_hyper_samples_dtype = cutn.marginal_get_attribute_dtype(cutn.MarginalAttribute.OPT_NUM_HYPER_SAMPLES)
+# Configure the computation of the desired reduced density matrix (marginal) with hyper samples for the contraction optimizer
+num_hyper_samples_dtype = cutn.marginal_get_attribute_dtype(cutn.MarginalAttribute.CONFIG_NUM_HYPER_SAMPLES)
 num_hyper_samples = np.asarray(8, dtype=num_hyper_samples_dtype)
 cutn.marginal_configure(handle, marginal, 
-    cutn.MarginalAttribute.OPT_NUM_HYPER_SAMPLES, 
+    cutn.MarginalAttribute.CONFIG_NUM_HYPER_SAMPLES, 
     num_hyper_samples.ctypes.data, num_hyper_samples.dtype.itemsize)
 
 # Prepare the specified quantum circuit reduced densitry matrix (marginal)
 work_desc = cutn.create_workspace_descriptor(handle)
 cutn.marginal_prepare(handle, marginal, scratch_size, work_desc, stream.ptr)
 print("Prepared the specified quantum circuit reduced density matrix (marginal)")
+
+flops_dtype = cutn.marginal_get_attribute_dtype(cutn.MarginalAttribute.INFO_FLOPS)
+flops = np.zeros(1, dtype=flops_dtype)
+cutn.marginal_get_info(handle, marginal, cutn.MarginalAttribute.INFO_FLOPS, flops.ctypes.data, flops.dtype.itemsize)
+print(f"Total flop count = {flops.item()/1e9} GFlop")
 
 workspace_size_d = cutn.workspace_get_memory_size(handle, 
     work_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)

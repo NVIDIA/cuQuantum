@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -403,7 +403,7 @@ class TestBatchedAbs2Sum(TestBatchedSV):
             bit_ordering, 'bit_ordering', *input_form['bit_ordering'])
 
         # mask = 0b1
-        mask_bit_strings = np.ones(self.n_svs)
+        mask_bit_strings = np.ones(self.n_svs, dtype=np.int64)
         mask_bit_strings, _ = self._return_data(
             mask_bit_strings, 'mask_bit_strings',
             *input_form['mask_bit_strings'])
@@ -1040,6 +1040,64 @@ class TestExpect(TestSV):
         result[0] = 1  # for XX...X
         assert np.allclose(expect, result)
 
+class TestBatchedExpect(TestBatchedSV):
+
+    @pytest.mark.parametrize(
+        'mempool', (None, 'py-callable', 'cffi', 'cffi_struct')
+    )
+    @pytest.mark.parametrize(
+        'input_form', (
+            {'basis_bits': (np.int32, 'int_h')},
+            {'basis_bits': (np.int32, 'seq')},
+        )
+    )
+    @pytest.mark.parametrize('xp', (np, cp))
+    def test_compute_expectation_batched(
+            self, handle, xp, input_form, mempool):
+        if (isinstance(mempool, str) and mempool.startswith('cffi')
+                and not _can_use_cffi()):
+            pytest.skip("cannot run cffi tests")
+
+        sv = self.get_sv()
+        data_type = dtype_to_data_type[self.dtype]
+        compute_type = dtype_to_compute_type[self.dtype]
+        basis_bits = list(range(self.n_qubits))
+        basis_bits, n_basis_bits = self._return_data(
+            basis_bits, 'basis_bits', *input_form['basis_bits'])
+
+        # matrices can live on host or device
+        n_matrices = 2
+        matrix_dim = 2**self.n_qubits
+        matrices = xp.ones(
+            (n_matrices, matrix_dim, matrix_dim),
+            dtype=sv.dtype)
+        matrices_ptr = matrices.ctypes.data if xp is np else matrices.data.ptr
+
+        if mempool is None:
+            workspace_size = cusv.compute_expectation_batched_get_workspace_size(
+                handle, data_type, self.n_qubits, self.n_svs, self.sv_stride,
+                matrices_ptr, data_type, cusv.MatrixLayout.ROW, n_matrices,
+                n_basis_bits, compute_type)
+            if workspace_size:
+                workspace = cp.cuda.alloc(workspace_size)
+                workspace_ptr = workspace.ptr
+            else:
+                workspace_ptr = 0
+        else:
+            mr = MemoryResourceFactory(mempool)
+            handler = mr.get_dev_mem_handler()
+            cusv.set_device_mem_handler(handle, handler)
+
+            workspace_ptr = 0
+            workspace_size = 0
+
+        expect = np.empty((n_matrices * self.n_svs,), dtype=np.complex128)
+        cusv.compute_expectation_batched(
+            handle, sv.data.ptr, data_type, self.n_qubits, self.n_svs, self.sv_stride,
+            expect.ctypes.data, matrices_ptr, data_type, cusv.MatrixLayout.ROW, n_matrices,
+            basis_bits, n_basis_bits, compute_type, workspace_ptr, workspace_size)
+
+        assert (np.allclose(expect, 1))
 
 class TestSampler(TestSV):
 
@@ -1376,11 +1434,11 @@ class TestBatchMeasureWithSubSV(TestMultiGpuSV):
         orig_sub_sv = copy.deepcopy(sub_sv)
 
         bitstring = np.empty(self.n_local_bits, dtype=np.int32)
+        norm = cumulative_array[-1]
         for i_sv in range(self.n_devices):
-            if (cumulative_array[i_sv] <= rand
-                    and rand < cumulative_array[i_sv+1]):
+            if (cumulative_array[i_sv] <= rand * norm
+                    and (rand * norm < cumulative_array[i_sv+1] or i_sv == self.n_devices-1)):
                 global_bits = i_sv
-                norm = cumulative_array[-1]
                 offset = cumulative_array[i_sv]
                 with cp.cuda.Device(i_sv) as dev:
                     cusv.batch_measure_with_offset(

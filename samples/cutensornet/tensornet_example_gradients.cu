@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -36,35 +36,35 @@
 
 struct GPUTimer
 {
-   GPUTimer(cudaStream_t stream): stream_(stream)
-   {
-      cudaEventCreate(&start_);
-      cudaEventCreate(&stop_);
-   }
+    GPUTimer(cudaStream_t stream): stream_(stream)
+    {
+        HANDLE_CUDA_ERROR(cudaEventCreate(&start_));
+        HANDLE_CUDA_ERROR(cudaEventCreate(&stop_));
+    }
 
-   ~GPUTimer()
-   {
-      cudaEventDestroy(start_);
-      cudaEventDestroy(stop_);
-   }
+    ~GPUTimer()
+    {
+        HANDLE_CUDA_ERROR(cudaEventDestroy(start_));
+        HANDLE_CUDA_ERROR(cudaEventDestroy(stop_));
+    }
 
-   void start()
-   {
-      cudaEventRecord(start_, stream_);
-   }
+    void start()
+    {
+        HANDLE_CUDA_ERROR(cudaEventRecord(start_, stream_));
+    }
 
-   float seconds()
-   {
-      cudaEventRecord(stop_, stream_);
-      cudaEventSynchronize(stop_);
-      float time;
-      cudaEventElapsedTime(&time, start_, stop_);
-      return time * 1e-3;
-   }
+    float seconds()
+    {
+        HANDLE_CUDA_ERROR(cudaEventRecord(stop_, stream_));
+        HANDLE_CUDA_ERROR(cudaEventSynchronize(stop_));
+        float time;
+        HANDLE_CUDA_ERROR(cudaEventElapsedTime(&time, start_, stop_));
+        return time * 1e-3;
+    }
 
-   private:
-   cudaEvent_t start_, stop_;
-   cudaStream_t stream_;
+    private:
+    cudaEvent_t start_, stop_;
+    cudaStream_t stream_;
 };
 
 
@@ -250,7 +250,7 @@ int main()
     *************************/
 
     cudaStream_t stream;
-    cudaStreamCreate(&stream);
+    HANDLE_CUDA_ERROR( cudaStreamCreate(&stream) );
 
     cutensornetHandle_t handle;
     HANDLE_ERROR( cutensornetCreate(&handle) );

@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -43,7 +43,11 @@ class Qiskit(Backend):
     def find_version(self, identifier):
         if identifier == 'cusvaer':
             return version('cusvaer')
-        return qiskit.__qiskit_version__['qiskit-aer']
+
+        if hasattr(qiskit_aer, "__version__"):
+            return qiskit_aer.__version__
+        else:
+            return qiskit.__qiskit_version__['qiskit-aer']
     
     def preprocess_circuit(self, circuit, *args, **kwargs):
         if _internal_utils is not None:
@@ -77,7 +81,10 @@ class Qiskit(Backend):
         try:
             # we defer importing Aer as late as possible, due to a bug it has that
             # could init all GPUs prematurely
-            from qiskit.providers.aer import AerSimulator
+            if hasattr(qiskit, "__version__") and qiskit.__version__ >= "1.0.0":
+                from qiskit_aer import AerSimulator
+            else:
+                from qiskit.providers.aer import AerSimulator
         except ImportError as e:
             raise RuntimeError("qiskit-aer (or qiskit-aer-gpu) is not installed") from e
 

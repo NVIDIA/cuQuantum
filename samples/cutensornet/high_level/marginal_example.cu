@@ -1,4 +1,4 @@
-/* Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+/* Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -30,7 +30,7 @@
 };
 
 
-int main(int argc, char **argv)
+int main()
 {
   static_assert(sizeof(size_t) == sizeof(int64_t), "Please build this sample on a 64-bit architecture!");
 
@@ -108,10 +108,10 @@ int main(int argc, char **argv)
 
   // Construct the final quantum circuit state (apply quantum gates) for the GHZ circuit
   int64_t id;
-  HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
+  HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
                     d_gateH, nullptr, 1, 0, 1, &id));
   for(int32_t i = 1; i < numQubits; ++i) {
-    HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
+    HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
                       d_gateCX, nullptr, 1, 0, 1, &id));
   }
   std::cout << "Applied quantum gates\n";
@@ -129,7 +129,7 @@ int main(int argc, char **argv)
   // Configure the computation of the specified quantum circuit reduced density matrix (marginal)
   const int32_t numHyperSamples = 8; // desired number of hyper samples used in the tensor network contraction path finder
   HANDLE_CUTN_ERROR(cutensornetMarginalConfigure(cutnHandle, marginal,
-                    CUTENSORNET_MARGINAL_OPT_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
+                    CUTENSORNET_MARGINAL_CONFIG_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
 
   // Sphinx: Marginal #11
 
@@ -139,6 +139,10 @@ int main(int argc, char **argv)
   std::cout << "Created the workspace descriptor\n";
   HANDLE_CUTN_ERROR(cutensornetMarginalPrepare(cutnHandle, marginal, scratchSize, workDesc, 0x0));
   std::cout << "Prepared the computation of the specified quantum circuit reduced density matrix (marginal)\n";
+  double flops {0.0};
+  HANDLE_CUTN_ERROR(cutensornetMarginalGetInfo(cutnHandle, marginal,
+                    CUTENSORNET_MARGINAL_INFO_FLOPS, &flops, sizeof(flops)));
+  std::cout << "Total flop count = " << (flops/1e9) << " GFlop\n";
 
   // Sphinx: Marginal #12
 

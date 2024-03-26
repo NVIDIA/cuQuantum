@@ -1,4 +1,4 @@
-# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -130,6 +130,7 @@ add_custatevec_example(custatevec_examples "cuStateVec.example.diagonal_matrix" 
 add_custatevec_example(custatevec_examples "cuStateVec.example.batched_gate_application"  batched_gate_application.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.exponential_pauli"         exponential_pauli.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.expectation"               expectation.cu)
+add_custatevec_example(custatevec_examples "cuStateVec.example.batched_expectation"       batched_expectation.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.expentation_pauli"         expectation_pauli.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.sampler"                   sampler.cu)
 add_custatevec_example(custatevec_examples "cuStateVec.example.measure_zbasis"            measure_zbasis.cu)

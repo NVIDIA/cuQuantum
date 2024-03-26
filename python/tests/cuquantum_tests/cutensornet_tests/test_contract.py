@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -97,6 +97,12 @@ class _TestContractBase:
                     pytest.skip("this TN is currently not supported")
                 else:
                     raise
+            except MemoryError as e:
+                if "Insufficient memory" in str(e):
+                    # not enough memory available to process, just skip
+                    pytest.skip("Insufficient workspace memory available.")
+                else:
+                    raise
 
             if return_info:
                 out, (path, info) = out
@@ -138,6 +144,12 @@ class _TestContractBase:
                 if (optimize is not True
                         and "CUTENSORNET_STATUS_NOT_SUPPORTED" in str(e)):
                     pytest.skip("cuquantum.einsum() fail -- TN too large?")
+                else:
+                    raise
+            except MemoryError as e:
+                if "Insufficient memory" in str(e):
+                    # not enough memory available to process, just skip
+                    pytest.skip("Insufficient workspace memory available.")
                 else:
                     raise
 

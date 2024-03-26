@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -129,7 +129,7 @@ def get_or_create_stream(device_id, stream, op_package):
         **{'ctx': ctx, 'obj': obj, 'ptr': ptr, 'device_id': device_id, 'package': op_package})
 
 
-def get_memory_limit(memory_limit, device):
+def get_memory_limit(memory_limit, device, limit=0):
     """
     Parse user provided memory limit and return the memory limit in bytes.
     """
@@ -137,8 +137,8 @@ def get_memory_limit(memory_limit, device):
 
     _, total_memory = device.mem_info
     if isinstance(memory_limit, (int, float)):
-        if memory_limit <= 0:
-            raise ValueError("The specified memory limit must be greater than 0.")
+        if memory_limit < limit:
+            raise ValueError(f"The specified memory limit must be greater than {limit}.")
         if memory_limit < 1:
             memory_limit *= total_memory
         return int(memory_limit)
@@ -152,7 +152,7 @@ def get_memory_limit(memory_limit, device):
 
     m = mem_limit.MEM_LIMIT_RE_VAL.match(memory_limit)
     if not m:
-        raise ValueError(mem_limit.MEM_LIMIT_DOC % memory_limit)
+        raise ValueError(mem_limit.MEM_LIMIT_DOC.format(kind="memory limit", value=memory_limit))
 
     base = 1000
     if m.group('binary'):
@@ -229,18 +229,6 @@ def get_operands_dtype(operands):
     return dtype
 
 
-# Unused since cuQuantum 22.11
-def get_maximal_alignment(address):
-    """
-    Calculate the maximal alignment of the provided memory location.
-    """
-    alignment = 1
-    while address % alignment == 0 and alignment < 256:
-        alignment *= 2
-
-    return alignment
-
-
 def get_operands_package(operands):
     """
     Return the package name of the tensors.
@@ -252,35 +240,19 @@ def get_operands_package(operands):
     return package
 
 
-def check_operands_match(orig_operands, new_operands, attribute, description):
+def check_attributes_match(orig_attributes, new_attributes, description):
     """
-    Check if the specified attribute matches between the corresponding new and old operands, and raise an exception if it 
+    Check if the corresponding attributes match between the corresponding new and old operands, and raise an exception if it 
     doesn't.
     """
-    checks = [getattr(o, attribute) == getattr(n, attribute) for o, n in zip(orig_operands, new_operands)]
+    checks = [o == n for o, n in zip(orig_attributes, new_attributes)]
 
     if not all(checks): 
-        mismatch = [f"{location}: {getattr(orig_operands[location], attribute)} => {getattr(new_operands[location], attribute)}"
+        mismatch = [f"{location}: {orig_attributes[location]} => {new_attributes[location]}"
                         for location, predicate in enumerate(checks) if predicate is False]
         mismatch = formatters.array2string(mismatch)
         message = f"""The {description} of each new operand must match the {description} of the corresponding original operand.
 The mismatch in {description} as a sequence of "position: original {description} => new {description}" is: \n{mismatch}"""
-        raise ValueError(message)
-
-
-# Unused since cuQuantum 22.11
-def check_alignments_match(orig_alignments, new_alignments):
-    """
-    Check if alignment matches between the corresponding new and old operands, and raise an exception if it doesn't.
-    """
-    checks = [o == n for o, n in zip(orig_alignments, new_alignments)]
-
-    if not all(checks): 
-        mismatch = [f"{location}: {orig_alignments[location]} => {new_alignments[location]}" 
-                        for location, predicate in enumerate(checks) if predicate is False] 
-        mismatch = formatters.array2string(mismatch)
-        message = f"""The data alignment of each new operand must match the data alignment of the corresponding original operand.
-The mismatch in data alignment as a sequence of "position: original alignment => new alignment" is: \n{mismatch}"""
         raise ValueError(message)
 
 

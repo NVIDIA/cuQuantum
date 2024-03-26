@@ -1,4 +1,4 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -68,13 +68,13 @@ quantum_state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits, qub
 print("Created the initial quantum state")
 
 # Construct the quantum circuit state with gate application
-tensor_id = cutn.state_apply_tensor(
+tensor_id = cutn.state_apply_tensor_operator(
         handle, quantum_state, 1, (0, ), 
         gate_h.data.ptr, gate_h_strides, 1, 0, 1)
 
 for i in range(1, num_qubits):
-    tensor_id = cutn.state_apply_tensor(
-        handle, quantum_state, 2, (i-1, i),  # target on i-1 while control on i
+    tensor_id = cutn.state_apply_tensor_operator(
+        handle, quantum_state, 2, (i-1, i),  # control on i-1 while target on i
         gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)
 print("Quantum gates applied")
 
@@ -82,17 +82,22 @@ print("Quantum gates applied")
 accessor = cutn.create_accessor(handle, 
     quantum_state, num_fixed_modes, fixed_modes, amplitudes_strides)
 
-# Configure the computation of the specified slice of the quantum circuit amplitudes tensor
-num_hyper_samples_dtype = cutn.accessor_get_attribute_dtype(cutn.AccessorAttribute.OPT_NUM_HYPER_SAMPLES)
+# Configure the computation of the specified slice of the quantum circuit amplitudes tensor with hyper samples for the contraction optimizer
+num_hyper_samples_dtype = cutn.accessor_get_attribute_dtype(cutn.AccessorAttribute.CONFIG_NUM_HYPER_SAMPLES)
 num_hyper_samples = np.asarray(8, dtype=num_hyper_samples_dtype)
 cutn.accessor_configure(handle, accessor, 
-    cutn.AccessorAttribute.OPT_NUM_HYPER_SAMPLES, 
+    cutn.AccessorAttribute.CONFIG_NUM_HYPER_SAMPLES, 
     num_hyper_samples.ctypes.data, num_hyper_samples.dtype.itemsize)
 
 # Prepare the computation of the specified slice of the quantum circuit amplitudes tensor
 work_desc = cutn.create_workspace_descriptor(handle)
 cutn.accessor_prepare(handle, accessor, scratch_size, work_desc, stream.ptr)
 print("Prepare the computation of the specified slice of the quantum circuit amplitudes tensor")
+
+flops_dtype = cutn.accessor_get_attribute_dtype(cutn.AccessorAttribute.INFO_FLOPS)
+flops = np.zeros(1, dtype=flops_dtype)
+cutn.accessor_get_info(handle, accessor, cutn.AccessorAttribute.INFO_FLOPS, flops.ctypes.data, flops.dtype.itemsize)
+print(f"Total flop count = {flops.item()/1e9} GFlop")
 
 workspace_size_d = cutn.workspace_get_memory_size(handle, 
     work_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)

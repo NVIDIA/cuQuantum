@@ -1,4 +1,4 @@
-/* Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.
+/* Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -30,7 +30,7 @@
 };
 
 
-int main(int argc, char **argv)
+int main()
 {
   static_assert(sizeof(size_t) == sizeof(int64_t), "Please build this sample on a 64-bit architecture!");
 
@@ -129,10 +129,10 @@ int main(int argc, char **argv)
 
   // Construct the final quantum circuit state (apply quantum gates) for the GHZ circuit
   int64_t id;
-  HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
+  HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 1, std::vector<int32_t>{{0}}.data(),
                     d_gateH, nullptr, 1, 0, 1, &id));
   for(int32_t i = 1; i < numQubits; ++i) {
-    HANDLE_CUTN_ERROR(cutensornetStateApplyTensor(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
+    HANDLE_CUTN_ERROR(cutensornetStateApplyTensorOperator(cutnHandle, quantumState, 2, std::vector<int32_t>{{i-1,i}}.data(),
                       d_gateCX, nullptr, 1, 0, 1, &id));
   }
   std::cout << "Applied quantum gates\n";
@@ -149,7 +149,7 @@ int main(int argc, char **argv)
   // Optional, set up the SVD method for MPS truncation.
   cutensornetTensorSVDAlgo_t algo = CUTENSORNET_TENSOR_SVD_ALGO_GESVDJ; 
   HANDLE_CUTN_ERROR(cutensornetStateConfigure(cutnHandle, quantumState, 
-                    CUTENSORNET_STATE_MPS_SVD_CONFIG_ALGO, &algo, sizeof(algo)));
+                    CUTENSORNET_STATE_CONFIG_MPS_SVD_ALGO, &algo, sizeof(algo)));
   std::cout << "Configured the MPS factorization computation\n";
 
   // Sphinx: MPS Marginal #12
@@ -159,6 +159,17 @@ int main(int argc, char **argv)
   HANDLE_CUTN_ERROR(cutensornetCreateWorkspaceDescriptor(cutnHandle, &workDesc));
   std::cout << "Created the workspace descriptor\n";
   HANDLE_CUTN_ERROR(cutensornetStatePrepare(cutnHandle, quantumState, scratchSize, workDesc, 0x0));
+  std::cout << "Prepared the computation of the quantum circuit state\n";
+  double flops {0.0};
+  HANDLE_CUTN_ERROR(cutensornetStateGetInfo(cutnHandle, quantumState,
+                    CUTENSORNET_STATE_INFO_FLOPS, &flops, sizeof(flops)));
+  if(flops > 0.0) {
+    std::cout << "Total flop count = " << (flops/1e9) << " GFlop\n";
+  }else if(flops < 0.0) {
+    std::cout << "ERROR: Negative Flop count!\n";
+    std::abort();
+  }
+
   int64_t worksize {0};
   HANDLE_CUTN_ERROR(cutensornetWorkspaceGetMemorySize(cutnHandle,
                                                       workDesc,
@@ -196,7 +207,7 @@ int main(int argc, char **argv)
   // Configure the computation of the specified quantum circuit reduced density matrix (marginal)
   const int32_t numHyperSamples = 8; // desired number of hyper samples used in the tensor network contraction path finder
   HANDLE_CUTN_ERROR(cutensornetMarginalConfigure(cutnHandle, marginal,
-                    CUTENSORNET_MARGINAL_OPT_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
+                    CUTENSORNET_MARGINAL_CONFIG_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
   std::cout << "Configured the specified quantum circuit reduced density matrix (marginal) computation\n";
 
   // Sphinx: MPS Marginal #16
@@ -204,6 +215,14 @@ int main(int argc, char **argv)
   // Prepare the specified quantum circuit reduced densitry matrix (marginal)
   HANDLE_CUTN_ERROR(cutensornetMarginalPrepare(cutnHandle, marginal, scratchSize, workDesc, 0x0));
   std::cout << "Prepared the specified quantum circuit reduced density matrix (marginal)\n";
+  flops = 0.0;
+  HANDLE_CUTN_ERROR(cutensornetMarginalGetInfo(cutnHandle, marginal,
+                    CUTENSORNET_MARGINAL_INFO_FLOPS, &flops, sizeof(flops)));
+  std::cout << "Total flop count = " << (flops/1e9) << " GFlop\n";
+  if(flops <= 0.0) {
+    std::cout << "ERROR: Invalid Flop count!\n";
+    std::abort();
+  }
 
   // Sphinx: MPS Marginal #17
 

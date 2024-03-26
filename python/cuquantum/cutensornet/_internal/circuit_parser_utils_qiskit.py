@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -6,7 +6,12 @@ import cupy as cp
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit import Barrier, ControlledGate, Delay, Gate, Measure
-from qiskit.extensions import UnitaryGate
+try:
+    # qiskit 1.0
+    from qiskit.circuit.library import UnitaryGate
+except ModuleNotFoundError:
+    # qiskit < 1.0
+    from qiskit.extensions import UnitaryGate
 
 from .tensor_wrapper import _get_backend_asarray_func
 
@@ -27,10 +32,20 @@ def get_inverse_circuit(circuit):
     """
     return circuit.inverse()
 
+def is_primitive_gate(operation):
+    """
+    Return whether an operation is of primitive gate type, i.e, standard gate, customized unitary gate and 
+    parameterized SingletonGate (for qiskit>=0.45.0). 
+    """
+    operation_name = str(type(operation))
+    return ('standard_gate' in operation_name # standard gate
+        or isinstance(operation, UnitaryGate) # customized unitary gate
+        or ('_Singleton' in operation_name and operation.definition is None) ) # paramterized Singleton Gate
+
 def get_decomposed_gates(circuit, qubit_map=None, gates=None, gate_process_func=None, global_phase=0):
     """
     Return the gate sequence for the given circuit. Compound gates/instructions will be decomposed 
-    to either standard gates or customized unitary gates.
+    to standard gates or customized unitary gates or parameterized SingletonGate(for qiskit>=0.45.0)
     """
     if gates is None:
         gates = []
@@ -39,12 +54,17 @@ def get_decomposed_gates(circuit, qubit_map=None, gates=None, gate_process_func=
         if qubit_map:
             gate_qubits = [qubit_map[q] for q in gate_qubits]
         if isinstance(operation, Gate):
-            if 'standard_gate' in str(type(operation)) or isinstance(operation, UnitaryGate):
-                if callable(gate_process_func):
-                    gates.append(gate_process_func(operation, gate_qubits))
-                else:
-                    gates.append((operation, gate_qubits))
-                continue
+            if is_primitive_gate(operation):
+                try:
+                    if callable(gate_process_func):
+                        gates.append(gate_process_func(operation, gate_qubits))
+                    else:
+                        gates.append((operation, gate_qubits))
+                    continue
+                except:
+                    # certain standard_gates do not have materialized to_matrix implemented.
+                    # jump to the next level unfold in such case
+                    assert operation.definition is not None
         else:
             if isinstance(operation, (Barrier, Delay)):
                 # no physical meaning in tensor network simulation

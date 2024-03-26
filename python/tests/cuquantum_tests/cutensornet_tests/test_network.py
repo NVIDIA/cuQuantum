@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -28,6 +28,12 @@ from .test_utils import set_path_to_optimizer_options
 # TODO: parametrize compute type?
 @pytest.mark.uncollect_if(func=deselect_contract_tests)
 @pytest.mark.parametrize(
+    "release_workspace", (True, False)
+)
+@pytest.mark.parametrize(
+    "reset_none", (True, )
+)
+@pytest.mark.parametrize(
     "gradient", (False, "random", "all")
 )
 @pytest.mark.parametrize(
@@ -55,7 +61,7 @@ class TestNetwork:
 
     def test_network(
             self, einsum_expr_pack, xp, dtype, order, autotune,
-            stream, use_numpy_path, gradient):
+            stream, use_numpy_path, gradient, reset_none, release_workspace):
         einsum_expr = copy.deepcopy(einsum_expr_pack)
         if isinstance(einsum_expr, list):
             einsum_expr, network_opts, optimizer_opts, _ = einsum_expr
@@ -102,13 +108,16 @@ class TestNetwork:
                     assert all(map(lambda x, y: sorted(x) == sorted(y), path, path_ref))
 
             if autotune:
-                tn.autotune(iterations=autotune, stream=stream)
+                tn.autotune(iterations=autotune, stream=stream, release_workspace=release_workspace)
             # check the result
             out, out_ref = self._verify_contract(
-                tn, operands, backend, data, xp, dtype, stream)
+                tn, operands, backend, data, xp, dtype, stream, release_workspace)
             self._verify_gradient(
                 tn, operands, backend, data, xp, dtype,
-                gradient, out, out_ref, picks, stream)
+                gradient, out, out_ref, picks, stream, release_workspace)
+
+            if reset_none:
+                tn.reset_operands(None, stream=stream)
 
             # generate new data (by picking a nonzero seed) and bind them
             # to the TN
@@ -120,10 +129,10 @@ class TestNetwork:
 
             # check the result
             out, out_ref = self._verify_contract(
-                tn, operands, backend, data, xp, dtype, stream)
+                tn, operands, backend, data, xp, dtype, stream, release_workspace)
             self._verify_gradient(
                 tn, operands, backend, data, xp, dtype,
-                gradient, out, out_ref, picks, stream)
+                gradient, out, out_ref, picks, stream, release_workspace)
         finally:
             tn.free()
 
@@ -138,9 +147,9 @@ class TestNetwork:
                 raise
         return path, info
 
-    def _setup_gradients(self, tn, output_grad, stream):
+    def _setup_gradients(self, tn, output_grad, stream, release_workspace):
         try:
-            input_grads = tn.gradients(output_grad, stream=stream)
+            input_grads = tn.gradients(output_grad, stream=stream, release_workspace=release_workspace)
         except cutn.cuTensorNetError as e:
             # differentiating some edge TNs is not yet supported
             if "NOT_SUPPORTED" in str(e):
@@ -150,8 +159,8 @@ class TestNetwork:
         return input_grads
 
     def _verify_contract(
-            self, tn, operands, backend, data, xp, dtype, stream):
-        out = tn.contract(stream=stream)
+            self, tn, operands, backend, data, xp, dtype, stream, release_workspace):
+        out = tn.contract(stream=stream, release_workspace=release_workspace)
         if stream:
             stream.synchronize()
 
@@ -168,13 +177,13 @@ class TestNetwork:
 
     def _verify_gradient(
             self, tn, operands, backend, data, xp, dtype,
-            gradient, out, out_ref, picks, stream):
+            gradient, out, out_ref, picks, stream, release_workspace):
         if gradient is False:
             return
 
         # compute gradients
         output_grad = backend.ones_like(out)
-        input_grads = self._setup_gradients(tn, output_grad, stream)
+        input_grads = self._setup_gradients(tn, output_grad, stream, release_workspace)
         if stream:
             stream.synchronize()
 
