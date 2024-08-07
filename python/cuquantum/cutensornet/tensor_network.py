@@ -470,7 +470,7 @@ The data type '{self.data_type}' is currently not supported.
         assert getattr(self, f"workspace_{kind}_size") is not None, "Internal Error."
         assert getattr(self, f"workspace_h_{kind}_size") is not None, "Internal Error."
 
-        self.logger.debug(f"Allocating {kind} workspace for contracting the tensor network...")
+        self.logger.debug(f"Allocating {kind} workspace for the tensor network computation...")
 
         # Allocate device workspace.
         device_size = getattr(self, f"workspace_{kind}_size")

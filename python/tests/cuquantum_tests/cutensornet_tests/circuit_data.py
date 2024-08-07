@@ -2,6 +2,9 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import itertools
+import pytest
+
 import numpy as np
 try:
     import cirq
@@ -179,3 +182,11 @@ except:
     pass
 
 testing_circuits = cirq_circuits + qiskit_circuits
+
+@pytest.fixture(scope="session")
+def backend_cycle():
+    return itertools.cycle(('numpy', 'cupy', 'torch'))
+
+@pytest.fixture(scope="function")
+def backend(backend_cycle):
+    return next(backend_cycle)

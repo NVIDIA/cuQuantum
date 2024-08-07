@@ -64,7 +64,7 @@ class NumpyTensor(Tensor):
         dtype = NumpyTensor.name_to_dtype[name]
         strides = context.get('strides', None)
         # when strides is not None, it should be of unit counts not bytes
-        return cls(module.ndarray(shape, dtype=dtype, strides=(tuple(s * dtype.itemsize for s in strides) if strides else None)))
+        return cls(numpy.ndarray(shape, dtype=dtype, strides=(tuple(s * dtype.itemsize for s in strides) if strides else None)))
 
     def to(self, device='cpu', stream_holder=StreamHolder()):
         """
@@ -73,7 +73,7 @@ class NumpyTensor(Tensor):
           is not CPU. Otherwise, return self.
         """
         if device == 'cpu':
-            return self
+            return self.tensor
 
         if not isinstance(device, int):
             raise ValueError(f"The device must be specified as an integer or 'cpu', not '{device}'.")
@@ -84,7 +84,19 @@ class NumpyTensor(Tensor):
         return tensor_device
 
     def copy_(self, src, stream_holder=StreamHolder()):
-        raise NotImplementedError
+        package = utils.infer_object_package(src)
+        # Handle NumPy <=> CuPy CPU-GPU ndarray asymmetry.
+        if package == 'cupy':
+            stream = stream_holder.obj
+            with stream:
+                out = src.get(stream=stream, out=self.tensor)
+            # cupy/cupy#7820
+            if stream is not None:
+                stream.synchronize()
+
+            return out
+        else:
+            raise NotImplementedError
 
     def istensor(self):
         """
@@ -92,6 +104,6 @@ class NumpyTensor(Tensor):
         """
         return isinstance(self.tensor, numpy.ndarray)
     
-    def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
+    def update_extents_strides(self, extents, strides):
         #NOTE: this method is only called for CupyTensor and TorchTensor
         raise NotImplementedError

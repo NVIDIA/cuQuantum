@@ -1,8 +1,8 @@
 # Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-# This code was automatically generated. Do not modify it directly.
+#
+# This code was automatically generated across versions from 23.03.0 to 24.08.0. Do not modify it directly.
 
 cimport cython
 cimport cpython
@@ -209,6 +209,7 @@ class SamplerAttribute(_IntEnum):
     """See `cutensornetSamplerAttributes_t`."""
     OPT_NUM_HYPER_SAMPLES = CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES
     CONFIG_NUM_HYPER_SAMPLES = CUTENSORNET_SAMPLER_CONFIG_NUM_HYPER_SAMPLES
+    CONFIG_DETERMINISTIC = CUTENSORNET_SAMPLER_CONFIG_DETERMINISTIC
     INFO_FLOPS = CUTENSORNET_SAMPLER_INFO_FLOPS
 
 class AccessorAttribute(_IntEnum):
@@ -682,7 +683,7 @@ cpdef contraction_optimizer_config_get_attribute(intptr_t handle, intptr_t optim
     """Gets attributes of ``optimizer_config``.
 
     Args:
-        handle (intptr_t): Opaque handle holding cuTENSORNet's library context.
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
         optimizer_config (intptr_t): Opaque structure that is accessed.
         attr (ContractionOptimizerConfigAttribute): Specifies the attribute that is requested.
         buf (intptr_t): On return, this buffer (of size ``size_in_bytes``) holds the value that corresponds to ``attr`` within ``optimizer_config``.
@@ -702,7 +703,7 @@ cpdef contraction_optimizer_config_set_attribute(intptr_t handle, intptr_t optim
     """Sets attributes of ``optimizer_config``.
 
     Args:
-        handle (intptr_t): Opaque handle holding cuTENSORNet's library context.
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
         optimizer_config (intptr_t): Opaque structure that is accessed.
         attr (ContractionOptimizerConfigAttribute): Specifies the attribute that is requested.
         buf (intptr_t): This buffer (of size ``size_in_bytes``) determines the value to which ``attr`` will be set.
@@ -1023,7 +1024,7 @@ cpdef contraction_autotune_preference_get_attribute(intptr_t handle, intptr_t au
     """Gets attributes of ``autotune_preference``.
 
     Args:
-        handle (intptr_t): Opaque handle holding cuTENSORNet's library context.
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
         autotune_preference (intptr_t): Opaque structure that is accessed.
         attr (ContractionAutotunePreferenceAttribute): Specifies the attribute that is requested.
         buf (intptr_t): On return, this buffer (of size ``size_in_bytes``) holds the value that corresponds to ``attr`` within ``autotune_preference``.
@@ -1043,7 +1044,7 @@ cpdef contraction_autotune_preference_set_attribute(intptr_t handle, intptr_t au
     """Sets attributes of ``autotune_preference``.
 
     Args:
-        handle (intptr_t): Opaque handle holding cuTENSORNet's library context.
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
         autotune_preference (intptr_t): Opaque structure that is accessed.
         attr (ContractionAutotunePreferenceAttribute): Specifies the attribute that is requested.
         buf (intptr_t): This buffer (of size ``size_in_bytes``) determines the value to which ``attr`` will be set.
@@ -1119,7 +1120,7 @@ cpdef contract_slices(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_
 
         raw_data_out (intptr_t): Points to the raw data of the output tensor (in device memory).
         accumulate_output (int32_t): If 0, write the contraction result into raw_data_out; otherwise accumulate the result into raw_data_out.
-        work_desc (intptr_t): Opaque structure describing the workspace. The provided ``CUTENSORNET_WORKSPACE_SCRATCH`` workspace must be ``valid`` (the workspace size must be the same as or larger than both the minimum needed and the value provided at plan creation). See :func:`create_contraction_plan`, :func:`workspace_get_memory_size` & :func:`workspace_set_memory`. The provided ``CUTENSORNET_WORKSPACE_CACHE`` workspace can be of any size, the larger the better, up to the size that can be queried with :func:`workspace_get_memory_size`. If a device memory handler is set, then ``work_desc`` can be set to null, or the memory pointer in ``work_desc`` of either the workspace kinds can be set to null, and the workspace size can be set either to a negative value (in which case the "recommended" size is used, see ``CUTENSORNET_WORKSIZE_PREF_RECOMMENDED``) or to a ``valid`` size. For a workspace of kind ``CUTENSORNET_WORKSPACE_SCRATCH``, a memory buffer with the specified size will be drawn from the user's mempool and released back once done. For a workspace of kind ``CUTENSORNET_WORKSPACE_CACHE``, a memory buffer with the specified size will be drawn from the user's mempool and released back once the ``work_desc`` is destroyed, if ``work_desc`` != NULL, otherwise, once the ``plan`` is destroyed, or an alternative ``work_desc`` with a different memory address/size is provided in a subsequent :func:`contract_slices` call.
+        work_desc (intptr_t): Opaque structure describing the workspace. The provided ``CUTENSORNET_WORKSPACE_SCRATCH`` workspace must be ``valid`` (the workspace pointer must be device accessible, see ``cutensornetMemspace_t``, and the workspace size must be the same as or larger than both the minimum needed and the value provided at plan creation). See :func:`create_contraction_plan`, :func:`workspace_get_memory_size` & :func:`workspace_set_memory`. The provided ``CUTENSORNET_WORKSPACE_CACHE`` workspace must be device accessible, see ``cutensornetMemspace_t``; it can be of any size, the larger the better, up to the size that can be queried with :func:`workspace_get_memory_size`. If a device memory handler is set, then ``work_desc`` can be set to null, or the memory pointer in ``work_desc`` of either the workspace kinds can be set to null, and the workspace size can be set either to a negative value (in which case the "recommended" size is used, see ``CUTENSORNET_WORKSIZE_PREF_RECOMMENDED``) or to a ``valid`` size. For a workspace of kind ``CUTENSORNET_WORKSPACE_SCRATCH``, a memory buffer with the specified size will be drawn from the user's mempool and released back once done. For a workspace of kind ``CUTENSORNET_WORKSPACE_CACHE``, a memory buffer with the specified size will be drawn from the user's mempool and released back once the ``work_desc`` is destroyed, if ``work_desc`` != NULL, otherwise, once the ``plan`` is destroyed, or an alternative ``work_desc`` with a different memory address/size is provided in a subsequent :func:`contract_slices` call.
         slice_group (intptr_t): Opaque object specifying the slices to be contracted (see :func:`create_slice_group_from_id_range` and ``cutensornetCreateSliceGroupFromIDs()``). ``If set to null, all slices will be contracted.``.
         stream (intptr_t): The CUDA stream on which the computation is performed.
 
@@ -1251,7 +1252,7 @@ cpdef tensor_svd_config_get_attribute(intptr_t handle, intptr_t svd_config, int 
     """Gets attributes of ``svd_config``.
 
     Args:
-        handle (intptr_t): Opaque handle holding cuTENSORNet's library context.
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
         svd_config (intptr_t): Opaque structure that is accessed.
         attr (TensorSVDConfigAttribute): Specifies the attribute that is requested.
         buf (intptr_t): On return, this buffer (of size ``size_in_bytes``) holds the value that corresponds to ``attr`` within ``svd_config``.
@@ -1271,7 +1272,7 @@ cpdef tensor_svd_config_set_attribute(intptr_t handle, intptr_t svd_config, int 
     """Sets attributes of ``svd_config``.
 
     Args:
-        handle (intptr_t): Opaque handle holding cuTENSORNet's library context.
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
         svd_config (intptr_t): Opaque structure that is accessed.
         attr (TensorSVDConfigAttribute): Specifies the attribute that is requested.
         buf (intptr_t): This buffer (of size ``size_in_bytes``) determines the value to which ``attr`` will be set.
@@ -1372,7 +1373,7 @@ cpdef tensor_svd_info_get_attribute(intptr_t handle, intptr_t svd_info, int attr
     """Gets attributes of ``svd_info``.
 
     Args:
-        handle (intptr_t): Opaque handle holding cuTENSORNet's library context.
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
         svd_info (intptr_t): Opaque structure that is accessed.
         attr (TensorSVDInfoAttribute): Specifies the attribute that is requested.
         buf (intptr_t): On return, this buffer (of size ``size_in_bytes``) holds the value that corresponds to ``attr`` within ``svdConfig``.
@@ -1758,7 +1759,7 @@ cpdef compute_gradients_backward(intptr_t handle, intptr_t plan, raw_data_in, in
             - a Python sequence of :class:`int`\s (as pointer addresses).
 
         accumulate_output (int32_t): If 0, write the gradient results into ``gradients``; otherwise accumulates the results into ``gradients``.
-        work_desc (intptr_t): Opaque structure describing the workspace. The provided ``CUTENSORNET_WORKSPACE_SCRATCH`` workspace must be ``valid`` (the workspace size must be the same as or larger than the minimum needed). See :func:`workspace_compute_contraction_sizes`, :func:`workspace_get_memory_size` & :func:`workspace_set_memory`. The provided ``CUTENSORNET_WORKSPACE_CACHE`` workspace must be ``valid``, and contains the cached intermediate tensors from the corresponding :func:`contract_slices` call. If a device memory handler is set, and ``work_desc`` is set to null, or the memory pointer in ``work_desc`` of either the workspace kinds is set to null, for both calls to :func:`contract_slices` and :func:`compute_gradients_backward`, memory will be drawn from the memory pool. See :func:`contract_slices` for details.
+        work_desc (intptr_t): Opaque structure describing the workspace. The provided ``CUTENSORNET_WORKSPACE_SCRATCH`` workspace must be ``valid`` (the workspace pointer must be device accessible, see ``cutensornetMemspace_t``, and the workspace size must be the same as or larger than the minimum needed). See :func:`workspace_compute_contraction_sizes`, :func:`workspace_get_memory_size` & :func:`workspace_set_memory`. The provided ``CUTENSORNET_WORKSPACE_CACHE`` workspace must be ``valid`` (the workspace pointer must be device accessible, see ``cutensornetMemspace_t``), and contains the cached intermediate tensors from the corresponding :func:`contract_slices` call. If a device memory handler is set, and ``work_desc`` is set to null, or the memory pointer in ``work_desc`` of either the workspace kinds is set to null, for both calls to :func:`contract_slices` and :func:`compute_gradients_backward`, memory will be drawn from the memory pool. See :func:`contract_slices` for details.
         stream (intptr_t): The CUDA stream on which the computation is performed.
 
     .. seealso:: `cutensornetComputeGradientsBackward`
@@ -2041,6 +2042,7 @@ cpdef intptr_t create_sampler(intptr_t handle, intptr_t tensor_network_state, in
 cdef dict sampler_attribute_sizes = {
     CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES: _numpy.int32,
     CUTENSORNET_SAMPLER_CONFIG_NUM_HYPER_SAMPLES: _numpy.int32,
+    CUTENSORNET_SAMPLER_CONFIG_DETERMINISTIC: _numpy.int32,
     CUTENSORNET_SAMPLER_INFO_FLOPS: _numpy.float64,
 }
 
@@ -3287,7 +3289,7 @@ def logger_set_callback_data(callback, *args, **kwargs):
 
           - ``callback(log_level, func_name, message, *args, **kwargs)``
 
-          where ``log_level`` (:py:`int`), ``func_name`` (`str`), and
+          where ``log_level`` (:class:`int`), ``func_name`` (`str`), and
           ``message`` (`str`) are provided by the logger API.
 
     .. seealso:: `cutensornetLoggerSetCallbackData`

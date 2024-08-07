@@ -13,6 +13,7 @@ print("cuTensorNet-vers:", cutn.get_version())
 dev = cp.cuda.Device()  # get current device
 props = cp.cuda.runtime.getDeviceProperties(dev.id)
 print("===== device info ======")
+print("GPU-local-id:", dev.id)
 print("GPU-name:", props["name"].decode())
 print("GPU-clock:", props["clockRate"])
 print("GPU-memoryClock:", props["memoryClockRate"])
@@ -123,10 +124,9 @@ if workspace_size_d <= scratch_size:
 else:
     print("Error:Insufficient workspace size on Device")
     cutn.destroy_workspace_descriptor(work_desc)
-    cutn.destroy_marginal(marginal)
     cutn.destroy_state(quantum_state)
     cutn.destroy(handle)
-    del scratch
+    del scratch_space
     print("Free resource and exit.")
     exit()
 print("Set the workspace buffer for MPS computation")
@@ -171,7 +171,7 @@ else:
     cutn.destroy_marginal(marginal)
     cutn.destroy_state(quantum_state)
     cutn.destroy(handle)
-    del scratch
+    del scratch_space
     print("Free resource and exit.")
     exit()
 print("Set the workspace buffer for marginal computation")

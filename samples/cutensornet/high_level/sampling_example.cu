@@ -107,6 +107,9 @@ int main()
   const int32_t numHyperSamples = 8; // desired number of hyper samples used in the tensor network contraction path finder
   HANDLE_CUTN_ERROR(cutensornetSamplerConfigure(cutnHandle, sampler,
     CUTENSORNET_SAMPLER_CONFIG_NUM_HYPER_SAMPLES, &numHyperSamples, sizeof(numHyperSamples)));
+  const int32_t rndSeed = 13; // explicit random seed to get the same results each run
+  HANDLE_CUTN_ERROR(cutensornetSamplerConfigure(cutnHandle, sampler,
+    CUTENSORNET_SAMPLER_CONFIG_DETERMINISTIC, &rndSeed, sizeof(rndSeed)));
 
   // Sphinx: Sampler #9
 

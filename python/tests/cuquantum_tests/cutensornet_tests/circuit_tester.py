@@ -15,10 +15,17 @@ except ImportError:
     qiskit = None
 
 from cuquantum import CircuitToEinsum
+from cuquantum.cutensornet.experimental import NetworkState, MPSConfig
 from cuquantum.cutensornet._internal.utils import infer_object_package
 
-from .circuit_utils import CirqComputeEngine, ConverterComputeEngine, QiskitComputeEngine, probablity_from_sv
+from .circuit_utils import CirqComputeEngine, ConverterComputeEngine, QiskitComputeEngine, get_contraction_tolerance, get_mps_tolerance, probablity_from_sv
 from .test_utils import DEFAULT_RNG
+
+def get_engine_iters(engine):
+    """For NetworkState, compute the same property twice to ensure cache mechanism is correctly activated"""
+    if isinstance(engine, NetworkState):
+        return range(2)
+    return range(1)
 
 
 def bitstring_generator(n_qubits, num_bitstrings, rng=DEFAULT_RNG, state_dims=None):
@@ -51,9 +58,23 @@ def where_fixed_generator(qubits, num_fix_sites_max, num_rdm_sites_max=None, rng
                     yield where, fixed
 
 
-def random_pauli_string_generator(n_qubits, num_pauli_strings, rng=DEFAULT_RNG):
-    for _ in range(num_pauli_strings):
-        yield ''.join(rng.choice(['I','X', 'Y', 'Z'], n_qubits))
+def get_random_pauli_strings(n, num_pauli_strings, rng=DEFAULT_RNG):
+    def _get_pauli_string():
+        return ''.join(rng.choice(['I','X', 'Y', 'Z'], n))
+    
+    if num_pauli_strings is None:
+        return _get_pauli_string()
+    else:
+        # return in dictionary format
+        pauli_strings = {}
+        for _ in range(num_pauli_strings):
+            pauli_string = _get_pauli_string()
+            coeff = rng.random() + rng.random() * 1j
+            if pauli_string in pauli_strings:
+                pauli_strings[pauli_string] += coeff
+            else:
+                pauli_strings[pauli_string] = coeff
+        return pauli_strings
 
 
 def compute_sample_overlap(samples, sv, modes_to_sample):
@@ -96,6 +117,14 @@ class BaseTester:
         self.num_fix_sites_max = max(min(num_fix_sites_max, self.n_qubits-num_rdm_sites_max-1), 0)
         self.nshots = nshots
         self.rng = rng
+
+        for engine in self.all_engines:
+            if isinstance(engine, NetworkState):
+                if isinstance(engine.config, MPSConfig):
+                    tolerance = get_mps_tolerance(engine.dtype)
+                else:
+                    tolerance = get_contraction_tolerance(engine.dtype)
+                setattr(engine, 'tolerance', tolerance)
     
     @property
     def all_engines(self):
@@ -109,35 +138,38 @@ class BaseTester:
         raise NotImplementedError
     
     def test_norm(self):
-        norm1 = self.reference_engine.get_norm()
+        norm1 = self.reference_engine.compute_norm()
         for engine in self.target_engines:
-            norm2 = engine.get_norm()
-            message = f"{engine.__class__.__name__} maxDiff={abs(norm1-norm2)}"
-            assert np.allclose(norm1, norm2, **engine.tolerance), message
+            for _ in get_engine_iters(engine):
+                norm2 = engine.compute_norm()
+                message = f"{engine.__class__.__name__} maxDiff={abs(norm1-norm2)}"
+                assert np.allclose(norm1, norm2, **engine.tolerance), message
     
     def test_state_vector(self):
-        sv1 = self.reference_engine.get_state_vector()
+        sv1 = self.reference_engine.compute_state_vector()
         for engine in self.target_engines:
-            sv2 = engine.get_state_vector()
-            message = f"{engine.__class__.__name__} maxDiff={abs(sv1-sv2).max()}"
-            assert self.backend.allclose(sv1, sv2, **engine.tolerance), message
+            for _ in get_engine_iters(engine):
+                sv2 = engine.compute_state_vector()
+                message = f"{engine.__class__.__name__} maxDiff={abs(sv1-sv2).max()}"
+                assert self.backend.allclose(sv1, sv2, **engine.tolerance), message
     
     
     def test_amplitude(self):
         for bitstring in bitstring_generator(self.n_qubits, self.num_tests_per_task):    
-            amp1 = self.reference_engine.get_amplitude(bitstring)
+            amp1 = self.reference_engine.compute_amplitude(bitstring)
             for engine in self.target_engines:
-                amp2 = engine.get_amplitude(bitstring)
-                message = f"{engine.__class__.__name__} maxDiff={abs(amp1-amp2).max()}"
-                assert self.backend.allclose(amp1, amp2, **engine.tolerance), message
+                amp2 = engine.compute_amplitude(bitstring)
+                message = f"{engine.__class__.__name__} diff={abs(amp1-amp2)}"
+                assert np.allclose(amp1, amp2, **engine.tolerance), message
     
     def test_batched_amplitudes(self):
         for fixed in where_fixed_generator(self.qubits, self.num_fix_sites_max):
-            batched_amps1 = self.reference_engine.get_batched_amplitudes(fixed)
+            batched_amps1 = self.reference_engine.compute_batched_amplitudes(fixed)
             for engine in self.target_engines:
-                batched_amps2 = engine.get_batched_amplitudes(fixed)
-                message = f"{engine.__class__.__name__} maxDiff={abs(batched_amps1-batched_amps2).max()}"
-                assert self.backend.allclose(batched_amps1, batched_amps2, **engine.tolerance), message
+                for _ in get_engine_iters(engine):
+                    batched_amps2 = engine.compute_batched_amplitudes(fixed)
+                    message = f"{engine.__class__.__name__} maxDiff={abs(batched_amps1-batched_amps2).max()}"
+                    assert self.backend.allclose(batched_amps1, batched_amps2, **engine.tolerance), message
     
     def test_reduced_density_matrix(self):
         for where, fixed in where_fixed_generator(self.qubits, self.num_fix_sites_max, num_rdm_sites_max=self.num_rdm_sites_max):
@@ -146,26 +178,27 @@ class BaseTester:
                 operands2 = self.converter.reduced_density_matrix(where, fixed=fixed, lightcone=False)[1]
                 assert len(operands1) <= len(operands2) + 2 # potential phase handling for qiskit Circuit            
             
-            rdm1 = self.reference_engine.get_reduced_density_matrix(where, fixed=fixed)
+            rdm1 = self.reference_engine.compute_reduced_density_matrix(where, fixed=fixed)
             # comparision with different references
             for engine in self.target_engines:
                 all_kwargs = ({'lightcone': True}, {'lightcone': False}) if isinstance(engine, ConverterComputeEngine) else ({},)
                 for kwargs in all_kwargs:
-                    rdm2 = engine.get_reduced_density_matrix(where, fixed=fixed, **kwargs)
-                    message = f"{engine.__class__.__name__} maxDiff={abs(rdm1-rdm2).max()}"
-                    assert self.backend.allclose(rdm1, rdm2, **engine.tolerance), message
+                    for _ in get_engine_iters(engine):
+                        rdm2 = engine.compute_reduced_density_matrix(where, fixed=fixed, **kwargs)
+                        message = f"{engine.__class__.__name__} maxDiff={abs(rdm1-rdm2).max()}"
+                        assert self.backend.allclose(rdm1, rdm2, **engine.tolerance), message
     
     def test_expectation(self):
-        for pauli_string in random_pauli_string_generator(self.n_qubits, 6):
+        for pauli_string in get_random_pauli_strings(self.n_qubits, 6):
             if self.converter is not None:
                 operands1 = self.converter.expectation(pauli_string, lightcone=True)[1]
                 operands2 = self.converter.expectation(pauli_string, lightcone=False)[1]
                 assert len(operands1) <= len(operands2) + 2 # potential phase handling for qiskit Circuit
             
-            expec1 = self.reference_engine.get_expectation(pauli_string)
+            expec1 = self.reference_engine.compute_expectation(pauli_string)
             for engine in self.target_engines:
                 for lightcone in (True, False):
-                    expec2 = engine.get_expectation(pauli_string, lightcone=lightcone)
+                    expec2 = engine.compute_expectation(pauli_string, lightcone=lightcone)
                     message = f"{engine.__class__.__name__} maxDiff={abs(expec1-expec2)}"
                     assert np.allclose(expec1, expec2, **engine.tolerance), message
     
@@ -173,7 +206,7 @@ class BaseTester:
         full_qubits = list(self.qubits)
         self.rng.shuffle(full_qubits)
         selected_qubits = full_qubits[:len(full_qubits)//2]
-        sv = self.reference_engine.get_state_vector()
+        sv = self.reference_engine.compute_state_vector()
 
         for engine in self.all_engines:
             for qubits_to_sample in (None, selected_qubits):
@@ -184,7 +217,7 @@ class BaseTester:
 
                 for counter in range(1, max_try+1):
                     # build the sampling
-                    samples = engine.get_sampling(self.nshots, qubits_to_sample=qubits_to_sample)
+                    samples = engine.compute_sampling(self.nshots, modes=qubits_to_sample)
 
                     # compute overlap of the histograms
                     overlap = compute_sample_overlap(samples, sv, modes_to_sample)
@@ -213,9 +246,7 @@ class BaseTester:
         self.test_expectation()
         self.test_norm()
         self.test_misc()
-        if self.backend is cp:
-            # sampling only needed to be tested for cupy backend
-            self.test_sampling()
+        self.test_sampling()
         # release resources for all compute engines
         for engine in self.all_engines:
             engine.free()
@@ -240,7 +271,7 @@ class CircuitToEinsumTester(BaseTester):
     def test_misc(self):
         self.test_qubits()
         self.test_gates()
-        norm = self.reference_engine.get_norm()
+        norm = self.reference_engine.compute_norm()
         assert np.allclose(norm, 1, **self.reference_engine.tolerance)
     
     def test_qubits(self):

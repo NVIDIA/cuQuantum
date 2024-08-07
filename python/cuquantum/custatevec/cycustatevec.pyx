@@ -283,14 +283,6 @@ cdef custatevecStatus_t custatevecMeasureBatched(custatevecHandle_t handle, void
     return _custatevec._custatevecMeasureBatched(handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, bitStrings, bitOrdering, bitStringLen, randnums, collapse)
 
 
-cdef custatevecStatus_t custatevecComputeExpectationBatchedGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const uint32_t nBasisBits, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
-    return _custatevec._custatevecComputeExpectationBatchedGetWorkspaceSize(handle, svDataType, nIndexBits, nSVs, svStride, matrices, matrixDataType, layout, nMatrices, nBasisBits, computeType, extraWorkspaceSizeInBytes)
-
-
-cdef custatevecStatus_t custatevecComputeExpectationBatched(custatevecHandle_t handle, const void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, custatevecIndex_t svStride, double2* expectationValues, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const int32_t* basisBits, const uint32_t nBasisBits, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
-    return _custatevec._custatevecComputeExpectationBatched(handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, expectationValues, matrices, matrixDataType, layout, nMatrices, basisBits, nBasisBits, computeType, extraWorkspace, extraWorkspaceSizeInBytes)
-
-
 cdef custatevecStatus_t custatevecSubSVMigratorCreate(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t* migrator, void* deviceSlots, cudaDataType_t svDataType, int nDeviceSlots, int nLocalIndexBits) except* nogil:
     return _custatevec._custatevecSubSVMigratorCreate(handle, migrator, deviceSlots, svDataType, nDeviceSlots, nLocalIndexBits)
 
@@ -301,3 +293,11 @@ cdef custatevecStatus_t custatevecSubSVMigratorDestroy(custatevecHandle_t handle
 
 cdef custatevecStatus_t custatevecSubSVMigratorMigrate(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t migrator, int deviceSlotIndex, const void* srcSubSV, void* dstSubSV, custatevecIndex_t begin, custatevecIndex_t end) except* nogil:
     return _custatevec._custatevecSubSVMigratorMigrate(handle, migrator, deviceSlotIndex, srcSubSV, dstSubSV, begin, end)
+
+
+cdef custatevecStatus_t custatevecComputeExpectationBatchedGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const uint32_t nBasisBits, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
+    return _custatevec._custatevecComputeExpectationBatchedGetWorkspaceSize(handle, svDataType, nIndexBits, nSVs, svStride, matrices, matrixDataType, layout, nMatrices, nBasisBits, computeType, extraWorkspaceSizeInBytes)
+
+
+cdef custatevecStatus_t custatevecComputeExpectationBatched(custatevecHandle_t handle, const void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, custatevecIndex_t svStride, double2* expectationValues, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const int32_t* basisBits, const uint32_t nBasisBits, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+    return _custatevec._custatevecComputeExpectationBatched(handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, expectationValues, matrices, matrixDataType, layout, nMatrices, basisBits, nBasisBits, computeType, extraWorkspace, extraWorkspaceSizeInBytes)

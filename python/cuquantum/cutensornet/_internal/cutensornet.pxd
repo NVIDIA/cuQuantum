@@ -1,8 +1,8 @@
 # Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-# This code was automatically generated. Do not modify it directly.
+#
+# This code was automatically generated across versions from 23.03.0 to 24.08.0. Do not modify it directly.
 
 from ..cycutensornet cimport *
 

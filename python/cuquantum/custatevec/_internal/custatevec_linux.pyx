@@ -102,11 +102,11 @@ cdef void* __custatevecAbs2SumArrayBatched = NULL
 cdef void* __custatevecCollapseByBitStringBatchedGetWorkspaceSize = NULL
 cdef void* __custatevecCollapseByBitStringBatched = NULL
 cdef void* __custatevecMeasureBatched = NULL
-cdef void* __custatevecComputeExpectationBatchedGetWorkspaceSize = NULL
-cdef void* __custatevecComputeExpectationBatched = NULL
 cdef void* __custatevecSubSVMigratorCreate = NULL
 cdef void* __custatevecSubSVMigratorDestroy = NULL
 cdef void* __custatevecSubSVMigratorMigrate = NULL
+cdef void* __custatevecComputeExpectationBatchedGetWorkspaceSize = NULL
+cdef void* __custatevecComputeExpectationBatched = NULL
 
 
 cdef void* load_library() except* nogil:
@@ -602,20 +602,6 @@ cdef int _check_or_init_custatevec() except -1 nogil:
             handle = load_library()
         __custatevecMeasureBatched = dlsym(handle, 'custatevecMeasureBatched')
     
-    global __custatevecComputeExpectationBatchedGetWorkspaceSize
-    __custatevecComputeExpectationBatchedGetWorkspaceSize = dlsym(RTLD_DEFAULT, 'custatevecComputeExpectationBatchedGetWorkspaceSize')
-    if __custatevecComputeExpectationBatchedGetWorkspaceSize == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __custatevecComputeExpectationBatchedGetWorkspaceSize = dlsym(handle, 'custatevecComputeExpectationBatchedGetWorkspaceSize')
-    
-    global __custatevecComputeExpectationBatched
-    __custatevecComputeExpectationBatched = dlsym(RTLD_DEFAULT, 'custatevecComputeExpectationBatched')
-    if __custatevecComputeExpectationBatched == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __custatevecComputeExpectationBatched = dlsym(handle, 'custatevecComputeExpectationBatched')
-    
     global __custatevecSubSVMigratorCreate
     __custatevecSubSVMigratorCreate = dlsym(RTLD_DEFAULT, 'custatevecSubSVMigratorCreate')
     if __custatevecSubSVMigratorCreate == NULL:
@@ -636,6 +622,20 @@ cdef int _check_or_init_custatevec() except -1 nogil:
         if handle == NULL:
             handle = load_library()
         __custatevecSubSVMigratorMigrate = dlsym(handle, 'custatevecSubSVMigratorMigrate')
+    
+    global __custatevecComputeExpectationBatchedGetWorkspaceSize
+    __custatevecComputeExpectationBatchedGetWorkspaceSize = dlsym(RTLD_DEFAULT, 'custatevecComputeExpectationBatchedGetWorkspaceSize')
+    if __custatevecComputeExpectationBatchedGetWorkspaceSize == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __custatevecComputeExpectationBatchedGetWorkspaceSize = dlsym(handle, 'custatevecComputeExpectationBatchedGetWorkspaceSize')
+    
+    global __custatevecComputeExpectationBatched
+    __custatevecComputeExpectationBatched = dlsym(RTLD_DEFAULT, 'custatevecComputeExpectationBatched')
+    if __custatevecComputeExpectationBatched == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __custatevecComputeExpectationBatched = dlsym(handle, 'custatevecComputeExpectationBatched')
 
     __py_custatevec_init = True
     return 0
@@ -849,12 +849,6 @@ cpdef dict _inspect_function_pointers():
     global __custatevecMeasureBatched
     data["__custatevecMeasureBatched"] = <intptr_t>__custatevecMeasureBatched
     
-    global __custatevecComputeExpectationBatchedGetWorkspaceSize
-    data["__custatevecComputeExpectationBatchedGetWorkspaceSize"] = <intptr_t>__custatevecComputeExpectationBatchedGetWorkspaceSize
-    
-    global __custatevecComputeExpectationBatched
-    data["__custatevecComputeExpectationBatched"] = <intptr_t>__custatevecComputeExpectationBatched
-
     global __custatevecSubSVMigratorCreate
     data["__custatevecSubSVMigratorCreate"] = <intptr_t>__custatevecSubSVMigratorCreate
     
@@ -863,6 +857,12 @@ cpdef dict _inspect_function_pointers():
     
     global __custatevecSubSVMigratorMigrate
     data["__custatevecSubSVMigratorMigrate"] = <intptr_t>__custatevecSubSVMigratorMigrate
+    
+    global __custatevecComputeExpectationBatchedGetWorkspaceSize
+    data["__custatevecComputeExpectationBatchedGetWorkspaceSize"] = <intptr_t>__custatevecComputeExpectationBatchedGetWorkspaceSize
+    
+    global __custatevecComputeExpectationBatched
+    data["__custatevecComputeExpectationBatched"] = <intptr_t>__custatevecComputeExpectationBatched
 
     return data
 
@@ -1551,26 +1551,6 @@ cdef custatevecStatus_t _custatevecMeasureBatched(custatevecHandle_t handle, voi
         handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, bitStrings, bitOrdering, bitStringLen, randnums, collapse)
 
 
-cdef custatevecStatus_t _custatevecComputeExpectationBatchedGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const uint32_t nBasisBits, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
-    global __custatevecComputeExpectationBatchedGetWorkspaceSize
-    _check_or_init_custatevec()
-    if __custatevecComputeExpectationBatchedGetWorkspaceSize == NULL:
-        with gil:
-            raise FunctionNotFoundError("function custatevecComputeExpectationBatchedGetWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const uint32_t, custatevecComputeType_t, size_t*) nogil>__custatevecComputeExpectationBatchedGetWorkspaceSize)(
-        handle, svDataType, nIndexBits, nSVs, svStride, matrices, matrixDataType, layout, nMatrices, nBasisBits, computeType, extraWorkspaceSizeInBytes)
-
-
-cdef custatevecStatus_t _custatevecComputeExpectationBatched(custatevecHandle_t handle, const void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, custatevecIndex_t svStride, double2* expectationValues, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const int32_t* basisBits, const uint32_t nBasisBits, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
-    global __custatevecComputeExpectationBatched
-    _check_or_init_custatevec()
-    if __custatevecComputeExpectationBatched == NULL:
-        with gil:
-            raise FunctionNotFoundError("function custatevecComputeExpectationBatched is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, const uint32_t, custatevecIndex_t, double2*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) nogil>__custatevecComputeExpectationBatched)(
-        handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, expectationValues, matrices, matrixDataType, layout, nMatrices, basisBits, nBasisBits, computeType, extraWorkspace, extraWorkspaceSizeInBytes)
-
-
 cdef custatevecStatus_t _custatevecSubSVMigratorCreate(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t* migrator, void* deviceSlots, cudaDataType_t svDataType, int nDeviceSlots, int nLocalIndexBits) except* nogil:
     global __custatevecSubSVMigratorCreate
     _check_or_init_custatevec()
@@ -1599,3 +1579,23 @@ cdef custatevecStatus_t _custatevecSubSVMigratorMigrate(custatevecHandle_t handl
             raise FunctionNotFoundError("function custatevecSubSVMigratorMigrate is not found")
     return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSubSVMigratorDescriptor_t, int, const void*, void*, custatevecIndex_t, custatevecIndex_t) nogil>__custatevecSubSVMigratorMigrate)(
         handle, migrator, deviceSlotIndex, srcSubSV, dstSubSV, begin, end)
+
+
+cdef custatevecStatus_t _custatevecComputeExpectationBatchedGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const uint32_t nBasisBits, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
+    global __custatevecComputeExpectationBatchedGetWorkspaceSize
+    _check_or_init_custatevec()
+    if __custatevecComputeExpectationBatchedGetWorkspaceSize == NULL:
+        with gil:
+            raise FunctionNotFoundError("function custatevecComputeExpectationBatchedGetWorkspaceSize is not found")
+    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const uint32_t, custatevecComputeType_t, size_t*) nogil>__custatevecComputeExpectationBatchedGetWorkspaceSize)(
+        handle, svDataType, nIndexBits, nSVs, svStride, matrices, matrixDataType, layout, nMatrices, nBasisBits, computeType, extraWorkspaceSizeInBytes)
+
+
+cdef custatevecStatus_t _custatevecComputeExpectationBatched(custatevecHandle_t handle, const void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, custatevecIndex_t svStride, double2* expectationValues, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const int32_t* basisBits, const uint32_t nBasisBits, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+    global __custatevecComputeExpectationBatched
+    _check_or_init_custatevec()
+    if __custatevecComputeExpectationBatched == NULL:
+        with gil:
+            raise FunctionNotFoundError("function custatevecComputeExpectationBatched is not found")
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, const uint32_t, custatevecIndex_t, double2*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) nogil>__custatevecComputeExpectationBatched)(
+        handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, expectationValues, matrices, matrixDataType, layout, nMatrices, basisBits, nBasisBits, computeType, extraWorkspace, extraWorkspaceSizeInBytes)

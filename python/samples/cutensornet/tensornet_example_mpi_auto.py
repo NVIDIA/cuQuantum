@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import os
 import cupy as cp
 import numpy as np
 from mpi4py import MPI
@@ -25,14 +26,20 @@ dev.use()
 props = cp.cuda.runtime.getDeviceProperties(dev.id)
 if rank == root:
     print("cuTensorNet-vers:", cutn.get_version())
-    print("===== root process device info ======")
+    print("===== rank 0 device info ======")
+    print("GPU-local-id:", dev.id)
     print("GPU-name:", props["name"].decode())
     print("GPU-clock:", props["clockRate"])
     print("GPU-memoryClock:", props["memoryClockRate"])
     print("GPU-nSM:", props["multiProcessorCount"])
     print("GPU-major:", props["major"])
     print("GPU-minor:", props["minor"])
-    print("========================")
+    print("CUDA-available-devices:",num_devices)
+    CUDA_VISIBLE_DEVICES = os.getenv('CUDA_VISIBLE_DEVICES')
+    print("CUDA_VISIBLE_DEVICES:",CUDA_VISIBLE_DEVICES if CUDA_VISIBLE_DEVICES != None else '')
+    print("===============================")
+else:
+    print("===== rank ", rank, " device info ======\nGPU-local-id:", dev.id)
 
 ######################################################################################
 # Computing: R_{k,l} = A_{a,b,c,d,e,f} B_{b,g,h,e,i,j} C_{m,a,g,f,i,k} D_{l,c,h,d,j,m}

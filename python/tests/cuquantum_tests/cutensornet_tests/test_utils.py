@@ -5,6 +5,7 @@
 import re
 import sys
 from types import MappingProxyType
+import importlib
 
 import cupy as cp
 from cupy.testing import shaped_random
@@ -19,6 +20,7 @@ except ImportError:
 from cuquantum import cutensornet as cutn
 from cuquantum import OptimizerOptions
 from cuquantum import tensor
+from cuquantum.cutensornet.experimental._internal.network_state_utils import _get_asarray_function
 from cuquantum.cutensornet._internal.circuit_converter_utils import EINSUM_SYMBOLS_BASE
 from cuquantum.cutensornet._internal.decomposition_utils import DECOMPOSITION_DTYPE_NAMES
 from cuquantum.cutensornet._internal.einsum_parser import infer_output_mode_labels
@@ -454,3 +456,86 @@ def deselect_contract_decompose_algorithm_tests(qr_method, svd_method, *args, **
     if qr_method is False and svd_method is False: # not a valid algorithm
         return True
     return False
+
+def is_device_id_valid(device_id):
+    if device_id is not None:
+        num_devices = cp.cuda.runtime.getDeviceCount()
+        return device_id < num_devices
+    return True
+
+def deselect_network_operator_from_pauli_string_tests(backend, n_qubits, num_pauli_strings, dtype, device_id, *args, **kwargs):
+    if backend == 'torch-cpu' or dtype.startswith('float'): # NetworkOperator.from_pauli_strings not support torch-cpu
+        return True
+    return not is_device_id_valid(device_id)
+
+def deselect_invalid_device_id_tests(*args, **kwargs):
+    device_id = kwargs.get('device_id', None)
+    return not is_device_id_valid(device_id)
+
+def get_state_internal_backend_device(backend, device_id):
+    expected_backend = {
+            'numpy': 'cupy',
+            'cupy': 'cupy',
+            'torch': 'torch', # same as torch-gpu
+            'torch-cpu': 'torch', 
+            'torch-gpu': 'torch', 
+        }[backend]
+    expected_device = 0 if device_id is None else device_id
+    return expected_backend, expected_device
+
+def get_dtype_name(dtype):
+    if not isinstance(dtype, str):
+        dtype = getattr(dtype, '__name__', str(dtype).split('.')[-1])
+    return dtype
+
+def get_or_create_tensor_backend(backend, **kwargs):
+    if not isinstance(backend, TensorBackend):
+        return TensorBackend(backend=backend, **kwargs)
+    return backend
+
+class TensorBackend:
+    def __init__(self, backend='cupy', device_id=None):
+        assert backend in {'cupy', 'numpy', 'torch-cpu', 'torch-gpu', 'torch'}
+        if backend in {'numpy', 'torch-cpu'}:
+            self.device = 'cpu'
+        else:
+            self.device = device_id if device_id is not None else 0
+        self.full_name = backend
+        self.name = backend = backend.split('-')[0]
+        self.module = importlib.import_module(backend)
+        self._asarray = _get_asarray_function(backend, self.device, None)
+    
+    @property
+    def __name__(self):
+        return self.name
+    
+    def random(self, shape, dtype, rng=None):
+        if dtype.startswith('complex'):
+            real_dtype = {'complex128': 'float64', 'complex64': 'float32'}[dtype]
+        else:
+            real_dtype = dtype
+        if rng is None:
+            rng = np.random.default_rng(7)
+        array = rng.random(shape, dtype=real_dtype)
+        if real_dtype != dtype:
+            array = array + 1.j * rng.random(shape, dtype=real_dtype)
+        return self._asarray(array)
+    
+    def asarray(self, *args, **kwargs):
+        return self._asarray(*args, **kwargs)
+
+    def zeros(self, *args, **kwargs):
+        array = np.zeros(*args, **kwargs)
+        return self._asarray(array)
+    
+    def norm(self, *args, **kwargs):
+        return self.module.linalg.norm(*args, **kwargs)
+    
+    def einsum(self, *args, **kwargs):
+        return self.module.einsum(*args, **kwargs)
+    
+    def allclose(self, *args, **kwargs):
+        return self.module.allclose(*args, **kwargs)
+    
+    def vstack(self, *args, **kwargs):
+        return self.module.vstack(*args, **kwargs)

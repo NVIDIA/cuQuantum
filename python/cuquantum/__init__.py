@@ -5,8 +5,9 @@
 from cuquantum import custatevec
 from cuquantum import cutensornet
 from cuquantum.cutensornet import (
-    contract, contract_path, einsum, einsum_path, tensor, tensor_qualifiers_dtype, Network, BaseCUDAMemoryManager, MemoryPointer,
-    NetworkOptions, OptimizerInfo, OptimizerOptions, PathFinderOptions, ReconfigOptions, SlicerOptions, CircuitToEinsum)
+    contract, contract_path, einsum, einsum_path, tensor, tensor_qualifiers_dtype, BaseCUDAMemoryManager, CircuitToEinsum, MemoryPointer, 
+    Network, NetworkOptions, OptimizerInfo, OptimizerOptions, PathFinderOptions, 
+    ReconfigOptions, SlicerOptions)
 from cuquantum._utils import ComputeType, cudaDataType, libraryPropertyType
 from cuquantum._version import __version__
 

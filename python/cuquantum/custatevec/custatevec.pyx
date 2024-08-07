@@ -851,66 +851,6 @@ cpdef double compute_expectation(intptr_t handle, intptr_t sv, int sv_data_type,
     check_status(status)
     return residual_norm
 
-cpdef size_t compute_expectation_batched_get_workspace_size(intptr_t handle, int sv_data_type, uint32_t n_index_bits, uint32_t n_svs, int64_t sv_stride, intptr_t matrices, int matrix_data_type, int layout, uint32_t n_matrices, uint32_t n_basis_bits, int compute_type) except? 0:
-    """This function gets the required workspace size for :func:`compute_expectation_batched`.
-    Args:
-        handle (intptr_t): the handle to the cuStateVec context.
-        sv_data_type (int): Data type of the state vector.
-        n_index_bits (uint32_t): the number of index bits of the state vector.
-        n_svs (uint32_t): the number of state vectors.
-        sv_stride (int64_t): distance of two consecutive state vectors.
-        matrices (intptr_t): pointer to allocated matrices in one contiguous memory chunk on host or device.
-        matrix_data_type (int): data type of matrices.
-        layout (MatrixLayout): enumerator specifying the memory layout of matrix.
-        n_matrices (uint32_t): the number of matrices.
-        n_basis_bits (uint32_t): the number of basis bits.
-        compute_type (ComputeType): compute type of matrix multiplication.
-
-    Returns:
-        size_t: size of the extra workspace.
-
-    .. seealso:: `custatevecComputeExpectationBatchedGetWorkspaceSize`
-    """
-    cdef size_t extra_workspace_size_in_bytes
-    with nogil:
-        status = custatevecComputeExpectationBatchedGetWorkspaceSize(<Handle>handle, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <const custatevecIndex_t>sv_stride, <const void*>matrices, <DataType>matrix_data_type, <_MatrixLayout>layout, <const uint32_t>n_matrices, <const uint32_t>n_basis_bits, <_ComputeType>compute_type, &extra_workspace_size_in_bytes)
-    check_status(status)
-    return extra_workspace_size_in_bytes
-
-
-cpdef compute_expectation_batched(intptr_t handle, intptr_t batched_sv, int sv_data_type, uint32_t n_index_bits, uint32_t n_svs, int64_t sv_stride, intptr_t expectation_values, intptr_t matrices, int matrix_data_type, int layout, uint32_t n_matrices, basis_bits, uint32_t n_basis_bits, int compute_type, intptr_t extra_workspace, size_t extra_workspace_size_in_bytes):
-    """Compute the expectation values of matrix observables to each of the batched state vectors.
-
-    Args:
-        handle (intptr_t): the handle to the cuStateVec library.
-        batched_sv (intptr_t): batched state vector allocated in one continuous memory chunk on device.
-        sv_data_type (int): data type of the state vector.
-        n_index_bits (uint32_t): the number of index bits of the state vector.
-        n_svs (uint32_t): the number of state vectors.
-        sv_stride (int64_t): distance of two consecutive state vectors.
-        expectation_values (intptr_t): pointer to a host array to store expectation values.
-        matrices (intptr_t): pointer to allocated matrices in one contiguous memory chunk on host or device.
-        matrix_data_type (int): data type of matrices.
-        layout (MatrixLayout): matrix memory layout.
-        n_matrices (uint32_t): the number of matrices.
-        basis_bits (object): pointer to a host array of basis index bits. It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``int32_t``.
-
-        n_basis_bits (uint32_t): the number of basis bits.
-        compute_type (ComputeType): compute type of matrix multiplication.
-        extra_workspace (intptr_t): pointer to an extra workspace.
-        extra_workspace_size_in_bytes (size_t): the size of extra workspace.
-
-    .. seealso:: `custatevecComputeExpectationBatched`
-    """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_ = \
-        get_resource_ptr[int32_t](basis_bits, <int32_t*>NULL)
-    with nogil:
-        status = custatevecComputeExpectationBatched(<Handle>handle, <const void*>batched_sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <custatevecIndex_t>sv_stride, <double2*>expectation_values, <const void*>matrices, <DataType>matrix_data_type, <_MatrixLayout>layout, <const uint32_t>n_matrices, <const int32_t*>(_basis_bits_.data()), <const uint32_t>n_basis_bits, <_ComputeType>compute_type, <void*>extra_workspace, extra_workspace_size_in_bytes)
-    check_status(status)
-
 
 cpdef tuple sampler_create(intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_index_bits, uint32_t n_max_shots):
     """Create sampler descriptor.
@@ -1896,6 +1836,68 @@ cpdef sub_sv_migrator_migrate(intptr_t handle, intptr_t migrator, int device_slo
     """
     with nogil:
         status = custatevecSubSVMigratorMigrate(<Handle>handle, <SubSVMigratorDescriptor>migrator, device_slot_ind_ex, <const void*>src_sub_sv, <void*>dst_sub_sv, <custatevecIndex_t>begin, <custatevecIndex_t>end)
+    check_status(status)
+
+
+cpdef size_t compute_expectation_batched_get_workspace_size(intptr_t handle, int sv_data_type, uint32_t n_index_bits, uint32_t n_svs, int64_t sv_stride, intptr_t matrices, int matrix_data_type, int layout, uint32_t n_matrices, uint32_t n_basis_bits, int compute_type) except? 0:
+    """This function gets the required workspace size for :func:`compute_expectation_batched`.
+
+    Args:
+        handle (intptr_t): the handle to the cuStateVec context.
+        sv_data_type (int): Data type of the state vector.
+        n_index_bits (uint32_t): the number of index bits of the state vector.
+        n_svs (uint32_t): the number of state vectors.
+        sv_stride (int64_t): distance of two consecutive state vectors.
+        matrices (intptr_t): pointer to allocated matrices in one contiguous memory chunk on host or device.
+        matrix_data_type (int): data type of matrices.
+        layout (MatrixLayout): enumerator specifying the memory layout of matrix.
+        n_matrices (uint32_t): the number of matrices.
+        n_basis_bits (uint32_t): the number of basis bits.
+        compute_type (ComputeType): compute_type of matrix multiplication.
+
+    Returns:
+        size_t: size of the extra workspace.
+
+    .. seealso:: `custatevecComputeExpectationBatchedGetWorkspaceSize`
+    """
+    cdef size_t extra_workspace_size_in_bytes
+    with nogil:
+        status = custatevecComputeExpectationBatchedGetWorkspaceSize(<Handle>handle, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <const custatevecIndex_t>sv_stride, <const void*>matrices, <DataType>matrix_data_type, <_MatrixLayout>layout, <const uint32_t>n_matrices, <const uint32_t>n_basis_bits, <_ComputeType>compute_type, &extra_workspace_size_in_bytes)
+    check_status(status)
+    return extra_workspace_size_in_bytes
+
+
+cpdef compute_expectation_batched(intptr_t handle, intptr_t batched_sv, int sv_data_type, uint32_t n_index_bits, uint32_t n_svs, int64_t sv_stride, intptr_t expectation_values, intptr_t matrices, int matrix_data_type, int layout, uint32_t n_matrices, basis_bits, uint32_t n_basis_bits, int compute_type, intptr_t extra_workspace, size_t extra_workspace_size_in_bytes):
+    """Compute the expectation values of matrix observables for each of the batched state vectors.
+
+    Args:
+        handle (intptr_t): the handle to the cuStateVec library.
+        batched_sv (intptr_t): batched state vector allocated in one continuous memory chunk on device.
+        sv_data_type (int): data type of the state vector.
+        n_index_bits (uint32_t): the number of index bits of the state vector.
+        n_svs (uint32_t): the number of state vectors.
+        sv_stride (int64_t): distance of two consecutive state vectors.
+        expectation_values (intptr_t): pointer to a host array to store expectation values.
+        matrices (intptr_t): pointer to allocated matrices in one contiguous memory chunk on host or device.
+        matrix_data_type (int): data type of matrices.
+        layout (MatrixLayout): matrix memory layout.
+        n_matrices (uint32_t): the number of matrices.
+        basis_bits (object): pointer to a host array of basis index bits. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
+
+        n_basis_bits (uint32_t): the number of basis bits.
+        compute_type (ComputeType): compute_type of matrix multiplication.
+        extra_workspace (intptr_t): pointer to an extra workspace.
+        extra_workspace_size_in_bytes (size_t): the size of extra workspace.
+
+    .. seealso:: `custatevecComputeExpectationBatched`
+    """
+    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_ = \
+        get_resource_ptr[int32_t](basis_bits, <int32_t*>NULL)
+    with nogil:
+        status = custatevecComputeExpectationBatched(<Handle>handle, <const void*>batched_sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <custatevecIndex_t>sv_stride, <double2*>expectation_values, <const void*>matrices, <DataType>matrix_data_type, <_MatrixLayout>layout, <const uint32_t>n_matrices, <const int32_t*>(_basis_bits_.data()), <const uint32_t>n_basis_bits, <_ComputeType>compute_type, <void*>extra_workspace, extra_workspace_size_in_bytes)
     check_status(status)
 
 

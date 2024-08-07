@@ -55,7 +55,8 @@ class CupyTensor(Tensor):
 
     def numpy(self, stream_holder=StreamHolder()):
         stream = stream_holder.obj
-        out = self.tensor.get(stream=stream)
+        with stream:
+            out = self.tensor.get(stream=stream)
         # cupy/cupy#7820
         if stream is not None:
             stream.synchronize()
@@ -121,9 +122,7 @@ class CupyTensor(Tensor):
         Check if the object is ndarray-like.
         """
         return isinstance(self.tensor, cupy.ndarray)
-
-    def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
-        _, _, extents, strides = cutn.get_tensor_details(handle, desc_tensor)
-        if tuple(extents) != self.shape:
-            strides = [i * self.tensor.itemsize for i in strides]
-            self.tensor = cupy.ndarray(extents, dtype=self.tensor.dtype, memptr=self.tensor.data, strides=strides)
+    
+    def update_extents_strides(self, extents, strides):
+        strides = [i * self.tensor.itemsize for i in strides]
+        self.tensor = cupy.ndarray(extents, dtype=self.tensor.dtype, memptr=self.tensor.data, strides=strides)

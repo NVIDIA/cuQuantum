@@ -52,6 +52,14 @@ class Tensor(ABC):
     @abstractmethod
     def shape(self):
         raise NotImplementedError
+    
+    @property
+    def ndim(self):
+        return len(self.shape)
+    
+    @property
+    def T(self):
+        return self.__class__(self.tensor.T)
 
     @property
     @abstractmethod
@@ -85,10 +93,15 @@ class Tensor(ABC):
                 pass
         return name_to_dtype
     
-    @abstractmethod
     def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
-        raise NotImplementedError
+        _, _, extents, strides = cutn.get_tensor_details(handle, desc_tensor)
+        if tuple(extents) != self.shape:
+            self.update_extents_strides(extents, strides)
     
     def create_tensor_descriptor(self, handle, modes):
         return cutn.create_tensor_descriptor(handle, self.tensor.ndim, self.shape, self.strides, modes, typemaps.NAME_TO_DATA_TYPE[self.dtype])
+    
+    @abstractmethod
+    def update_extents_strides(self, extents, strides):
+        raise NotImplementedError
 

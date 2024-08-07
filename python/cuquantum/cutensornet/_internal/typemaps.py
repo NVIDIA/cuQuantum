@@ -50,7 +50,7 @@ def create_cuda_compute_type_map(cuda_compute_type_enum_class):
     """
     Map the data type name to the corresponding CUDA compute type.
     """
-    cuda_compute_type_pattern = re.compile(r'COMPUTE_(?:(?P<width>\d+)(?P<type>F|I|U|BF)|(?P<tf32>TF32))')
+    cuda_compute_type_pattern = re.compile(r'COMPUTE_(?:(?P<width>\d+)(?P<type>F|I|U|BF)|(?P<tf32>TF32|3XTF32))')
 
     type_code_map = { 'i' : 'int', 'u' : 'uint', 'f' : 'float', 'bf' : 'bfloat' }
 

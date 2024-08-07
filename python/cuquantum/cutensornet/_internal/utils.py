@@ -7,7 +7,6 @@ A collection of (internal use) helper functions.
 """
 
 import contextlib
-import ctypes
 import functools
 from typing import Callable, Dict, Mapping, Optional
 
@@ -88,20 +87,15 @@ def device_ctx(new_device_id):
         cp.cuda.runtime.setDevice(old_device_id)
 
 
-def get_or_create_stream(device_id, stream, op_package):
-    """
-    Create a stream object from a stream pointer or extract the stream pointer from a stream object, or
-    use the current stream.
+def is_hashable(obj):
+    try:
+        hash(obj)
+    except TypeError:
+        return False
+    return True
 
-    Args:
-        device_id: The device ID.
-        stream: A stream object, stream pointer, or None.
-        op_package: The package the tensor network operands belong to.
-
-    Returns:
-        StreamHolder: Hold a CuPy stream object, package stream context, stream pointer, ...
-    """
-
+@functools.lru_cache(maxsize=128)
+def cached_get_or_create_stream(device_id, stream, op_package):
     op_package_ifc = package_wrapper.PACKAGE[op_package]
     if stream is None:
         stream = op_package_ifc.get_current_stream(device_id)
@@ -127,6 +121,25 @@ def get_or_create_stream(device_id, stream, op_package):
     obj, ctx, ptr = _create_stream_ctx_ptr_cupy_stream(op_package_ifc, stream)
     return StreamHolder(
         **{'ctx': ctx, 'obj': obj, 'ptr': ptr, 'device_id': device_id, 'package': op_package})
+
+
+def get_or_create_stream(device_id, stream, op_package):
+    """
+    Create a stream object from a stream pointer or extract the stream pointer from a stream object, or
+    use the current stream.
+
+    Args:
+        device_id: The device ID.
+        stream: A stream object, stream pointer, or None.
+        op_package: The package the tensor network operands belong to.
+
+    Returns:
+        StreamHolder: Hold a CuPy stream object, package stream context, stream pointer, ...
+    """
+    if stream is not None and is_hashable(stream): # cupy.cuda.Stream from cupy-10.4 is unhashable (if one installs cupy from conda with cuda11.8)
+        return cached_get_or_create_stream(device_id, stream, op_package)
+    else:
+        return cached_get_or_create_stream.__wrapped__(device_id, stream, op_package)
 
 
 def get_memory_limit(memory_limit, device, limit=0):

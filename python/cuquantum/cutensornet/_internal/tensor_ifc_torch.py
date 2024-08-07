@@ -33,7 +33,7 @@ class TorchTensor(Tensor):
 
     @property
     def device(self):
-        str(self.tensor.device).split(':')[0]
+        return str(self.tensor.device).split(':')[0]
 
     @property
     def device_id(self):
@@ -51,6 +51,10 @@ class TorchTensor(Tensor):
     @property
     def strides(self):
         return self.tensor.stride()
+    
+    @property
+    def T(self):
+        return self.__class__(self.tensor.permute(*torch.arange(self.tensor.ndim - 1, -1, -1)))
 
     def numpy(self, stream_holder=StreamHolder()):
         # We currently do not use this.
@@ -100,9 +104,6 @@ class TorchTensor(Tensor):
         Check if the object is ndarray-like.
         """
         return isinstance(self.tensor, torch.Tensor)
-    
-    def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
-        _, _, extents, strides = cutn.get_tensor_details(handle, desc_tensor)
-        if tuple(extents) != self.shape:
-            # note: torch strides is not scaled by bytes
-            self.tensor = torch.as_strided(self.tensor, tuple(extents), tuple(strides))
+
+    def update_extents_strides(self, extents, strides):
+        self.tensor = torch.as_strided(self.tensor, tuple(extents), tuple(strides))
