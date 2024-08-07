@@ -14,7 +14,7 @@ from cuquantum import tensor
 from cuquantum.cutensornet._internal.decomposition_utils import DECOMPOSITION_DTYPE_NAMES
 from cuquantum.cutensornet._internal.utils import infer_object_package
 
-from .approxTN_utils import tensor_decompose, verify_split_QR, verify_split_SVD
+from .approxTN_utils import tensor_decompose, verify_split_QR, verify_split_SVD, SingularValueDegeneracyError
 from .data import backend_names, tensor_decomp_expressions
 from .test_options import _OptionsBase, TestNetworkOptions
 from .test_utils import DecomposeFactory
@@ -70,7 +70,10 @@ class TestDecompose:
             assert verify_split_QR(decompose_expr, operand, q, r, None, None)
         elif isinstance(method, tensor.SVDMethod):
             svd_kwargs = dataclasses.asdict(method)
-            outputs_ref = tensor_decompose(decompose_expr, operand, method="svd", return_info=return_info, **svd_kwargs)
+            try:
+                outputs_ref = tensor_decompose(decompose_expr, operand, method="svd", return_info=return_info, **svd_kwargs)
+            except SingularValueDegeneracyError:
+                pytest.skip("Test skipped due to singular value degeneracy issue")
             if return_info:
                 u, s, v, info = outputs
                 u_ref, s_ref, v_ref, info_ref = outputs_ref

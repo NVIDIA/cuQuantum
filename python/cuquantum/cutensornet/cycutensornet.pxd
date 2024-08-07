@@ -1,8 +1,8 @@
 # Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-# This code was automatically generated. Do not modify it directly.
+#
+# This code was automatically generated across versions from 23.03.0 to 24.08.0. Do not modify it directly.
 # This layer exposes the C header to Cython as-is.
 
 from libc.stdint cimport int32_t, int64_t, uint32_t, uint64_t
@@ -50,7 +50,7 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_STATUS_DEVICE_ALLOCATOR_ERROR
         CUTENSORNET_STATUS_DISTRIBUTED_FAILURE
         CUTENSORNET_STATUS_INTERRUPTED
-    
+
     ctypedef enum cutensornetComputeType_t:
         CUTENSORNET_COMPUTE_16F
         CUTENSORNET_COMPUTE_16BF
@@ -62,20 +62,20 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_COMPUTE_8I
         CUTENSORNET_COMPUTE_32U
         CUTENSORNET_COMPUTE_32I
-    
+
     ctypedef enum cutensornetGraphAlgo_t:
         CUTENSORNET_GRAPH_ALGO_RB
         CUTENSORNET_GRAPH_ALGO_KWAY
-    
+
     ctypedef enum cutensornetMemoryModel_t:
         CUTENSORNET_MEMORY_MODEL_HEURISTIC
         CUTENSORNET_MEMORY_MODEL_CUTENSOR
-    
+
     ctypedef enum cutensornetOptimizerCost_t:
         CUTENSORNET_OPTIMIZER_COST_FLOPS
         CUTENSORNET_OPTIMIZER_COST_TIME
         CUTENSORNET_OPTIMIZER_COST_TIME_TUNED
-    
+
     ctypedef enum cutensornetContractionOptimizerConfigAttributes_t:
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GRAPH_NUM_PARTITIONS
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GRAPH_CUTOFF_SIZE
@@ -97,7 +97,7 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_CACHE_REUSE_NRUNS
         CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION
-    
+
     ctypedef enum cutensornetContractionOptimizerInfoAttributes_t:
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_PATH
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_SLICES
@@ -113,24 +113,24 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_LARGEST_TENSOR
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_INTERMEDIATE_MODES
         CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_INTERMEDIATE_MODES
-    
+
     ctypedef enum cutensornetContractionAutotunePreferenceAttributes_t:
         CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS
         CUTENSORNET_CONTRACTION_AUTOTUNE_INTERMEDIATE_MODES
-    
+
     ctypedef enum cutensornetWorksizePref_t:
         CUTENSORNET_WORKSIZE_PREF_MIN
         CUTENSORNET_WORKSIZE_PREF_RECOMMENDED
         CUTENSORNET_WORKSIZE_PREF_MAX
-    
+
     ctypedef enum cutensornetMemspace_t:
         CUTENSORNET_MEMSPACE_DEVICE
         CUTENSORNET_MEMSPACE_HOST
-    
+
     ctypedef enum cutensornetWorkspaceKind_t:
         CUTENSORNET_WORKSPACE_SCRATCH
         CUTENSORNET_WORKSPACE_CACHE
-    
+
     ctypedef enum cutensornetTensorSVDConfigAttributes_t:
         CUTENSORNET_TENSOR_SVD_CONFIG_ABS_CUTOFF
         CUTENSORNET_TENSOR_SVD_CONFIG_REL_CUTOFF
@@ -139,30 +139,30 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_TENSOR_SVD_CONFIG_ALGO
         CUTENSORNET_TENSOR_SVD_CONFIG_ALGO_PARAMS
         CUTENSORNET_TENSOR_SVD_CONFIG_DISCARDED_WEIGHT_CUTOFF
-    
+
     ctypedef enum cutensornetTensorSVDPartition_t:
         CUTENSORNET_TENSOR_SVD_PARTITION_NONE
         CUTENSORNET_TENSOR_SVD_PARTITION_US
         CUTENSORNET_TENSOR_SVD_PARTITION_SV
         CUTENSORNET_TENSOR_SVD_PARTITION_UV_EQUAL
-    
+
     ctypedef enum cutensornetTensorSVDNormalization_t:
         CUTENSORNET_TENSOR_SVD_NORMALIZATION_NONE
         CUTENSORNET_TENSOR_SVD_NORMALIZATION_L1
         CUTENSORNET_TENSOR_SVD_NORMALIZATION_L2
         CUTENSORNET_TENSOR_SVD_NORMALIZATION_LINF
-    
+
     ctypedef enum cutensornetTensorSVDInfoAttributes_t:
         CUTENSORNET_TENSOR_SVD_INFO_FULL_EXTENT
         CUTENSORNET_TENSOR_SVD_INFO_REDUCED_EXTENT
         CUTENSORNET_TENSOR_SVD_INFO_DISCARDED_WEIGHT
         CUTENSORNET_TENSOR_SVD_INFO_ALGO
         CUTENSORNET_TENSOR_SVD_INFO_ALGO_STATUS
-    
+
     ctypedef enum cutensornetGateSplitAlgo_t:
         CUTENSORNET_GATE_SPLIT_ALGO_DIRECT
         CUTENSORNET_GATE_SPLIT_ALGO_REDUCED
-    
+
     ctypedef enum cutensornetNetworkAttributes_t:
         CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_CONSTANT
         CUTENSORNET_NETWORK_INPUT_TENSORS_CONSTANT
@@ -170,43 +170,44 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_NETWORK_INPUT_TENSORS_CONJUGATED
         CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_REQUIRE_GRAD
         CUTENSORNET_NETWORK_INPUT_TENSORS_REQUIRE_GRAD
-    
+
     ctypedef enum cutensornetSmartOption_t:
         CUTENSORNET_SMART_OPTION_DISABLED
         CUTENSORNET_SMART_OPTION_ENABLED
-    
+
     ctypedef enum cutensornetTensorSVDAlgo_t:
         CUTENSORNET_TENSOR_SVD_ALGO_GESVD
         CUTENSORNET_TENSOR_SVD_ALGO_GESVDJ
         CUTENSORNET_TENSOR_SVD_ALGO_GESVDP
         CUTENSORNET_TENSOR_SVD_ALGO_GESVDR
-    
+
     ctypedef enum cutensornetStatePurity_t:
         CUTENSORNET_STATE_PURITY_PURE
-    
+
     ctypedef enum cutensornetMarginalAttributes_t:
         CUTENSORNET_MARGINAL_OPT_NUM_HYPER_SAMPLES
         CUTENSORNET_MARGINAL_CONFIG_NUM_HYPER_SAMPLES
         CUTENSORNET_MARGINAL_INFO_FLOPS
-    
+
     ctypedef enum cutensornetSamplerAttributes_t:
         CUTENSORNET_SAMPLER_OPT_NUM_HYPER_SAMPLES
         CUTENSORNET_SAMPLER_CONFIG_NUM_HYPER_SAMPLES
+        CUTENSORNET_SAMPLER_CONFIG_DETERMINISTIC
         CUTENSORNET_SAMPLER_INFO_FLOPS
-    
+
     ctypedef enum cutensornetAccessorAttributes_t:
         CUTENSORNET_ACCESSOR_OPT_NUM_HYPER_SAMPLES
         CUTENSORNET_ACCESSOR_CONFIG_NUM_HYPER_SAMPLES
         CUTENSORNET_ACCESSOR_INFO_FLOPS
-    
+
     ctypedef enum cutensornetExpectationAttributes_t:
         CUTENSORNET_EXPECTATION_OPT_NUM_HYPER_SAMPLES
         CUTENSORNET_EXPECTATION_CONFIG_NUM_HYPER_SAMPLES
         CUTENSORNET_EXPECTATION_INFO_FLOPS
-    
+
     ctypedef enum cutensornetBoundaryCondition_t:
         CUTENSORNET_BOUNDARY_CONDITION_OPEN
-    
+
     ctypedef enum cutensornetStateAttributes_t:
         CUTENSORNET_STATE_MPS_CANONICAL_CENTER
         CUTENSORNET_STATE_MPS_SVD_CONFIG_ABS_CUTOFF
@@ -226,7 +227,7 @@ cdef extern from '<cutensornet.h>' nogil:
         CUTENSORNET_STATE_CONFIG_MPS_MPO_APPLICATION
         CUTENSORNET_STATE_CONFIG_NUM_HYPER_SAMPLES
         CUTENSORNET_STATE_INFO_FLOPS
-    
+
     ctypedef enum cutensornetStateMPOApplication_t:
         CUTENSORNET_STATE_MPO_APPLICATION_INEXACT
         CUTENSORNET_STATE_MPO_APPLICATION_EXACT

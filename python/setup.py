@@ -33,10 +33,10 @@ with open(os.path.join(source_root, "tests/requirements.txt")) as f:
 # - cuTENSOR version is constrained in the cutensornet-cuXX package, so we don't
 #   need to list it
 install_requires = [
-    'numpy~=1.21',  # ">=1.21,<2"
+    'numpy>=1.21, <3.0',  # ">=1.21,<3"
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
     f'custatevec-cu{utils.cuda_major_ver}~=1.6',   # ">=1.6.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.4',  # ">=2.4.0,<3"
+    f'cutensornet-cu{utils.cuda_major_ver}>=2.5.0,<3',
 ]
 if utils.cuda_major_ver == '11':
     install_requires.append('cupy-cuda11x>=13.0')  # no ambiguity
@@ -151,7 +151,6 @@ setup(
         "Topic :: Education",
         "Topic :: Scientific/Engineering",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
@@ -167,7 +166,7 @@ setup(
         ["*.pxd", "*.pyx", "*.py"],
     ),
     zip_safe=False,
-    python_requires='>=3.9',
+    python_requires='>=3.10',
     install_requires=install_requires,
     tests_require=install_requires+tests_require,
     cmdclass=cmdclass,

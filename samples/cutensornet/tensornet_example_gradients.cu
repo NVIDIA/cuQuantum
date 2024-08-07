@@ -89,6 +89,7 @@ int main()
 
     if(verbose) {
         printf("===== device info ======\n");
+        printf("GPU-local-id:%d\n", deviceId);
         printf("GPU-name:%s\n", prop.name);
         printf("GPU-clock:%d\n", prop.clockRate);
         printf("GPU-memoryClock:%d\n", prop.memoryClockRate);

@@ -33,12 +33,14 @@ class MemoryPointer:
         self.size = size
         if finalizer is not None:
             self._finalizer = weakref.finalize(self, finalizer)
+        else:
+            self._finalizer = None
 
     def free(self):
         """
         "Frees" the memory buffer by calling the finalizer.
         """
-        if finalizer is None:
+        if self._finalizer is None:
             return
 
         if not self._finalizer.alive:

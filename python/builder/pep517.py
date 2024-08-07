@@ -31,7 +31,7 @@ def get_requires_for_build_wheel(config_settings=None):
     # 22.3 by setuptools, so we must follow the same practice in the constraints;
     # also, we don't need the patch number here
     cuqnt_require = [f'custatevec-cu{utils.cuda_major_ver}~=1.6',   # ">=1.6.0,<2"
-                     f'cutensornet-cu{utils.cuda_major_ver}~=2.4',  # ">=2.4.0,<3"
+                     f'cutensornet-cu{utils.cuda_major_ver}~=2.5',   # ">=2.5.0,<3"
                     ]
 
     return _build_meta.get_requires_for_build_wheel(config_settings) + cuqnt_require

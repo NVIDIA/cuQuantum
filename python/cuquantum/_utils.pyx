@@ -111,6 +111,7 @@ class ComputeType(IntEnum):
     COMPUTE_32I     = 1 << 9
     COMPUTE_16BF    = 1 << 10
     COMPUTE_TF32    = 1 << 12
+    COMPUTE_3XTF32  = 1 << 13
 
 
 # TODO: use those exposed by CUDA Python instead, but before removing these

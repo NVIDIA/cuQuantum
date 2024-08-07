@@ -5,7 +5,7 @@
 Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com/cuda/cuquantum/latest/python).
 
 For instructions on installing *cuQuantum Python*, refer to our 
-[getting started section](../getting_started/getting_started.rst)
+[getting started section](../getting-started/index.rst)
 
 ## Building and installing cuQuantum Python from source
 
@@ -15,8 +15,8 @@ The build-time dependencies of the cuQuantum Python package include:
 
 * CUDA Toolkit 11.x or 12.x
 * cuStateVec 1.4.0+
-* cuTensorNet 2.4.0+
-* Python 3.9+
+* cuTensorNet 2.5.0+
+* Python 3.10+
 * Cython >=0.29.22,<3
 * pip 21.3.1+
 * [packaging](https://packaging.pypa.io/en/latest/)
@@ -57,8 +57,8 @@ Runtime dependencies of the cuQuantum Python package include:
 * Driver: Linux (450.80.02+ for CUDA 11, 525.60.13+ for CUDA 12)
 * CUDA Toolkit 11.x or 12.x
 * cuStateVec 1.4.0+
-* cuTensorNet 2.4.0+
-* Python 3.9+
+* cuTensorNet 2.5.0+
+* Python 3.10+
 * NumPy v1.21+
 * CuPy v13.0.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
 * PyTorch v1.10+ (optional, see [installation guide](https://pytorch.org/get-started/locally/))
@@ -96,4 +96,4 @@ variable `CUDA_PATH` is not set.
 
 ## Citing cuQuantum
 
-Pleae click this Zenodo badge to see the citation format: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6385574.svg)](https://doi.org/10.5281/zenodo.6385574)
+Please click this Zenodo badge to see the citation format: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6385574.svg)](https://doi.org/10.5281/zenodo.6385574)

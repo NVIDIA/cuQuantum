@@ -185,7 +185,7 @@ else:
     cutn.destroy_network_operator(tn_operator1)
     cutn.destroy_network_operator(tn_operator2)
     cutn.destroy(handle)
-    del scratch
+    del scratch_space
     print("Free resource and exit.")
     exit()
 print("Set the workspace buffer for MPS computation")
@@ -232,7 +232,7 @@ else:
     cutn.destroy_network_operator(tn_operator1)
     cutn.destroy_network_operator(tn_operator2)
     cutn.destroy(handle)
-    del scratch
+    del scratch_space
     print("Free resource and exit.")
     exit()
 print("Set the workspace buffer for sampling")

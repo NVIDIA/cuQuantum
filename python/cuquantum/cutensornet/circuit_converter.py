@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -97,6 +97,10 @@ class CircuitToEinsum:
                 dtype = getattr(backend, dtype)
             except AttributeError:
                 dtype = getattr(backend, np.dtype(dtype).name)
+        dtype_name = str(dtype).split('.')[-1]
+        if not dtype_name.startswith('complex'):
+            raise ValueError(f"dtype shall be complex, found {dtype}")
+
         self.dtype = dtype
 
         # unfold circuit metadata

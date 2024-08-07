@@ -31,8 +31,8 @@ from cuquantum import CircuitToEinsum, contract
 from cuquantum.cutensornet._internal.utils import infer_object_package
 from cuquantum.cutensornet._internal.circuit_converter_utils import get_pauli_gates
 
-from .approxTN_utils import gate_decompose, tensor_decompose, SVD_TOLERANCE
-from .test_utils import atol_mapper, rtol_mapper, DEFAULT_RNG, EMPTY_DICT
+from .approxTN_utils import SVD_TOLERANCE
+from .test_utils import atol_mapper, get_or_create_tensor_backend, rtol_mapper, DEFAULT_RNG, EMPTY_DICT, get_or_create_tensor_backend, get_dtype_name
 
 # note: this implementation would cause pytorch tests being silently skipped
 # if pytorch is not available, which is the desired effect since otherwise
@@ -40,6 +40,23 @@ from .test_utils import atol_mapper, rtol_mapper, DEFAULT_RNG, EMPTY_DICT
 backends = [np, cp]
 if torch:
     backends.append(torch)
+
+def get_contraction_tolerance(dtype):
+    tolerance = {'atol': atol_mapper[dtype],
+                 'rtol': rtol_mapper[dtype]}
+    return tolerance
+
+def get_mps_tolerance(dtype):
+    tolerance = get_contraction_tolerance(dtype)
+    # relax the tolerance for SVD based simulations
+    if dtype in ('float64', 'complex128'):
+    # for double precision, relax the tolerance
+        tolerance['atol'] += SVD_TOLERANCE[dtype] ** .5
+        tolerance['rtol'] += SVD_TOLERANCE[dtype] ** .5
+    else:
+        tolerance['atol'] += SVD_TOLERANCE[dtype]
+        tolerance['rtol'] += SVD_TOLERANCE[dtype]
+    return tolerance
 
 def get_partial_indices(n, projected_modes=EMPTY_DICT):
     partial_indices = [slice(None)] * n
@@ -55,7 +72,7 @@ def reduced_density_matrix_from_sv(sv, modes, projected_modes=EMPTY_DICT):
     bra_modes = list(range(n))
     ket_modes = [i+n if i in modes else i for i in range(n)]
     output_modes = list(modes) + [i+n for i in modes]
-    if infer_object_package(sv) is torch:
+    if infer_object_package(sv) == 'torch':
         inputs = [sv, bra_modes, sv.conj().resolve_conj(), ket_modes]
     else:
         inputs = [sv, bra_modes, sv.conj(), ket_modes]
@@ -72,7 +89,7 @@ def batched_amplitude_from_sv(sv, projected_modes):
 
 def amplitude_from_sv(sv, bitstring):
     index = [int(ibit) for ibit in bitstring]
-    return sv[tuple(index)]
+    return sv[tuple(index)].item()
 
 
 def expectation_from_sv(sv, pauli_strings):
@@ -89,6 +106,8 @@ def expectation_from_sv(sv, pauli_strings):
         for o, qs in pauli_gates:
             q = qs[0]
             inputs[3][q] += n # update ket indices
+            if infer_object_package(sv) == 'torch' and str(sv.device) == 'cpu':
+                o = o.to(device=sv.device)
             inputs.extend([o, [q+n, q]])
         return oe.contract(*inputs).item()
     else:
@@ -142,7 +161,9 @@ class _BaseComputeEngine:
 
     def __init__(self, circuit, backend, dtype='complex128', sample_rng=DEFAULT_RNG):
         self.circuit = circuit
-        self.backend = backend
+        if not isinstance(backend, str):
+            backend = backend.__name__
+        self.backend = get_or_create_tensor_backend(backend)
         self.dtype = dtype
         self.sv = None
         self.norm = None
@@ -161,44 +182,43 @@ class _BaseComputeEngine:
         if self._tolerance is None:
             #NOTE: This is default tolerance for contraction based simulation. 
             #For MPS simulations, tolerance needs to be relaxed
-            self._tolerance = {'atol': atol_mapper[self.dtype],
-                               'rtol': rtol_mapper[self.dtype]}
+            self._tolerance = get_contraction_tolerance(self.dtype)
         return self._tolerance
     
-    def _get_state_vector(self):
+    def _compute_state_vector(self):
         # implementation for different backends
         raise NotImplementedError
     
-    def get_sampling(self, nshots, qubits_to_sample=None):
-        modes_to_sample = [self.qubits.index(q) for q in qubits_to_sample] if qubits_to_sample else None
-        return sample_from_sv(self.get_state_vector(), nshots, modes_to_sample=modes_to_sample, rng=self.sample_rng)
+    def compute_sampling(self, nshots, modes=None):
+        modes_to_sample = [self.qubits.index(q) for q in modes] if modes else None
+        return sample_from_sv(self.compute_state_vector(), nshots, modes_to_sample=modes_to_sample, rng=self.sample_rng)
     
-    def get_state_vector(self):
+    def compute_state_vector(self):
         if self.sv is None:
-            self.sv = self._get_state_vector()
+            self.sv = self._compute_state_vector()
         return self.sv
     
-    def get_norm(self):
+    def compute_norm(self):
         if self.norm is None:
-            sv = self.get_state_vector()
-            self.norm = self.backend.linalg.norm(sv).item() ** 2
+            sv = self.compute_state_vector()
+            self.norm = self.backend.norm(sv).item() ** 2
         return self.norm
     
-    def get_amplitude(self, bitstring):
-        return amplitude_from_sv(self.get_state_vector(), bitstring)
+    def compute_amplitude(self, bitstring):
+        return amplitude_from_sv(self.compute_state_vector(), bitstring)
     
-    def get_batched_amplitudes(self, fixed):
+    def compute_batched_amplitudes(self, fixed):
         fixed_modes = dict([(self.qubits.index(q), bit) for q, bit in fixed.items()])
-        return batched_amplitude_from_sv(self.get_state_vector(), fixed_modes)
+        return batched_amplitude_from_sv(self.compute_state_vector(), fixed_modes)
     
-    def get_reduced_density_matrix(self, where, fixed=EMPTY_DICT):
-        sv = self.get_state_vector()
+    def compute_reduced_density_matrix(self, where, fixed=EMPTY_DICT):
+        sv = self.compute_state_vector()
         modes = [self.qubits.index(q) for q in where]
         projected_modes = dict([(self.qubits.index(q), bit) for q, bit in fixed.items()])
         return reduced_density_matrix_from_sv(sv, modes, projected_modes=projected_modes)
     
-    def get_expectation(self, pauli_string):
-        return expectation_from_sv(self.get_state_vector(), pauli_string)
+    def compute_expectation(self, pauli_string):
+        return expectation_from_sv(self.compute_state_vector(), pauli_string)
 
 
 class CirqComputeEngine(_BaseComputeEngine):
@@ -207,29 +227,26 @@ class CirqComputeEngine(_BaseComputeEngine):
     def qubits(self):
         return sorted(self.circuit.all_qubits())
     
-    def _get_state_vector(self):
+    def _compute_state_vector(self):
         qubits = self.qubits
         simulator = cirq.Simulator(dtype=self.dtype)
         circuit = circuit_parser_utils_cirq.remove_measurements(self.circuit)
         result = simulator.simulate(circuit, qubit_order=qubits)
         statevector = result.state_vector().reshape((2,)*len(qubits))
-        if self.backend is torch:
-            statevector = torch.as_tensor(statevector, dtype=getattr(torch, self.dtype), device='cuda')
-        else:
-            statevector = self.backend.asarray(statevector, dtype=self.dtype)
+        statevector = self.backend.asarray(statevector, dtype=self.dtype)
         return statevector
     
-    def get_sampling(self, nshots, qubits_to_sample=None):
-        if qubits_to_sample is None:
-            qubits_to_sample = self.qubits
+    def compute_sampling(self, nshots, modes=None):
+        if modes is None:
+            modes = self.qubits
         circuit = circuit_parser_utils_cirq.remove_measurements(self.circuit)
-        circuit.append(cirq.measure(*qubits_to_sample, key='meas'))
+        circuit.append(cirq.measure(*modes, key='meas'))
         result = cirq.sample(
             circuit, repetitions=nshots, seed=int(self.sample_rng.integers(2023)), dtype=getattr(np, self.dtype))
         result = result.histogram(key='meas')
         sampling = {}
         nsamples = 0
-        specifier = f"0{len(qubits_to_sample)}b"
+        specifier = f"0{len(modes)}b"
         for bitstring, nsample in result.items():
             sampling[format(bitstring, specifier)] = nsample
             nsamples += nsample
@@ -248,7 +265,7 @@ class QiskitComputeEngine(_BaseComputeEngine):
                      'complex128': 'double'}[self.dtype]
         return precision
     
-    def _get_state_vector(self):
+    def _compute_state_vector(self):
         precision = self._get_precision()
         circuit = circuit_parser_utils_qiskit.remove_measurements(self.circuit)
         circuit.save_statevector()
@@ -259,19 +276,16 @@ class QiskitComputeEngine(_BaseComputeEngine):
         # statevector returned by qiskit's simulator is labelled by the inverse of :attr:`qiskit.QuantumCircuit.qubits`
         # this is different from `cirq` and different from the implementation in :class:`CircuitToEinsum`
         sv = sv.transpose(list(range(circuit.num_qubits))[::-1])
-        if self.backend is torch:
-            sv = torch.as_tensor(sv, dtype=getattr(torch, self.dtype), device='cuda')
-        else:
-            sv = self.backend.asarray(sv, dtype=self.dtype)
+        sv = self.backend.asarray(sv, dtype=self.dtype)
         return sv
     
-    def get_sampling(self, nshots, qubits_to_sample=None):
-        if qubits_to_sample is None:
-            qubits_to_sample = self.qubits
+    def compute_sampling(self, nshots, modes=None):
+        if modes is None:
+            modes = self.qubits
         circuit = self.circuit.remove_final_measurements(inplace=False)
-        new_creg = circuit._create_creg(len(qubits_to_sample), "meas")
+        new_creg = circuit._create_creg(len(modes), "meas")
         circuit.add_register(new_creg)
-        circuit.measure(qubits_to_sample, new_creg)
+        circuit.measure(modes, new_creg)
         precision = self._get_precision()
         backend = QasmSimulator(precision=precision)
         result = backend.run(qiskit.transpile(circuit, backend), shots=nshots, seed=self.sample_rng.integers(2023)).result()
@@ -295,10 +309,8 @@ class ConverterComputeEngine(_BaseComputeEngine):
         else:
             circuit = circuit_or_converter
             self.converter = CircuitToEinsum(circuit, backend=backend, dtype=dtype)
-        if backend is torch:
-            dtype_name = str(self.converter.dtype).split('.')[1]
-        else:
-            dtype_name = self.converter.dtype.__name__
+        
+        dtype_name = get_dtype_name(self.converter.dtype)
         super().__init__(circuit, self.converter.backend, dtype=dtype_name, sample_rng=sample_rng) 
         self._own_handle = handle is None
         if self._own_handle:
@@ -316,24 +328,27 @@ class ConverterComputeEngine(_BaseComputeEngine):
     
     def _compute_from_converter(self, task, *args, **kwargs):
         expression, operands = getattr(self.converter, task)(*args, **kwargs)
-        return contract(expression, *operands, options={'handle': self.handle})
+        out = contract(expression, *operands, options={'handle': self.handle})
+        if task in {'amplitude', 'expectation'}:
+            out = out.item()
+        return out
     
-    def _get_state_vector(self):
+    def _compute_state_vector(self):
         return self._compute_from_converter('state_vector')
     
-    def get_amplitude(self, bitstring):
+    def compute_amplitude(self, bitstring):
         return self._compute_from_converter('amplitude', bitstring)
     
-    def get_batched_amplitudes(self, fixed):
+    def compute_batched_amplitudes(self, fixed):
         return self._compute_from_converter('batched_amplitudes', fixed)
     
-    def get_reduced_density_matrix(self, where, fixed=EMPTY_DICT, lightcone=True):
+    def compute_reduced_density_matrix(self, where, fixed=EMPTY_DICT, lightcone=True):
         return self._compute_from_converter('reduced_density_matrix', where, fixed=fixed, lightcone=lightcone)
     
-    def get_expectation(self, pauli_strings, lightcone=True):
+    def compute_expectation(self, pauli_strings, lightcone=True):
         if isinstance(pauli_strings, str):
             pauli_strings = {pauli_strings: 1}
         val = 0
         for pauli_string, coeff in pauli_strings.items():
             val += coeff * self._compute_from_converter('expectation', pauli_string, lightcone=lightcone)
-        return val.item()
+        return val

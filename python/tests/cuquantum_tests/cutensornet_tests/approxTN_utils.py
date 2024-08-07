@@ -14,6 +14,12 @@ except ImportError:
 import numpy as np
 
 
+REL_DEGENERACY_TOLERANCE = 1e-4
+
+class SingularValueDegeneracyError(Exception):
+    """Truncation takes places at two or more degenerate singular values."""
+    pass
+
 ####################################################
 ################# Helper functions #################
 ####################################################
@@ -261,6 +267,8 @@ def matrix_svd(
     info["reduced_extent"] = reduced_extent
     if reduced_extent != len(s):
         sqrt_sum = backend.linalg.norm(s).item() ** 2
+        if s[reduced_extent-1] >= REL_DEGENERACY_TOLERANCE * s[0] and s[reduced_extent] >= (1-REL_DEGENERACY_TOLERANCE) * s[reduced_extent-1]:
+            raise SingularValueDegeneracyError("Truncation takes places at two or more degenerate singular values.")
         u = u[:, :reduced_extent]
         s = s[:reduced_extent]
         v = v[:reduced_extent]

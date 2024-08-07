@@ -4,7 +4,7 @@ opt_einsum
 cffi >=1.0.0
 nbformat
 nbconvert
-cirq >=0.6.0
+cirq-core
 qiskit
 qiskit-aer
 pylatexenc

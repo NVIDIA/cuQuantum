@@ -109,7 +109,7 @@ else:
     cutn.destroy_accessor(accessor)
     cutn.destroy_state(quantum_state)
     cutn.destroy(handle)
-    del scratch
+    del scratch_space
     print("Free resource and exit.")
     exit()
 print("Set the workspace buffer")

@@ -17,6 +17,7 @@ print("cuTensorNet-vers:", cutn.get_version())
 dev = cp.cuda.Device()  # get current device
 props = cp.cuda.runtime.getDeviceProperties(dev.id)
 print("===== device info ======")
+print("GPU-local-id:", dev.id)
 print("GPU-name:", props["name"].decode())
 print("GPU-clock:", props["clockRate"])
 print("GPU-memoryClock:", props["memoryClockRate"])

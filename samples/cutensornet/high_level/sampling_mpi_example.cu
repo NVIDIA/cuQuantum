@@ -198,6 +198,13 @@ int main(int argc, char **argv)
                                                       &worksize));
   assert(worksize > 0);
 
+  int64_t cacheWorksize {0};
+  HANDLE_CUTN_ERROR(cutensornetWorkspaceGetMemorySize(cutnHandle,
+                                                      workDesc,
+                                                      CUTENSORNET_WORKSIZE_PREF_RECOMMENDED,
+                                                      CUTENSORNET_MEMSPACE_DEVICE,
+                                                      CUTENSORNET_WORKSPACE_CACHE,
+                                                      &cacheWorksize));
   void *d_scratch {nullptr};
   if(worksize <= workSizeAvailable) {
     HANDLE_CUDA_ERROR(cudaMalloc(&d_scratch, worksize));
@@ -210,7 +217,7 @@ int main(int argc, char **argv)
     std::cout << "ERROR: Insufficient workspace size on Device!\n";
     std::abort();
   }
-  const std::size_t cacheSizeAvailable = (workSizeAvailable - worksize);
+  const auto cacheSizeAvailable = std::min(workSizeAvailable - static_cast<size_t>(worksize), static_cast<size_t>(cacheWorksize));
   void *d_cache {nullptr};
   HANDLE_CUDA_ERROR(cudaMalloc(&d_cache, cacheSizeAvailable));
   if (verbose)

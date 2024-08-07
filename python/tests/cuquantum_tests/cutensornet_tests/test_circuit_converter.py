@@ -6,9 +6,8 @@ import pytest
 
 from cuquantum import cutensornet as cutn
 
-from .circuit_data import testing_circuits
+from .circuit_data import backend, backend_cycle, testing_circuits
 from .circuit_tester import CircuitToEinsumTester
-from .circuit_utils import backends
 
 CIRCUIT_TEST_SETTING = {'num_tests_per_task': 3,
                         'num_rdm_sites_max': 3,
@@ -23,8 +22,8 @@ def handle():
 class TestCircuitToEinsum:
     @pytest.mark.parametrize("circuit", testing_circuits)
     @pytest.mark.parametrize("dtype", ('complex64', 'complex128',))
-    @pytest.mark.parametrize("backend", backends)
     def test_circuit_converter(self, circuit, dtype, backend, handle):
+        print(f"{backend=}")
         # Results from Cirq/Qiskit are compared with CircuitToEinsum
         circuit_tests = CircuitToEinsumTester.from_circuit(circuit, dtype, backend, handle=handle, **CIRCUIT_TEST_SETTING)
         circuit_tests.run_tests()

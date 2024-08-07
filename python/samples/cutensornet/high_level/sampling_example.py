@@ -13,6 +13,7 @@ print("cuTensorNet-vers:", cutn.get_version())
 dev = cp.cuda.Device()  # get current device
 props = cp.cuda.runtime.getDeviceProperties(dev.id)
 print("===== device info ======")
+print("GPU-local-id:", dev.id)
 print("GPU-name:", props["name"].decode())
 print("GPU-clock:", props["clockRate"])
 print("GPU-memoryClock:", props["memoryClockRate"])
@@ -84,6 +85,11 @@ num_hyper_samples = np.asarray(8, dtype=num_hyper_samples_dtype)
 cutn.sampler_configure(handle, sampler, 
     cutn.SamplerAttribute.CONFIG_NUM_HYPER_SAMPLES, 
     num_hyper_samples.ctypes.data, num_hyper_samples.dtype.itemsize)
+rng_dtype = cutn.sampler_get_attribute_dtype(cutn.SamplerAttribute.CONFIG_DETERMINISTIC)
+rng = np.asarray(13, dtype=rng_dtype)
+cutn.sampler_configure(handle, sampler, 
+    cutn.SamplerAttribute.CONFIG_DETERMINISTIC, 
+    rng.ctypes.data, rng.dtype.itemsize)
 
 # Prepare the quantum circuit sampler
 work_desc = cutn.create_workspace_descriptor(handle)
@@ -106,7 +112,7 @@ else:
     cutn.destroy_sampler(sampler)
     cutn.destroy_state(quantum_state)
     cutn.destroy(handle)
-    del scratch
+    del scratch_space
     print("Free resource and exit.")
     exit()
 print("Set the workspace buffer")

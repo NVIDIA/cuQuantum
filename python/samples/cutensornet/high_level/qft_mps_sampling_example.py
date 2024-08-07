@@ -125,7 +125,7 @@ else:
     cutn.destroy_workspace_descriptor(work_desc)
     cutn.destroy_state(quantum_state)
     cutn.destroy(handle)
-    del scratch
+    del scratch_space
     print("Free resource and exit.")
     exit()
 print("Set the workspace buffer for MPS computation")
@@ -170,7 +170,7 @@ else:
     cutn.destroy_sampler(sampler)
     cutn.destroy_state(quantum_state)
     cutn.destroy(handle)
-    del scratch
+    del scratch_space
     print("Free resource and exit.")
     exit()
 print("Set the workspace buffer for sampling")

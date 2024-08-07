@@ -6,14 +6,14 @@
 A collection of types for defining options to cutensornet.
 """
 
-__all__ = ['NetworkOptions', 'OptimizerInfo', 'OptimizerOptions', 'PathFinderOptions', 'ReconfigOptions', 'SlicerOptions']
+__all__ = ['NetworkOptions', 'OptimizerInfo', 'OptimizerOptions', 'PathFinderOptions', 
+    'ReconfigOptions', 'SlicerOptions']
 
 import collections
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from logging import Logger
-from typing import Dict, Hashable, Iterable, Literal, Mapping, Optional, Tuple, Union
+from typing import Dict, Hashable, Iterable, Literal, Optional, Tuple, Union
 
-import cupy as cp
 
 import cuquantum
 from cuquantum import cutensornet as cutn
@@ -67,6 +67,10 @@ class NetworkOptions(object):
         if self.allocator is not None and not isinstance(self.allocator, BaseCUDAMemoryManager):
             raise TypeError("The allocator must be an object of type that fulfils the BaseCUDAMemoryManager protocol.")
 
+    def _check_compatible_with_state(self):
+        if self.compute_type is not None:
+            raise ValueError(f"NetworkState and NetworkOperator only supports default compute_type")
+        
 # Generate the options dataclasses from ContractionOptimizerConfigAttributes.
 
 _create_options = enum_utils.create_options_class_from_enum

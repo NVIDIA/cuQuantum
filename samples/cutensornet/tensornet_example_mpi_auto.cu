@@ -131,14 +131,19 @@ int main(int argc, char **argv)
    // Sphinx: MPI #4 [end]
 
    if(verbose) {
-      printf("===== device info ======\n");
+      printf("===== rank 0 device info ======\n");
+      printf("GPU-local-id:%d\n", deviceId);
       printf("GPU-name:%s\n", prop.name);
       printf("GPU-clock:%d\n", prop.clockRate);
       printf("GPU-memoryClock:%d\n", prop.memoryClockRate);
       printf("GPU-nSM:%d\n", prop.multiProcessorCount);
       printf("GPU-major:%d\n", prop.major);
       printf("GPU-minor:%d\n", prop.minor);
-      printf("========================\n");
+      printf("CUDA-available-devices:%d\n",numDevices);
+      printf("CUDA_VISIBLE_DEVICES:%s\n",getenv("CUDA_VISIBLE_DEVICES") != nullptr ? getenv("CUDA_VISIBLE_DEVICES") : "");
+      printf("===============================\n");
+   } else {
+      printf("===== rank %d device info ======\nGPU-local-id:%d\n", rank, deviceId);
    }
 
    typedef float floatType;

@@ -643,8 +643,9 @@ class TestContraction(TestTensorNetworkBase):
                         cutn.Memspace.DEVICE,  # TODO: parametrize memspace?
                         kind)
                     assert required_size == required_size_deprecated
-                if workspace_hint < required_size:
-                    assert False, \
+                if workspace_pref == 'min':
+                    # This only holds when workspace_pref set to min
+                    assert required_size <= workspace_hint, \
                         f"wrong assumption on the workspace size " \
                         f"(given: {workspace_hint}, needed: {required_size})"
                 if required_size > 0:
@@ -948,7 +949,7 @@ class TestTensorQR:
     ),
     'options': (
         {}, # standard exact svd
-        {'max_extent': 4, 'normalization':'L1', 'partition':'U', 'algorithm': 'gesvdr', 'gesvdr_niters': 40}, # fix extent truncation
+        {'max_extent': 4, 'normalization':'L1', 'partition':'U', 'algorithm': 'gesvdr', 'gesvdr_niters': 100}, # fix extent truncation
         {'abs_cutoff': 0.1, 'discarded_weight_cutoff': 0.05, 'normalization': 'L2'}, # discarded weight truncation
         {'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'algorithm': 'gesvdj', 'gesvdj_tol':1e-14, 'gesvdj_max_sweeps': 80}, # value based truncation
         {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V', 'algorithm': 'gesvdj'}, # absolute value based truncation
@@ -1043,10 +1044,13 @@ class TestTensorSVD:
                 s = cp.ndarray(reduced_extent, dtype=s.dtype, memptr=s.data, order='F')
             tn.right_tensor = v = cp.ndarray(extent_V_out, dtype=v.dtype, memptr=v.data, strides=strides_V_out)
         
-        u_ref, s_ref, v_ref, info_ref = approxTN_utils.tensor_decompose(
-            tn.subscript, T, 
-            method='svd', return_info=True, 
-            **self.options)
+        try:
+            u_ref, s_ref, v_ref, info_ref = approxTN_utils.tensor_decompose(
+                tn.subscript, T, 
+                method='svd', return_info=True, 
+                **self.options)
+        except approxTN_utils.SingularValueDegeneracyError:
+            pytest.skip("Test skipped due to singular value degeneracy issue")            
 
         assert approxTN_utils.verify_split_SVD(
             tn.subscript, T, 
@@ -1070,7 +1074,7 @@ class TestTensorSVD:
     ),
     'options': (
         {}, # standard exact svd
-        {'max_extent': 4, 'normalization':'L1', 'partition':'U', 'algorithm': 'gesvdr', 'gesvdr_niters': 40}, # fix extent truncation
+        {'max_extent': 4, 'normalization':'L1', 'partition':'U', 'algorithm': 'gesvdr', 'gesvdr_niters': 100}, # fix extent truncation
         {'abs_cutoff': 0.1, 'discarded_weight_cutoff': 0.05, 'normalization': 'L2'}, # discarded weight truncation
         {'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'algorithm': 'gesvdj', 'gesvdj_tol':1e-14, 'gesvdj_max_sweeps': 80}, # value based truncation
         {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V', 'algorithm': 'gesvdj'}, # absolute value based truncation
@@ -1171,14 +1175,17 @@ class TestTensorGate:
                 s = cp.ndarray(reduced_extent, dtype=s.dtype, memptr=s.data, order='F')
             tn.right_tensor = v = cp.ndarray(extent_V_out, dtype=v.dtype, memptr=v.data, strides=strides_V_out)
         
-        u_ref, s_ref, v_ref, info_ref = approxTN_utils.gate_decompose(
-            tn.subscript, 
-            arr_a, 
-            arr_b, 
-            arr_gate, 
-            gate_algo=algo, 
-            return_info=True, 
-            **self.options)
+        try:
+            u_ref, s_ref, v_ref, info_ref = approxTN_utils.gate_decompose(
+                tn.subscript, 
+                arr_a, 
+                arr_b, 
+                arr_gate, 
+                gate_algo=algo, 
+                return_info=True, 
+                **self.options)
+        except approxTN_utils.SingularValueDegeneracyError:
+            pytest.skip("Test skipped due to singular value degeneracy issue")
         
         assert approxTN_utils.verify_split_SVD(
             tn.subscript, None, 
@@ -1277,3 +1284,11 @@ class TestLogger(LoggerTestBase):
 
     mod = cutn
     prefix = "cutensornet"
+
+
+class TestMisc:
+
+    @pytest.mark.parametrize("cutn_compute_type", cutn.ComputeType)
+    def test_compute_type(self, cutn_compute_type):
+        # check if all compute types under cutn.ComputeType are included in cuquantum.ComputeType
+        cuqnt_compute_type = ComputeType(cutn_compute_type)
