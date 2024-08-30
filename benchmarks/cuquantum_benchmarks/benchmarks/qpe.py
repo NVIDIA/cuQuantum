@@ -18,7 +18,7 @@ class QPE(Benchmark):
 
         # Example instantiation of QPE circuit paramterized by nqubits
         phase = 1/3
-        U = np.mat([[1, 0], [0, np.exp(np.pi * 1j * phase)]])
+        U = np.asmatrix([[1, 0], [0, np.exp(np.pi * 1j * phase)]])
         in_nqubits = 1
         unfold = config['unfold']
         measure = config['measure']

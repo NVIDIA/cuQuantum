@@ -201,7 +201,7 @@ backends = {
             'nfused': None,
             'ngpus': 0,
             'ncputhreads': 1,
-            'precision': 'single',
+            'precision': 'double',
         },
     },
 

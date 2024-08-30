@@ -4,6 +4,7 @@
 
 import functools
 import logging
+import warnings
 import math
 import nvtx
 import os
@@ -41,13 +42,14 @@ class BenchCircuitRunner:
                   'cusvaer_data_transfer_buffer_bits', 'cusvaer_comm_plugin_type',
                   'cusvaer_comm_plugin_soname',
                   # cutn options
-                  'nhypersamples'):
+                  'nhypersamples',
+                  'compute_mode'):
             v = kwargs.pop(k)
-            if k.startswith('cusvaer') or v is not None:
+            if k.startswith('cusvaer') or k == 'compute_mode' or v is not None:
                 setattr(self, k, v)
             else:
                 setattr(self, k, backend_config['config'][k])
-
+            
         # To be parsed in run()
         self._benchmarks = kwargs.pop("benchmarks")
         self._nqubits = kwargs.pop("nqubits")
@@ -72,7 +74,7 @@ class BenchCircuitRunner:
         if self._nqubits is None:
             gpu_prop = cp.cuda.runtime.getDeviceProperties(cp.cuda.Device().id)
             max_n_qubits = math.floor(math.log2(gpu_prop['totalGlobalMem'] / (8 if self.precision == 'single' else 16)))
-            nqubits_list = list(range(16, max_n_qubits + 4, 4))
+            nqubits_list = list(range(4, max_n_qubits + 4, 4))
         else:
             nqubits_list = [self._nqubits]
 
@@ -194,14 +196,15 @@ class BenchCircuitRunner:
         return perf_time / self.nrepeats, cuda_time / self.nrepeats, post_time / self.nrepeats, post_process
 
     def _fix_filename_for_cutn(self, circuit_filename, nqubits):
-        target = pauli = None
+        pauli = None
         if self.backend == 'cutn':
-            target = os.environ.get('CUTENSORNET_BENCHMARK_TARGET', 'amplitude')
-            circuit_filename += f'_{target}'
-            if target == 'expectation':
+            if self.compute_mode is None:
+                self.compute_mode = 'amplitude' # default value
+            circuit_filename += f'_{self.compute_mode}'
+            if self.compute_mode == 'expectation':
                 pauli = random.choices(('I', 'X', 'Y', 'Z'), k=nqubits)
                 circuit_filename += f"_{''.join(pauli)}"
-        return circuit_filename, target, pauli
+        return circuit_filename, pauli
 
     def extract_frontend_version(self):
         if self.frontend == 'qiskit':
@@ -256,8 +259,8 @@ class BenchCircuitRunner:
             circuit_filename += f'_p{p}'
         if measure:
             circuit_filename += '_measure'
-        circuit_filename, target, pauli = self._fix_filename_for_cutn(circuit_filename, self.nqubits)
-        self.cutn_target = target
+        
+        circuit_filename, pauli = self._fix_filename_for_cutn(circuit_filename, self.nqubits)
 
         # get circuit
         circuit = self.get_circuit(circuit_filename)
@@ -300,9 +303,9 @@ class BenchCircuitRunner:
 
         preprocess_data = backend.preprocess_circuit(
             circuit,
-            # only cutn needs these, TODO: backend config
+            # only TN-based backends need these, TODO: backend config
             circuit_filename=os.path.join(self.cache_dir, circuit_filename),
-            target=target,
+            compute_mode=self.compute_mode,
             pauli=pauli
         )
 
@@ -393,7 +396,8 @@ class BenchCircuitRunner:
             sim_config["backend"]["cusvaer_global_index_bits"] = self.cusvaer_global_index_bits
             sim_config["backend"]["cusvaer_p2p_device_bits"] = self.cusvaer_p2p_device_bits
         elif self.backend == "cutn":
-            sim_config["backend"]["target"] = self.cutn_target
+            sim_config["backend"]["compute_mode"] = self.compute_mode
+            sim_config["backend"]["nhypersamples"] = self.nhypersamples
 
         sim_config_hash = sim_config.get_hash()
         self.benchmark_data = {**self.benchmark_data, **sim_config}

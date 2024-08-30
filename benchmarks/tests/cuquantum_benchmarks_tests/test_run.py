@@ -220,6 +220,7 @@ class TestCmdCircuit:
             cmd += ['--cusvaer-global-index-bits', '--cusvaer-p2p-device-bits']
         if backend == 'cutn':
             cmd += ['--nhypersamples', '2']
+            cmd += ['--compute-target', 'amplitude']
 
         for cmd_prefix in tests:
             result = subprocess.run(cmd_prefix+cmd, env=env, capture_output=True)

@@ -132,7 +132,7 @@ backend_cusvaer.add_argument('--cusvaer-comm-plugin-soname', type=str, nargs='?'
 
 backend_cutn = parser_circuit.add_argument_group('cutn-specific options')
 backend_cutn.add_argument('--nhypersamples', type=int, default=32, help='set the number of hypersamples for the pathfinder to explore')
-
+backend_cutn.add_argument('--compute-mode', type=str, required=False, help='set the mode for computation')
 
 # "cuquantum-benchmarks api" subcommand
 parser_api = subparsers.add_parser(

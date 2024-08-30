@@ -44,8 +44,12 @@ class Qiskit(Backend):
         if identifier == 'cusvaer':
             return version('cusvaer')
 
-        if hasattr(qiskit_aer, "__version__"):
-            return qiskit_aer.__version__
+        if hasattr(qiskit, "__version__") and qiskit.__version__ >= "1.0.0":
+            try:
+                from qiskit_aer import __version__ as aer_version
+                return aer_version
+            except ImportError as e:
+                raise RuntimeError("qiskit-aer (or qiskit-aer-gpu) is not installed") from e
         else:
             return qiskit.__qiskit_version__['qiskit-aer']
     
