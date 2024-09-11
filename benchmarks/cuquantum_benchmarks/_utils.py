@@ -21,8 +21,6 @@ import warnings
 import cupy as cp
 import numpy as np
 import nvtx
-from cuquantum import cudaDataType, ComputeType
-from cuquantum.cutensornet._internal.einsum_parser import create_size_dict
 import psutil
 
 
@@ -62,6 +60,7 @@ def precision_str_to_dtype(precision, is_complex=True):
 
 
 def dtype_to_cuda_type(dtype):
+    from cuquantum import cudaDataType
     if dtype == np.complex64:
         return cudaDataType.CUDA_C_32F
     elif dtype == np.complex128:
@@ -71,6 +70,7 @@ def dtype_to_cuda_type(dtype):
 
 
 def dtype_to_compute_type(dtype):
+    from cuquantum import ComputeType
     if dtype == np.complex64:
         return ComputeType.COMPUTE_32F
     elif dtype == np.complex128:
@@ -80,6 +80,7 @@ def dtype_to_compute_type(dtype):
 
 
 def generate_size_dict_from_operands(einsum, operands):
+    from cuquantum.cutensornet._internal.einsum_parser import create_size_dict
     inputs = einsum.split("->")[0]
     inputs = inputs.split(",")
     assert len(inputs) == len(operands)

@@ -43,51 +43,66 @@ class Pennylane(Backend):
         if identifier == "pennylane-lightning-gpu":
             if self.ngpus == 1:
                 try:
-                    import pennylane_lightning_gpu
-                except ImportError as e:
-                    raise RuntimeError("PennyLane-Lightning-GPU plugin is not installed") from e
+                    from pennylane_lightning.lightning_gpu import LightningGPU
+                    return LightningGPU.version
+                except ImportError:
+                    try: # pre pennylane_lightning 0.33.0 version
+                        import pennylane_lightning_gpu
+                        return pennylane_lightning_gpu.__version__
+                    except ImportError:
+                        raise RuntimeError("PennyLane-Lightning-GPU plugin is not installed")
             else:
                 raise ValueError(f"cannot specify --ngpus > 1 for the backend {identifier}")
-            ver = pennylane_lightning_gpu.__version__
         elif identifier == "pennylane-lightning-kokkos":
             try:
-                import pennylane_lightning_kokkos
-            except ImportError as e:
-                raise RuntimeError("PennyLane-Lightning-Kokkos plugin is not installed") from e
-            ver = pennylane_lightning_kokkos.__version__
+                from pennylane_lightning.lightning_kokkos import LightningKokkos
+                return LightningKokkos.version
+            except ImportError:
+                try: # pre pennylane_lightning 0.33.0 version
+                    import pennylane_lightning_kokkos
+                    return pennylane_lightning_kokkos.__version__
+                except ImportError:
+                    raise RuntimeError("PennyLane-Lightning-Kokkos plugin is not installed")
         elif identifier == "pennylane-lightning-qubit":
             try:
                 from pennylane_lightning import lightning_qubit
+                return lightning_qubit.__version__
             except ImportError as e:
                 raise RuntimeError("PennyLane-Lightning plugin is not installed") from e
-            ver = lightning_qubit.__version__
         else: # identifier == "pennylane"
-            ver = pennylane.__version__
-        return ver
-
+            return pennylane.__version__
+        
     def _make_qnode(self, circuit, nshots=1024, **kwargs):
         if self.identifier == "pennylane-lightning-gpu":
             dev = pennylane.device("lightning.gpu", wires=self.nqubits, shots=nshots, c_dtype=self.dtype)
         elif self.identifier == "pennylane-lightning-kokkos":
             # there's no way for us to query what execution space (=backend) that kokkos supports at runtime,
             # so let's just set up Kokkos::InitArguments and hope kokkos to do the right thing...
+            dev = None
             try:
-                import pennylane_lightning_kokkos
-            except ImportError as e:
-                raise RuntimeError("PennyLane-Lightning-Kokkos plugin is not installed") from e
-            args = pennylane_lightning_kokkos.lightning_kokkos.InitArguments()
-            args.num_threads = self.ncpu_threads
-            args.disable_warnings = int(logger.getEffectiveLevel() != logging.DEBUG)
-            ## Disable MPI because it's unclear if pennylane actually supports it (at least it's untested)
-            # # if we're running MPI, we want to know now and get it init'd before kokkos is
-            # MPI = is_running_mpi()
-            # if MPI:
-            #     comm = MPI.COMM_WORLD
-            #     args.ndevices = min(comm.Get_size(), self.ngpus)  # note: kokkos uses 1 GPU per process
-            dev = pennylane.device(
+                if self.ncpu_threads > 1 :
+                    warnings.warn(f"--ncputhreads is ignored for {self.identifier}", stacklevel=2)
+                dev = pennylane.device(
                 "lightning.kokkos", wires=self.nqubits, shots=nshots, c_dtype=self.dtype,
-                sync=False,
-                kokkos_args=args)
+                sync=False)
+            except ImportError:
+                try: # pre pennylane_lightning 0.33.0 version
+                    from pennylane_lightning_kokkos.lightning_kokkos import InitArguments
+                    args = InitArguments()
+                    args.num_threads = self.ncpu_threads
+                    args.disable_warnings = int(logger.getEffectiveLevel() != logging.DEBUG)
+                    ## Disable MPI because it's unclear if pennylane actually supports it (at least it's untested)
+                    # # if we're running MPI, we want to know now and get it init'd before kokkos is
+                    # MPI = is_running_mpi()
+                    # if MPI:
+                    #     comm = MPI.COMM_WORLD
+                    #     args.ndevices = min(comm.Get_size(), self.ngpus)  # note: kokkos uses 1 GPU per process
+                    dev = pennylane.device(
+                        "lightning.kokkos", wires=self.nqubits, shots=nshots, c_dtype=self.dtype,
+                        sync=False,
+                        kokkos_args=args)
+                except ImportError:
+                    raise RuntimeError("Could not load PennyLane-Lightning-Kokkos plugin. Is it installed?")
         elif self.identifier == "pennylane-lightning-qubit":
             if self.ngpus != 0:
                 raise ValueError(f"cannot specify --ngpus for the backend {self.identifier}")
@@ -98,10 +113,12 @@ class Pennylane(Backend):
         elif self.identifier == "pennylane":
             if self.ngpus != 0:
                 raise ValueError(f"cannot specify --ngpus for the backend {self.identifier}")
-            dev = pennylane.device("default.qubit", wires=self.nqubits, shots=nshots, c_dtype=self.dtype)
+            if self.dtype == np.complex64:
+                raise ValueError("As of version 0.33.0, Pennylane's default.qubit device only supports double precision.")
+            dev = pennylane.device("default.qubit", wires=self.nqubits, shots=nshots)
         else:
             raise ValueError(f"the backend {self.identifier} is not recognized")
-
+        
         qnode = pennylane.QNode(circuit, device=dev)
         return qnode
 

@@ -50,7 +50,7 @@ For backends that support MPI parallelism, it is assumed that `MPI_COMM_WORLD` i
 
 Examples:
 - `cuquantum-benchmarks api --benchmark apply_matrix --targets 4,5 --controls 2,3 --nqubits 16`: Apply a random gate matrix controlled by qubits 2 & 3 to qubits 4 & 5 of a 16-qubit statevector using cuStateVec's `apply_matrix()` API
-- `cuquantum-benchmarks circuit --frontend qiskit --backend cutn --benchmark qft --nqubits 8 --ngpus 1`: Construct a 8-qubit QFT circuit in Qiskit and run it with cuTensorNet on GPU
+- `cuquantum-benchmarks circuit --frontend qiskit --backend cutn --compute-mode statevector --benchmark qft --nqubits 8 --ngpus 1`: Construct a 8-qubit QFT circuit in Qiskit and compute the statevector with cuTensorNet on GPU. Note that the `--compute-mode` can be specified only for `cutn` backend and supports `amplitude` (default), `statevector`, and `expectation`. 
 - `cuquantum-benchmarks circuit --frontend cirq --backend qsim-mgpu --benchmark qaoa --nqubits 16 --ngpus 2`: Construct a 16-qubit QAOA circuit in Cirq and run it with the (multi-GPU) `qsim-mgpu` backend on 2 GPUs (requires cuQuantum Appliance)
 - `mpiexec -n 4 cuquantum-benchmarks circuit --frontend qiskit --backend cusvaer --benchmark quantum_volume --nqubits 32 --ngpus 1 --cusvaer-global-index-bits 1,1 --cusvaer-p2p-device-bits 1`: Construct a 32-qubit Quantum Volume circuit in Qiskit and run it with the (multi-GPU-multi-node) `cusvaer` backend on 2 nodes. Each node runs 2 MPI processes, each of which controls 1 GPU (requires cuQuantum Appliance)
 
@@ -69,9 +69,9 @@ It is recommended to loop over all recorded `sim_config_hash` to gather perf dat
 Currently all environment variables are reserved for internal use only, and are subject to change in the future without notification.
 
 * `CUTENSORNET_DUMP_TN=txt`
-* `CUTENSORNET_BENCHMARK_TARGET={amplitude,state_vector,expectation}` (pick one)
 * `CUTENSORNET_APPROX_TN_UTILS_PATH`
 * `CUQUANTUM_BENCHMARKS_DUMP_GATES`
+* `CUQUANTUM_BENCHMARKS_TCS_FULL_TENSOR`
 
 ## Development Overview
 

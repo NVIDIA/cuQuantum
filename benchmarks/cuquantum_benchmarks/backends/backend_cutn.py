@@ -6,13 +6,19 @@ import logging
 import os
 import time
 import warnings
+from math import log10, log2
 
 import numpy as np
 import cupy as cp
-from cuquantum import contract, contract_path, CircuitToEinsum
-from cuquantum import cutensornet as cutn
 
 from .backend import Backend
+
+try:
+    from cuquantum import contract, contract_path, CircuitToEinsum
+    from cuquantum import cutensornet as cutn
+except ImportError:
+    cutn = None
+
 from .._utils import convert_einsum_to_txt, generate_size_dict_from_operands, is_running_mpiexec
 
 
@@ -24,6 +30,8 @@ logger = logging.getLogger(logger_name)
 class cuTensorNet(Backend):
 
     def __init__(self, ngpus, ncpu_threads, precision, **kwargs):
+        if cutn is None:
+            raise RuntimeError("cuquantum-python is not installed")
         if ngpus != 1:
             raise ValueError("the cutn backend must be run with --ngpus 1 (regardless if MPI is in use)")
 
@@ -32,6 +40,7 @@ class cuTensorNet(Backend):
         self.nqubits = kwargs.pop('nqubits')
         self.rank = 0
         self.handle = cutn.create()
+        self.meta = {}
         try:
             # cuQuantum Python 22.11+ supports nonblocking & auto-MPI
             opts = cutn.NetworkOptions(handle=self.handle, blocking="auto")
@@ -50,47 +59,49 @@ class cuTensorNet(Backend):
             # cuQuantum Python 22.07 or below
             opts = cutn.NetworkOptions(handle=self.handle)
         self.network_opts = opts
-        self.n_samples = kwargs.pop('nhypersamples')
+        self.n_hyper_samples = kwargs.pop('nhypersamples')
         self.version = cutn.get_version()
+
+        self.meta["backend"] = f"cutn-v{self.version} precision={self.precision}"
+        self.meta['nhypersamples'] = self.n_hyper_samples
+        self.meta['cpu_threads'] = self.ncpu_threads
 
     def __del__(self):
         cutn.destroy(self.handle)
 
     def preprocess_circuit(self, circuit, *args, **kwargs):
         circuit_filename = kwargs.pop('circuit_filename')
-        target = kwargs.pop('target')
-        pauli = kwargs.pop('pauli')
-        preprocess_data = {}
+        self.compute_mode = kwargs.pop('compute_mode')
+        self.pauli = kwargs.pop('pauli')
+        valid_choices = ['amplitude', 'expectation', 'statevector']
+        if self.compute_mode not in valid_choices:
+            raise ValueError(f"The string '{self.compute_mode}' is not a valid option for --compute-mode argument. Valid options are: {valid_choices}")
 
         t1 = time.perf_counter()
-
         if self.precision == 'single':
             circuit_converter = CircuitToEinsum(circuit, dtype='complex64', backend=cp)
         else:
             circuit_converter = CircuitToEinsum(circuit, dtype='complex128', backend=cp)
-
         t2 = time.perf_counter()
         time_circ2einsum = t2 - t1
-        logger.info(f'CircuitToEinsum took {time_circ2einsum} s')
-
+        
         t1 = time.perf_counter()
-        if target == 'amplitude':
+        if self.compute_mode == 'amplitude':
             # any bitstring would give same TN topology, so let's just pick "000...0"
             self.expression, self.operands = circuit_converter.amplitude('0'*self.nqubits)
-        elif target == 'state_vector':
+        elif self.compute_mode == 'statevector':
             self.expression, self.operands = circuit_converter.state_vector()
-        elif target == 'expectation':
+        elif self.compute_mode == 'expectation':
             # new in cuQuantum Python 22.11
-            assert pauli is not None
-            logger.info(f"compute expectation value for Pauli string: {pauli}")
-            self.expression, self.operands = circuit_converter.expectation(pauli)
+            assert self.pauli is not None
+            logger.info(f"compute expectation value for Pauli string: {self.pauli}")
+            self.expression, self.operands = circuit_converter.expectation(self.pauli)
         else:
             # TODO: add other CircuitToEinsum methods?
-            raise NotImplementedError(f"the target {target} is not supported")
+            raise NotImplementedError(f"the target {self.compute_mode} is not supported")
         t2 = time.perf_counter()
         time_tn = t2 - t1
-        logger.info(f'{target}() took {time_tn} s')
-
+        
         tn_format = os.environ.get('CUTENSORNET_DUMP_TN')
         if tn_format == 'txt':
             size_dict = generate_size_dict_from_operands(
@@ -106,23 +117,20 @@ class cuTensorNet(Backend):
         t1 = time.perf_counter()
         path, opt_info = self.network.contract_path(
             # TODO: samples may be too large for small circuits
-            optimize={'samples': self.n_samples, 'threads': self.ncpu_threads})
+            optimize={'samples': self.n_hyper_samples, 'threads': self.ncpu_threads})
         t2 = time.perf_counter()
         time_path = t2 - t1
-        logger.info(f'contract_path() took {time_path} s')
-        logger.debug(f'# samples: {self.n_samples}')
-        logger.debug(opt_info)
 
-        self.path = path
-        self.opt_info = opt_info
-        preprocess_data = {
-            'CircuitToEinsum': time_circ2einsum,
-            target:            time_tn,
-            'contract_path':   time_path,
-        }
+        self.opt_info = opt_info # cuTensorNet returns "real-number" Flops. To get the true FLOP count, multiply it by 4
 
-        return preprocess_data
-
+        self.meta['compute-mode'] = f'{self.compute_mode}()'
+        self.meta[f'circuit to einsum'] = f"{time_circ2einsum + time_tn} s"
+        
+        logger.info(f'data: {self.meta}')
+        logger.info(f'log10[FLOPS]: {log10(self.opt_info.opt_cost * 4)}  log2[SIZE]: {log2(opt_info.largest_intermediate)}  contract_path(): {time_path} s')
+        pre_data = {'circuit to einsum time': time_circ2einsum + time_tn, 'contract path time': time_path, 
+                    'log2[LargestInter]': log2(opt_info.largest_intermediate), 'log10[FLOPS]': log10(self.opt_info.opt_cost * 4) }
+        return pre_data
     def run(self, circuit, nshots=0):
         if self.rank == 0 and nshots > 0:
             warnings.warn("the cutn backend does not support sampling")
