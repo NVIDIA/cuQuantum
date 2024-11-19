@@ -1012,6 +1012,8 @@ class TestExpect(TestSV):
             basis_bits, basis_bits_len,
             compute_type, workspace_ptr, workspace_size)
 
+        # wait expect to be updated
+        cp.cuda.Device().synchronize()
         assert xp.allclose(expect, 2**self.n_qubits)
 
     # TODO: test other input forms?
@@ -1097,6 +1099,8 @@ class TestBatchedExpect(TestBatchedSV):
             expect.ctypes.data, matrices_ptr, data_type, cusv.MatrixLayout.ROW, n_matrices,
             basis_bits, n_basis_bits, compute_type, workspace_ptr, workspace_size)
 
+        # wait expect to be updated
+        cp.cuda.Device().synchronize()
         assert (np.allclose(expect, 1))
 
 class TestSampler(TestSV):

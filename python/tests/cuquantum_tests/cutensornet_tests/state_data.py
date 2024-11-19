@@ -15,6 +15,10 @@ try:
     import qiskit
 except ImportError:
     qiskit = None
+try:
+    import torch
+except ImportError:
+    torch = None
 from cuquantum.cutensornet.experimental import NetworkState, NetworkOperator
 
 from .circuit_data import cirq_circuits, get_qiskit_unitary_gate, qiskit_circuits
@@ -100,8 +104,21 @@ approx_mps_options = (
     {'max_extent': 3, 'canonical_center': 1, 'rel_cutoff': 0.1, 'normalization': 'L2'}
 )
 
+# state with unitary channels to test
+# (qudits, initial_mps_dim, config, dtype) for each test case
+unitary_state_tests = (
+    (4, None, {}, 'complex128'), 
+    (7, 2, {}, 'complex64'),
+    (4, 2, {'mpo_application': 'exact'}, 'complex128'), # exact MPS simulation
+    (5, None, {'mpo_application': 'exact'}, 'complex128'), # exact MPS simulation
+    (6, 2, {'max_extent': 4, 'rel_cutoff': 0.1}, 'complex128'),
+    (8, None, {'max_extent': 6, 'rel_cutoff': 0.1}, 'complex64'), 
+)
+
 @pytest.fixture(scope="session")
 def factory_backend_cycle():
+    if torch is None:
+        return itertools.cycle(('numpy', 'cupy'))
     return itertools.cycle(('numpy', 'cupy', 'torch', 'torch-cpu'))
 
 @pytest.fixture(scope="function")

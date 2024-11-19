@@ -74,7 +74,8 @@ print(samples)
 
 # compute the normalized expectation value for a series of Pauli operators
 pauli_string = {'IXIXIX': 0.5, 'IYIYIY': 0.2, 'IZIZIZ': 0.3}
-expec = state.compute_expectation(pauli_string).real / state.compute_norm()
+expec, norm = state.compute_expectation(pauli_string, return_norm=True)
+expec = expec.real / norm
 print(f"{expec=}")
 
 # release resources

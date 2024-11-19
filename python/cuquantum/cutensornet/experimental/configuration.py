@@ -46,7 +46,6 @@ class ContractDecomposeAlgorithm:
     Attributes:
         qr_method: The QR method used for the decomposition. See :class:`~cuquantum.cutensornet.tensor.QRMethod`.
         svd_method: The SVD method used for the decomposition. See :class:`~cuquantum.cutensornet.tensor.SVDMethod`.
-        svd_info: The SVD information during runtime. See :class:`~cuquantum.cutensornet.tensor.SVDInfo`.
     """
 
     qr_method: Optional[Union[QRMethod, Literal[False, None],Dict]] = dataclasses.field(default_factory=QRMethod)

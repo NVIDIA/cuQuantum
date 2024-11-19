@@ -62,5 +62,6 @@ with NetworkState.from_circuit(circuit, dtype='complex128', backend='cupy', conf
 
     # compute the expectation value for a series of Pauli operators
     pauli_string = {'IXIXIXIX': 0.5, 'IYIYIYIY': 0.2, 'IZIZIZIZ': 0.3}
-    expec = state.compute_expectation(pauli_string).real / state.compute_norm()
+    expec, norm = state.compute_expectation(pauli_string, return_norm=True)
+    expec = expec.real / norm
     print(f"{expec=}")

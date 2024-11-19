@@ -10,11 +10,12 @@ __all__ = ['contract_decompose']
 
 import dataclasses
 import logging
+import cupy as cp
 
 from .configuration import ContractDecomposeAlgorithm, ContractDecomposeInfo
 from ._internal.utils import is_gate_split, maybe_truncate_qr_output_operands
 from .. import cutensornet as cutn
-from ..configuration import NetworkOptions
+from ..configuration import NetworkOptions, MemoryLimitExceeded
 from ..tensor import decompose, SVDInfo
 from ..tensor_network import contract
 from .._internal import decomposition_utils
@@ -78,13 +79,14 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
         
         cutn.workspace_compute_gate_split_sizes(handle, 
             *input_tensor_descriptors, *output_tensor_descriptors, 
-            gate_algorithm, svd_config, options.compute_type, workspace_desc)
-
+            gate_algorithm, svd_config, options.compute_type, workspace_desc) 
+        
         # Allocate and set workspace
         for mem_space in (cutn.Memspace.DEVICE, cutn.Memspace.HOST):
-            workspaces[mem_space] = decomposition_utils.allocate_and_set_workspace(handle, options.allocator, workspace_desc, 
-                    cutn.WorksizePref.MIN, mem_space, cutn.WorkspaceKind.SCRATCH, options.device_id, 
-                    stream_holder, options.logger, task_name='contract decomposition')
+            pref = cutn.WorksizePref.MIN
+            workspace_kind = cutn.WorkspaceKind.SCRATCH
+            workspaces[mem_space] = decomposition_utils.allocate_and_set_workspace(options, workspace_desc, 
+                    pref, mem_space, workspace_kind, stream_holder, task_name='contract decomposition')
 
         options.logger.info("Starting contract-decompose (gate split)...")
         timing =  bool(options.logger and options.logger.handlers)
@@ -105,7 +107,7 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
                 output_tensor_descriptors[1], output_operands[1].data_ptr,
                 gate_algorithm, 
                 svd_config, 
-                options.compute_type, 
+                options.compute_type,
                 svd_info, 
                 workspace_desc, 
                 stream_ptr)
@@ -197,6 +199,9 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
               Note, depending on the choice of :attr:`~ContractDecomposeAlgorithm.svd_method.partition`, the returned S operand may be `None`. 
               Also see :attr:`~SVDMethod.partition`. 
     
+    Raises:
+        :class:`MemoryLimitExceeded`: the memory needed to perform the operation is larger than the ``options.memory_limit``
+
     The contract and decompose expression adopts a combination of Einstein summation notation for contraction and the decomposition notation
     introduced in :func:`~cuquantum.cutensornet.tensor.decompose`.
     The ``subscripts`` string is a list of subscript labels where each label refers to a mode of the corresponding operand. 
@@ -226,7 +231,7 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
         >>> # equivalent:
         >>> # t = contract('ijc,cad,dbe->ijabe', a, b, c)
         >>> # u, s, v = tensor.decompose('ijabe->ixeb,jax', t, method=SVDMethod())
-        >>> u, s, v = contract_decompose('ijc,cad,dbe->ixeb,jax', a, b, c, algorithm={'qr_method': False, 'svd_method': True})
+        >>> u, s, v = contract_decompose('ijc,cad,dbe->ixeb,jax', a, b, c, algorithm={'qr_method': False, 'svd_method': {}})
 
     If the contract and decompose problem amounts to a **ternary-operand gate split problem** commonly seen in quantum circuit simulation 
     (see :ref:`Gate Split Algorithm<gatesplitalgo>` for details), 
@@ -352,10 +357,12 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
         # For contract SVD decomposition, we inject max_extent as part of the internal SVDMethod.
 
         logger.info("Beginning decomposition of the intermediate tensor...")
+        decompose_options = dataclasses.asdict(options)
+        decompose_options['compute_type'] = None
         if algorithm.qr_method and algorithm.svd_method is False:
             # contract and QR decompose
             results = decompose(
-                decompose_subscripts, intm_output, method=algorithm.qr_method, options=dataclasses.asdict(options),
+                decompose_subscripts, intm_output, method=algorithm.qr_method, options=decompose_options,
                 stream=stream, return_info=False)
             results = maybe_truncate_qr_output_operands(results, outputs, max_mid_extent)
             if operands_location == 'cpu':
@@ -367,7 +374,7 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
             if use_max_mid_extent:
                 algorithm.svd_method.max_extent = max_mid_extent
             results = decompose(
-                decompose_subscripts, intm_output, method=algorithm.svd_method, options=dataclasses.asdict(options),
+                decompose_subscripts, intm_output, method=algorithm.svd_method, options=decompose_options,
                 stream=stream, return_info=return_info)
             if use_max_mid_extent:
                 # revert back

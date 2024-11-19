@@ -9,6 +9,7 @@ A collection of utility functions for decomposition.
 import logging
 
 import numpy
+import cupy as cp
 
 from . import einsum_parser
 from . import formatters
@@ -17,6 +18,7 @@ from . import typemaps
 from . import utils
 from .. import cutensornet as cutn
 from .. import memory
+from ..configuration import NetworkOptions, MemoryLimitExceeded
 
 
 DECOMPOSITION_DTYPE_NAMES = ('float32', 'float64', 'complex64', 'complex128')
@@ -131,7 +133,6 @@ def parse_decomposition(subscripts, *operands):
     Returns wrapped operands, mapped inputs and output, size dictionary based on internal mode numbers, 
     the forward as well as the reverse mode maps, and the largest mid extent expected for the decomposition.
     """
-
     inputs, outputs = parse_decomposition_subscripts(subscripts)
     num_operand, num_input = len(operands), len(inputs)
     if num_operand != num_input:
@@ -278,6 +279,7 @@ def parse_svd_config(handle, svd_config, svd_method, logger=None):
         if logger is not None:
             logger.info(f"The SVDConfig attribute '{cutn.TensorSVDConfigAttribute.ALGO_PARAMS}' has been set to {algo_params}.")
 
+
 def get_svd_info_dict(handle, svd_info):
     """
     Parse the information in SVDInfo in a dictionary object.
@@ -322,7 +324,12 @@ def parse_decompose_operands_options(options, wrapped_operands, stream, allowed_
     dtype_name = utils.get_operands_dtype(wrapped_operands)
     if allowed_dtype_names is not None and dtype_name not in allowed_dtype_names:
         raise ValueError(f"dtype {dtype_name} not supported")
-    compute_type = options.compute_type if options.compute_type is not None else typemaps.NAME_TO_COMPUTE_TYPE[dtype_name]
+    
+    # compute_type for decomposition should be None
+    if options.__class__.__name__ == 'NetworkOptions':
+        compute_type = options.compute_type if options.compute_type is not None else typemaps.NAME_TO_COMPUTE_TYPE[dtype_name]
+    else:
+        compute_type = None
 
     stream_holder = utils.get_or_create_stream(options.device_id, stream, package)
 
@@ -333,7 +340,7 @@ def parse_decompose_operands_options(options, wrapped_operands, stream, allowed_
         logger.info("Input data transfer finished")
 
     allocator = options.allocator if options.allocator is not None else memory._MEMORY_MANAGER[package](device_id, logger)
-
+    
     internal_options = options.__class__(device_id=device_id,
                                         logger=logger,
                                         handle=handle,
@@ -345,17 +352,31 @@ def parse_decompose_operands_options(options, wrapped_operands, stream, allowed_
     return wrapped_operands, internal_options, own_handle, operands_location, stream_holder
 
 
-def allocate_and_set_workspace(handle, allocator, workspace_desc, pref, mem_space, workspace_kind, device_id, stream_holder, logger, task_name=''):
+def allocate_and_set_workspace(options: NetworkOptions, workspace_desc, pref, mem_space, workspace_kind, stream_holder, task_name=''):
     """
     Allocate and set the workspace in the workspace descriptor.
+
+    The ``options`` argument should be properly initialized using :func:``create_operands_and_descriptors``.
+
+    Options used: 
+        - options.handle
+        - options.allocator
+        - options.device_id
+        - options.logger
+        - options.memory_limit
     """
-    workspace_size = cutn.workspace_get_memory_size(handle, workspace_desc, pref, mem_space, workspace_kind)
+    logger = options.logger
+    workspace_size = cutn.workspace_get_memory_size(options.handle, workspace_desc, pref, mem_space, workspace_kind)
+    _device = cp.cuda.Device(options.device_id)
+    _memory_limit =  utils.get_memory_limit(options.memory_limit, _device)
+    if _memory_limit < workspace_size:
+        raise MemoryLimitExceeded(_memory_limit, workspace_size, options.device_id)
     # Allocate and set workspace
     if mem_space == cutn.Memspace.DEVICE:
-        with utils.device_ctx(device_id), stream_holder.ctx:
+        with utils.device_ctx(options.device_id), stream_holder.ctx:
             try:
                 logger.debug(f"Allocating device memory for {task_name}")
-                workspace_ptr = allocator.memalloc(workspace_size)
+                workspace_ptr = options.allocator.memalloc(workspace_size)
             except TypeError as e:
                 message = "The method 'memalloc' in the allocator object must conform to the interface in the "\
                         "'BaseCUDAMemoryManager' protocol."
@@ -363,7 +384,7 @@ def allocate_and_set_workspace(handle, allocator, workspace_desc, pref, mem_spac
         
         logger.debug(f"Finished allocating device memory of size {formatters.MemoryStr(workspace_size)} for decomposition in the context of stream {stream_holder.obj}.")
         device_ptr = utils.get_ptr_from_memory_pointer(workspace_ptr)
-        cutn.workspace_set_memory(handle, workspace_desc, mem_space, workspace_kind, device_ptr, workspace_size)
+        cutn.workspace_set_memory(options.handle, workspace_desc, mem_space, workspace_kind, device_ptr, workspace_size)
         logger.debug(f"The workspace memory (device pointer = {device_ptr}) has been set in the workspace descriptor.")
         return workspace_ptr
     elif workspace_size != 0:
@@ -371,7 +392,7 @@ def allocate_and_set_workspace(handle, allocator, workspace_desc, pref, mem_spac
         logger.debug(f"Allocating host memory for {task_name}")
         workspace_host = numpy.empty(workspace_size, dtype=numpy.int8)
         logger.debug(f"Finished allocating host memory of size {formatters.MemoryStr(workspace_size)} for decomposition.")
-        cutn.workspace_set_memory(handle, workspace_desc, mem_space, workspace_kind, workspace_host.ctypes.data, workspace_size)
+        cutn.workspace_set_memory(options.handle, workspace_desc, mem_space, workspace_kind, workspace_host.ctypes.data, workspace_size)
         logger.debug(f"The workspace memory (host pointer = {workspace_host.ctypes.data}) has been set in the workspace descriptor.")
         return workspace_host
     else:
@@ -431,6 +452,7 @@ def create_operands_and_descriptors(
         raise
 
     return input_tensor_descriptors, output_operands, output_tensor_descriptors, s, s_ptr
+
 
 def get_return_operand_data(tensor, target_location, stream_holder):
     """

@@ -2,12 +2,14 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+from cuquantum import bindings
 from cuquantum import custatevec
 from cuquantum import cutensornet
+from cuquantum import densitymat
 from cuquantum.cutensornet import (
     contract, contract_path, einsum, einsum_path, tensor, tensor_qualifiers_dtype, BaseCUDAMemoryManager, CircuitToEinsum, MemoryPointer, 
     Network, NetworkOptions, OptimizerInfo, OptimizerOptions, PathFinderOptions, 
-    ReconfigOptions, SlicerOptions)
+    ReconfigOptions, SlicerOptions, MemoryLimitExceeded)
 from cuquantum._utils import ComputeType, cudaDataType, libraryPropertyType
 from cuquantum._version import __version__
 

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 24.08.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 24.11.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -205,3 +205,5 @@ cpdef accessor_get_info(intptr_t handle, intptr_t tensor_network_accessor, int a
 cpdef expectation_get_info(intptr_t handle, intptr_t tensor_network_expectation, int attribute, intptr_t attribute_value, size_t attribute_size)
 cpdef marginal_get_info(intptr_t handle, intptr_t tensor_network_marginal, int attribute, intptr_t attribute_value, size_t attribute_size)
 cpdef sampler_get_info(intptr_t handle, intptr_t tensor_network_sampler, int attribute, intptr_t attribute_value, size_t attribute_size)
+cpdef int64_t state_apply_unitary_channel(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, int32_t num_tensors, tensor_data, tensor_mode_strides, probabilities) except? -1
+cpdef state_capture_mps(intptr_t handle, intptr_t tensor_network_state)

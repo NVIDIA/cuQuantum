@@ -2,24 +2,36 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import itertools
+
 import numpy as np
 
 import opt_einsum as oe
 
 from cuquantum import CircuitToEinsum
 from cuquantum.cutensornet.experimental import NetworkState, TNConfig, MPSConfig, NetworkOperator
+from cuquantum.cutensornet.experimental._internal.network_state_utils import get_pauli_map
 from cuquantum.cutensornet._internal.decomposition_utils import compute_mid_extent
 from cuquantum.cutensornet._internal.utils import infer_object_package
 from cuquantum.cutensornet._internal import tensor_wrapper
 
 from .approxTN_utils import gate_decompose, tensor_decompose, SVD_TOLERANCE, verify_unitary
-from .circuit_tester import BaseTester, get_random_pauli_strings, get_engine_iters
-from .circuit_utils import _BaseComputeEngine, ConverterComputeEngine, get_mps_tolerance
+from .circuit_tester import BaseTester, get_random_pauli_strings, get_engine_iters, compute_sample_overlap
+from .circuit_utils import (
+    _BaseComputeEngine, 
+    ConverterComputeEngine, 
+    get_mps_tolerance, 
+    reduced_density_matrix_from_sv, 
+    amplitude_from_sv,
+    batched_amplitude_from_sv,
+    expectation_from_sv,
+)
 from .test_utils import DEFAULT_RNG, EMPTY_DICT, TensorBackend, get_or_create_tensor_backend, atol_mapper, rtol_mapper, get_dtype_name, get_state_internal_backend_device
 
 
 # valid simulation setting for reference MPS class
 MPS_VALID_CONFIGS = {'max_extent', 'abs_cutoff', 'rel_cutoff', 'discarded_weight_cutoff', 'normalization', 'canonical_center', 'mpo'}
+STATE_PROPERTIES_NAMES = ('amplitude', 'batched_amplitudes', 'state_vector', 'reduced_density_matrix', 'expectation', 'sampling')
 
 def is_converter_mps_compatible(converter):
     for _, qubits in converter.gates:
@@ -59,7 +71,7 @@ def get_device_id(options):
     if isinstance(options, dict):
         device_id = options.get('device_id', 0)
     else:
-        device_id = getattr(options, 'device_id', None)
+        device_id = getattr(options, 'device_id', 0)
     return device_id
 
 def get_random_network_operator(state_dims, *, backend='cupy', rng=DEFAULT_RNG, num_repeats=2, dtype='complex128', options=None):
@@ -109,6 +121,69 @@ def get_random_network_operator(state_dims, *, backend='cupy', rng=DEFAULT_RNG, 
         operator_obj.append_mpo(coefficient, mpo_modes, mpo_tensors)
     return operator_obj
 
+def compute_state_basic_property(state, property_name):
+    func = getattr(state, f'compute_{property_name}')
+    if property_name == 'amplitude':
+        return func('0' * state.n, return_norm=True)
+    elif property_name == 'batched_amplitudes':
+        return func({0: 0, 1:1})
+    elif property_name == 'state_vector':
+        return func()
+    elif property_name == 'reduced_density_matrix':
+        return func((0, ))
+    elif property_name == 'sampling':
+        return func(1000, seed=1)
+    elif property_name == 'expectation':
+        if set(state.state_mode_extents) == set([2]):
+            pauli_strings = {'X' * state.n: 0.1,
+                             'Y' * state.n: 0.2,
+                             'Z' * state.n: 0.4}
+            expec, norm = func(pauli_strings, return_norm=True)
+            return expec
+    else:
+        raise ValueError(f"{property_name} not supported")
+
+def compute_state_basic_quantities(state):
+    output = {}
+    for property_name in STATE_PROPERTIES_NAMES:
+        if property_name == 'expectation' and set(state.state_mode_extents) != set([2]):
+            continue
+        if property_name == 'amplitude':
+            output[property_name], output['norm'] = compute_state_basic_property(state, property_name)
+        else:
+            output[property_name] = compute_state_basic_property(state, property_name)
+    return output
+
+def apply_factory_sequence(network_state, sequence, parse_channels=True):
+    tensor_ids = []
+    channel_info = dict()
+    for op, modes, gate_info in sequence:
+        if gate_info is None:
+            if isinstance(op, (list, tuple)):
+                # MPO
+                tensor_id = network_state.apply_mpo(modes, op)
+            else:
+                # GATE
+                tensor_id = network_state.apply_tensor_operator(modes, op)
+        else:
+            if 'probabilities' in gate_info:
+                if parse_channels:
+                    # Unitary Channel
+                    tensor_id = network_state.apply_unitary_tensor_channel(modes, op, gate_info['probabilities'])
+                else:
+                    tensor_id = network_state.apply_tensor_operator(modes, op[0], unitary=True)
+                    channel_info[tensor_id] = (op, gate_info['probabilities'])
+            else:
+                assert 'control_modes' in gate_info
+                assert 'control_values' in gate_info
+                # Controlled-Tensor
+                # NetworkState currently only support immutable controlled tensors
+                tensor_id = network_state.apply_tensor_operator(modes, op, control_modes=gate_info['control_modes'], control_values=gate_info['control_values'], immutable=True)
+        tensor_ids.append(tensor_id)
+    if parse_channels:
+        return tensor_ids
+    else:
+        return tensor_ids, channel_info
 
 class StateFactory:
     def __init__(
@@ -137,7 +212,12 @@ class StateFactory:
         self.backend = TensorBackend(backend=backend, device_id=self.device_id)
         self.dtype = get_dtype_name(dtype)
 
-        assert set(layers).issubset(set('SDCM'))
+        dims = set(self.state_dims)
+        if len(dims) == 1 and dims.pop() == 2:
+            # unitary channel only supported for qubits
+            assert set(layers).issubset(set('SDCMU'))
+        else:
+            assert set(layers).issubset(set('SDCM'))
         self.layers = layers
 
         if rng is None:
@@ -200,11 +280,37 @@ class StateFactory:
                 self._append_controlled_tensor_mpo_layer()
             elif layer == 'M':
                 self._append_mpo_layer()
+            elif layer == 'U':
+                self._append_unitary_channel_layer()
             else:
                 raise ValueError(f"layer type {layer} not supported")
     
     def append_sequence(self, sequence):
         self._sequence.append(sequence)
+    
+    def _append_unitary_channel_layer(self):
+        if not hasattr(self, 'pauli_map'):
+            self.pauli_map = get_pauli_map(self.dtype, backend=self.backend.name, device_id=self.device_id)
+        pauli_map = self.pauli_map
+        qudits = list(range(self.num_qudits))
+        self.rng.shuffle(qudits)
+        for i, q in enumerate(qudits[:2]):
+            if i == 0:
+                operands = [pauli_map['I'], pauli_map['X']] # bitflip channel
+                gate_info = {'probabilities': [0.95, 0.05]}
+            else:
+                operands = [pauli_map[p] for p in 'IXYZ'] # phase shift channel
+                gate_info = {'probabilities': [0.7, 0.15, 0.1, 0.05]}
+            self._sequence.append((operands, (q, ), gate_info)) 
+        
+        if self.num_qudits >= 4:
+            XY = self.backend.einsum('Aa,Bb->ABab', pauli_map['X'], pauli_map['Y'])
+            YZ = self.backend.einsum('Aa,Bb->ABab', pauli_map['Y'], pauli_map['Z'])
+            ZX = self.backend.einsum('Aa,Bb->ABab', pauli_map['Z'], pauli_map['X'])
+            operands = [XY, YZ, ZX]
+            gate_info = {'probabilities': [0.7, 0.2, 0.1]}
+            self._sequence.append((operands, qudits[2:4], gate_info))
+        return    
     
     def _append_single_qudit_layer(self):
         for i in range(self.num_qudits):
@@ -305,7 +411,8 @@ class StateFactory:
         except TypeError:
             t = t + t.conj().permute(*transpose_order)
         t /= self.backend.norm(t)
-        self._sequence.append((t, target_modes, (control_modes, control_values)))
+        gate_info = {'control_modes': control_modes, 'control_values': control_values}
+        self._sequence.append((t, target_modes, gate_info))
 
     def compute_control_tensor(self, control_dim, control_val, rank, direction):
         c1_rank3 = self.backend.asarray([1, 0, 0, 0,  0, 0, 0, 1]).reshape(2, 2, 2)
@@ -511,14 +618,17 @@ class StateFactory:
                 mode_frontier += 1
                 operands += [t, modes]
         
-        for op, qudits, control_info in self.sequence:
-            if control_info is not None:
-                # convert control tensor into MPO
-                ctrl_modes, ctrl_vals = control_info
-                op = self.compute_ct_mpo_tensors(ctrl_modes, ctrl_vals, qudits, op)
-                qudits = qudits + ctrl_modes
-                qudits = sorted(qudits)
-                control_info = None
+        for op, qudits, gate_info in self.sequence:
+            if gate_info is not None:
+                if 'control_values' in gate_info and 'control_modes' in gate_info:
+                    # convert control tensor into MPO
+                    ctrl_modes, ctrl_vals = gate_info['control_modes'], gate_info['control_values']
+                    op = self.compute_ct_mpo_tensors(ctrl_modes, ctrl_vals, qudits, op)
+                    qudits = qudits + ctrl_modes
+                    qudits = sorted(qudits)
+                    gate_info = None
+                else:
+                    raise RuntimeError("Not the expected code path")
             n_qudits = len(qudits)
             if isinstance(op, (list, tuple)):
                 # for MPO
@@ -550,23 +660,15 @@ class StateFactory:
         operands.append(qudit_modes)
         return operands
 
-    def to_network_state(self, config=None, options=None):
+    def to_network_state(self, *, parse_channels=True, config=None, options=None):
         network_state = NetworkState(self.state_dims, dtype=self.dtype, config=config, options=options)
         if self.initial_mps_dim is not None:
             network_state.set_initial_mps(self.get_initial_state())
-        for op, modes, control_info in self.sequence:
-            if control_info is None:
-                if isinstance(op, (list, tuple)):
-                    # MPO
-                    network_state.apply_mpo(modes, op)
-                else:
-                    # GATE
-                    network_state.apply_tensor_operator(modes, op)
-            else:
-                # Controlled-Tensor
-                # NetworkState currently only support immutable controlled tensors
-                network_state.apply_tensor_operator(modes, op, control_modes=control_info[0], control_values=control_info[1], immutable=True)
-        return network_state
+        outputs = apply_factory_sequence(network_state, self.sequence, parse_channels)
+        if parse_channels:
+            return network_state
+        else:
+            return network_state, outputs[1]
 
 
 class MPS(_BaseComputeEngine):
@@ -607,20 +709,15 @@ class MPS(_BaseComputeEngine):
             if self.mps_tensors[-1].ndim == 2:
                 new_shape = self.mps_tensors[-1].shape + (1, ) 
                 self.mps_tensors[-1] = self.mps_tensors[-1].reshape(*new_shape)
-        self._minimal_compression(0, self.n-1, True)
-        if canonical_center is not None:
-            assert canonical_center >= 0 and canonical_center < self.n
-        self.canonical_center = canonical_center
-        self.sample_rng = sample_rng
         for key in svd_options.keys():
             if key not in MPS_VALID_CONFIGS:
                 raise ValueError(f"{key} not supported")
         self.svd_options = {'partition': 'UV'}
         self.svd_options.update(svd_options)
-        max_extent = self.svd_options.pop('max_extent', None)
         self.is_exact_svd = self.svd_options.get('normalization', None) is None
         for key in ('abs_cutoff', 'rel_cutoff', 'discarded_weight_cutoff'):
             self.is_exact_svd = self.is_exact_svd and self.svd_options.get(key, None) in (0, None)
+        max_extent = self.svd_options.pop('max_extent', None)
         self.max_extents = []
         for i in range(self.n-1):
             max_shared_extent = min(np.prod(self.state_dims[:i+1]), np.prod(self.state_dims[i+1:]))
@@ -628,6 +725,11 @@ class MPS(_BaseComputeEngine):
                 self.max_extents.append(max_shared_extent)
             else:
                 self.max_extents.append(min(max_extent, max_shared_extent))
+        self._minimal_compression(0, self.n-1, True)
+        if canonical_center is not None:
+            assert canonical_center >= 0 and canonical_center < self.n
+        self.canonical_center = canonical_center
+        self.sample_rng = sample_rng
         assert mpo_application in {'exact', 'approximate'}
         self.mpo_application = mpo_application
         self._tolerance = None
@@ -786,23 +888,24 @@ class MPS(_BaseComputeEngine):
             tmp = self.backend.einsum('ipj,jql->ipql', ti, tj)
             self[left], _, self[right] = tensor_decompose('ipql->ipj,jql', tmp, method='svd', max_extent=max_extent, **svd_options)
     
-    def _minimal_compression(self, start, end, check_minimal=False):
+    def _minimal_compression(self, start, end, check_manageable=False):
+        if check_manageable:
+            manageable = True
+            for i in range(start, end+1):
+                if i == self.n - 1:
+                    break
+                manageable = manageable and self[i].shape[-1] <= self.max_extents[i]
+                if not manageable:
+                    break
+            if manageable:
+                return
+        
         for i in range(start, end+1):
             if i == self.n - 1: 
                 break
-            if check_minimal:
-                left_extent, shared_extent = np.prod(self[i].shape[:2]), self[i].shape[-1]
-                right_extent = np.prod(self[i+1].shape[1:])
-                if shared_extent == min(left_extent, right_extent, shared_extent):
-                    continue
             self._canonicalize_site(i, 'right')
         for i in range(end, start-1, -1):
             if i==0: break
-            if check_minimal:
-                left_extent, shared_extent = np.prod(self[i-1].shape[:2]), self[i-1].shape[-1]
-                right_extent = np.prod(self[i].shape[1:])
-                if shared_extent == min(left_extent, right_extent, shared_extent):
-                    continue
             self._canonicalize_site(i, 'left')
 
     def _apply_gate_1q(self, i, operand):
@@ -968,8 +1071,8 @@ class MPS(_BaseComputeEngine):
             mps_tensors = None
         qudit_dims = factory.state_dims
         mps = cls(qudits, factory.backend, qudit_dims=qudit_dims, mps_tensors=mps_tensors, dtype=factory.dtype, **kwargs)
-        for op, modes, control_info in factory.sequence:
-            if control_info is None:
+        for op, modes, gate_info in factory.sequence:
+            if gate_info is None:
                 if isinstance(op, (list, tuple)):
                     # MPO
                     mps.apply_mpo(modes, op)
@@ -977,11 +1080,14 @@ class MPS(_BaseComputeEngine):
                     # Gate
                     mps.apply_gate(modes, op)
             else:
-                ctrl_modes, ctrl_vals = control_info
-                ct_tensors = factory.compute_ct_mpo_tensors(ctrl_modes, ctrl_vals, modes, op) 
-                new_modes = modes + ctrl_modes
-                new_modes = sorted(new_modes)
-                mps.apply_mpo(new_modes, ct_tensors)
+                if 'control_values' in gate_info and 'control_modes' in gate_info:
+                    ctrl_modes, ctrl_vals = gate_info['control_modes'], gate_info['control_values']
+                    ct_tensors = factory.compute_ct_mpo_tensors(ctrl_modes, ctrl_vals, modes, op) 
+                    new_modes = modes + ctrl_modes
+                    new_modes = sorted(new_modes)
+                    mps.apply_mpo(new_modes, ct_tensors)
+                else:
+                    raise RuntimeError("Not expected code path")
         mps.canonicalize()
         return mps
     
@@ -1125,16 +1231,16 @@ class NetworkStateFunctionalityTester:
             for o in mps_tensors:
                 self._check_tensor(o)
     
-        sv = self.state.compute_state_vector()
+        sv, norm_0 = self.state.compute_state_vector(return_norm=True)
         self._check_tensor(sv, shape=self.state.state_mode_extents)
 
         # amplitude
-        amplitude = self.state.compute_amplitude('0' * self.n)
+        amplitude, norm_1 = self.state.compute_amplitude('0' * self.n, return_norm=True)
         np.allclose(sv.ravel()[0].item(), amplitude, **self.tolerance)
 
         # batched_amplitude
         fixed = {0:1, 1:0} if self.n > 2 else {0:1}
-        batched_amplitude = self.state.compute_batched_amplitudes(fixed)
+        batched_amplitude, norm_2 = self.state.compute_batched_amplitudes(fixed, return_norm=True)
         self._check_tensor(batched_amplitude, shape=self.state.state_mode_extents[len(fixed):])
 
         # RDM
@@ -1153,9 +1259,187 @@ class NetworkStateFunctionalityTester:
 
         # expectation
         if (set(self.state.state_mode_extents) == set([2, ])) and self.state.dtype.startswith('complex'):
-            expectation = self.state.compute_expectation('I' * self.n)
+            expectation, norm_3 = self.state.compute_expectation('I' * self.n, return_norm=True)
             assert np.allclose(expectation, norm_ref, **self.tolerance)
-
+        else:
+            norm_3 = None
+        
         # norm
-        norm = self.state.compute_norm()
-        assert np.allclose(norm, norm_ref, **self.tolerance)
+        for norm in (norm_0, norm_1, norm_2, norm_3):
+            if norm is not None:
+                assert np.allclose(norm, norm_ref, **self.tolerance)
+
+
+class NetworkStateChannelTester:
+    """
+    Two simulation workflows are compared in this tester:
+
+        - state_with_channel used to perform trajectory based simulation
+        - state_reference used to compute exact results for each configuration with corresponding probabilities
+    """
+    def __init__(self, factory, config, num_trajectories = 100):
+        self.factory = factory
+        self.config = config
+        self.dtype = factory.dtype
+        self.num_trajectories = num_trajectories
+        self.backend = factory.backend
+        self.n = factory.num_qudits
+        self.tolerance = {'atol': atol_mapper[self.dtype], 
+                          'rtol': rtol_mapper[self.dtype]}
+
+        # parse factory to state
+        self.state_with_channel = factory.to_network_state(config=config)
+        self.state_reference, self.channel_info = factory.to_network_state(config=config, parse_channels=False, options=self.state_with_channel.options)
+        channel_ids, channel_ops = zip(*self.channel_info.items())
+        self.ops_to_update = []
+        for op_ids in itertools.product(*[range(len(ops)) for ops, _ in channel_ops]):
+            p_tot = 1.0
+            entry = []
+            for channel_id, (ops, probabilities), op_id in zip(channel_ids, channel_ops, op_ids):
+                p_tot *= probabilities[op_id]
+                entry.append([channel_id, ops[op_id]])
+            entry = [p_tot, ] + entry
+            self.ops_to_update.append(entry)
+        
+        self.pauli_strings = {
+            'X' * self.n: 0.1,
+            'Y' * self.n: 0.2,
+            'Z' * self.n: 0.4,
+        }
+        # use an explicit NetworkOperator to activate caching for expectation computation speedup
+        self.pauli_operator = NetworkOperator.from_pauli_strings(self.pauli_strings, dtype=self.dtype, options=self.state_with_channel.options)
+        self.num_sampling_shots = 1000
+
+    def _compute_property_with_channel(self, property_name):
+        data = []
+        for _ in range(self.num_trajectories):
+            if property_name == 'expectation':
+                # use self.pauli_operators to activate caching for speedup
+                expec, norm = self.state_with_channel.compute_expectation(self.pauli_operator, return_norm=True)
+                output = expec / norm
+            elif property_name == 'amplitude':
+                # skip norm
+                output = self.state_with_channel.compute_amplitude(self.n * '0')
+            else:
+                output = compute_state_basic_property(self.state_with_channel, property_name)
+            data.append(output)
+        return data
+    
+    def _compute_property_reference(self, property_name):
+        data = []
+        for p, *entry in self.ops_to_update:
+            for (channel_id, operand) in entry:
+                self.state_reference.update_tensor_operator(channel_id, operand, unitary=True)
+            if property_name == 'expectation':
+                # use self.pauli_operators instead of a dictionary to activate caching for speedup
+                expec, norm = self.state_reference.compute_expectation(self.pauli_operator, return_norm=True)
+                output = expec / norm
+            elif property_name == 'amplitude':
+                # skip norm
+                output = self.state_reference.compute_amplitude(self.n * '0')
+            else:
+                output = compute_state_basic_property(self.state_reference, property_name)
+            data.append([p, output])
+        return data
+
+    def _verify_output(self, property_name, traj_output, reference_output):
+        if property_name == 'sampling':
+            # For sampling, since we fix the seed, we verify that each trajectory output has a high overlap with at least one of the reference output
+            for snap_shot in traj_output:
+                ovlp_with_reference = []
+                for _, reference in reference_output:
+                    ovlp = 0
+                    for key in set(snap_shot) & set(reference):
+                        ovlp += min(snap_shot[key], reference[key])
+                    ovlp_with_reference.append(ovlp / self.num_sampling_shots)
+                #NOTE: this is often 1 since we fix the seed, but leaving 0.99 here in case of machine precision error
+                assert max(ovlp_with_reference) >= 0.99
+        else:
+            # making sure that all traj_output can be obtained in the reference_output
+            traj_value_arrays = self.backend.asarray(traj_output)
+            reference_value_array = self.backend.asarray([val for _, val in reference_output])
+            diff = abs(traj_value_arrays[:, None]- reference_value_array[None,:])
+            if diff.ndim > 2:
+                diff = self.backend.sum(diff, axis=tuple(range(2, diff.ndim)))
+                # diff shape becomes (n_trajectory, n_possible_configs)
+            col_indices = self.backend.argmin(diff, axis=1)
+            min_values = diff[np.arange(diff.shape[0]), col_indices]
+            # make sure that each trajectory has a corresponding entry from the reference configurations
+            assert self.backend.allclose(min_values, self.backend.zeros_like(min_values), **self.tolerance)
+        
+            if property_name == 'expectation':
+                # For expectation, also test the average result are close for trajectory simulation and exact reference
+                traj_expectation = self.backend.average(traj_value_arrays)
+                reference_expectation = sum([p * val for p, val in reference_output])
+                # NOTE: rtol=0.05 is manually selected. 
+                # Due to the stochastic nature of noisy simulation, this test may fail when num_trajectories is low.
+                # If expectation value check fails, increase num_trajectories and verify again (up to 3 max tries) in _run_property_test
+                assert self.backend.allclose(traj_expectation, reference_expectation, rtol=0.05)      
+    
+    def _run_property_test(self, property_name):
+        if property_name != 'expectation':
+            traj_output = self._compute_property_with_channel(property_name)
+            reference_output =  self._compute_property_reference(property_name)
+            self._verify_output(property_name, traj_output, reference_output)
+        else:
+            num_trajectories = self.num_trajectories
+            self.num_trajectories = 500 # starting from 500 as default 100 is not a good starting point for convergence
+            reference_output = self._compute_property_reference(property_name)
+            test_passed = False
+            for i in range(3): # max try
+                try:
+                    traj_output = self._compute_property_with_channel(property_name)
+                    self._verify_output(property_name, traj_output, reference_output)
+                    test_passed = True
+                except AssertionError:
+                    print(f"WARNING: expectation convergence test failing with {self.num_trajectories} trajectories")
+                    self.num_trajectories *= 5
+                if test_passed:
+                    if self.num_trajectories != num_trajectories:
+                        print(f"INFO: expectation convergence test passed with {self.num_trajectories} trajectories")
+                    break
+            # revert to the original num_trajectories
+            self.num_trajectories = num_trajectories
+            assert test_passed 
+
+    def run_tests(self):
+        for property_name in STATE_PROPERTIES_NAMES:
+            self._run_property_test(property_name)
+
+        if isinstance(self.state_with_channel.config, MPSConfig):
+            # check that if release_operators is set to True, all properties map to the same state/trajectory
+            # NOTE: this test must be performed after _run_property_test as release_operators=True will capture MPS in state_with_channel and invalidate the stochastic property
+            self.state_with_channel.compute_output_state(release_operators=True)
+            sv = self.state_with_channel.compute_state_vector()
+
+            where = (0, 1)
+            rdm = self.state_with_channel.compute_reduced_density_matrix(where)
+            assert self.backend.allclose(rdm, reduced_density_matrix_from_sv(sv, where), **self.tolerance)
+            
+            bitstring = '1' * self.n
+            amp, norm = self.state_with_channel.compute_amplitude(bitstring, return_norm=True)
+            assert self.backend.allclose(amp, amplitude_from_sv(sv, bitstring), **self.tolerance)
+            assert self.backend.allclose(norm, (abs(sv)**2).sum(), **self.tolerance)
+
+            fixed = {0: 1, 1: 0}
+            batched_amp = self.state_with_channel.compute_batched_amplitudes(fixed)
+            assert self.backend.allclose(batched_amp, batched_amplitude_from_sv(sv, fixed), **self.tolerance)
+
+            expectation = self.state_with_channel.compute_expectation(self.pauli_operator)
+            assert self.backend.allclose(expectation, expectation_from_sv(sv, self.pauli_strings), **self.tolerance)
+
+            nshots = 5000
+            for _ in range(3):
+                samples = self.state_with_channel.compute_sampling(nshots, seed=1)
+                ovlp = compute_sample_overlap(samples, sv, None)
+                test_passed = ovlp >= 0.95
+                if test_passed:
+                    print(f"INFO: sampling test passed with {nshots=}")
+                    break
+                else:
+                    print(f"WARNING: sampling test failed with {nshots=}")
+                    nshots *= 10
+            assert test_passed
+
+        self.state_with_channel.free()
+        self.state_reference.free()

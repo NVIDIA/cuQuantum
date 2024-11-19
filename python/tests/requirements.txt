@@ -9,3 +9,5 @@ qiskit
 qiskit-aer
 pylatexenc
 jsonschema == 4.17.3
+scipy
+networkx

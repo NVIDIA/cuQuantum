@@ -14,6 +14,10 @@ try:
     import qiskit
 except ImportError:
     qiskit = None
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from .test_utils import DEFAULT_RNG
 
@@ -185,6 +189,8 @@ testing_circuits = cirq_circuits + qiskit_circuits
 
 @pytest.fixture(scope="session")
 def backend_cycle():
+    if torch is None:
+        return itertools.cycle(('numpy', 'cupy'))
     return itertools.cycle(('numpy', 'cupy', 'torch'))
 
 @pytest.fixture(scope="function")

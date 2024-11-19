@@ -17,19 +17,33 @@ from cuquantum.cutensornet.experimental._internal.utils import is_gate_split
 from cuquantum.cutensornet.experimental._internal.network_state_utils import STATE_SUPPORTED_DTYPE_NAMES
 from cuquantum.cutensornet._internal.decomposition_utils import DECOMPOSITION_DTYPE_NAMES, parse_decomposition
 from cuquantum.cutensornet._internal.utils import infer_object_package
+from cuquantum.cutensornet.configuration import MemoryLimitExceeded
 
 from .approxTN_utils import split_contract_decompose, tensor_decompose, verify_split_QR, verify_split_SVD, SingularValueDegeneracyError
 from .circuit_data import backend, backend_cycle
 from .circuit_tester import get_random_pauli_strings
 from .circuit_utils import get_contraction_tolerance, get_mps_tolerance
 from .data import backend_names, contract_decompose_expr
-from .state_data import testing_circuits_mps, qudits_to_test, state_settings, approx_mps_options, factory_backend, factory_backend_cycle, svd_algorithm, svd_algorithm_cycle, create_vqc_states, STATE_UPDATE_CONFIGS
-from .state_tester import StateFactory, NetworkStateFunctionalityTester, ExactStateAPITester, ApproximateMPSTester, MPS, get_random_network_operator, is_converter_mps_compatible
+from .state_data import (
+    testing_circuits_mps, 
+    qudits_to_test, 
+    state_settings, 
+    approx_mps_options, 
+    factory_backend, 
+    factory_backend_cycle, 
+    svd_algorithm, 
+    svd_algorithm_cycle, 
+    create_vqc_states, 
+    STATE_UPDATE_CONFIGS,
+    unitary_state_tests
+)
+from .state_tester import StateFactory, NetworkStateFunctionalityTester, ExactStateAPITester, ApproximateMPSTester, MPS, NetworkStateChannelTester
+from .state_tester import get_random_network_operator, is_converter_mps_compatible, apply_factory_sequence, compute_state_basic_quantities
 from .test_circuit_converter import CIRCUIT_TEST_SETTING
 from .test_options import _OptionsBase
 from .test_utils import DecomposeFactory, deselect_contract_decompose_algorithm_tests, deselect_decompose_tests, get_svd_methods_for_test, DEFAULT_RNG, gen_rand_svd_method
-from .test_utils import get_stream_for_backend, deselect_network_operator_from_pauli_string_tests, deselect_invalid_device_id_tests, get_state_internal_backend_device
-
+from .test_utils import get_stream_for_backend, get_state_internal_backend_device
+from .test_utils import deselect_invalid_network_operator_tests, deselect_network_operator_from_pauli_string_tests, deselect_invalid_device_id_tests
 
 @pytest.mark.uncollect_if(func=deselect_decompose_tests)
 @pytest.mark.parametrize(
@@ -135,25 +149,29 @@ class TestContractDecompose:
                                     info_ref=info_ref,
                                     **svd_kwargs)
 
-
     def test_contract_qr_decompose(self, decompose_expr, xp, dtype, order, stream):
         algorithm = ContractDecomposeAlgorithm(qr_method={}, svd_method=False)
         self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
 
-    
     def test_contract_svd_decompose(self, decompose_expr, xp, dtype, order, stream):
         methods = get_svd_methods_for_test(3, dtype)
         for svd_method in methods:
             algorithm = ContractDecomposeAlgorithm(qr_method=False, svd_method=svd_method)
             self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
 
-    
     def test_contract_qr_assisted_svd_decompose(self, decompose_expr, xp, dtype, order, stream):
         methods = get_svd_methods_for_test(3, dtype)
         for svd_method in methods:
             algorithm = ContractDecomposeAlgorithm(qr_method={}, svd_method=svd_method)
             self._run_contract_decompose(decompose_expr, xp, dtype, order, stream, algorithm)
 
+def test_memory_limit():
+    decompose_expr = 'il->ix,lx'
+    factory = DecomposeFactory(decompose_expr)
+    operands = factory.generate_operands(factory.input_shapes, "numpy", "float64", "C")
+    with pytest.raises(MemoryLimitExceeded):
+        outputs = contract_decompose(decompose_expr, *operands, options={'memory_limit': 1})
+    
 
 class TestContractDecomposeAlgorithm(_OptionsBase):
 
@@ -203,7 +221,7 @@ class TestContractDecomposeInfo(_OptionsBase):
 
 # Correctness tests will be performed in TestNetworkState
 class TestNetworkOperator:
-    @pytest.mark.uncollect_if(func=deselect_invalid_device_id_tests)
+    @pytest.mark.uncollect_if(func=deselect_invalid_network_operator_tests)
     @pytest.mark.parametrize("backend", backend_names)
     @pytest.mark.parametrize("state_dim_extents",(3, 4, 7, (3, 2, 4, 5), (4, 5, 2, 3, 2)))
     @pytest.mark.parametrize("dtype", STATE_SUPPORTED_DTYPE_NAMES)
@@ -236,6 +254,30 @@ class TestNetworkOperator:
                 assert (o.name, o.device_id) == (expected_backend, expected_device)
 
 
+def create_state_factory(qudits, state_setting, backend, dtype):
+    print(f"{backend=}")
+    adjacent_double_layer, mpo_bond_dim, mpo_num_sites, mpo_geometry, ct_target_place, initial_mps_dim = state_setting
+    if isinstance(qudits, (tuple, list)):
+        # for qudits with different dimensions, exact simulation only supports adjacent double layers
+        if len(set(qudits)) != 1:
+            adjacent_double_layer = True
+    factory = StateFactory(qudits, 
+                           dtype, 
+                           backend=backend,
+                           layers='SDCMDS',
+                           adjacent_double_layer=adjacent_double_layer,
+                           mpo_bond_dim=mpo_bond_dim,
+                           mpo_num_sites=mpo_num_sites,
+                           mpo_geometry=mpo_geometry,
+                           ct_target_place=ct_target_place,
+                           initial_mps_dim=initial_mps_dim)
+    return factory
+
+@pytest.fixture(scope='function')
+def state_factory(qudits, state_setting, factory_backend, dtype):
+    return create_state_factory(qudits, state_setting, factory_backend, dtype)
+
+
 class TestNetworkStateFunctionality:
 
     @pytest.mark.uncollect_if(func=deselect_invalid_device_id_tests)
@@ -255,7 +297,7 @@ class TestNetworkStateFunctionality:
     def test_custom_state(self, qudits, dtype, config, factory_backend):
         print(f"{factory_backend=}")
         adjacent_double_layer = False
-        if isinstance(qudits_to_test, (tuple, list)) and len(set(qudits_to_test)) != 1:
+        if isinstance(qudits, (tuple, list)) and len(set(qudits)) != 1:
             # for qudits with different dimensions, exact simulation only supports adjacent double layers
             adjacent_double_layer = True
 
@@ -281,41 +323,25 @@ class TestNetworkStateCorrectness:
         state_tester.run_tests()
 
     @pytest.mark.parametrize("qudits", qudits_to_test)
-    @pytest.mark.parametrize("dtype", ('float32', 'float64', 'complex64', 'complex128'))
     @pytest.mark.parametrize("state_setting", state_settings)
-    def test_exact_custom_state(self, qudits, dtype, state_setting, factory_backend):
-        print(f"{factory_backend=}")
-        adjacent_double_layer, mpo_bond_dim, mpo_num_sites, mpo_geometry, ct_target_place, initial_mps_dim = state_setting
-        if isinstance(qudits_to_test, (tuple, list)):
-            # for qudits with different dimensions, exact simulation only supports adjacent double layers
-            if len(set(qudits_to_test)) != 1:
-                adjacent_double_layer = True
-        factory = StateFactory(qudits, 
-                               dtype, 
-                               backend=factory_backend,
-                               layers='SDCMDS',
-                               adjacent_double_layer=adjacent_double_layer,
-                               mpo_bond_dim=mpo_bond_dim,
-                               mpo_num_sites=mpo_num_sites,
-                               mpo_geometry=mpo_geometry,
-                               ct_target_place=ct_target_place,
-                               initial_mps_dim=initial_mps_dim)
-        expr = factory.get_sv_contraction_expression()
+    @pytest.mark.parametrize("dtype", ('float32', 'float64', 'complex64', 'complex128'))
+    def test_exact_custom_state(self, state_factory):
+        expr = state_factory.get_sv_contraction_expression()
         sv0 = contract(*expr)
         
-        mps = MPS.from_factory(factory, mpo_application='exact')
+        mps = MPS.from_factory(state_factory, mpo_application='exact')
         sv = mps.compute_state_vector()
-        assert factory.backend.allclose(sv0, sv, **mps.tolerance)
+        assert state_factory.backend.allclose(sv0, sv, **mps.tolerance)
         sv = None
 
         rdm0 = mps.compute_reduced_density_matrix((0,))
 
         for config in (TNConfig(), MPSConfig(mpo_application='exact')):
-            with factory.to_network_state(config=config) as state:
+            with state_factory.to_network_state(config=config) as state:
                 sv = state.compute_state_vector()
                 rdm = state.compute_reduced_density_matrix((0,))
-                assert factory.backend.allclose(sv, sv0, **mps.tolerance)
-                assert factory.backend.allclose(rdm, rdm0, **mps.tolerance)
+                assert state_factory.backend.allclose(sv, sv0, **mps.tolerance)
+                assert state_factory.backend.allclose(rdm, rdm0, **mps.tolerance)
 
 
     @pytest.mark.parametrize("circuit", testing_circuits_mps)
@@ -346,22 +372,9 @@ class TestNetworkStateCorrectness:
     @pytest.mark.parametrize("state_setting", state_settings)
     @pytest.mark.parametrize("dtype", ('float64', 'complex128'))
     @pytest.mark.parametrize("mps_option", approx_mps_options)
-    def test_approximate_custom_state(self, qudits, state_setting, dtype, mps_option, factory_backend):
-        print(f"{factory_backend=}")
-        adjacent_double_layer, mpo_bond_dim, mpo_num_sites, mpo_geometry, ct_target_place, initial_mps_dim = state_setting
-        factory = StateFactory(qudits, 
-                               dtype, 
-                               layers='SDCMDS',
-                               backend=factory_backend,
-                               adjacent_double_layer=adjacent_double_layer,
-                               mpo_bond_dim=mpo_bond_dim,
-                               mpo_num_sites=mpo_num_sites,
-                               mpo_geometry=mpo_geometry,
-                               ct_target_place=ct_target_place,
-                               initial_mps_dim=initial_mps_dim
-                               )
+    def test_approximate_custom_state(self, state_factory, mps_option):
         try:
-            tester = ApproximateMPSTester.from_factory(factory, mps_option, rng=np.random.default_rng(2024))
+            tester = ApproximateMPSTester.from_factory(state_factory, mps_option, rng=np.random.default_rng(2024))
             tester.run_tests()
         except SingularValueDegeneracyError:
             pytest.skip("Test skipped due to singular value degeneracy issue")
@@ -382,8 +395,8 @@ class TestNetworkStateCorrectness:
 
         original_expec = []
         for state in [state_a, state_b]:
-            e = state.compute_expectation(operator) / state.compute_norm()
-            original_expec.append(e)
+            e, norm = state.compute_expectation(operator, return_norm=True)
+            original_expec.append(e/norm)
         
         for tensor_id in two_body_op_ids:
             state_a.update_tensor_operator(tensor_id, op_two_body_y, unitary=False)
@@ -391,8 +404,8 @@ class TestNetworkStateCorrectness:
         
         updated_expec = []
         for state in [state_b, state_a]:
-            e = state.compute_expectation(operator) / state.compute_norm()
-            updated_expec.append(e)
+            e, norm = state.compute_expectation(operator, return_norm=True)
+            updated_expec.append(e/norm)
 
         for e1, e2 in zip(original_expec, updated_expec):
             np.allclose(e1, e2, **tolerance)
@@ -412,3 +425,75 @@ class TestNetworkStateCorrectness:
 
         for sv1, sv2 in zip(original_sv, updated_sv):
             cp.allclose(sv1, sv2, **tolerance)
+    
+            
+    @pytest.mark.parametrize("qudits", qudits_to_test)
+    @pytest.mark.parametrize("state_setting", state_settings)
+    @pytest.mark.parametrize("dtype", ('complex128', ))
+    @pytest.mark.parametrize("config", (MPSConfig(max_extent=4, rel_cutoff=1e-1),))
+    def test_mps_release_operators(self, state_factory, config):
+        num_operands = len(state_factory.sequence)
+        
+        #############################################################
+        # Case I. NetworkState with release_operators in the middle #
+        #############################################################
+
+        state = NetworkState(state_factory.state_dims, dtype=state_factory.dtype, config=config)
+        if state_factory.initial_mps_dim is not None:
+            state.set_initial_mps(state_factory.get_initial_state())
+        # apply the first half operators
+        tensor_ids_first_half = set(apply_factory_sequence(state, state_factory.sequence[:num_operands//2]))
+        tensors_0 = state.compute_output_state(release_operators=True)
+        # create a copy as initial guess for another NetworkState object
+        try:
+            tensors_0 = [o.copy() for o in tensors_0] 
+        except AttributeError:
+            tensors_0 = [o.clone() for o in tensors_0] # torch
+        # compute the intermediate state output
+        intermediate_output = compute_state_basic_quantities(state)
+        # Apply the second half
+        tensor_ids_second_half = set(apply_factory_sequence(state, state_factory.sequence[num_operands//2:]))
+        # make sure that there is no overlap in the output tensor ids
+        assert not tensor_ids_first_half.intersection(tensor_ids_second_half)
+        with state:
+            output = compute_state_basic_quantities(state)
+
+        #######################################################
+        # Reference I. NetworkState without release_operators #
+        #######################################################
+        with state_factory.to_network_state(config=config) as reference_state:
+            reference_1 = compute_state_basic_quantities(reference_state)
+
+        ####################################################
+        # Reference II. NetworkState with initial state    #
+        ####################################################
+        new_state = NetworkState(state_factory.state_dims, dtype=state_factory.dtype, config=config)
+        new_state.set_initial_mps(tensors_0)
+        # Apply the second half operators
+        apply_factory_sequence(new_state, state_factory.sequence[num_operands//2:])
+        with new_state:
+            reference_2 = compute_state_basic_quantities(new_state)
+        
+        allclose = state_factory.backend.allclose
+        for key, result in output.items():
+            intm = intermediate_output[key]
+            ref1 = reference_1[key]
+            ref2 = reference_2[key]
+            if key == 'sampling':
+                assert result==ref1 and result==ref2 and result != intm
+            else:
+                # NOTE: result != intm holds here because operands are generated as random tensors
+                assert allclose(result, ref1) and allclose(result, ref2) and (not allclose(result, intm))
+    
+    @pytest.mark.parametrize('unitary_state_setting', unitary_state_tests)
+    def test_unitary_channel(self, unitary_state_setting):
+        qudits, initial_mps_dim, config, dtype = unitary_state_setting
+        factory = StateFactory(qudits, 
+                               dtype, 
+                               layers='SDMUDS', 
+                               backend='cupy', 
+                               rng=np.random.default_rng(qudits), 
+                               initial_mps_dim=initial_mps_dim, 
+                               adjacent_double_layer=True)
+        unitary_channel_tester = NetworkStateChannelTester(factory, config, num_trajectories=100)
+        unitary_channel_tester.run_tests()

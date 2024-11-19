@@ -64,7 +64,7 @@ class MPSHelper:
 
         # create tensor descriptors
         for i in range(self.num_sites):
-            self.state_tensors.append(initial_state[i].astype(tensor.dtype, order="F"))
+            self.state_tensors.append(cp.asarray(initial_state[i], order="F"))
             extent = self.get_tensor_extent(i)
             modes = self.get_tensor_modes(i)
             desc_tensor = cutn.create_tensor_descriptor(self.handle, 3, extent, 0, modes, self.data_type)
@@ -259,17 +259,32 @@ class MPSHelper:
         cutn.destroy_tensor_descriptor(desc_tensor_in_G)
     
     def __del__(self):
-        """Free all resources owned by the object."""
+        """
+        Calls `MPSHelper.free()`.
+
+        An explicit call to `MPSHelper.free()` by the user of this class allows
+        to free resources at a predictable moment in time. In some cases,
+        relying on the garbage collection can cause resource over-utilization
+        or other problems.
+
+        It is advised to always call `MPSHelper.free()` when you no longer need
+        the object.
+        """
+        self.free()
+
+    def free(self):
+        """Free all resources owned by the object, if not already freed."""
+        if self.handle is None:
+            return
+        self.handle = cutn.destroy(self.handle) # free() should be idempotent
         for desc_tensor in self.desc_tensors:
             cutn.destroy_tensor_descriptor(desc_tensor)
-        cutn.destroy(self.handle)
         cutn.destroy_workspace_descriptor(self.work_desc)
         cutn.destroy_tensor_svd_config(self.svd_config)
         cutn.destroy_tensor_svd_info(self.svd_info)
 
 
-if __name__ == '__main__':
-
+def main():
     print("cuTensorNet-vers:", cutn.get_version())
     dev = cp.cuda.Device()  # get current device
     props = cp.cuda.runtime.getDeviceProperties(dev.id)
@@ -295,6 +310,7 @@ if __name__ == '__main__':
     for i in range(num_sites):
         # we create dummpy indices for MPS tensors on the boundary for easier bookkeeping
         # we'll use Fortran layout throughout this example
+        # all tensors have to have the same dtype
         tensor = cp.zeros((1,2,1), dtype=np.complex128, order="F")
         tensor[0,0,0] = 1.0
         initial_state.append(tensor)
@@ -353,3 +369,10 @@ if __name__ == '__main__':
         tensor = mps_helper.get_tensor(i)
         modes = mps_helper.get_tensor_modes(i)
         print(f"Site {i}, extent: {tensor.shape}, modes: {modes}")
+
+    mps_helper.free()
+
+if __name__ == '__main__':
+    main()
+
+

@@ -463,14 +463,20 @@ def is_device_id_valid(device_id):
         return device_id < num_devices
     return True
 
-def deselect_network_operator_from_pauli_string_tests(backend, n_qubits, num_pauli_strings, dtype, device_id, *args, **kwargs):
+def deselect_network_operator_from_pauli_string_tests(*args, **kwargs):
+    backend = kwargs.get('backend')
+    dtype = kwargs.get('dtype')
     if backend == 'torch-cpu' or dtype.startswith('float'): # NetworkOperator.from_pauli_strings not support torch-cpu
         return True
-    return not is_device_id_valid(device_id)
+    return deselect_invalid_network_operator_tests(*args, **kwargs)
 
 def deselect_invalid_device_id_tests(*args, **kwargs):
     device_id = kwargs.get('device_id', None)
     return not is_device_id_valid(device_id)
+
+def deselect_invalid_network_operator_tests(*args, **kwargs):
+    backend = kwargs.get('backend')
+    return deselect_invalid_device_id_tests(*args, **kwargs) or (backend.startswith('torch') and torch is None)
 
 def get_state_internal_backend_device(backend, device_id):
     expected_backend = {
@@ -531,11 +537,13 @@ class TensorBackend:
     def norm(self, *args, **kwargs):
         return self.module.linalg.norm(*args, **kwargs)
     
-    def einsum(self, *args, **kwargs):
-        return self.module.einsum(*args, **kwargs)
-    
     def allclose(self, *args, **kwargs):
+        if np.isscalar(args[0]) and np.isscalar(args[1]):
+            return np.allclose(*args, **kwargs)
         return self.module.allclose(*args, **kwargs)
     
-    def vstack(self, *args, **kwargs):
-        return self.module.vstack(*args, **kwargs)
+    def __getattr__(self, name):
+        try:
+            return getattr(self.module, name)
+        except AttributeError as e:
+            raise e

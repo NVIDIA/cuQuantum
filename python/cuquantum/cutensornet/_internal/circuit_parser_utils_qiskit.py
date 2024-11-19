@@ -9,7 +9,7 @@ from qiskit.circuit import Barrier, ControlledGate, Delay, Gate, Measure
 try:
     # qiskit 1.0
     from qiskit.circuit.library import UnitaryGate
-except ModuleNotFoundError:
+except ImportError:
     # qiskit < 1.0
     from qiskit.extensions import UnitaryGate
 

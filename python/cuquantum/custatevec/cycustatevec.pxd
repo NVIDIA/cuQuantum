@@ -1,8 +1,8 @@
 # Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-# This code was automatically generated. Do not modify it directly.
+#
+# This code was automatically generated across versions from 23.03.0 to 24.03.0. Do not modify it directly.
 # This layer exposes the C header to Cython as-is.
 
 from libc.stdint cimport int32_t, int64_t, uint32_t, uint64_t
@@ -20,6 +20,10 @@ cdef extern from *:
     ctypedef int cudaDataType 'cudaDataType'
     ctypedef int libraryPropertyType_t 'libraryPropertyType_t'
     ctypedef int libraryPropertyType 'libraryPropertyType'
+    ctypedef struct int2 'int2':
+        pass
+    ctypedef struct double2 'double2':
+        pass
 
 
 cdef extern from '<custatevec.h>' nogil:
@@ -40,55 +44,55 @@ cdef extern from '<custatevec.h>' nogil:
         CUSTATEVEC_STATUS_COMMUNICATOR_ERROR
         CUSTATEVEC_STATUS_LOADING_LIBRARY_FAILED
         CUSTATEVEC_STATUS_MAX_VALUE
-    
+
     ctypedef enum custatevecPauli_t:
         CUSTATEVEC_PAULI_I
         CUSTATEVEC_PAULI_X
         CUSTATEVEC_PAULI_Y
         CUSTATEVEC_PAULI_Z
-    
+
     ctypedef enum custatevecMatrixLayout_t:
         CUSTATEVEC_MATRIX_LAYOUT_COL
         CUSTATEVEC_MATRIX_LAYOUT_ROW
-    
+
     ctypedef enum custatevecMatrixType_t:
         CUSTATEVEC_MATRIX_TYPE_GENERAL
         CUSTATEVEC_MATRIX_TYPE_UNITARY
         CUSTATEVEC_MATRIX_TYPE_HERMITIAN
-    
+
     ctypedef enum custatevecCollapseOp_t:
         CUSTATEVEC_COLLAPSE_NONE
         CUSTATEVEC_COLLAPSE_NORMALIZE_AND_ZERO
-    
+
     ctypedef enum custatevecComputeType_t:
         CUSTATEVEC_COMPUTE_DEFAULT
         CUSTATEVEC_COMPUTE_32F
         CUSTATEVEC_COMPUTE_64F
         CUSTATEVEC_COMPUTE_TF32
-    
+
     ctypedef enum custatevecSamplerOutput_t:
         CUSTATEVEC_SAMPLER_OUTPUT_RANDNUM_ORDER
         CUSTATEVEC_SAMPLER_OUTPUT_ASCENDING_ORDER
-    
+
     ctypedef enum custatevecDeviceNetworkType_t:
         CUSTATEVEC_DEVICE_NETWORK_TYPE_SWITCH
         CUSTATEVEC_DEVICE_NETWORK_TYPE_FULLMESH
-    
+
     ctypedef enum custatevecCommunicatorType_t:
         CUSTATEVEC_COMMUNICATOR_TYPE_EXTERNAL
         CUSTATEVEC_COMMUNICATOR_TYPE_OPENMPI
         CUSTATEVEC_COMMUNICATOR_TYPE_MPICH
-    
+
     ctypedef enum custatevecDataTransferType_t:
         CUSTATEVEC_DATA_TRANSFER_TYPE_NONE
         CUSTATEVEC_DATA_TRANSFER_TYPE_SEND
         CUSTATEVEC_DATA_TRANSFER_TYPE_RECV
         CUSTATEVEC_DATA_TRANSFER_TYPE_SEND_RECV
-    
+
     ctypedef enum custatevecMatrixMapType_t:
         CUSTATEVEC_MATRIX_MAP_TYPE_BROADCAST
         CUSTATEVEC_MATRIX_MAP_TYPE_MATRIX_INDEXED
-    
+
     ctypedef enum custatevecStateVectorType_t:
         CUSTATEVEC_STATE_VECTOR_TYPE_ZERO
         CUSTATEVEC_STATE_VECTOR_TYPE_UNIFORM
@@ -139,13 +143,6 @@ cdef extern from '<custatevec.h>' nogil:
     const int CUSTATEVEC_VER_MINOR
     const int CUSTATEVEC_VER_PATCH
     const int CUSTATEVEC_VERSION
-
-
-cdef extern from "vector_types.h" nogil:
-    ctypedef struct int2 'int2':
-        pass
-    ctypedef struct double2 'double2':
-        pass
 
 
 ###############################################################################
