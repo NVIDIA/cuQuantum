@@ -66,7 +66,7 @@ The cuTENSOR library path would depend on the CUDA major version. Please refer t
 ## Prerequisites
 
 * [CUDA Toolkit 11.x](https://developer.nvidia.com/cuda-downloads) and compatible driver r450+ (see [CUDA Driver Release Notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#cuda-major-component-versions)).
-* cuTENSOR 1.5.0+.
+* cuTENSOR 2.0.2+.
 * GNU OpenMP (GOMP) runtime.
 * CMake 3.17+ if using `cmake`.
 

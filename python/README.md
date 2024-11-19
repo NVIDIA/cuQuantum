@@ -14,8 +14,9 @@ For instructions on installing *cuQuantum Python*, refer to our
 The build-time dependencies of the cuQuantum Python package include:
 
 * CUDA Toolkit 11.x or 12.x
-* cuStateVec 1.4.0+
-* cuTensorNet 2.5.0+
+* cuStateVec 1.7.0+
+* cuTensorNet 2.6.0+
+* cuDensityMat >=0.0.5, <0.1.0
 * Python 3.10+
 * Cython >=0.29.22,<3
 * pip 21.3.1+
@@ -43,9 +44,8 @@ Notes:
   * `-v`: enable more verbose output
   * `--no-deps`: avoid installing the *run-time* dependencies
   * `--no-build-isolation`: reuse the current Python environment instead of creating a new one for building the package (this avoids installing any *build-time* dependencies)
-- As an alternative to setting `CUQUANTUM_ROOT`, `CUSTATEVEC_ROOT` and `CUTENSORNET_ROOT` can be set to point to the cuStateVec and the cuTensorNet libraries, respectively. The latter two environment variables take precedence if defined.
+- As an alternative to setting `CUQUANTUM_ROOT`, `CUSTATEVEC_ROOT`, `CUTENSORNET_ROOT` and `CUDENSITYMAT_ROOT` can be set to point to the cuStateVec, cuTensorNet and cuDensityMat libraries, respectively. The latter three environment variables take precedence if defined.
 - Please ensure that you use consistent binaries and packages for either CUDA 11 or 12. Mixing-and-matching will result in undefined behavior.
-
 
 ## Running
 
@@ -56,8 +56,9 @@ Runtime dependencies of the cuQuantum Python package include:
 * An NVIDIA GPU with compute capability 7.0+
 * Driver: Linux (450.80.02+ for CUDA 11, 525.60.13+ for CUDA 12)
 * CUDA Toolkit 11.x or 12.x
-* cuStateVec 1.4.0+
-* cuTensorNet 2.5.0+
+* cuStateVec 1.7.0+
+* cuTensorNet 2.6.0+
+* cuDensityMat >=0.0.5, <0.1.0
 * Python 3.10+
 * NumPy v1.21+
 * CuPy v13.0.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
@@ -83,9 +84,8 @@ Known issues:
 
 Samples for demonstrating the usage of both low-level and high-level Python APIs are
 available in the `samples` directory. The low-level API samples are 1:1 translations of the corresponding
-samples written in C. The high-level API samples demonstrate pythonic usages of the cuTensorNet
+samples written in C. The high-level API samples demonstrate pythonic usages of the cuTensorNet and cuDensityMat
 library in Python.
-
 
 ## Testing
 
@@ -93,7 +93,6 @@ If pytest is installed, typing `pytest tests` at the command prompt in the Pytho
 run all tests. Some tests would be skipped if `cffi` is not installed or if the environment
 variable `CUDA_PATH` is not set.
 
-
 ## Citing cuQuantum
 
-Please click this Zenodo badge to see the citation format: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6385574.svg)](https://doi.org/10.5281/zenodo.6385574)
+H. Bayraktar et al., "cuQuantum SDK: A High-Performance Library for Accelerating Quantum Science", 2023 IEEE International Conference on Quantum Computing and Engineering (QCE), Bellevue, WA, USA, 2023, pp. 1050-1061, doi: [10.1109/QCE57702.2023.00119](https://doi.org/10.1109/QCE57702.2023.00119)

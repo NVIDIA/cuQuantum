@@ -13,6 +13,7 @@ import pytest
 import cuquantum
 from cuquantum import cutensornet as cutn
 from cuquantum.cutensornet._internal.utils import infer_object_package
+from cuquantum.cutensornet.configuration import MemoryLimitExceeded
 
 from .data import backend_names, dtype_names, einsum_expressions
 from .test_utils import atol_mapper, EinsumFactory, rtol_mapper
@@ -97,12 +98,8 @@ class _TestContractBase:
                     pytest.skip("this TN is currently not supported")
                 else:
                     raise
-            except MemoryError as e:
-                if "Insufficient memory" in str(e):
-                    # not enough memory available to process, just skip
-                    pytest.skip("Insufficient workspace memory available.")
-                else:
-                    raise
+            except MemoryLimitExceeded as e:
+                pytest.skip("Insufficient workspace memory available.")
 
             if return_info:
                 out, (path, info) = out
@@ -146,12 +143,8 @@ class _TestContractBase:
                     pytest.skip("cuquantum.einsum() fail -- TN too large?")
                 else:
                     raise
-            except MemoryError as e:
-                if "Insufficient memory" in str(e):
-                    # not enough memory available to process, just skip
-                    pytest.skip("Insufficient workspace memory available.")
-                else:
-                    raise
+            except MemoryLimitExceeded as e:
+                pytest.skip("Insufficient workspace memory available.")
 
         backend_out = sys.modules[infer_object_package(out)]
         assert backend_out is backend

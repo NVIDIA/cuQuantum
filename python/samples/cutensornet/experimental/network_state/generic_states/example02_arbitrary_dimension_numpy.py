@@ -57,8 +57,9 @@ print(f"state vector type: {type(sv)}, shape: {sv.shape}")
 
 # compute the un-normalized bitstring amplitude
 bitstring = '0' * n_state_modes
-amplitude = state.compute_amplitude(bitstring)
-print(f"Bitstring amplitude for {bitstring}: {amplitude}")
+amplitude, norm = state.compute_amplitude(bitstring, return_norm=True)
+prob = abs(amplitude) ** 2 / norm
+print(f"Bitstring amplitude for {bitstring}: {amplitude}, prob={prob}")
 
 # compute batched bitstring amplitude with first mode fixed at state 0 and second mode at state 1
 fixed = {0: 0, 1: 1}
@@ -85,8 +86,8 @@ for i, dim in enumerate(state_mode_extents):
 
 expec_operator = NetworkOperator(state_mode_extents, dtype=dtype)
 expec_operator.append_product(1, expec_prod_modes, expec_prod_operators)
-expec = state.compute_expectation(expec_operator)
-print(f"Expectation value: {expec}, norm: {state.compute_norm()}")
+expec, norm = state.compute_expectation(expec_operator, return_norm=True)
+print(f"normalized expectation value = {expec/norm}")
 
 # release resources
 state.free()

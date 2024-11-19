@@ -8,20 +8,26 @@ Computational primitives for tensors
 
 __all__ = ['decompose', 'DecompositionOptions', 'QRMethod', 'SVDInfo', 'SVDMethod']
 
-import dataclasses
+from dataclasses import dataclass
 import logging
 import re
 from typing import Optional
 
 import numpy
+import cupy as cp
 
 from . import cutensornet as cutn
-from .configuration import NetworkOptions
+from .configuration import NetworkOptions, MemoryLimitExceeded
 from ._internal import decomposition_utils
 from ._internal import utils 
 
 
-DecompositionOptions = dataclasses.make_dataclass("DecompositionOptions", fields=[(field.name, field.type, field) for field in dataclasses.fields(NetworkOptions)], bases=(NetworkOptions,))
+@dataclass
+class DecompositionOptions(NetworkOptions):
+    def __post_init__(self):
+        super().__post_init__()
+        if self.compute_type is not None:
+            raise ValueError("The compute_type for decomposition should be None.")
 DecompositionOptions.__doc__ = re.sub(":class:`cuquantum.Network` object", ":func:`cuquantum.cutensornet.tensor.decompose` and :func:`cuquantum.cutensornet.experimental.contract_decompose` functions", NetworkOptions.__doc__)
 
 
@@ -73,6 +79,9 @@ def decompose(
               a 4-tuple of output tensors U, S, V and a `dict` object that contains information about the decomposition will be returned. 
               Note, depending on the choice of :attr:`cuquantum.cutensornet.tensor.SVDMethod.partition`, the returned S operand may be `None`.
               Also see :attr:`~SVDMethod.partition`. 
+
+    Raises:
+        :class:`MemoryLimitExceeded`: the memory needed to perform the operation is larger than the ``options.memory_limit``
 
     The decomposition expression adopts a similar notation as einsum expression. 
     The ``subscripts`` string is a list of subscript labels where each label refers to a mode of the corresponding operand.
@@ -271,9 +280,10 @@ def decompose(
         
         # Allocate and set workspace
         for mem_space in (cutn.Memspace.DEVICE, cutn.Memspace.HOST):
-            workspaces[mem_space] = decomposition_utils.allocate_and_set_workspace(handle, options.allocator, workspace_desc, 
-                cutn.WorksizePref.MIN, mem_space, cutn.WorkspaceKind.SCRATCH, options.device_id,
-                stream_holder, options.logger, task_name='tensor decomposition')
+            pref = cutn.WorksizePref.MIN
+            workspace_kind = cutn.WorkspaceKind.SCRATCH
+            workspaces[mem_space] = decomposition_utils.allocate_and_set_workspace(options, workspace_desc, 
+                pref, mem_space, workspace_kind, stream_holder, task_name='tensor decomposition')
         
         svd_info_obj = None
 
@@ -349,13 +359,13 @@ def decompose(
         raise NotImplementedError
 
 
-@dataclasses.dataclass
+@dataclass
 class QRMethod:
     """A data class for providing QR options to the :func:`cuquantum.cutensornet.tensor.decompose` function."""
     pass
 
 
-@dataclasses.dataclass
+@dataclass
 class SVDInfo:
 
     """A data class for holding information regarding SVD truncation at runtime.
@@ -400,7 +410,7 @@ class SVDInfo:
         return s
     
 
-@dataclasses.dataclass
+@dataclass
 class SVDMethod:
     """A data class for providing SVD options to the :func:`cuquantum.cutensornet.tensor.decompose` function.
 

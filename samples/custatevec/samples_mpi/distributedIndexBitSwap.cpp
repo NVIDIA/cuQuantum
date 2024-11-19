@@ -124,6 +124,10 @@ void runDistributedIndexBitSwaps(
     int nP2PDeviceBits = 0;
     int nSubSVsP2P = 1 << nP2PDeviceBits;
 
+    // use CUDA IPC event or semaphore
+    // set useCudaIpcEvent to use CUDA IPC event, otherwise use semaphore
+    bool useCudaIpcEvent = true;
+
     // use rank and size to map sub state vectors
     // this sample assigns one device to one rank and allocates one sub state vector on the assigned device
     // use the rank as the index of the sub state vector locally allocated in this process
@@ -143,6 +147,7 @@ void runDistributedIndexBitSwaps(
     void* d_orgSubSV = nullptr;
     cudaStream_t localStream = nullptr;
     cudaEvent_t localEvent = nullptr;
+    void* d_localSemaphore = nullptr;
 
     // bind the device to the process
     // this is based on the assumption of the global rank placement that the
@@ -166,8 +171,6 @@ void runDistributedIndexBitSwaps(
     ERRCHK(cudaMalloc(&d_orgSubSV, subSVSize));
     ERRCHK(cudaMemset(d_orgSubSV, 0, subSVSize));
     ERRCHK(cudaStreamCreate(&localStream));
-    // event should be created with the cudaEventInterprocess flag
-    ERRCHK(cudaEventCreateWithFlags(&localEvent, cudaEventInterprocess | cudaEventDisableTiming));
 
     // create cuStateVec handle
     custatevecHandle_t handle;
@@ -230,20 +233,37 @@ void runDistributedIndexBitSwaps(
     ERRCHK(custatevecCommunicatorCreate(handle, &communicator, communicatorType, soname));
 
     //
-    // create sv segment swap worker
+    // create SvSwapWorker
     //
     custatevecSVSwapWorkerDescriptor_t svSegSwapWorker = nullptr;
     size_t extraWorkspaceSize = 0;
     size_t minTransferWorkspaceSize = 0;
-    ERRCHK(custatevecSVSwapWorkerCreate(
-                   handle, &svSegSwapWorker, communicator,
-                   d_orgSubSV, orgSubSVIndex, localEvent, svDataType,
-                   localStream, &extraWorkspaceSize, &minTransferWorkspaceSize));
+
+    if (useCudaIpcEvent)
+    {
+        // event should be created with the cudaEventInterprocess flag
+        ERRCHK(cudaEventCreateWithFlags(&localEvent, cudaEventInterprocess | cudaEventDisableTiming));
+        // create SVSwapWorker
+        ERRCHK(custatevecSVSwapWorkerCreate(
+                       handle, &svSegSwapWorker, communicator,
+                       d_orgSubSV, orgSubSVIndex, localEvent, svDataType,
+                       localStream, &extraWorkspaceSize, &minTransferWorkspaceSize));
+    }
+    else
+    {
+        ERRCHK(cudaMalloc(&d_localSemaphore, sizeof(int)));
+        // create SVSwapWorker
+        ERRCHK(custatevecSVSwapWorkerCreateWithSemaphore(
+                       handle, &svSegSwapWorker, communicator,
+                       d_orgSubSV, orgSubSVIndex, d_localSemaphore, svDataType,
+                       localStream, &extraWorkspaceSize, &minTransferWorkspaceSize));
+    }
     // set extra workspace
     void* d_extraWorkspace = nullptr;
     ERRCHK(cudaMalloc(&d_extraWorkspace, extraWorkspaceSize));
     ERRCHK(custatevecSVSwapWorkerSetExtraWorkspace(
                    handle, svSegSwapWorker, d_extraWorkspace, extraWorkspaceSize));
+
     // set transfer workspace
     // The size should be equal to or larger than minTransferWorkspaceSize
     // Depending on the systems, larger transfer workspace can improve the performance
@@ -260,6 +280,7 @@ void runDistributedIndexBitSwaps(
     std::vector<void*> d_subSVsP2P;
     std::vector<int> subSVIndicesP2P;
     std::vector<cudaEvent_t> remoteEvents;
+    std::vector<void*> remoteSemaphores;
     if (nP2PDeviceBits > 0)
     {
         // distribute device memory handles
@@ -268,13 +289,6 @@ void runDistributedIndexBitSwaps(
         std::vector<cudaIpcMemHandle_t> ipcMemHandles(nSubSVs);
         ERRCHK(MPI_Allgather(&ipcMemHandle, sizeof(ipcMemHandle), MPI_UINT8_T,
                              ipcMemHandles.data(), sizeof(ipcMemHandle), MPI_UINT8_T, MPI_COMM_WORLD));
-
-        // distribute event handles
-        cudaIpcEventHandle_t eventHandle;
-        ERRCHK(cudaIpcGetEventHandle(&eventHandle, localEvent));
-        std::vector<cudaIpcEventHandle_t> ipcEventHandles(nSubSVs);
-        ERRCHK(MPI_Allgather(&eventHandle, sizeof(eventHandle), MPI_UINT8_T,
-                             ipcEventHandles.data(), sizeof(eventHandle), MPI_UINT8_T, MPI_COMM_WORLD));
 
         // get remove device pointers and events
         // this calculation assumes that the global rank placement is done in a round-robin fashion
@@ -296,17 +310,58 @@ void runDistributedIndexBitSwaps(
             const auto& dstMemHandle = ipcMemHandles[p2pSubSVIndex];
             ERRCHK(cudaIpcOpenMemHandle(&d_subSVP2P, dstMemHandle, cudaIpcMemLazyEnablePeerAccess));
             d_subSVsP2P.push_back(d_subSVP2P);
-            cudaEvent_t eventP2P = nullptr;
-            ERRCHK(cudaIpcOpenEventHandle(&eventP2P, ipcEventHandles[p2pSubSVIndex]));
-            remoteEvents.push_back(eventP2P);
             subSVIndicesP2P.push_back(p2pSubSVIndex);
         }
 
-        // set p2p sub state vectors
-        ERRCHK(custatevecSVSwapWorkerSetSubSVsP2P(
-                       handle, svSegSwapWorker,
-                       d_subSVsP2P.data(), subSVIndicesP2P.data(), remoteEvents.data(),
-                       static_cast<int>(d_subSVsP2P.size())));
+        if (useCudaIpcEvent)
+        {
+            // distribute event handles
+            cudaIpcEventHandle_t eventHandle;
+            ERRCHK(cudaIpcGetEventHandle(&eventHandle, localEvent));
+            std::vector<cudaIpcEventHandle_t> ipcEventHandles(nSubSVs);
+            ERRCHK(MPI_Allgather(&eventHandle, sizeof(eventHandle), MPI_UINT8_T,
+                                 ipcEventHandles.data(), sizeof(eventHandle), MPI_UINT8_T, MPI_COMM_WORLD));
+
+            for (int p2pSubSVIndex = p2pSubSVIndexBegin; p2pSubSVIndex < p2pSubSVIndexEnd; ++p2pSubSVIndex)
+            {
+                if (orgSubSVIndex == p2pSubSVIndex)
+                    continue;  // don't need local sub state vector pointer
+                cudaEvent_t eventP2P = nullptr;
+                ERRCHK(cudaIpcOpenEventHandle(&eventP2P, ipcEventHandles[p2pSubSVIndex]));
+                remoteEvents.push_back(eventP2P);
+            }
+            // set p2p sub state vectors
+            ERRCHK(custatevecSVSwapWorkerSetSubSVsP2P(
+                           handle, svSegSwapWorker,
+                           d_subSVsP2P.data(), subSVIndicesP2P.data(), remoteEvents.data(),
+                           static_cast<int>(d_subSVsP2P.size())));
+        }
+        else
+        {
+            // distribute semaphore memory handles
+            cudaIpcMemHandle_t ipcSemaphoreMemHandle;
+            ERRCHK(cudaIpcGetMemHandle(&ipcSemaphoreMemHandle, d_localSemaphore));
+            std::vector<cudaIpcMemHandle_t> ipcSemaphoreMemHandles(nSubSVs);
+            ERRCHK(MPI_Allgather(
+                           &ipcSemaphoreMemHandle, sizeof(ipcMemHandle), MPI_UINT8_T,
+                           ipcSemaphoreMemHandles.data(), sizeof(ipcSemaphoreMemHandle), MPI_UINT8_T,
+                           MPI_COMM_WORLD));
+
+            for (int p2pSubSVIndex = p2pSubSVIndexBegin; p2pSubSVIndex < p2pSubSVIndexEnd; ++p2pSubSVIndex)
+            {
+                if (orgSubSVIndex == p2pSubSVIndex)
+                    continue;  // don't need local sub state vector pointer
+                void* d_semaphoreP2P = nullptr;
+                const auto& dstSemaphoreMemHandle = ipcSemaphoreMemHandles[p2pSubSVIndex];
+                ERRCHK(cudaIpcOpenMemHandle(&d_semaphoreP2P, dstSemaphoreMemHandle, cudaIpcMemLazyEnablePeerAccess));
+                remoteSemaphores.push_back(d_semaphoreP2P);
+            }
+            // set p2p sub state vectors
+            ERRCHK(custatevecSVSwapWorkerSetSubSVsP2PWithSemaphores(
+                           handle, svSegSwapWorker,
+                           d_subSVsP2P.data(), subSVIndicesP2P.data(), remoteSemaphores.data(),
+                           static_cast<int>(remoteSemaphores.size())));
+        }
     }
 
     //
@@ -377,8 +432,18 @@ void runDistributedIndexBitSwaps(
         ERRCHK(cudaIpcCloseMemHandle(d_subSV));
     for (auto event : remoteEvents)
         ERRCHK(cudaEventDestroy(event));
+    for (auto* semaphore : remoteSemaphores)
+        ERRCHK(cudaIpcCloseMemHandle(semaphore));
+
+    // ensure all remote resources are released
+    ERRCHK(cudaDeviceSynchronize());
+    ERRCHK(MPI_Barrier(MPI_COMM_WORLD));
+
     ERRCHK(cudaFree(d_orgSubSV));
-    ERRCHK(cudaEventDestroy(localEvent));
+    if (localEvent != nullptr)
+        ERRCHK(cudaEventDestroy(localEvent));
+    if (d_localSemaphore != nullptr)
+        ERRCHK(cudaFree(d_localSemaphore));
     ERRCHK(cudaStreamDestroy(localStream));
 }
 

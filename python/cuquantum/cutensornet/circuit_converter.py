@@ -31,7 +31,7 @@ class CircuitToEinsum:
         dtype : The datatype for the output tensor operands. If not specified, double complex is used. 
         backend: The backend for the output tensor operands. If not specified, ``cupy`` is used.
     
-    Notes:
+    .. note::
 
       - For :class:`qiskit.QuantumCircuit`, composite gates will be decomposed into either Qiskit standard gates or customized unitary gates.
 

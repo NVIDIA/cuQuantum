@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 24.08.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 24.11.0. Do not modify it directly.
 
 from ._internal cimport cutensornet as _cutensornet
 
@@ -465,3 +465,11 @@ cdef cutensornetStatus_t cutensornetMarginalGetInfo(const cutensornetHandle_t ha
 
 cdef cutensornetStatus_t cutensornetSamplerGetInfo(const cutensornetHandle_t handle, const cutensornetStateSampler_t tensorNetworkSampler, cutensornetSamplerAttributes_t attribute, void* attributeValue, size_t attributeSize) except* nogil:
     return _cutensornet._cutensornetSamplerGetInfo(handle, tensorNetworkSampler, attribute, attributeValue, attributeSize)
+
+
+cdef cutensornetStatus_t cutensornetStateApplyUnitaryChannel(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, int32_t numTensors, void* tensorData[], const int64_t* tensorModeStrides, const double probabilities[], int64_t* channelId) except* nogil:
+    return _cutensornet._cutensornetStateApplyUnitaryChannel(handle, tensorNetworkState, numStateModes, stateModes, numTensors, tensorData, tensorModeStrides, probabilities, channelId)
+
+
+cdef cutensornetStatus_t cutensornetStateCaptureMPS(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState) except* nogil:
+    return _cutensornet._cutensornetStateCaptureMPS(handle, tensorNetworkState)

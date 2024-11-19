@@ -138,10 +138,17 @@ class BaseTester:
         raise NotImplementedError
     
     def test_norm(self):
-        norm1 = self.reference_engine.compute_norm()
+        try:
+            norm1 = self.reference_engine.compute_norm()
+        except:
+            # for NetworkState
+            _, norm1 = self.reference_engine.compute_amplitude('0'*self.n_qubits, return_norm=True)
         for engine in self.target_engines:
             for _ in get_engine_iters(engine):
-                norm2 = engine.compute_norm()
+                try:
+                    norm2 = engine.compute_norm()
+                except:
+                    _, norm2 = engine.compute_amplitude('0'*self.n_qubits, return_norm=True)
                 message = f"{engine.__class__.__name__} maxDiff={abs(norm1-norm2)}"
                 assert np.allclose(norm1, norm2, **engine.tolerance), message
     

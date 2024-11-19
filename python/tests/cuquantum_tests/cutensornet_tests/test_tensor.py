@@ -13,6 +13,7 @@ import pytest
 from cuquantum import tensor
 from cuquantum.cutensornet._internal.decomposition_utils import DECOMPOSITION_DTYPE_NAMES
 from cuquantum.cutensornet._internal.utils import infer_object_package
+from cuquantum.cutensornet.configuration import MemoryLimitExceeded
 
 from .approxTN_utils import tensor_decompose, verify_split_QR, verify_split_SVD, SingularValueDegeneracyError
 from .data import backend_names, tensor_decomp_expressions
@@ -116,10 +117,20 @@ class TestDecompose:
                 decompose_expr, xp, dtype, order, stream, method,
                 blocking=blocking, return_info=return_info)
 
-
+def test_memory_limit():
+    decompose_expr, shapes = ('ab->ax,xb', [(8, 8)])
+    factory = DecomposeFactory(decompose_expr, shapes=shapes)
+    operand = factory.generate_operands(factory.input_shapes, "numpy", "float64", "C")[0]
+    with pytest.raises(MemoryLimitExceeded):
+        outputs = tensor.decompose(decompose_expr, operand, options={'memory_limit': 1})
+                
+    
 class TestDecompositionOptions(TestNetworkOptions):
 
     options_type = tensor.DecompositionOptions
+    
+    def test_compute_type(self):
+        pass  # Skip this test for DecompositionOptions
 
 
 class TestSVDMethod(_OptionsBase):

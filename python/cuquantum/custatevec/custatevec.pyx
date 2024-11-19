@@ -1,8 +1,8 @@
 # Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-# This code was automatically generated. Do not modify it directly.
+#
+# This code was automatically generated across versions from 23.03.0 to 24.03.0. Do not modify it directly.
 
 cimport cython  # NOQA
 cimport cpython
@@ -514,12 +514,12 @@ cpdef abs2sum_array(intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_i
 
     .. seealso:: `custatevecAbs2SumArray`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_ = \
-        get_resource_ptr[int32_t](mask_bit_string, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_ = \
-        get_resource_ptr[int32_t](mask_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_
+    get_resource_ptr[int32_t](_mask_bit_string_, mask_bit_string, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_
+    get_resource_ptr[int32_t](_mask_ordering_, mask_ordering, <int32_t*>NULL)
     with nogil:
         status = custatevecAbs2SumArray(<Handle>handle, <const void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <double*>abs2sum, <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_ordering_len, <const int32_t*>(_mask_bit_string_.data()), <const int32_t*>(_mask_ordering_.data()), <const uint32_t>mask_len)
     check_status(status)
@@ -544,8 +544,8 @@ cpdef collapse_on_z_basis(intptr_t handle, intptr_t sv, int sv_data_type, uint32
 
     .. seealso:: `custatevecCollapseOnZBasis`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_ = \
-        get_resource_ptr[int32_t](basis_bits, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_
+    get_resource_ptr[int32_t](_basis_bits_, basis_bits, <int32_t*>NULL)
     with nogil:
         status = custatevecCollapseOnZBasis(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const int32_t>parity, <const int32_t*>(_basis_bits_.data()), <const uint32_t>n_basis_bits, norm)
     check_status(status)
@@ -574,10 +574,10 @@ cpdef collapse_by_bit_string(intptr_t handle, intptr_t sv, int sv_data_type, uin
 
     .. seealso:: `custatevecCollapseByBitString`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_string_ = \
-        get_resource_ptr[int32_t](bit_string, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_string_
+    get_resource_ptr[int32_t](_bit_string_, bit_string, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
     with nogil:
         status = custatevecCollapseByBitString(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const int32_t*>(_bit_string_.data()), <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_string_len, norm)
     check_status(status)
@@ -605,8 +605,8 @@ cpdef int32_t measure_on_z_basis(intptr_t handle, intptr_t sv, int sv_data_type,
 
     .. seealso:: `custatevecMeasureOnZBasis`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_ = \
-        get_resource_ptr[int32_t](basis_bits, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_
+    get_resource_ptr[int32_t](_basis_bits_, basis_bits, <int32_t*>NULL)
     cdef int32_t parity
     with nogil:
         status = custatevecMeasureOnZBasis(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, &parity, <const int32_t*>(_basis_bits_.data()), <const uint32_t>n_basis_bits, <const double>randnum, <_CollapseOp>collapse)
@@ -634,8 +634,8 @@ cpdef batch_measure(intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_i
 
     .. seealso:: `custatevecBatchMeasure`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
     with nogil:
         status = custatevecBatchMeasure(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <int32_t*>bit_string, <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_string_len, <const double>randnum, <_CollapseOp>collapse)
     check_status(status)
@@ -663,8 +663,8 @@ cpdef batch_measure_with_offset(intptr_t handle, intptr_t sv, int sv_data_type, 
 
     .. seealso:: `custatevecBatchMeasureWithOffset`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
     with nogil:
         status = custatevecBatchMeasureWithOffset(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <int32_t*>bit_string, <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_string_len, <const double>randnum, <_CollapseOp>collapse, <const double>offset, <const double>abs2sum)
     check_status(status)
@@ -704,14 +704,14 @@ cpdef apply_pauli_rotation(intptr_t handle, intptr_t sv, int sv_data_type, uint3
 
     .. seealso:: `custatevecApplyPauliRotation`
     """
-    cdef nullable_unique_ptr[ vector[int] ] _paulis_ = \
-        get_resource_ptr[int](paulis, <int*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_ = \
-        get_resource_ptr[int32_t](targets, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_ = \
-        get_resource_ptr[int32_t](controls, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_ = \
-        get_resource_ptr[int32_t](control_bit_values, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int] ] _paulis_
+    get_resource_ptr[int](_paulis_, paulis, <int*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_
+    get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_
+    get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_
+    get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
     with nogil:
         status = custatevecApplyPauliRotation(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, theta, <const _Pauli*>(_paulis_.data()), <const int32_t*>(_targets_.data()), <const uint32_t>n_targets, <const int32_t*>(_controls_.data()), <const int32_t*>(_control_bit_values_.data()), <const uint32_t>n_controls)
     check_status(status)
@@ -779,12 +779,12 @@ cpdef apply_matrix(intptr_t handle, intptr_t sv, int sv_data_type, uint32_t n_in
 
     .. seealso:: `custatevecApplyMatrix`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_ = \
-        get_resource_ptr[int32_t](targets, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_ = \
-        get_resource_ptr[int32_t](controls, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_ = \
-        get_resource_ptr[int32_t](control_bit_values, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_
+    get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_
+    get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_
+    get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
     with nogil:
         status = custatevecApplyMatrix(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const void*>matrix, <DataType>matrix_data_type, <_MatrixLayout>layout, <const int32_t>adjoint, <const int32_t*>(_targets_.data()), <const uint32_t>n_targets, <const int32_t*>(_controls_.data()), <const int32_t*>(_control_bit_values_.data()), <const uint32_t>n_controls, <_ComputeType>compute_type, <void*>extra_workspace, extra_workspace_size_in_bytes)
     check_status(status)
@@ -843,8 +843,8 @@ cpdef double compute_expectation(intptr_t handle, intptr_t sv, int sv_data_type,
 
     .. seealso:: `custatevecComputeExpectation`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_ = \
-        get_resource_ptr[int32_t](basis_bits, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_
+    get_resource_ptr[int32_t](_basis_bits_, basis_bits, <int32_t*>NULL)
     cdef double residual_norm
     with nogil:
         status = custatevecComputeExpectation(<Handle>handle, <const void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <void*>expectation_value, <DataType>expectation_data_type, &residual_norm, <const void*>matrix, <DataType>matrix_data_type, <_MatrixLayout>layout, <const int32_t*>(_basis_bits_.data()), <const uint32_t>n_basis_bits, <_ComputeType>compute_type, <void*>extra_workspace, extra_workspace_size_in_bytes)
@@ -967,10 +967,10 @@ cpdef sampler_sample(intptr_t handle, intptr_t sampler, intptr_t bit_strings, bi
 
     .. seealso:: `custatevecSamplerSample`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[double] ] _randnums_ = \
-        get_resource_ptr[double](randnums, <double*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[double] ] _randnums_
+    get_resource_ptr[double](_randnums_, randnums, <double*>NULL)
     with nogil:
         status = custatevecSamplerSample(<Handle>handle, <SamplerDescriptor>sampler, <custatevecIndex_t*>bit_strings, <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_string_len, <const double*>(_randnums_.data()), <const uint32_t>n_shots, <_SamplerOutput>output)
     check_status(status)
@@ -1003,10 +1003,10 @@ cpdef size_t apply_generalized_permutation_matrix_get_workspace_size(intptr_t ha
 
     .. seealso:: `custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _permutation_ = \
-        get_resource_ptr[int64_t](permutation, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_ = \
-        get_resource_ptr[int32_t](targets, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _permutation_
+    get_resource_ptr[int64_t](_permutation_, permutation, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_
+    get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
     cdef size_t extra_workspace_size_in_bytes
     with nogil:
         status = custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize(<Handle>handle, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const custatevecIndex_t*>(_permutation_.data()), <const void*>diagonals, <DataType>diagonals_data_type, <const int32_t*>(_targets_.data()), <const uint32_t>n_targets, <const uint32_t>n_controls, &extra_workspace_size_in_bytes)
@@ -1052,14 +1052,14 @@ cpdef apply_generalized_permutation_matrix(intptr_t handle, intptr_t sv, int sv_
 
     .. seealso:: `custatevecApplyGeneralizedPermutationMatrix`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _permutation_ = \
-        get_resource_ptr[int64_t](permutation, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_ = \
-        get_resource_ptr[int32_t](targets, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_ = \
-        get_resource_ptr[int32_t](controls, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_ = \
-        get_resource_ptr[int32_t](control_bit_values, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _permutation_
+    get_resource_ptr[int64_t](_permutation_, permutation, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_
+    get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_
+    get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_
+    get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
     with nogil:
         status = custatevecApplyGeneralizedPermutationMatrix(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <custatevecIndex_t*>(_permutation_.data()), <const void*>diagonals, <DataType>diagonals_data_type, <const int32_t>adjoint, <const int32_t*>(_targets_.data()), <const uint32_t>n_targets, <const int32_t*>(_controls_.data()), <const int32_t*>(_control_bit_values_.data()), <const uint32_t>n_controls, <void*>extra_workspace, extra_workspace_size_in_bytes)
     check_status(status)
@@ -1097,12 +1097,12 @@ cpdef compute_expectations_on_pauli_basis(intptr_t handle, intptr_t sv, int sv_d
 
     .. seealso:: `custatevecComputeExpectationsOnPauliBasis`
     """
-    cdef nested_resource[ int ] _pauli_operators_array_ = \
-        get_nested_resource_ptr[int](pauli_operators_array, <int*>NULL)
-    cdef nested_resource[ int32_t ] _basis_bits_array_ = \
-        get_nested_resource_ptr[int32_t](basis_bits_array, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[uint32_t] ] _n_basis_bits_array_ = \
-        get_resource_ptr[uint32_t](n_basis_bits_array, <uint32_t*>NULL)
+    cdef nested_resource[ int ] _pauli_operators_array_
+    get_nested_resource_ptr[int](_pauli_operators_array_, pauli_operators_array, <int*>NULL)
+    cdef nested_resource[ int32_t ] _basis_bits_array_
+    get_nested_resource_ptr[int32_t](_basis_bits_array_, basis_bits_array, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[uint32_t] ] _n_basis_bits_array_
+    get_resource_ptr[uint32_t](_n_basis_bits_array_, n_basis_bits_array, <uint32_t*>NULL)
     with nogil:
         status = custatevecComputeExpectationsOnPauliBasis(<Handle>handle, <const void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <double*>expectation_values, <const _Pauli**>(_pauli_operators_array_.ptrs.data()), <const uint32_t>n_pauli_operator_arrays, <const int32_t**>(_basis_bits_array_.ptrs.data()), <const uint32_t*>(_n_basis_bits_array_.data()))
     check_status(status)
@@ -1144,12 +1144,12 @@ cpdef tuple accessor_create(intptr_t handle, intptr_t sv, int sv_data_type, uint
     """
     cdef AccessorDescriptor accessor
     cdef size_t extra_workspace_size_in_bytes
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_ = \
-        get_resource_ptr[int32_t](mask_bit_string, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_ = \
-        get_resource_ptr[int32_t](mask_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_
+    get_resource_ptr[int32_t](_mask_bit_string_, mask_bit_string, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_
+    get_resource_ptr[int32_t](_mask_ordering_, mask_ordering, <int32_t*>NULL)
     with nogil:
         status = custatevecAccessorCreate(<Handle>handle, <void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, &accessor, <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_ordering_len, <const int32_t*>(_mask_bit_string_.data()), <const int32_t*>(_mask_ordering_.data()), <const uint32_t>mask_len, &extra_workspace_size_in_bytes)
     check_status(status)
@@ -1192,12 +1192,12 @@ cpdef tuple accessor_create_view(intptr_t handle, intptr_t sv, int sv_data_type,
     """
     cdef AccessorDescriptor accessor
     cdef size_t extra_workspace_size_in_bytes
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_ = \
-        get_resource_ptr[int32_t](mask_bit_string, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_ = \
-        get_resource_ptr[int32_t](mask_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_
+    get_resource_ptr[int32_t](_mask_bit_string_, mask_bit_string, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_
+    get_resource_ptr[int32_t](_mask_ordering_, mask_ordering, <int32_t*>NULL)
     with nogil:
         status = custatevecAccessorCreateView(<Handle>handle, <const void*>sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, &accessor, <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_ordering_len, <const int32_t*>(_mask_bit_string_.data()), <const int32_t*>(_mask_ordering_.data()), <const uint32_t>mask_len, &extra_workspace_size_in_bytes)
     check_status(status)
@@ -1492,12 +1492,12 @@ cpdef sv_swap_worker_set_sub_svs_p2p(intptr_t handle, intptr_t sv_swap_worker, d
 
     .. seealso:: `custatevecSVSwapWorkerSetSubSVsP2P`
     """
-    cdef nullable_unique_ptr[ vector[intptr_t] ] _dst_sub_svs_p2p_ = \
-        get_resource_ptr[intptr_t](dst_sub_svs_p2p, <intptr_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _dst_sub_sv_indices_p2p_ = \
-        get_resource_ptr[int32_t](dst_sub_sv_indices_p2p, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[intptr_t] ] _dst_events_ = \
-        get_resource_ptr[intptr_t](dst_events, <intptr_t*>NULL)
+    cdef nullable_unique_ptr[ vector[intptr_t] ] _dst_sub_svs_p2p_
+    get_resource_ptr[intptr_t](_dst_sub_svs_p2p_, dst_sub_svs_p2p, <intptr_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _dst_sub_sv_indices_p2p_
+    get_resource_ptr[int32_t](_dst_sub_sv_indices_p2p_, dst_sub_sv_indices_p2p, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[intptr_t] ] _dst_events_
+    get_resource_ptr[intptr_t](_dst_events_, dst_events, <intptr_t*>NULL)
     with nogil:
         status = custatevecSVSwapWorkerSetSubSVsP2P(<Handle>handle, <SVSwapWorkerDescriptor>sv_swap_worker, <void**>(_dst_sub_svs_p2p_.data()), <const int32_t*>(_dst_sub_sv_indices_p2p_.data()), <Event*>(_dst_events_.data()), <const uint32_t>n_dst_sub_svs_p2p)
     check_status(status)
@@ -1565,8 +1565,8 @@ cpdef size_t apply_matrix_batched_get_workspace_size(intptr_t handle, int sv_dat
 
     .. seealso:: `custatevecApplyMatrixBatchedGetWorkspaceSize`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _matrix_indices_ = \
-        get_resource_ptr[int32_t](matrix_indices, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _matrix_indices_
+    get_resource_ptr[int32_t](_matrix_indices_, matrix_indices, <int32_t*>NULL)
     cdef size_t extra_workspace_size_in_bytes
     with nogil:
         status = custatevecApplyMatrixBatchedGetWorkspaceSize(<Handle>handle, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <const custatevecIndex_t>sv_stride, <_MatrixMapType>map_type, <const int32_t*>(_matrix_indices_.data()), <const void*>matrices, <DataType>matrix_data_type, <_MatrixLayout>layout, <const int32_t>adjoint, <const uint32_t>n_matrices, <const uint32_t>n_targets, <const uint32_t>n_controls, <_ComputeType>compute_type, &extra_workspace_size_in_bytes)
@@ -1618,14 +1618,14 @@ cpdef apply_matrix_batched(intptr_t handle, intptr_t batched_sv, int sv_data_typ
 
     .. seealso:: `custatevecApplyMatrixBatched`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _matrix_indices_ = \
-        get_resource_ptr[int32_t](matrix_indices, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_ = \
-        get_resource_ptr[int32_t](targets, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_ = \
-        get_resource_ptr[int32_t](controls, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_ = \
-        get_resource_ptr[int32_t](control_bit_values, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _matrix_indices_
+    get_resource_ptr[int32_t](_matrix_indices_, matrix_indices, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_
+    get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_
+    get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_
+    get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
     with nogil:
         status = custatevecApplyMatrixBatched(<Handle>handle, <void*>batched_sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <custatevecIndex_t>sv_stride, <_MatrixMapType>map_type, <const int32_t*>(_matrix_indices_.data()), <const void*>matrices, <DataType>matrix_data_type, <_MatrixLayout>layout, <const int32_t>adjoint, <const uint32_t>n_matrices, <const int32_t*>(_targets_.data()), <const uint32_t>n_targets, <const int32_t*>(_controls_.data()), <const int32_t*>(_control_bit_values_.data()), <const uint32_t>n_controls, <_ComputeType>compute_type, <void*>extra_workspace, extra_workspace_size_in_bytes)
     check_status(status)
@@ -1663,12 +1663,12 @@ cpdef abs2sum_array_batched(intptr_t handle, intptr_t batched_sv, int sv_data_ty
 
     .. seealso:: `custatevecAbs2SumArrayBatched`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _mask_bit_strings_ = \
-        get_resource_ptr[int64_t](mask_bit_strings, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_ = \
-        get_resource_ptr[int32_t](mask_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _mask_bit_strings_
+    get_resource_ptr[int64_t](_mask_bit_strings_, mask_bit_strings, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_
+    get_resource_ptr[int32_t](_mask_ordering_, mask_ordering, <int32_t*>NULL)
     with nogil:
         status = custatevecAbs2SumArrayBatched(<Handle>handle, <const void*>batched_sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <const custatevecIndex_t>sv_stride, <double*>abs2sum_arrays, <const custatevecIndex_t>abs2sum_array_stride, <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_ordering_len, <const custatevecIndex_t*>(_mask_bit_strings_.data()), <const int32_t*>(_mask_ordering_.data()), <const uint32_t>mask_len)
     check_status(status)
@@ -1696,10 +1696,10 @@ cpdef size_t collapse_by_bit_string_batched_get_workspace_size(intptr_t handle, 
 
     .. seealso:: `custatevecCollapseByBitStringBatchedGetWorkspaceSize`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _bit_strings_ = \
-        get_resource_ptr[int64_t](bit_strings, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[double] ] _norms_ = \
-        get_resource_ptr[double](norms, <double*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _bit_strings_
+    get_resource_ptr[int64_t](_bit_strings_, bit_strings, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[double] ] _norms_
+    get_resource_ptr[double](_norms_, norms, <double*>NULL)
     cdef size_t extra_workspace_size_in_bytes
     with nogil:
         status = custatevecCollapseByBitStringBatchedGetWorkspaceSize(<Handle>handle, <const uint32_t>n_svs, <const custatevecIndex_t*>(_bit_strings_.data()), <const double*>(_norms_.data()), &extra_workspace_size_in_bytes)
@@ -1738,12 +1738,12 @@ cpdef collapse_by_bit_string_batched(intptr_t handle, intptr_t batched_sv, int s
 
     .. seealso:: `custatevecCollapseByBitStringBatched`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _bit_strings_ = \
-        get_resource_ptr[int64_t](bit_strings, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[double] ] _norms_ = \
-        get_resource_ptr[double](norms, <double*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _bit_strings_
+    get_resource_ptr[int64_t](_bit_strings_, bit_strings, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[double] ] _norms_
+    get_resource_ptr[double](_norms_, norms, <double*>NULL)
     with nogil:
         status = custatevecCollapseByBitStringBatched(<Handle>handle, <void*>batched_sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <const custatevecIndex_t>sv_stride, <const custatevecIndex_t*>(_bit_strings_.data()), <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_string_len, <const double*>(_norms_.data()), <void*>extra_workspace, extra_workspace_size_in_bytes)
     check_status(status)
@@ -1775,10 +1775,10 @@ cpdef measure_batched(intptr_t handle, intptr_t batched_sv, int sv_data_type, ui
 
     .. seealso:: `custatevecMeasureBatched`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_ = \
-        get_resource_ptr[int32_t](bit_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[double] ] _randnums_ = \
-        get_resource_ptr[double](randnums, <double*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_ordering_
+    get_resource_ptr[int32_t](_bit_ordering_, bit_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[double] ] _randnums_
+    get_resource_ptr[double](_randnums_, randnums, <double*>NULL)
     with nogil:
         status = custatevecMeasureBatched(<Handle>handle, <void*>batched_sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <const custatevecIndex_t>sv_stride, <custatevecIndex_t*>bit_strings, <const int32_t*>(_bit_ordering_.data()), <const uint32_t>bit_string_len, <const double*>(_randnums_.data()), <_CollapseOp>collapse)
     check_status(status)
@@ -1894,8 +1894,8 @@ cpdef compute_expectation_batched(intptr_t handle, intptr_t batched_sv, int sv_d
 
     .. seealso:: `custatevecComputeExpectationBatched`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_ = \
-        get_resource_ptr[int32_t](basis_bits, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_
+    get_resource_ptr[int32_t](_basis_bits_, basis_bits, <int32_t*>NULL)
     with nogil:
         status = custatevecComputeExpectationBatched(<Handle>handle, <const void*>batched_sv, <DataType>sv_data_type, <const uint32_t>n_index_bits, <const uint32_t>n_svs, <custatevecIndex_t>sv_stride, <double2*>expectation_values, <const void*>matrices, <DataType>matrix_data_type, <_MatrixLayout>layout, <const uint32_t>n_matrices, <const int32_t*>(_basis_bits_.data()), <const uint32_t>n_basis_bits, <_ComputeType>compute_type, <void*>extra_workspace, extra_workspace_size_in_bytes)
     check_status(status)
@@ -1953,8 +1953,8 @@ cpdef tuple abs2sum_on_z_basis(
     abs2sum1_ptr = &abs2sum1 if get_parity1 else NULL
 
     # basis_bits can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_ = \
-        get_resource_ptr[int32_t](basis_bits, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_bits_
+    get_resource_ptr[int32_t](_basis_bits_, basis_bits, <int32_t*>NULL)
 
     with nogil:
         status = custatevecAbs2SumOnZBasis(
@@ -2030,12 +2030,12 @@ cpdef swap_index_bits(
                          "un-recognized format")
 
     # mask_bit_string can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_ = \
-        get_resource_ptr[int32_t](mask_bit_string, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_
+    get_resource_ptr[int32_t](_mask_bit_string_, mask_bit_string, <int32_t*>NULL)
 
     # mask_ordering can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_ = \
-        get_resource_ptr[int32_t](mask_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_
+    get_resource_ptr[int32_t](_mask_ordering_, mask_ordering, <int32_t*>NULL)
 
     with nogil:
         status = custatevecSwapIndexBits(
@@ -2092,12 +2092,12 @@ cpdef multi_device_swap_index_bits(
     .. seealso:: `custatevecMultiDeviceSwapIndexBits`
     """
     # handles can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[intptr_t] ] _handles_ = \
-        get_resource_ptr[intptr_t](handles, <intptr_t*>NULL)
+    cdef nullable_unique_ptr[ vector[intptr_t] ] _handles_
+    get_resource_ptr[intptr_t](_handles_, handles, <intptr_t*>NULL)
 
     # sub_svs can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[intptr_t] ] _sub_svs_ = \
-        get_resource_ptr[intptr_t](sub_svs, <intptr_t*>NULL)
+    cdef nullable_unique_ptr[ vector[intptr_t] ] _sub_svs_
+    get_resource_ptr[intptr_t](_sub_svs_, sub_svs, <intptr_t*>NULL)
 
     # swapped_bits can be:
     #   - a plain pointer address
@@ -2127,12 +2127,12 @@ cpdef multi_device_swap_index_bits(
                          "un-recognized format")
 
     # mask_bit_string can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_ = \
-        get_resource_ptr[int32_t](mask_bit_string, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_
+    get_resource_ptr[int32_t](_mask_bit_string_, mask_bit_string, <int32_t*>NULL)
 
     # mask_ordering can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_ = \
-        get_resource_ptr[int32_t](mask_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_
+    get_resource_ptr[int32_t](_mask_ordering_, mask_ordering, <int32_t*>NULL)
 
     with nogil:
         status = custatevecMultiDeviceSwapIndexBits(
@@ -2295,12 +2295,12 @@ cpdef uint32_t dist_index_bit_swap_scheduler_set_index_bit_swaps(
                          "un-recognized format")
 
     # mask_bit_string can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_ = \
-        get_resource_ptr[int32_t](mask_bit_string, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_
+    get_resource_ptr[int32_t](_mask_bit_string_, mask_bit_string, <int32_t*>NULL)
 
     # mask_ordering can be a pointer address, or a Python sequence
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_ = \
-        get_resource_ptr[int32_t](mask_ordering, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_ordering_
+    get_resource_ptr[int32_t](_mask_ordering_, mask_ordering, <int32_t*>NULL)
 
     cdef uint32_t n_swap_batches
     with nogil:

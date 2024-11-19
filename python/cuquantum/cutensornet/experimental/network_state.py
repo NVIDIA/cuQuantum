@@ -13,7 +13,15 @@ from cuquantum import cutensornet as cutn
 
 from .configuration import MPSConfig, TNConfig
 from .network_operator import NetworkOperator
-from ._internal.network_state_utils import EXACT_MPS_EXTENT_LIMIT, STATE_DEFAULT_DTYPE, check_dtype_supported, state_operands_wrapper, state_result_wrapper, state_labels_wrapper
+from ._internal.network_state_utils import (
+    EXACT_MPS_EXTENT_LIMIT, 
+    STATE_DEFAULT_DTYPE, 
+    check_dtype_supported, 
+    get_mps_key, 
+    state_operands_wrapper, 
+    state_result_wrapper, 
+    state_labels_wrapper,
+)
 from .. import memory
 from ..tensor_network import Network
 from ..circuit_converter import CircuitToEinsum
@@ -115,6 +123,9 @@ class NetworkState:
         options = utils.check_or_create_options(NetworkOptions, options, "network options")
         self.options = options
         self.device_id = self.options.device_id
+        if state_labels is not None:
+            if any(isinstance(element, int) for element in state_labels):
+                raise ValueError("ints are currently not supported in state_labels to avoid potential conflicting usage")
         self.state_labels = list(state_labels) if state_labels is not None else state_labels
 
         # Get cuTensorNet version (as seen at run-time).
@@ -159,6 +170,9 @@ class NetworkState:
         else:
             raise ValueError("method must be either a TNConfig/MPSConfig object or a dict that can be used to construct TNConfig/MPSConfig")
         
+        if self.n == 1 and isinstance(self.config, MPSConfig):
+            raise ValueError(f"For system with one physical dimension, please switch to tensor network simulation method via TNConfig")
+        
         self.operands = {}
         self.owned_network_operators = {}
         self.non_owned_network_operators = {}
@@ -183,7 +197,7 @@ class NetworkState:
         self.workspace_h_scratch_ptr, self.workspace_h_scratch_size = None, None
         self.workspace_h_cache_ptr, self.workspace_h_cache_size = None, None
         self.workspace_scratch_allocated_here, self.workspace_cache_allocated_here = False, False
-        
+        self.workspace_sizes_requirements = {} # a dictionary to cache workspace requirements
         # Attributes to establish stream ordering.
         self.blocking = None # This will be set when operators are applied
         self.workspace_stream = None
@@ -198,12 +212,13 @@ class NetworkState:
         self.target_state_set = False
         self.state_prepared = False
         self.state_computed = False
-        self.norm = None
         self.initial_state = []
         self.valid_state = True
 
         self.cached_task_obj = {}
+        self.contains_stochastic_channels = False
         self.logger.info("The network state has been created.")
+        self.prev_state_key = None
     
     
     def _check_backend_setup(self, *args, **kwargs):
@@ -341,6 +356,22 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             self.handle, self.workspace_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH)
         self.workspace_h_cache_size = cutn.workspace_get_memory_size(
             self.handle, self.workspace_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.HOST, cutn.WorkspaceKind.CACHE)
+        
+        return {
+            'scratch_size': self.workspace_scratch_size,
+            'cache_size': self.workspace_cache_size,
+            'h_scratch_size': self.workspace_h_scratch_size,
+            'h_cache_size': self.workspace_h_cache_size
+        }
+
+    def _reset_workspace_size_requirement(self, workspace_dict):
+        """
+        When preparation can be skipped, this API must be called to update the correct workspace size requirement
+        """
+        for name in ('scratch', 'cache', 'h_scratch', 'h_cache'):
+            if getattr(self, f'workspace_{name}_size') != workspace_dict[f'{name}_size']:
+                setattr(self, f'workspace_{name}_size', workspace_dict[f'{name}_size'])
+                setattr(self, f'workspace_{name}_ptr', None)
 
     @utils.precondition(_check_valid_network)
     @utils.atomic(_free_workspace_memory, method=True)
@@ -420,7 +451,6 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         The only exception is when update_tensor_operator is called for a tensor network contraction simulation or an MPS simulation without value based truncation, 
         in which case the cached task objects are still valid and do not need to be freed.
         """
-        self.norm = None
         self.state_computed = False
         if structural:
             self.state_prepared = False
@@ -527,6 +557,47 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         self._mark_updated()
         return tensor_id
     
+    @state_labels_wrapper(marker_index=1, marker_type='seq')
+    @state_operands_wrapper(operands_arg_index=2, is_single_operand=False)
+    @utils.precondition(_check_valid_network)
+    def apply_unitary_tensor_channel(self, modes, operands, probabilities, *, stream=None):
+        """
+        Apply a unitary tensor channel to the network state.
+
+        Args:
+            modes : A sequence of integers denoting the modes where the tensor operator acts on. 
+                If ``state_labels`` has been provided during initialization, ``modes`` can also be provided as a sequence of labels. 
+            operands : A sequence of ndarray-like objects for the unitary tensor operators defining the unitary channel.
+                The modes of the operand is expected to be ordered as ``ABC...abc...``, 
+                where ``ABC...`` denotes output bra modes and ``abc...`` denotes input ket modes corresponding to ``modes`` 
+            probabilities : A sequence of positive floats representing the probabilities of each operand.
+            stream : Provide the CUDA stream to use for applying the tensor operator (this is used to copy the operands to the GPU if they are provided on the CPU). 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                If a stream is not provided, the current stream will be used.
+        
+        Returns:
+            An integer `channel_id` specifying the location of the unitary channel.
+
+        Notes:
+            - For MPS simulation, the size of ``modes`` shall be restricted to no larger than 2 (two-body operator).
+        """
+        if len(operands) != len(probabilities):
+            raise ValueError(f"The number of operands ({len(operands)}) does not matching the size of probabilities ({len(probabilities)})")
+        # operand indices (b, a, B, A) required for modes a, b
+        operands = [o.T for o in operands]
+        tensor_data = [o.data_ptr for o in operands]
+        tensor_mode_strides = [o.strides for o in operands]
+        if not all(strides == tensor_mode_strides[0] for strides in tensor_mode_strides):
+            raise ValueError(f"The strides for all input operands must be the identical.")
+        channel_id = cutn.state_apply_unitary_channel(self.handle, 
+            self.state, len(modes), modes, len(operands), tensor_data, tensor_mode_strides[0], probabilities)
+        # keep operand alive otherwise cupy will re-use the memory space
+        self.operands[channel_id] = operands, True
+        # reset norm / state vector
+        self._mark_updated()
+        self.contains_stochastic_channels = True
+        return channel_id
+    
     @state_operands_wrapper(operands_arg_index=2, is_single_operand=True)
     @utils.precondition(_check_valid_network)
     def update_tensor_operator(self, tensor_id, operand, *, unitary=False, stream=None):
@@ -623,6 +694,19 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     ###### APIs for property computation ######
     ###########################################
 
+    def _maybe_setup_recompute(self, *args, **kwargs):
+        """
+        When stochastic channels exist in the state, for property computation methods, this API call is needed before calling _compute_target to activate re-computation of MPS for every compute_xxx call.
+        """
+        if self.contains_stochastic_channels and isinstance(self.config, MPSConfig):
+            self.state_computed = False
+    
+    def _get_current_key(self):
+        if isinstance(self.config, TNConfig) or not hasattr(self, 'mps_tensors'):
+            return None
+        else:
+            return get_mps_key(self.mps_tensors)
+
     def _maybe_configure_state(self):
         if not self.state_configured:
             # configure the state
@@ -632,6 +716,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     def _maybe_set_target_state(self, stream):
         self._maybe_configure_state()
         if isinstance(self.config, MPSConfig) and (not self.target_state_set):
+            self.prev_state_key = None
             # specify the largest output MPS tensors' sizes
             max_extent = self.config.max_extent
             self.mps_tensors = []
@@ -668,6 +753,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         if not self.state_computed and isinstance(self.config, MPSConfig):
             create_args = ()
             execute_args = (self.workspace_desc, [o.data_ptr for o in self.mps_tensors])
+            # record the key from last MPS computation
+            self.prev_state_key = self._get_current_key()
             # compute the final MPS tensors
             output = self._compute_target('state', create_args, execute_args, stream, release_workspace)
             if output is None:
@@ -716,7 +803,11 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         else:
             if task_key is None:
                 task_key = (task, create_args)
-            if task_key in self.cached_task_obj:
+            if task_key in self.cached_task_obj and (self.property_prepare_reusable or self._get_current_key() == self.prev_state_key):
+                # In the following cases, re-creation/preparation of property computation objects can be skipped:
+                # 1. Contraction based simulation  -> self.property_prepare_reusable
+                # 2. MPS without value based truncation -> self.property_prepare_reusable
+                # 3. MPS with value based truncation but at runtime yields the same extents as the previous compute call -> check key against last computation
                 task_obj = self.cached_task_obj[task_key]
                 self.logger.info(f"Found the same {task} object from the cache")
                 prepare_needed = False
@@ -743,13 +834,18 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 self.logger.info(f"The preparation of {caller_name} computation took {elapsed.data:.3f} ms to complete.")
             else:
                 self.logger.info(f"Preparation for {caller_name} has been completed")
-            self._calculate_workspace_size()
+            # cache the workspace size requirements
+            self.workspace_sizes_requirements[caller_name] = self._calculate_workspace_size()
             if task == 'state':
                 self.state_prepared = True
         else:
             self.logger.info(f"Preparation for {caller_name} has been skipped due to cache usage")
-
+            # While the compute object has been prepared in a previous call, 
+            # the current workspace size need to be reset to align with the actual requirement
+            self._reset_workspace_size_requirement(self.workspace_sizes_requirements[caller_name])
+            
         self._allocate_workspace_memory_perhaps(stream_holder, "scratch")
+        self._allocate_workspace_memory_perhaps(stream_holder, "cache")
 
         if self.logger.isEnabledFor(logging.INFO):
             info_flops_enum = getattr(cutn, f'{task.capitalize()}Attribute').INFO_FLOPS
@@ -768,15 +864,14 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         
         # Establish ordering wrt the computation and free scratch and cache workspace based on user request.
         self._release_workspace_memory_perhaps("scratch", release_workspace=release_workspace)
+        self._release_workspace_memory_perhaps("cache", release_workspace=release_workspace)
         self._reset_workspace_allocation_tracking()
 
-        if isinstance(output, tuple):
-            return output
-        else:
-            return True
+        # for task == 'state', output is a tuple, otherwise None
+        return output
     
 
-    def _run_state_accessor(self, caller_name, *, fixed_modes=None, stream=None, release_workspace=False):
+    def _run_state_accessor(self, caller_name, return_norm, *, fixed_modes=None, stream=None, release_workspace=False):
         if fixed_modes:
             # compute batched amplitudes
             shape = [self.state_mode_extents[q] for q in range(self.n) if q not in fixed_modes]
@@ -795,27 +890,28 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         norm = np.empty(1, dtype=self.dtype)
 
         create_args = (num_fixed_modes, fixed_modes, tuple(amplitudes.strides))
-        compute_norm = self.norm is None
-        if compute_norm:
+        if return_norm:
             execute_args = (fixed_values, self.workspace_desc, amplitudes.data_ptr, norm.ctypes.data)
         else:
             execute_args = (fixed_values, self.workspace_desc, amplitudes.data_ptr, 0)
-        if self._compute_target('accessor', create_args, execute_args, stream, release_workspace, caller_name=caller_name):
-            if compute_norm:
-                self.norm = norm.real.item()
-            return amplitudes
+        self._compute_target('accessor', create_args, execute_args, stream, release_workspace, caller_name=caller_name)
+        if return_norm:
+            return amplitudes, norm.real.item()
         else:
-            return None
+            return amplitudes
+
     
     @state_result_wrapper(is_scalar=True)
+    @utils.precondition(_maybe_setup_recompute)
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_backend_setup, "Amplitude computation")
-    def compute_amplitude(self, bitstring, *, stream=None, release_workspace=False):
+    def compute_amplitude(self, bitstring, *, return_norm=False, stream=None, release_workspace=False):
         """
         Compute the probability amplitude of a bitstring.
 
         Args:
             bitstring : A sequence of integers specifying the desired measured state dimension. 
+            return_norm : If true, the squared norm of the state will also be returned.
             stream : Provide the CUDA stream to use for the computation. 
                 Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
                 If a stream is not provided, the current stream will be used.
@@ -828,26 +924,29 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 The default is `False`.
         
         Returns:
-            A scalar for the bitstring amplitude. 
+            If ``return_norm`` is `False`, a scalar for the bitstring amplitude; otherwise, a 2-tuple consisting of the bitstring of the amplitude 
+            and a scalar for the squared norm of the state, i.e, inner product of bra and ket state.
         """
         if len(bitstring) != self.n:
             raise ValueError(f"Length of bitstring is expected to match the dimension of the underlying state ({self.n}), found ({len(bitstring)})")
         fixed_modes = {}
         for i, bit in enumerate(bitstring):
             fixed_modes[i] = int(bit)
-        return self._run_state_accessor('amplitude', fixed_modes=fixed_modes, stream=stream, release_workspace=release_workspace)
+        return self._run_state_accessor('amplitude', return_norm, fixed_modes=fixed_modes, stream=stream, release_workspace=release_workspace)
     
     @state_labels_wrapper(marker_index=1, marker_type='dict')
     @state_result_wrapper(is_scalar=False)
+    @utils.precondition(_maybe_setup_recompute)
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_backend_setup, "Batched amplitude computation")
-    def compute_batched_amplitudes(self, fixed, *, stream=None, release_workspace=False):
+    def compute_batched_amplitudes(self, fixed, *, return_norm=False, stream=None, release_workspace=False):
         """
         Compute the batched amplitudes for a given slice.
 
         Args:    
             fixed : A dictionary mapping a subset of state dimensions to correponding fixed states. 
                 If ``state_labels`` has been provided during initialization, ``fixed`` can also be provided as a dictionary mapping a subset of labels to corresponding fixed states. 
+            return_norm : If true, the squared norm of the state will also be returned.
             stream : Provide the CUDA stream to use for the computation. 
                 Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
                 If a stream is not provided, the current stream will be used.
@@ -860,20 +959,23 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 The default is `False`.
         
         Returns:
-            An ndarray-like object as batched amplitudes. The package and storage location of the ndarray will be the same as 
-            the operands provided in :meth:`apply_tensor_operator`, :meth:`apply_mpo` and :meth:`set_initial_mps`. 
+            If ``return_norm`` is `False`, An ndarray-like object as batched amplitudes. The package and storage location of the ndarray will be the same as 
+            the operands provided in :meth:`apply_tensor_operator`, :meth:`apply_mpo` and :meth:`set_initial_mps`; otherwise, a 2-tuple consisting of the batched amplitudes 
+            and a scalar for the squared norm of the state, i.e, inner product of bra and ket state.
         """
-        return self._run_state_accessor('batched_amplitudes', fixed_modes=fixed, stream=stream, release_workspace=release_workspace)
+        return self._run_state_accessor('batched_amplitudes', return_norm, fixed_modes=fixed, stream=stream, release_workspace=release_workspace)
     
 
     @state_result_wrapper(is_scalar=False)
+    @utils.precondition(_maybe_setup_recompute)
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_backend_setup, "State vector computation")
-    def compute_state_vector(self, *, stream=None, release_workspace=False):
+    def compute_state_vector(self, *, return_norm=False, stream=None, release_workspace=False):
         """
         Compute the state vector.
 
         Args:
+            return_norm : If true, the squared norm of the state will also be returned.
             stream : Provide the CUDA stream to use for the computation. 
                 Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
                 If a stream is not provided, the current stream will be used.
@@ -886,51 +988,16 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 The default is `False`.
 
         Returns:
-            An ndarray-like object as the state vector. The package and storage location of the ndarray will be the same as 
-            the operands provided in :meth:`apply_tensor_operator`, :meth:`apply_mpo` and :meth:`set_initial_mps`. 
+            If ``return_norm`` is `False`, An ndarray-like object as the state vector. The package and storage location of the ndarray will be the same as 
+            the operands provided in :meth:`apply_tensor_operator`, :meth:`apply_mpo` and :meth:`set_initial_mps`; otherwise, a 2-tuple consisting of the state vector 
+            and a scalar for the squared norm of the state, i.e, inner product of bra and ket state.
         """
-        return self._run_state_accessor('state vector', fixed_modes={}, stream=stream, release_workspace=release_workspace)
-    
-    @utils.precondition(_check_valid_network)
-    @utils.precondition(_check_backend_setup, "Norm computation")
-    def compute_norm(self, *, stream=None, release_workspace=False):
-        """
-        Compute the norm of the state.
-
-        Args:       
-            stream : Provide the CUDA stream to use for the computation. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
-                If a stream is not provided, the current stream will be used.
-            release_workspace : A value of `True` specifies that the state object should release workspace memory back to
-                the package memory pool on function return, while a value of `False` specifies that the state object
-                should retain the memory. This option may be set to `True` if the application performs other operations that consume
-                a lot of memory between successive calls to the (same or different) execution API such as :meth:`compute_sampling`,
-                :meth:`compute_reduced_density_matrix`, :meth:`compute_amplitude`, :meth:`compute_batched_amplitudes`, or :meth:`compute_expectation`, 
-                but incurs a small overhead due to obtaining and releasing workspace memory from and to the package memory pool on every call. 
-                The default is `False`.
-        
-        Returns:
-            A scalar for the norm of the state.
-        
-        Note:
-            - The norm of the state is also computed and cached if any of the following API is called:
-
-                - :meth:`compute_state_vector`
-                - :meth:`compute_amplitude`
-                - :meth:`compute_batched_amplitudes`
-                - :meth:`compute_expectation`
-        """
-        if self.norm is None:
-            fixed_modes = {}
-            for i in range(self.n):
-                fixed_modes[i] = 0
-            # use the least costive method to compute the norm
-            self._run_state_accessor('norm', fixed_modes=fixed_modes, stream=stream, release_workspace=release_workspace)
-        return self.norm
+        return self._run_state_accessor('state vector', return_norm, fixed_modes={}, stream=stream, release_workspace=release_workspace)
 
     @state_labels_wrapper(marker_index=1, marker_type='seq')
     @state_labels_wrapper(key='fixed', marker_type='dict')
     @state_result_wrapper(is_scalar=False)
+    @utils.precondition(_maybe_setup_recompute)
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_backend_setup, "Reduced density matrix computation")
     def compute_reduced_density_matrix(self, where, *, fixed=EMPTY_DICT, stream=None, release_workspace=False):
@@ -971,14 +1038,13 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         rdm = utils.create_empty_tensor(self.intermediate_class, rdm_shape, self.dtype, self.device_id, stream_holder)
         create_args = (n_marginal_modes, tuple(where), n_projected_modes, projected_modes, tuple(rdm.strides))
         execute_args = (projected_mode_values, self.workspace_desc, rdm.data_ptr)
-        if self._compute_target('marginal', create_args, execute_args, stream, release_workspace):
-            return rdm
-        else:
-            return None
+        self._compute_target('marginal', create_args, execute_args, stream, release_workspace)
+        return rdm
     
+    @utils.precondition(_maybe_setup_recompute)
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_backend_setup, "Output state")
-    def compute_output_state(self, stream=None, release_workspace=False):
+    def compute_output_state(self, *, stream=None, release_workspace=False, release_operators=False):
         """
         Compute the final output state for the underlying network state object. This method currently is only valid for MPS based simulation.
 
@@ -993,6 +1059,10 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 :meth:`compute_reduced_density_matrix`, :meth:`compute_amplitude`, :meth:`compute_batched_amplitudes`, or :meth:`compute_expectation`, 
                 but incurs a small overhead due to obtaining and releasing workspace memory from and to the package memory pool on every call. 
                 The default is `False`.
+            release_operators : A value of `True` will release the reference of all underlying tensor operators and :class:`NetworkOperator` objects. 
+                The previous ``tensor_id`` returned by :meth:`apply_tensor_operator`, :meth:`apply_network_operator` and :meth:`apply_mpo` will be invalid.
+                If the output state has already been computed, which is an intermediate step in other ``compute_xxx`` methods, the output state will be cached and returned directly. 
+                Thus passing ``release_operators=True`` can be used to reset the underlying :class:`NetworkState` object.
     
         Returns:
             When MPS simulation when is specified using the ``options`` argument during object initialization, a sequence of operands representing the underlying 
@@ -1008,11 +1078,26 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 result = [o.to('cpu', stream_holder=stream_holder) for o in self.mps_tensors]
             else:
                 result = [o.tensor for o in self.mps_tensors]
+            if release_operators:
+                # event synchronization
+                if self.last_compute_event is not None:
+                    if stream is None: 
+                        stream = utils.get_or_create_stream(self.device_id, stream, self.internal_package).obj
+                    stream.wait_event(self.last_compute_event)
+                # release reference to underlying operators and NetworkOperator
+                cutn.state_capture_mps(self.handle, self.state)
+                self.operands = {}
+                self.owned_network_operators = {}
+                self.non_owned_network_operators = {}
+                self.initial_state = list(self.mps_tensors)
+                # mark state as no longer computed & stochastic channels as resolved
+                self.state_computed = self.state_prepared = self.contains_stochastic_channels = False
             return result
         else:
             raise NotImplementedError()
     
     @state_labels_wrapper(key='modes', marker_type='seq')
+    @utils.precondition(_maybe_setup_recompute)
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_backend_setup, "Sampling")
     def compute_sampling(self, nshots, *, modes=None, seed=None, stream=None, release_workspace=False):
@@ -1056,19 +1141,17 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             attr = cutn.SamplerAttribute.CONFIG_DETERMINISTIC
             val = np.asarray(seed, dtype=cutn.get_sampler_attribute_dtype(attr))
             config_args = (attr, val.ctypes.data, val.dtype.itemsize)
-        if self._compute_target('sampler', create_args, execute_args, stream, release_workspace, config_args=config_args):
-            sampling = {}
-            for bitstring, n_sampling in zip(*np.unique(samples, axis=0, return_counts=True)):
-                bitstring = np.array2string(bitstring, separator='')[1:-1]
-                sampling[bitstring] = n_sampling
-            return sampling
-        else:
-            return None
+        self._compute_target('sampler', create_args, execute_args, stream, release_workspace, config_args=config_args)
+        sampling = {}
+        for bitstring, n_sampling in zip(*np.unique(samples, axis=0, return_counts=True)):
+            bitstring = np.array2string(bitstring, separator='')[1:-1]
+            sampling[bitstring] = n_sampling
+        return sampling
     
-
+    @utils.precondition(_maybe_setup_recompute)
     @utils.precondition(_check_valid_network)
     @utils.precondition(_check_backend_setup, "Expectation computation")
-    def compute_expectation(self, operators, *, stream=None, release_workspace=False):
+    def compute_expectation(self, operators, *, return_norm=False, stream=None, release_workspace=False):
         """
         Compute the expectation value (not normalized) for the given tensor network operator.
 
@@ -1079,6 +1162,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 - A single pauli string specifying the pauli operator for each qubit.
                 - A dictionary mapping each single pauli string to corresponding coefficient.
 
+            return_norm : If true, the squared norm of the state will also be returned.
             stream : Provide the CUDA stream to use for the computation. 
                 Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
                 If a stream is not provided, the current stream will be used.
@@ -1091,7 +1175,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 The default is `False`.
             
         Returns:
-            A scalar for the total expectation value.
+            If ``return_norm`` is `False`, a scalar for the total expectation value; otherwise, a 2-tuple consisting of the total expectation value
+            and a scalar for the squared norm of the state, i.e, inner product of bra and ket state.
         
         Note:
             - If user wishes to perform expectation value computation on the same operator multiple times, it is recommended to explicitly provide a :class:`NetworkOperator` object 
@@ -1114,17 +1199,15 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         expectation_value = np.empty(1, dtype=self.dtype)
         norm = np.empty(1, dtype=self.dtype)
         create_args = (operators.network_operator, )
-        compute_norm = self.norm is None
         # only compute and cache norm when it's has not been computed
-        if compute_norm:
+        if return_norm:
             execute_args = (self.workspace_desc, expectation_value.ctypes.data, norm.ctypes.data)
         else:
             execute_args = (self.workspace_desc, expectation_value.ctypes.data, 0)
         task_key = ('expectation', operators._get_key())
-        if self._compute_target('expectation', create_args, execute_args, stream, release_workspace, task_key=task_key):
-            output = expectation_value.item()
-            if compute_norm:
-                self.norm = norm.real.item()
+        self._compute_target('expectation', create_args, execute_args, stream, release_workspace, task_key=task_key)
+        output = expectation_value.item()
+        if return_norm:
+            return output, norm.real.item()
         else:
-            output = None
-        return output
+            return output

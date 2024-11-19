@@ -35,8 +35,9 @@ with open(os.path.join(source_root, "tests/requirements.txt")) as f:
 install_requires = [
     'numpy>=1.21, <3.0',  # ">=1.21,<3"
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.6',   # ">=1.6.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}>=2.5.0,<3',
+    f'custatevec-cu{utils.cuda_major_ver}~=1.7',   # ">=1.7.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.6',  # ">=2.6.0,<3"
+    f'cudensitymat-cu{utils.cuda_major_ver}~=0.0.5', # ">=0.0.5,<0.1"
 ]
 if utils.cuda_major_ver == '11':
     install_requires.append('cupy-cuda11x>=13.0')  # no ambiguity
@@ -107,6 +108,27 @@ ext_modules = [
         language="c++",
     ),
     Extension(
+        "cuquantum.bindings.cudensitymat",
+        sources=["cuquantum/bindings/cudensitymat.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings.cycudensitymat",
+        sources=["cuquantum/bindings/cycudensitymat.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings._internal.cudensitymat",
+        sources=["cuquantum/bindings/_internal/cudensitymat.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings._utils",
+        sources=["cuquantum/bindings/_utils.pyx"],
+        include_dirs=[os.path.join(utils.cuda_path, 'include')],
+        language="c++",
+    ),
+    Extension(
         "cuquantum._utils",
         sources=["cuquantum/_utils.pyx"],
         include_dirs=[os.path.join(utils.cuda_path, 'include')],
@@ -168,6 +190,6 @@ setup(
     zip_safe=False,
     python_requires='>=3.10',
     install_requires=install_requires,
-    tests_require=install_requires+tests_require,
+    extras_require={"test": tests_require},
     cmdclass=cmdclass,
 )

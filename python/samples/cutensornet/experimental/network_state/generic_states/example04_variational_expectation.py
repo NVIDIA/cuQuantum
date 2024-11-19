@@ -82,22 +82,25 @@ with state_a, state_b:
     e0 = cp.cuda.Event()
     e1 = cp.cuda.Event()
     e0.record()
-    expec_a = state_a.compute_expectation(operator).real / state_a.compute_norm()
+    expec_a, norm_a = state_a.compute_expectation(operator, return_norm=True)
+    expec_a = expec_a.real / norm_a
     e1.record()
     e1.synchronize()
-    print(f"Expectation for state_a from direct computation : {expec_a}, runtime={cp.cuda.get_elapsed_time(e0, e1)} ms")
+    print(f"Normalized expectation for state_a from direct computation : {expec_a}, runtime={cp.cuda.get_elapsed_time(e0, e1)} ms")
 
-    expec_b = state_b.compute_expectation(operator).real / state_b.compute_norm()
+    expec_b, norm_b = state_b.compute_expectation(operator, return_norm=True)
+    expec_b = expec_b.real / norm_b
     e0.record()
     e0.synchronize()
-    print(f"Expectation for state_b from direct computation : {expec_b}, runtime={cp.cuda.get_elapsed_time(e1, e0)} ms")
+    print(f"Normalized expectation for state_b from direct computation : {expec_b}, runtime={cp.cuda.get_elapsed_time(e1, e0)} ms")
 
     for tensor_id in two_body_op_ids:
         state_a.update_tensor_operator(tensor_id, op_two_body_y, unitary=False)
         print(f"Update two body operator ({tensor_id}) from X to Y in state_a")
 
-    expec_b_updated = state_a.compute_expectation(operator).real / state_a.compute_norm()
+    expec_b_updated, norm_b_updated = state_a.compute_expectation(operator, return_norm=True)
+    expec_b_updated = expec_b_updated.real / norm_b_updated
     e1.record()
     e1.synchronize()
-    print(f"Expectation for state_b from updating state_a : {expec_b_updated}, runtime={cp.cuda.get_elapsed_time(e0, e1)} ms")
+    print(f"Normalized expectation for state_b from updating state_a : {expec_b_updated}, runtime={cp.cuda.get_elapsed_time(e0, e1)} ms")
     assert cp.allclose(expec_b, expec_b_updated)

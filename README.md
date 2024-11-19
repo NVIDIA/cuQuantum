@@ -12,15 +12,18 @@ This public repository contains a few sets of files related to the [NVIDIA cuQua
   - Available for download on
     - conda-forge:
       - `cuquantum` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum.svg)](https://anaconda.org/conda-forge/cuquantum)
+        - `cudensitymat` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cudensitymat.svg)](https://anaconda.org/conda-forge/cudensitymat)
         - `custatevec` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/custatevec.svg)](https://anaconda.org/conda-forge/custatevec)
         - `cutensornet` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cutensornet.svg)](https://anaconda.org/conda-forge/cutensornet)
       - `cuquantum-python` [![Conda Version](https://img.shields.io/conda/vn/conda-forge/cuquantum-python.svg)](https://anaconda.org/conda-forge/cuquantum-python)
     - PyPI:
       - `cuquantum` [![pypi](https://img.shields.io/pypi/v/cuquantum.svg)](https://pypi.python.org/pypi/cuquantum)
         - `cuquantum-cu11` [![pypi](https://img.shields.io/pypi/v/cuquantum-cu11.svg)](https://pypi.python.org/pypi/cuquantum-cu11)
+          - `cudensitymat-cu11` [![pypi](https://img.shields.io/pypi/v/cudensitymat-cu11.svg)](https://pypi.python.org/pypi/cudensitymat-cu11)
           - `custatevec-cu11` [![pypi](https://img.shields.io/pypi/v/custatevec-cu11.svg)](https://pypi.python.org/pypi/custatevec-cu11)
           - `cutensornet-cu11` [![pypi](https://img.shields.io/pypi/v/cutensornet-cu11.svg)](https://pypi.python.org/pypi/cutensornet-cu11)
         - `cuquantum-cu12` [![pypi](https://img.shields.io/pypi/v/cuquantum-cu12.svg)](https://pypi.python.org/pypi/cuquantum-cu12)
+          - `cudensitymat-cu12` [![pypi](https://img.shields.io/pypi/v/cudensitymat-cu12.svg)](https://pypi.python.org/pypi/cudensitymat-cu12)
           - `custatevec-cu12` [![pypi](https://img.shields.io/pypi/v/custatevec-cu12.svg)](https://pypi.python.org/pypi/custatevec-cu12)
           - `cutensornet-cu12` [![pypi](https://img.shields.io/pypi/v/cutensornet-cu12.svg)](https://pypi.python.org/pypi/cutensornet-cu12)
       - `cuquantum-python` [![pypi](https://img.shields.io/pypi/v/cuquantum-python.svg)](https://pypi.python.org/pypi/cuquantum-python)
@@ -39,6 +42,4 @@ All files hosted in this repository are subject to the [BSD-3-Clause](./LICENSE)
 
 ## Citing cuQuantum
 
-This repository is uploaded to Zenodo automatically. Click the badge below to see citation formats.
-
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6385574.svg)](https://doi.org/10.5281/zenodo.6385574)
+H. Bayraktar et al., "cuQuantum SDK: A High-Performance Library for Accelerating Quantum Science", 2023 IEEE International Conference on Quantum Computing and Engineering (QCE), Bellevue, WA, USA, 2023, pp. 1050-1061, doi: [10.1109/QCE57702.2023.00119](https://doi.org/10.1109/QCE57702.2023.00119)

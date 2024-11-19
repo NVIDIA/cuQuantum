@@ -78,8 +78,9 @@ print(f"state vector type: {type(sv)}, shape: {sv.shape}, device: {sv.device}")
 
 # compute the bitstring amplitude
 bitstring = '0' * n_state_modes
-amplitude = state.compute_amplitude(bitstring)
-print(f"Bitstring amplitude for {bitstring}: {amplitude}")
+amplitude, norm = state.compute_amplitude(bitstring, return_norm=True)
+prob = abs(amplitude) ** 2 / norm
+print(f"Bitstring amplitude for {bitstring}: {amplitude}, prob={prob}")
 
 # compute batched bitstring amplitude with first mode fixed at state 0 and second mode at state 1
 fixed = {0: 0, 1: 1}
@@ -98,8 +99,8 @@ print("Sampling results:")
 print(samples)
 
 # compute the normalized expectation value for the MPO
-expec = state.compute_expectation(mpo) / state.compute_norm()
-print(f"{expec=}")
+expec, norm = state.compute_expectation(mpo, return_norm=True)
+print(f"normalized expectation value = {expec/norm}")
 
 # release resources
 state.free()

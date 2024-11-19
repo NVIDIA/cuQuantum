@@ -26,6 +26,7 @@ from ._internal import optimizer_ifc
 from ._internal import tensor_wrapper
 from ._internal import typemaps
 from ._internal import utils
+from .configuration import MemoryLimitExceeded
 
 
 class InvalidNetworkState(Exception):
@@ -576,12 +577,9 @@ The data type '{self.data_type}' is currently not supported.
         max_cache_size = cutn.workspace_get_memory_size(
             self.handle, self.workspace_desc, cutn.WorksizePref.MAX, cutn.Memspace.DEVICE, cutn.WorkspaceKind.CACHE)
 
-        if (self.memory_limit < min_scratch_size + self.require_grad * min_cache_size):
-            message = f"""Insufficient memory.
-The memory limit specified is {self.memory_limit}, while the minimum workspace size needed is {min_scratch_size + self.require_grad * min_cache_size}.
-"""
-            # such failure is due to problem configuration, not due to implementation or runtime factors
-            raise MemoryError(message)
+        min_workspace_size = min_scratch_size + self.require_grad * min_cache_size
+        if self.memory_limit < min_workspace_size:
+            raise MemoryLimitExceeded(self.memory_limit, min_workspace_size, self.device_id)
 
         if min_cache_size > 0:
             if self.require_grad:

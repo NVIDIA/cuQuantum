@@ -105,9 +105,15 @@ def state_result_wrapper(is_scalar=False):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
+            norm = None
             if result is not None:
+                if isinstance(result, tuple):
+                    result, norm = result
                 if is_scalar:
-                    return result.tensor.item()
+                    if norm is None:
+                        return result.tensor.item()
+                    else: 
+                        return result.tensor.item(), norm
                 obj = args[0]
                 if obj.output_location == 'cpu':
                     stream = kwargs.get('stream')
@@ -115,7 +121,10 @@ def state_result_wrapper(is_scalar=False):
                     result = result.to('cpu', stream_holder=stream_holder)
                 else:
                     result = result.tensor
-            return result 
+            if norm is None:
+                return result
+            else:
+                return result, norm
         return wrapper    
     return decorator
 
@@ -151,7 +160,7 @@ def _get_asarray_function(backend, device_id, stream):
         return asarray
 
 
-def create_pauli_operands(pauli_strings, dtype, backend='cupy', device_id=None, stream=None):
+def get_pauli_map(dtype, backend='cupy', device_id=None, stream=None):
     asarray = _get_asarray_function(backend, device_id, stream)
     if backend == 'torch':
         module = importlib.import_module(backend)
@@ -165,7 +174,10 @@ def create_pauli_operands(pauli_strings, dtype, backend='cupy', device_id=None, 
                  'X': pauli_x,
                  'Y': pauli_y,
                  'Z': pauli_z}
+    return pauli_map
 
+def create_pauli_operands(pauli_strings, dtype, backend='cupy', device_id=None, stream=None):
+    pauli_map = get_pauli_map(dtype, backend=backend, device_id=device_id, stream=stream)
     operands_data = []
     n_qubits = None
     for pauli_string, coefficient in pauli_strings.items():
@@ -185,3 +197,11 @@ def create_pauli_operands(pauli_strings, dtype, backend='cupy', device_id=None, 
             modes = [(q, ) for q in range(n_qubits)]
         operands_data.append([tensors, modes, coefficient])
     return operands_data
+
+def get_operand_key(o):
+    """Return a key that marks the underlying operand"""
+    return o.shape, o.strides, o.data_ptr
+
+def get_mps_key(mps_operands):
+    """Return a key that marks the underlying MPS state"""
+    return [get_operand_key(o) for o in mps_operands]

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 24.08.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 24.11.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -148,6 +148,8 @@ cdef void* __cutensornetAccessorGetInfo = NULL
 cdef void* __cutensornetExpectationGetInfo = NULL
 cdef void* __cutensornetMarginalGetInfo = NULL
 cdef void* __cutensornetSamplerGetInfo = NULL
+cdef void* __cutensornetStateApplyUnitaryChannel = NULL
+cdef void* __cutensornetStateCaptureMPS = NULL
 
 
 cdef void* load_library() except* nogil:
@@ -964,6 +966,20 @@ cdef int _check_or_init_cutensornet() except -1 nogil:
         if handle == NULL:
             handle = load_library()
         __cutensornetSamplerGetInfo = dlsym(handle, 'cutensornetSamplerGetInfo')
+    
+    global __cutensornetStateApplyUnitaryChannel
+    __cutensornetStateApplyUnitaryChannel = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyUnitaryChannel')
+    if __cutensornetStateApplyUnitaryChannel == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetStateApplyUnitaryChannel = dlsym(handle, 'cutensornetStateApplyUnitaryChannel')
+    
+    global __cutensornetStateCaptureMPS
+    __cutensornetStateCaptureMPS = dlsym(RTLD_DEFAULT, 'cutensornetStateCaptureMPS')
+    if __cutensornetStateCaptureMPS == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetStateCaptureMPS = dlsym(handle, 'cutensornetStateCaptureMPS')
 
     __py_cutensornet_init = True
     return 0
@@ -1314,6 +1330,12 @@ cpdef dict _inspect_function_pointers():
     
     global __cutensornetSamplerGetInfo
     data["__cutensornetSamplerGetInfo"] = <intptr_t>__cutensornetSamplerGetInfo
+    
+    global __cutensornetStateApplyUnitaryChannel
+    data["__cutensornetStateApplyUnitaryChannel"] = <intptr_t>__cutensornetStateApplyUnitaryChannel
+    
+    global __cutensornetStateCaptureMPS
+    data["__cutensornetStateCaptureMPS"] = <intptr_t>__cutensornetStateCaptureMPS
 
     return data
 
@@ -2460,3 +2482,23 @@ cdef cutensornetStatus_t _cutensornetSamplerGetInfo(const cutensornetHandle_t ha
             raise FunctionNotFoundError("function cutensornetSamplerGetInfo is not found")
     return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateSampler_t, cutensornetSamplerAttributes_t, void*, size_t) nogil>__cutensornetSamplerGetInfo)(
         handle, tensorNetworkSampler, attribute, attributeValue, attributeSize)
+
+
+cdef cutensornetStatus_t _cutensornetStateApplyUnitaryChannel(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, int32_t numTensors, void* tensorData[], const int64_t* tensorModeStrides, const double probabilities[], int64_t* channelId) except* nogil:
+    global __cutensornetStateApplyUnitaryChannel
+    _check_or_init_cutensornet()
+    if __cutensornetStateApplyUnitaryChannel == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateApplyUnitaryChannel is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, int32_t, void**, const int64_t*, const double*, int64_t*) nogil>__cutensornetStateApplyUnitaryChannel)(
+        handle, tensorNetworkState, numStateModes, stateModes, numTensors, tensorData, tensorModeStrides, probabilities, channelId)
+
+
+cdef cutensornetStatus_t _cutensornetStateCaptureMPS(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState) except* nogil:
+    global __cutensornetStateCaptureMPS
+    _check_or_init_cutensornet()
+    if __cutensornetStateCaptureMPS == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateCaptureMPS is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t) nogil>__cutensornetStateCaptureMPS)(
+        handle, tensorNetworkState)

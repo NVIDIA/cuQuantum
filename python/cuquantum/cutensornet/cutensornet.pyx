@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 24.08.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 24.11.0. Do not modify it directly.
 
 cimport cython
 cimport cpython
@@ -393,21 +393,21 @@ cpdef intptr_t create_network_descriptor(intptr_t handle, int32_t num_inputs, nu
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
         strides_in (object): Array of size ``num_inputs``; ``strides_in[i]`` has ``num_modes_in[i]`` many entries with ``strides_in[i][j]`` (``j`` < ``num_modes_in[i]``) corresponding to the linearized offset -- in physical memory -- between two logically-neighboring elements w.r.t the j-th mode of tensor ``i``. It can be:
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
         modes_in (object): Array of size ``num_inputs``; ``modes_in[i]`` has ``num_modes_in[i]`` many entries -- each entry corresponds to a mode. Each mode that does not appear in the input tensor is implicitly contracted. It can be:
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int32_t', or
             - a nested Python sequence of ``int32_t``.
 
         qualifiers_in (object): Array of size ``num_inputs``; ``qualifiers_in[i]`` denotes the qualifiers of i-th input tensor. Refer to ``cutensornetTensorQualifiers_t``. It can be:
@@ -439,22 +439,22 @@ cpdef intptr_t create_network_descriptor(intptr_t handle, int32_t num_inputs, nu
 
     .. seealso:: `cutensornetCreateNetworkDescriptor`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _num_modes_in_ = \
-        get_resource_ptr[int32_t](num_modes_in, <int32_t*>NULL)
-    cdef nested_resource[ int64_t ] _extents_in_ = \
-        get_nested_resource_ptr[int64_t](extents_in, <int64_t*>NULL)
-    cdef nested_resource[ int64_t ] _strides_in_ = \
-        get_nested_resource_ptr[int64_t](strides_in, <int64_t*>NULL)
-    cdef nested_resource[ int32_t ] _modes_in_ = \
-        get_nested_resource_ptr[int32_t](modes_in, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[cutensornetTensorQualifiers_t] ] _qualifiers_in_ = \
-        get_resource_ptr[cutensornetTensorQualifiers_t](qualifiers_in, <cutensornetTensorQualifiers_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _extents_out_ = \
-        get_resource_ptr[int64_t](extents_out, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _strides_out_ = \
-        get_resource_ptr[int64_t](strides_out, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _modes_out_ = \
-        get_resource_ptr[int32_t](modes_out, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _num_modes_in_
+    get_resource_ptr[int32_t](_num_modes_in_, num_modes_in, <int32_t*>NULL)
+    cdef nested_resource[ int64_t ] _extents_in_
+    get_nested_resource_ptr[int64_t](_extents_in_, extents_in, <int64_t*>NULL)
+    cdef nested_resource[ int64_t ] _strides_in_
+    get_nested_resource_ptr[int64_t](_strides_in_, strides_in, <int64_t*>NULL)
+    cdef nested_resource[ int32_t ] _modes_in_
+    get_nested_resource_ptr[int32_t](_modes_in_, modes_in, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[cutensornetTensorQualifiers_t] ] _qualifiers_in_
+    get_resource_ptr[cutensornetTensorQualifiers_t](_qualifiers_in_, qualifiers_in, <cutensornetTensorQualifiers_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _extents_out_
+    get_resource_ptr[int64_t](_extents_out_, extents_out, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _strides_out_
+    get_resource_ptr[int64_t](_strides_out_, strides_out, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _modes_out_
+    get_resource_ptr[int32_t](_modes_out_, modes_out, <int32_t*>NULL)
     cdef NetworkDescriptor desc_net
     with nogil:
         status = cutensornetCreateNetworkDescriptor(<const Handle>handle, num_inputs, <const int32_t*>(_num_modes_in_.data()), <const int64_t* const*>(_extents_in_.ptrs.data()), <const int64_t* const*>(_strides_in_.ptrs.data()), <const int32_t* const*>(_modes_in_.ptrs.data()), <const cutensornetTensorQualifiers_t*>(_qualifiers_in_.data()), num_modes_out, <const int64_t*>(_extents_out_.data()), <const int64_t*>(_strides_out_.data()), <const int32_t*>(_modes_out_.data()), <DataType>data_type, <_ComputeType>compute_type, &desc_net)
@@ -971,8 +971,8 @@ cpdef contraction_autotune(intptr_t handle, intptr_t plan, raw_data_in, intptr_t
 
     .. seealso:: `cutensornetContractionAutotune`
     """
-    cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_ = \
-        get_resource_ptrs[void](raw_data_in, <void*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_
+    get_resource_ptrs[void](_raw_data_in_, raw_data_in, <void*>NULL)
     with nogil:
         status = cutensornetContractionAutotune(<const Handle>handle, <ContractionPlan>plan, <const void* const*>(_raw_data_in_.data()), <void*>raw_data_out, <WorkspaceDescriptor>work_desc, <const ContractionAutotunePreference>pref, <Stream>stream)
     check_status(status)
@@ -1126,8 +1126,8 @@ cpdef contract_slices(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_
 
     .. seealso:: `cutensornetContractSlices`
     """
-    cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_ = \
-        get_resource_ptrs[void](raw_data_in, <void*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_
+    get_resource_ptrs[void](_raw_data_in_, raw_data_in, <void*>NULL)
     with nogil:
         status = cutensornetContractSlices(<const Handle>handle, <ContractionPlan>plan, <const void* const*>(_raw_data_in_.data()), <void*>raw_data_out, accumulate_output, <WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
     check_status(status)
@@ -1161,12 +1161,12 @@ cpdef intptr_t create_tensor_descriptor(intptr_t handle, int32_t num_modes, exte
 
     .. seealso:: `cutensornetCreateTensorDescriptor`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _extents_ = \
-        get_resource_ptr[int64_t](extents, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _strides_ = \
-        get_resource_ptr[int64_t](strides, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _modes_ = \
-        get_resource_ptr[int32_t](modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _extents_
+    get_resource_ptr[int64_t](_extents_, extents, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
+    get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _modes_
+    get_resource_ptr[int32_t](_modes_, modes, <int32_t*>NULL)
     cdef TensorDescriptor desc_tensor
     with nogil:
         status = cutensornetCreateTensorDescriptor(<const Handle>handle, num_modes, <const int64_t*>(_extents_.data()), <const int64_t*>(_strides_.data()), <const int32_t*>(_modes_.data()), <DataType>data_type, &desc_tensor)
@@ -1764,10 +1764,10 @@ cpdef compute_gradients_backward(intptr_t handle, intptr_t plan, raw_data_in, in
 
     .. seealso:: `cutensornetComputeGradientsBackward`
     """
-    cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_ = \
-        get_resource_ptrs[void](raw_data_in, <void*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _gradients_ = \
-        get_resource_ptrs[void](gradients, <void*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_
+    get_resource_ptrs[void](_raw_data_in_, raw_data_in, <void*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _gradients_
+    get_resource_ptrs[void](_gradients_, gradients, <void*>NULL)
     with nogil:
         status = cutensornetComputeGradientsBackward(<const Handle>handle, <ContractionPlan>plan, <const void* const*>(_raw_data_in_.data()), <const void*>output_gradient, <void* const*>(_gradients_.data()), accumulate_output, <WorkspaceDescriptor>work_desc, <Stream>stream)
     check_status(status)
@@ -1792,8 +1792,8 @@ cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_state_modes
 
     .. seealso:: `cutensornetCreateState`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _state_mode_extents_ = \
-        get_resource_ptr[int64_t](state_mode_extents, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _state_mode_extents_
+    get_resource_ptr[int64_t](_state_mode_extents_, state_mode_extents, <int64_t*>NULL)
     cdef State tensor_network_state
     with nogil:
         status = cutensornetCreateState(<const Handle>handle, <_StatePurity>purity, num_state_modes, <const int64_t*>(_state_mode_extents_.data()), <DataType>data_type, &tensor_network_state)
@@ -1828,10 +1828,10 @@ cpdef int64_t state_apply_tensor(intptr_t handle, intptr_t tensor_network_state,
 
     .. seealso:: `cutensornetStateApplyTensor`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_ = \
-        get_resource_ptr[int32_t](state_modes, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _tensor_mode_strides_ = \
-        get_resource_ptr[int64_t](tensor_mode_strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_
+    get_resource_ptr[int32_t](_state_modes_, state_modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _tensor_mode_strides_
+    get_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
     cdef int64_t tensor_id
     with nogil:
         status = cutensornetStateApplyTensor(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
@@ -1898,12 +1898,12 @@ cpdef intptr_t create_marginal(intptr_t handle, intptr_t tensor_network_state, i
 
     .. seealso:: `cutensornetCreateMarginal`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _marginal_modes_ = \
-        get_resource_ptr[int32_t](marginal_modes, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _projected_modes_ = \
-        get_resource_ptr[int32_t](projected_modes, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _marginal_tensor_strides_ = \
-        get_resource_ptr[int64_t](marginal_tensor_strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _marginal_modes_
+    get_resource_ptr[int32_t](_marginal_modes_, marginal_modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _projected_modes_
+    get_resource_ptr[int32_t](_projected_modes_, projected_modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _marginal_tensor_strides_
+    get_resource_ptr[int64_t](_marginal_tensor_strides_, marginal_tensor_strides, <int64_t*>NULL)
     cdef StateMarginal tensor_network_marginal
     with nogil:
         status = cutensornetCreateMarginal(<const Handle>handle, <State>tensor_network_state, num_marginal_modes, <const int32_t*>(_marginal_modes_.data()), num_projected_modes, <const int32_t*>(_projected_modes_.data()), <const int64_t*>(_marginal_tensor_strides_.data()), &tensor_network_marginal)
@@ -1990,8 +1990,8 @@ cpdef marginal_compute(intptr_t handle, intptr_t tensor_network_marginal, projec
 
     .. seealso:: `cutensornetMarginalCompute`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _projected_mode_values_ = \
-        get_resource_ptr[int64_t](projected_mode_values, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _projected_mode_values_
+    get_resource_ptr[int64_t](_projected_mode_values_, projected_mode_values, <int64_t*>NULL)
     with nogil:
         status = cutensornetMarginalCompute(<const Handle>handle, <StateMarginal>tensor_network_marginal, <const int64_t*>(_projected_mode_values_.data()), <WorkspaceDescriptor>work_desc, <void*>marginal_tensor, <Stream>cuda_stream)
     check_status(status)
@@ -2028,8 +2028,8 @@ cpdef intptr_t create_sampler(intptr_t handle, intptr_t tensor_network_state, in
 
     .. seealso:: `cutensornetCreateSampler`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _modes_to_sample_ = \
-        get_resource_ptr[int32_t](modes_to_sample, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _modes_to_sample_
+    get_resource_ptr[int32_t](_modes_to_sample_, modes_to_sample, <int32_t*>NULL)
     cdef StateSampler tensor_network_sampler
     with nogil:
         status = cutensornetCreateSampler(<const Handle>handle, <State>tensor_network_state, num_modes_to_sample, <const int32_t*>(_modes_to_sample_.data()), &tensor_network_sampler)
@@ -2142,23 +2142,23 @@ cpdef state_finalize_mps(intptr_t handle, intptr_t tensor_network_state, int bou
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
         strides_out (object): Array of size ``nStateModes`` specifying the strides of all tensors defining the target MPS representation. Similar to ``extents_out``, ``strides_out`` is also expected to be consistent with the mode order of each MPS tensor. If NULL, the default generalized column-major strides will be assumed. It can be:
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
 
     .. seealso:: `cutensornetStateFinalizeMPS`
     """
-    cdef nested_resource[ int64_t ] _extents_out_ = \
-        get_nested_resource_ptr[int64_t](extents_out, <int64_t*>NULL)
-    cdef nested_resource[ int64_t ] _strides_out_ = \
-        get_nested_resource_ptr[int64_t](strides_out, <int64_t*>NULL)
+    cdef nested_resource[ int64_t ] _extents_out_
+    get_nested_resource_ptr[int64_t](_extents_out_, extents_out, <int64_t*>NULL)
+    cdef nested_resource[ int64_t ] _strides_out_
+    get_nested_resource_ptr[int64_t](_strides_out_, strides_out, <int64_t*>NULL)
     with nogil:
         status = cutensornetStateFinalizeMPS(<const Handle>handle, <State>tensor_network_state, <_BoundaryCondition>boundary_condition, <const int64_t* const*>(_extents_out_.ptrs.data()), <const int64_t* const*>(_strides_out_.ptrs.data()))
     check_status(status)
@@ -2261,8 +2261,8 @@ cpdef intptr_t create_network_operator(intptr_t handle, int32_t num_state_modes,
 
     .. seealso:: `cutensornetCreateNetworkOperator`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _state_mode_extents_ = \
-        get_resource_ptr[int64_t](state_mode_extents, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _state_mode_extents_
+    get_resource_ptr[int64_t](_state_mode_extents_, state_mode_extents, <int64_t*>NULL)
     cdef NetworkOperator tensor_network_operator
     with nogil:
         status = cutensornetCreateNetworkOperator(<const Handle>handle, num_state_modes, <const int64_t*>(_state_mode_extents_.data()), <DataType>data_type, &tensor_network_operator)
@@ -2287,14 +2287,14 @@ cpdef int64_t network_operator_append_product(intptr_t handle, intptr_t tensor_n
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int32_t', or
             - a nested Python sequence of ``int32_t``.
 
         tensor_mode_strides (object): Tensor mode strides for each tensor factor (length = ``num_state_modes`` * 2). If NULL, the default generalized column-major strides will be used. It can be:
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
         tensor_data (object): Tensor data stored in GPU memory for each tensor factor. It can be:
@@ -2309,14 +2309,14 @@ cpdef int64_t network_operator_append_product(intptr_t handle, intptr_t tensor_n
     .. seealso:: `cutensornetNetworkOperatorAppendProduct`
     """
     cdef cuDoubleComplex _coefficient_ = cuDoubleComplex(coefficient.real, coefficient.imag)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _num_state_modes_ = \
-        get_resource_ptr[int32_t](num_state_modes, <int32_t*>NULL)
-    cdef nested_resource[ int32_t ] _state_modes_ = \
-        get_nested_resource_ptr[int32_t](state_modes, <int32_t*>NULL)
-    cdef nested_resource[ int64_t ] _tensor_mode_strides_ = \
-        get_nested_resource_ptr[int64_t](tensor_mode_strides, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _tensor_data_ = \
-        get_resource_ptrs[void](tensor_data, <void*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _num_state_modes_
+    get_resource_ptr[int32_t](_num_state_modes_, num_state_modes, <int32_t*>NULL)
+    cdef nested_resource[ int32_t ] _state_modes_
+    get_nested_resource_ptr[int32_t](_state_modes_, state_modes, <int32_t*>NULL)
+    cdef nested_resource[ int64_t ] _tensor_mode_strides_
+    get_nested_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _tensor_data_
+    get_resource_ptrs[void](_tensor_data_, tensor_data, <void*>NULL)
     cdef int64_t component_id
     with nogil:
         status = cutensornetNetworkOperatorAppendProduct(<const Handle>handle, <NetworkOperator>tensor_network_operator, <cuDoubleComplex>_coefficient_, num_tensors, <const int32_t*>(_num_state_modes_.data()), <const int32_t**>(_state_modes_.ptrs.data()), <const int64_t**>(_tensor_mode_strides_.ptrs.data()), <const void**>(_tensor_data_.data()), &component_id)
@@ -2360,10 +2360,10 @@ cpdef intptr_t create_accessor(intptr_t handle, intptr_t tensor_network_state, i
 
     .. seealso:: `cutensornetCreateAccessor`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _projected_modes_ = \
-        get_resource_ptr[int32_t](projected_modes, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _amplitudes_tensor_strides_ = \
-        get_resource_ptr[int64_t](amplitudes_tensor_strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _projected_modes_
+    get_resource_ptr[int32_t](_projected_modes_, projected_modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _amplitudes_tensor_strides_
+    get_resource_ptr[int64_t](_amplitudes_tensor_strides_, amplitudes_tensor_strides, <int64_t*>NULL)
     cdef StateAccessor tensor_network_accessor
     with nogil:
         status = cutensornetCreateAccessor(<const Handle>handle, <State>tensor_network_state, num_projected_modes, <const int32_t*>(_projected_modes_.data()), <const int64_t*>(_amplitudes_tensor_strides_.data()), &tensor_network_accessor)
@@ -2451,8 +2451,8 @@ cpdef accessor_compute(intptr_t handle, intptr_t tensor_network_accessor, projec
 
     .. seealso:: `cutensornetAccessorCompute`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _projected_mode_values_ = \
-        get_resource_ptr[int64_t](projected_mode_values, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _projected_mode_values_
+    get_resource_ptr[int64_t](_projected_mode_values_, projected_mode_values, <int64_t*>NULL)
     with nogil:
         status = cutensornetAccessorCompute(<const Handle>handle, <StateAccessor>tensor_network_accessor, <const int64_t*>(_projected_mode_values_.data()), <WorkspaceDescriptor>work_desc, <void*>amplitudes_tensor, <void*>state_norm, <Stream>cuda_stream)
     check_status(status)
@@ -2597,7 +2597,7 @@ cpdef int64_t state_apply_tensor_operator(intptr_t handle, intptr_t tensor_netwo
             - a Python sequence of ``int32_t``.
 
         tensor_data (intptr_t): Elements of the tensor operator (must be of the same data type as the elements of the state tensor).
-        tensor_mode_strides (object): Strides of the tensor operator data layout (note that the tensor operator has twice more modes than the number of state modes it acts on). Passing NULL will assume the default generalized columnwise layout. It can be:
+        tensor_mode_strides (object): Strides of the tensor operator data layout (note that the tensor operator has twice more modes than the number of state modes it acts on). Passing NULL will assume the default generalized columnwise storage layout. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
@@ -2611,10 +2611,10 @@ cpdef int64_t state_apply_tensor_operator(intptr_t handle, intptr_t tensor_netwo
 
     .. seealso:: `cutensornetStateApplyTensorOperator`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_ = \
-        get_resource_ptr[int32_t](state_modes, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _tensor_mode_strides_ = \
-        get_resource_ptr[int64_t](tensor_mode_strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_
+    get_resource_ptr[int32_t](_state_modes_, state_modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _tensor_mode_strides_
+    get_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
     cdef int64_t tensor_id
     with nogil:
         status = cutensornetStateApplyTensorOperator(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
@@ -2646,7 +2646,7 @@ cpdef int64_t state_apply_controlled_tensor_operator(intptr_t handle, intptr_t t
             - a Python sequence of ``int32_t``.
 
         tensor_data (intptr_t): Elements of the target tensor of the controlled tensor operator (must be of the same data type as the elements of the state tensor).
-        tensor_mode_strides (object): Strides of the tensor operator data layout (note that the tensor operator has twice more modes than the number of the target state modes it acts on). Passing NULL will assume the default generalized columnwise layout. It can be:
+        tensor_mode_strides (object): Strides of the tensor operator data layout (note that the tensor operator has twice more modes than the number of the target state modes it acts on). Passing NULL will assume the default generalized columnwise storage layout. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
@@ -2660,14 +2660,14 @@ cpdef int64_t state_apply_controlled_tensor_operator(intptr_t handle, intptr_t t
 
     .. seealso:: `cutensornetStateApplyControlledTensorOperator`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _state_control_modes_ = \
-        get_resource_ptr[int32_t](state_control_modes, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _state_control_values_ = \
-        get_resource_ptr[int64_t](state_control_values, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _state_target_modes_ = \
-        get_resource_ptr[int32_t](state_target_modes, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _tensor_mode_strides_ = \
-        get_resource_ptr[int64_t](tensor_mode_strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _state_control_modes_
+    get_resource_ptr[int32_t](_state_control_modes_, state_control_modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _state_control_values_
+    get_resource_ptr[int64_t](_state_control_values_, state_control_values, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _state_target_modes_
+    get_resource_ptr[int32_t](_state_target_modes_, state_target_modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _tensor_mode_strides_
+    get_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
     cdef int64_t tensor_id
     with nogil:
         status = cutensornetStateApplyControlledTensorOperator(<const Handle>handle, <State>tensor_network_state, num_control_modes, <const int32_t*>(_state_control_modes_.data()), <const int64_t*>(_state_control_values_.data()), num_target_modes, <const int32_t*>(_state_target_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
@@ -2726,14 +2726,14 @@ cpdef state_initialize_mps(intptr_t handle, intptr_t tensor_network_state, int b
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
         strides_in (object): Array of size ``nStateModes`` specifying the strides of all tensors in the chosen MPS representation. Similar to ``extents_in``, ``strides_in`` is also expected to be consistent with the mode order of each MPS tensor. If NULL, the default generalized column-major strides will be assumed. It can be:
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
         state_tensors_in (object): Array of size ``nStateModes`` specifying the data for all tensors defining the chosen MPS representation. If NULL, the initial MPS-factorized state will represent the vacuum state. It can be:
@@ -2744,12 +2744,12 @@ cpdef state_initialize_mps(intptr_t handle, intptr_t tensor_network_state, int b
 
     .. seealso:: `cutensornetStateInitializeMPS`
     """
-    cdef nested_resource[ int64_t ] _extents_in_ = \
-        get_nested_resource_ptr[int64_t](extents_in, <int64_t*>NULL)
-    cdef nested_resource[ int64_t ] _strides_in_ = \
-        get_nested_resource_ptr[int64_t](strides_in, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _state_tensors_in_ = \
-        get_resource_ptrs[void](state_tensors_in, <void*>NULL)
+    cdef nested_resource[ int64_t ] _extents_in_
+    get_nested_resource_ptr[int64_t](_extents_in_, extents_in, <int64_t*>NULL)
+    cdef nested_resource[ int64_t ] _strides_in_
+    get_nested_resource_ptr[int64_t](_strides_in_, strides_in, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _state_tensors_in_
+    get_resource_ptrs[void](_state_tensors_in_, state_tensors_in, <void*>NULL)
     with nogil:
         status = cutensornetStateInitializeMPS(<const Handle>handle, <State>tensor_network_state, <_BoundaryCondition>boundary_condition, <const int64_t* const*>(_extents_in_.ptrs.data()), <const int64_t* const*>(_strides_in_.ptrs.data()), <void**>(_state_tensors_in_.data()))
     check_status(status)
@@ -2792,14 +2792,14 @@ cpdef int64_t network_operator_append_mpo(intptr_t handle, intptr_t tensor_netwo
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
         tensor_mode_strides (object): Storage strides for each MPO tensor or NULL (default generalized column-wise strides). It can be:
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
-              to a valid sequence, or
+              to a valid sequence of 'int64_t', or
             - a nested Python sequence of ``int64_t``.
 
         tensor_data (object): Tensor data stored in GPU memory for each MPO tensor factor. It can be:
@@ -2815,14 +2815,14 @@ cpdef int64_t network_operator_append_mpo(intptr_t handle, intptr_t tensor_netwo
     .. seealso:: `cutensornetNetworkOperatorAppendMPO`
     """
     cdef cuDoubleComplex _coefficient_ = cuDoubleComplex(coefficient.real, coefficient.imag)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_ = \
-        get_resource_ptr[int32_t](state_modes, <int32_t*>NULL)
-    cdef nested_resource[ int64_t ] _tensor_mode_extents_ = \
-        get_nested_resource_ptr[int64_t](tensor_mode_extents, <int64_t*>NULL)
-    cdef nested_resource[ int64_t ] _tensor_mode_strides_ = \
-        get_nested_resource_ptr[int64_t](tensor_mode_strides, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _tensor_data_ = \
-        get_resource_ptrs[void](tensor_data, <void*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_
+    get_resource_ptr[int32_t](_state_modes_, state_modes, <int32_t*>NULL)
+    cdef nested_resource[ int64_t ] _tensor_mode_extents_
+    get_nested_resource_ptr[int64_t](_tensor_mode_extents_, tensor_mode_extents, <int64_t*>NULL)
+    cdef nested_resource[ int64_t ] _tensor_mode_strides_
+    get_nested_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _tensor_data_
+    get_resource_ptrs[void](_tensor_data_, tensor_data, <void*>NULL)
     cdef int64_t component_id
     with nogil:
         status = cutensornetNetworkOperatorAppendMPO(<const Handle>handle, <NetworkOperator>tensor_network_operator, <cuDoubleComplex>_coefficient_, num_state_modes, <const int32_t*>(_state_modes_.data()), <const int64_t**>(_tensor_mode_extents_.ptrs.data()), <const int64_t**>(_tensor_mode_strides_.ptrs.data()), <const void**>(_tensor_data_.data()), <_BoundaryCondition>boundary_condition, &component_id)
@@ -2907,6 +2907,69 @@ cpdef sampler_get_info(intptr_t handle, intptr_t tensor_network_sampler, int att
     """
     with nogil:
         status = cutensornetSamplerGetInfo(<const Handle>handle, <const StateSampler>tensor_network_sampler, <_SamplerAttribute>attribute, <void*>attribute_value, attribute_size)
+    check_status(status)
+
+
+cpdef int64_t state_apply_unitary_channel(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, int32_t num_tensors, tensor_data, tensor_mode_strides, probabilities) except? -1:
+    """Applies a tensor channel consisting of one or more unitary tensor operators to the tensor network state.
+
+    Args:
+        handle (intptr_t): cuTensorNet library handle.
+        tensor_network_state (intptr_t): Tensor network state.
+        num_state_modes (int32_t): Number of state modes the tensor channel acts on.
+        state_modes (object): Pointer to the state modes the tensor channel acts on. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
+
+        num_tensors (int32_t): Number of constituting tensor operators defining the tensor channel.
+        tensor_data (object): Elements of the tensor operators constituting the tensor channel (must be of the same data type as the elements of the state tensor). It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of :class:`int`\s (as pointer addresses).
+
+        tensor_mode_strides (object): Strides of the tensor data storage layout (note that the supplied tensors have twice more modes than the number of state modes they act on). Passing NULL will assume the default generalized columnwise storage layout. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+        probabilities (object): Probabilities associated with the individual tensor operators. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``float``.
+
+
+    Returns:
+        int64_t: Unique integer id (for later identification of the tensor channel).
+
+    .. seealso:: `cutensornetStateApplyUnitaryChannel`
+    """
+    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_
+    get_resource_ptr[int32_t](_state_modes_, state_modes, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _tensor_data_
+    get_resource_ptrs[void](_tensor_data_, tensor_data, <void*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _tensor_mode_strides_
+    get_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[double] ] _probabilities_
+    get_resource_ptr[double](_probabilities_, probabilities, <double*>NULL)
+    cdef int64_t channel_id
+    with nogil:
+        status = cutensornetStateApplyUnitaryChannel(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), num_tensors, <void**>(_tensor_data_.data()), <const int64_t*>(_tensor_mode_strides_.data()), <const double*>(_probabilities_.data()), &channel_id)
+    check_status(status)
+    return channel_id
+
+
+cpdef state_capture_mps(intptr_t handle, intptr_t tensor_network_state):
+    """Resets the tensor network state to the MPS state previously computed via ``cutensornetStateCompute``.
+
+    Args:
+        handle (intptr_t): cuTensorNet library handle.
+        tensor_network_state (intptr_t): Tensor network state.
+
+    .. seealso:: `cutensornetStateCaptureMPS`
+    """
+    with nogil:
+        status = cutensornetStateCaptureMPS(<const Handle>handle, <State>tensor_network_state)
     check_status(status)
 
 

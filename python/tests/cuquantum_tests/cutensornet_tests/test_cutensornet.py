@@ -953,8 +953,8 @@ class TestTensorQR:
         {'abs_cutoff': 0.1, 'discarded_weight_cutoff': 0.05, 'normalization': 'L2'}, # discarded weight truncation
         {'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'algorithm': 'gesvdj', 'gesvdj_tol':1e-14, 'gesvdj_max_sweeps': 80}, # value based truncation
         {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V', 'algorithm': 'gesvdj'}, # absolute value based truncation
-        {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # relative value based truncation
-        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV', 'algorithm': 'gesvdp'}, # compound truncation
+        {'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # exact gesvdp
+        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV'}, # compound truncation
     ),
 }))
 class TestTensorSVD:
@@ -1078,8 +1078,8 @@ class TestTensorSVD:
         {'abs_cutoff': 0.1, 'discarded_weight_cutoff': 0.05, 'normalization': 'L2'}, # discarded weight truncation
         {'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'algorithm': 'gesvdj', 'gesvdj_tol':1e-14, 'gesvdj_max_sweeps': 80}, # value based truncation
         {'abs_cutoff': 0.1, 'normalization':'L2', 'partition':'V', 'algorithm': 'gesvdj'}, # absolute value based truncation
-        {'rel_cutoff': 0.1, 'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # relative value based truncation
-        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV', 'algorithm': 'gesvdp'}, # compound truncation
+        {'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # exact gesvdp
+        {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV'}, # compound truncation
     ),
 }))
 class TestTensorGate:

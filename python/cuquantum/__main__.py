@@ -21,6 +21,9 @@ def get_lib_path(name):
     elif "cutensor" in name:  # cutensor or cutensornet
         from cuquantum import cutensornet as cutn
         cutn._internal.cutensornet._inspect_function_pointers()
+    elif "cudensitymat" in name:
+        from cuquantum import bindings
+        bindings._internal.cudensitymat._inspect_function_pointers()
 
     try:
         with open('/proc/self/maps') as f:
@@ -53,7 +56,7 @@ def get_lib_path(name):
 
 def _get_cuquantum_libs():
     paths = set()
-    for lib in ('custatevec', 'cutensornet', 'cutensor'):
+    for lib in ('custatevec', 'cutensornet', 'cutensor', 'cudensitymat'):
         path = os.path.normpath(get_lib_path(f"lib{lib}.so"))
         paths.add(path)
     return tuple(paths)
@@ -92,7 +95,7 @@ if __name__ == '__main__':
     parser.add_argument('--libs', action='store_true',
                         help='get cuQuantum linker flags')
     parser.add_argument('--target', action='append', default=[],
-                        choices=('custatevec', 'cutensornet'),
+                        choices=('custatevec', 'cutensornet', 'cudensitymat'),
                         help='get the linker flag for the target cuQuantum component')
     args = parser.parse_args()
 
@@ -109,6 +112,6 @@ if __name__ == '__main__':
     flag = ''
     for target in args.target:
         flag += _get_cuquantum_target(target)
-        if target == 'cutensornet':
+        if target in ('cutensornet', 'cudensitymat') :
             flag += _get_cuquantum_target('cutensor')
     print(flag)
