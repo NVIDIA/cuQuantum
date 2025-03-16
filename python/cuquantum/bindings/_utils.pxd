@@ -1,4 +1,4 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -8,6 +8,8 @@ from libcpp.vector cimport vector
 from libcpp cimport bool as cppbool
 from libcpp cimport nullptr_t, nullptr
 from libcpp.memory cimport unique_ptr
+
+from .cycutensornet cimport cutensornetTensorQualifiers_t
 
 cdef extern from "driver_types.h" nogil:
     ctypedef void* Stream 'cudaStream_t'
@@ -152,6 +154,7 @@ ctypedef fused ResT:
     int64_t
     uint32_t
     size_t
+    cutensornetTensorQualifiers_t
 
 ctypedef fused PtrT:
     void

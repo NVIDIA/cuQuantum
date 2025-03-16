@@ -1,4 +1,4 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -111,6 +111,7 @@ class ComputeType(IntEnum):
     COMPUTE_32I     = 1 << 9
     COMPUTE_16BF    = 1 << 10
     COMPUTE_TF32    = 1 << 12
+    COMPUTE_3XTF32  = 1 << 13
 
 
 # TODO: use those exposed by CUDA Python instead, but before removing these
@@ -195,11 +196,16 @@ cdef int[29] _WHITESPACE_UNICODE_INTS = [
 WHITESPACE_UNICODE = ''.join(chr(s) for s in _WHITESPACE_UNICODE_INTS)
 
 
-# Cython can't infer the overload by return type alone, so we need a dummy
-# input argument to help it
+# Cython can't infer the ResT overload when it is wrapped in nullable_unique_ptr,
+# so we need a dummy (__unused) input argument to help it
 cdef int get_resource_ptr(nullable_unique_ptr[vector[ResT]] &in_out_ptr, object obj, ResT* __unused) except 1:
-    cdef vector[ResT]* vec
-    if cpython.PySequence_Check(obj):
+    if isinstance(obj, _np_ndarray):
+        # TODO: can we do "assert obj.dtype == some_dtype" here? it seems we have no
+        # way to check the dtype...
+        # TODO: how about buffer protocol?
+        assert <size_t>(obj.dtype.itemsize) == sizeof(ResT)
+        in_out_ptr.reset(<vector[ResT]*><intptr_t>(obj.ctypes.data), False)
+    elif cpython.PySequence_Check(obj):
         vec = new vector[ResT](len(obj))
         # set the ownership immediately to avoid leaking the `vec` memory in
         # case of exception in the following loop
@@ -212,7 +218,6 @@ cdef int get_resource_ptr(nullable_unique_ptr[vector[ResT]] &in_out_ptr, object 
 
 
 cdef int get_resource_ptrs(nullable_unique_ptr[ vector[PtrT*] ] &in_out_ptr, object obj, PtrT* __unused) except 1:
-    cdef vector[PtrT*]* vec
     if cpython.PySequence_Check(obj):
         vec = new vector[PtrT*](len(obj))
         # set the ownership immediately to avoid leaking the `vec` memory in
@@ -259,7 +264,6 @@ cdef int get_nested_resource_ptr(nested_resource[ResT] &in_out_ptr, object obj, 
     in_out_ptr.ptrs = move(nested_ptr)
     in_out_ptr.nested_resource_ptr = move(nested_res_ptr)
     return 0
-
 
 
 class FunctionNotFoundError(RuntimeError): pass

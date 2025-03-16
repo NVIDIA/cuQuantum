@@ -1,11 +1,12 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
-from logging import getLogger, Logger
+from logging import Logger
 import weakref
 import collections
+from typing import Sequence, Tuple
 
-from cuquantum.cutensornet._internal import utils as cutn_utils
+from cuquantum._internal import utils as cutn_utils
 
 from cuquantum.bindings import cudensitymat as cudm
 from . import utils
@@ -15,8 +16,8 @@ from . import utils
 _comm_provider_map = {}
 _comm_provider_map["None"] = cudm.DistributedProvider.NONE
 _comm_provider_map["MPI"] = cudm.DistributedProvider.MPI
-_comm_provider_map["NCCL"] = cudm.DistributedProvider.NCCL
-_comm_provider_map["NVSHMEM"] = cudm.DistributedProvider.NVSHMEM
+# _comm_provider_map["NCCL"] = cudm.DistributedProvider.NCCL
+# _comm_provider_map["NVSHMEM"] = cudm.DistributedProvider.NVSHMEM
 
 
 class LibraryHandle:
@@ -76,7 +77,9 @@ class LibraryHandle:
     def device_id(self):
         return self._device_id
 
-    def set_communicator(self, comm, provider: str = "None") -> None:
+    def set_communicator(
+        self, comm: "mpi4py.MPI.Comm" | Tuple[int, int], provider: str = "None"
+    ) -> None:
         """
         Sets the communicator attached to the current context's library handle.
 
@@ -84,6 +87,8 @@ class LibraryHandle:
         -----------
         comm:
             The communicator instance with which to set the library context's communicator.
+            Can either be specified as an instance of `mpi4py.Comm` or
+            as a tuple of two integers (the pointer to the communicator and its size).
         provider: str
             The package/backend providing the communicator.
         """
@@ -94,7 +99,10 @@ class LibraryHandle:
             )
         assert provider in ["None", "MPI"]
         self._comm = comm
-        _comm_ptr, _size = cutn_utils.get_mpi_comm_pointer(comm)
+        if isinstance(comm, Sequence):
+            _comm_ptr, _size = comm
+        else:
+            _comm_ptr, _size = cutn_utils.get_mpi_comm_pointer(comm)
         cudm.reset_distributed_configuration(
             self._validated_ptr, _comm_provider_map[provider], _comm_ptr, _size
         )
@@ -140,4 +148,3 @@ class LibraryHandle:
         if self._upstream_finalizers is not None:
             del self._upstream_finalizers[user._finalizer]
             self.logger.debug(f"{self} unregistered user {user} for finalizer execution.")
-

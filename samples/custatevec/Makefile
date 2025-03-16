@@ -1,20 +1,28 @@
-# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 SHELL           := /bin/bash
 CUDA_TOOLKIT    := $(shell realpath $$(dirname $$(command -v nvcc))/..)
+CUDA_MAJOR_VERSION := $(shell nvcc --version | egrep -o "V[0-9]+.[0-9]+.[0-9]" | cut -d. -f1 | cut -c2-)
+CUDA_MINOR_VERSION := $(shell nvcc --version | egrep -o "V[0-9]+.[0-9]+.[0-9]" | cut -d. -f2)
 CUSTATEVEC_ROOT ?= ${CUQUANTUM_ROOT}
+
 
 INCLUDE_DIRS    := -I$(CUSTATEVEC_ROOT)/include
 LIBRARY_DIRS    := -L$(CUSTATEVEC_ROOT)/lib64 -L$(CUSTATEVEC_ROOT)/lib
 LINKER_FLAGS    := -lcudart -lcustatevec
 
-ARCH_FLAGS_SM70 = -gencode arch=compute_70,code=sm_70
-ARCH_FLAGS_SM75 = -gencode arch=compute_75,code=sm_75
-ARCH_FLAGS_SM80 = -gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80
-ARCH_FLAGS_SM90 = -gencode arch=compute_90,code=sm_90 -gencode arch=compute_90,code=compute_90
-ARCH_FLAGS      = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80) $(ARCH_FLAGS_SM90)
+ARCH_FLAGS_SM70  = -gencode arch=compute_70,code=sm_70
+ARCH_FLAGS_SM80  = -gencode arch=compute_80,code=sm_80
+ARCH_FLAGS_SM90  = -gencode arch=compute_90,code=sm_90 -gencode arch=compute_90,code=compute_90
+ARCH_FLAGS_SM100 = -gencode arch=compute_100,code=sm_100 -gencode arch=compute_120,code=sm_120 -gencode arch=compute_100,code=compute_100
+
+ifeq ($(shell [ $(CUDA_MAJOR_VERSION) -lt 12 ] || ( [ $(CUDA_MAJOR_VERSION) -eq 12 ] && [ $(CUDA_MINOR_VERSION) -lt 8 ] ); echo $$?),0)
+	ARCH_FLAGS = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM80) $(ARCH_FLAGS_SM90) 
+else
+	ARCH_FLAGS = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM80) $(ARCH_FLAGS_SM90) $(ARCH_FLAGS_SM100)
+endif
 
 CXX_FLAGS       = -std=c++11 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(ARCH_FLAGS) $(LINKER_FLAGS)
 

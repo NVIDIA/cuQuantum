@@ -40,6 +40,8 @@ def parse_python_script(filepath):
 def run_sample(samples_path, filename):
     fullpath = os.path.join(samples_path, filename)
     script = parse_python_script(fullpath)
+    if 'import torch' in script and int(cp.cuda.Device().compute_capability) >= 100:
+        pytest.skip(f'{filename} test skipped for blackwell hardware')
     try:
         old_argv = sys.argv
         sys.argv = [fullpath]

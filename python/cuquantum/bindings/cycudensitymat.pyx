@@ -1,6 +1,8 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
+#
+# This code was automatically generated with version 25.03.0. Do not modify it directly.
 
 from ._internal cimport cudensitymat as _cudensitymat
 
@@ -8,6 +10,10 @@ from ._internal cimport cudensitymat as _cudensitymat
 ###############################################################################
 # Wrapper functions
 ###############################################################################
+
+cdef size_t cudensitymatGetVersion() except* nogil:
+    return _cudensitymat._cudensitymatGetVersion()
+
 
 cdef cudensitymatStatus_t cudensitymatCreate(cudensitymatHandle_t* handle) except* nogil:
     return _cudensitymat._cudensitymatCreate(handle)
@@ -89,8 +95,24 @@ cdef cudensitymatStatus_t cudensitymatCreateElementaryOperator(const cudensityma
     return _cudensitymat._cudensitymatCreateElementaryOperator(handle, numSpaceModes, spaceModeExtents, sparsity, numDiagonals, diagonalOffsets, dataType, tensorData, tensorCallback, elemOperator)
 
 
+cdef cudensitymatStatus_t cudensitymatCreateElementaryOperatorBatch(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], int64_t batchSize, cudensitymatElementaryOperatorSparsity_t sparsity, int32_t numDiagonals, const int32_t diagonalOffsets[], cudaDataType_t dataType, void* tensorData, cudensitymatWrappedTensorCallback_t tensorCallback, cudensitymatElementaryOperator_t* elemOperator) except* nogil:
+    return _cudensitymat._cudensitymatCreateElementaryOperatorBatch(handle, numSpaceModes, spaceModeExtents, batchSize, sparsity, numDiagonals, diagonalOffsets, dataType, tensorData, tensorCallback, elemOperator)
+
+
 cdef cudensitymatStatus_t cudensitymatDestroyElementaryOperator(cudensitymatElementaryOperator_t elemOperator) except* nogil:
     return _cudensitymat._cudensitymatDestroyElementaryOperator(elemOperator)
+
+
+cdef cudensitymatStatus_t cudensitymatCreateMatrixOperatorDenseLocal(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudaDataType_t dataType, void* matrixData, cudensitymatWrappedTensorCallback_t matrixCallback, cudensitymatMatrixOperator_t* matrixOperator) except* nogil:
+    return _cudensitymat._cudensitymatCreateMatrixOperatorDenseLocal(handle, numSpaceModes, spaceModeExtents, dataType, matrixData, matrixCallback, matrixOperator)
+
+
+cdef cudensitymatStatus_t cudensitymatCreateMatrixOperatorDenseLocalBatch(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], int64_t batchSize, cudaDataType_t dataType, void* matrixData, cudensitymatWrappedTensorCallback_t matrixCallback, cudensitymatMatrixOperator_t* matrixOperator) except* nogil:
+    return _cudensitymat._cudensitymatCreateMatrixOperatorDenseLocalBatch(handle, numSpaceModes, spaceModeExtents, batchSize, dataType, matrixData, matrixCallback, matrixOperator)
+
+
+cdef cudensitymatStatus_t cudensitymatDestroyMatrixOperator(cudensitymatMatrixOperator_t matrixOperator) except* nogil:
+    return _cudensitymat._cudensitymatDestroyMatrixOperator(matrixOperator)
 
 
 cdef cudensitymatStatus_t cudensitymatCreateOperatorTerm(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatOperatorTerm_t* operatorTerm) except* nogil:
@@ -105,8 +127,20 @@ cdef cudensitymatStatus_t cudensitymatOperatorTermAppendElementaryProduct(const 
     return _cudensitymat._cudensitymatOperatorTermAppendElementaryProduct(handle, operatorTerm, numElemOperators, elemOperators, stateModesActedOn, modeActionDuality, coefficient, coefficientCallback)
 
 
+cdef cudensitymatStatus_t cudensitymatOperatorTermAppendElementaryProductBatch(const cudensitymatHandle_t handle, cudensitymatOperatorTerm_t operatorTerm, int32_t numElemOperators, const cudensitymatElementaryOperator_t elemOperators[], const int32_t stateModesActedOn[], const int32_t modeActionDuality[], int64_t batchSize, const cuDoubleComplex staticCoefficients[], cuDoubleComplex totalCoefficients[], cudensitymatWrappedScalarCallback_t coefficientCallback) except* nogil:
+    return _cudensitymat._cudensitymatOperatorTermAppendElementaryProductBatch(handle, operatorTerm, numElemOperators, elemOperators, stateModesActedOn, modeActionDuality, batchSize, staticCoefficients, totalCoefficients, coefficientCallback)
+
+
 cdef cudensitymatStatus_t cudensitymatOperatorTermAppendGeneralProduct(const cudensitymatHandle_t handle, cudensitymatOperatorTerm_t operatorTerm, int32_t numElemOperators, const int32_t numOperatorModes[], const int64_t* operatorModeExtents[], const int64_t* operatorModeStrides[], const int32_t stateModesActedOn[], const int32_t modeActionDuality[], cudaDataType_t dataType, void* tensorData[], cudensitymatWrappedTensorCallback_t tensorCallbacks[], cuDoubleComplex coefficient, cudensitymatWrappedScalarCallback_t coefficientCallback) except* nogil:
     return _cudensitymat._cudensitymatOperatorTermAppendGeneralProduct(handle, operatorTerm, numElemOperators, numOperatorModes, operatorModeExtents, operatorModeStrides, stateModesActedOn, modeActionDuality, dataType, tensorData, tensorCallbacks, coefficient, coefficientCallback)
+
+
+cdef cudensitymatStatus_t cudensitymatOperatorTermAppendMatrixProduct(const cudensitymatHandle_t handle, cudensitymatOperatorTerm_t operatorTerm, int32_t numMatrixOperators, const cudensitymatMatrixOperator_t matrixOperators[], const int32_t matrixConjugation[], const int32_t actionDuality[], cuDoubleComplex coefficient, cudensitymatWrappedScalarCallback_t coefficientCallback) except* nogil:
+    return _cudensitymat._cudensitymatOperatorTermAppendMatrixProduct(handle, operatorTerm, numMatrixOperators, matrixOperators, matrixConjugation, actionDuality, coefficient, coefficientCallback)
+
+
+cdef cudensitymatStatus_t cudensitymatOperatorTermAppendMatrixProductBatch(const cudensitymatHandle_t handle, cudensitymatOperatorTerm_t operatorTerm, int32_t numMatrixOperators, const cudensitymatMatrixOperator_t matrixOperators[], const int32_t matrixConjugation[], const int32_t actionDuality[], int64_t batchSize, const cuDoubleComplex staticCoefficients[], cuDoubleComplex totalCoefficients[], cudensitymatWrappedScalarCallback_t coefficientCallback) except* nogil:
+    return _cudensitymat._cudensitymatOperatorTermAppendMatrixProductBatch(handle, operatorTerm, numMatrixOperators, matrixOperators, matrixConjugation, actionDuality, batchSize, staticCoefficients, totalCoefficients, coefficientCallback)
 
 
 cdef cudensitymatStatus_t cudensitymatCreateOperator(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatOperator_t* superoperator) except* nogil:
@@ -121,12 +155,16 @@ cdef cudensitymatStatus_t cudensitymatOperatorAppendTerm(const cudensitymatHandl
     return _cudensitymat._cudensitymatOperatorAppendTerm(handle, superoperator, operatorTerm, duality, coefficient, coefficientCallback)
 
 
+cdef cudensitymatStatus_t cudensitymatOperatorAppendTermBatch(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, cudensitymatOperatorTerm_t operatorTerm, int32_t duality, int64_t batchSize, const cuDoubleComplex staticCoefficients[], cuDoubleComplex totalCoefficients[], cudensitymatWrappedScalarCallback_t coefficientCallback) except* nogil:
+    return _cudensitymat._cudensitymatOperatorAppendTermBatch(handle, superoperator, operatorTerm, duality, batchSize, staticCoefficients, totalCoefficients, coefficientCallback)
+
+
 cdef cudensitymatStatus_t cudensitymatOperatorPrepareAction(const cudensitymatHandle_t handle, const cudensitymatOperator_t superoperator, const cudensitymatState_t stateIn, const cudensitymatState_t stateOut, cudensitymatComputeType_t computeType, size_t workspaceSizeLimit, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except* nogil:
     return _cudensitymat._cudensitymatOperatorPrepareAction(handle, superoperator, stateIn, stateOut, computeType, workspaceSizeLimit, workspace, stream)
 
 
-cdef cudensitymatStatus_t cudensitymatOperatorComputeAction(const cudensitymatHandle_t handle, const cudensitymatOperator_t superoperator, double time, int32_t numParams, const double params[], const cudensitymatState_t stateIn, cudensitymatState_t stateOut, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except* nogil:
-    return _cudensitymat._cudensitymatOperatorComputeAction(handle, superoperator, time, numParams, params, stateIn, stateOut, workspace, stream)
+cdef cudensitymatStatus_t cudensitymatOperatorComputeAction(const cudensitymatHandle_t handle, const cudensitymatOperator_t superoperator, double time, int64_t batchSize, int32_t numParams, const double* params, const cudensitymatState_t stateIn, cudensitymatState_t stateOut, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except* nogil:
+    return _cudensitymat._cudensitymatOperatorComputeAction(handle, superoperator, time, batchSize, numParams, params, stateIn, stateOut, workspace, stream)
 
 
 cdef cudensitymatStatus_t cudensitymatCreateOperatorAction(const cudensitymatHandle_t handle, int32_t numOperators, cudensitymatOperator_t operators[], cudensitymatOperatorAction_t* operatorAction) except* nogil:
@@ -141,8 +179,8 @@ cdef cudensitymatStatus_t cudensitymatOperatorActionPrepare(const cudensitymatHa
     return _cudensitymat._cudensitymatOperatorActionPrepare(handle, operatorAction, stateIn, stateOut, computeType, workspaceSizeLimit, workspace, stream)
 
 
-cdef cudensitymatStatus_t cudensitymatOperatorActionCompute(const cudensitymatHandle_t handle, cudensitymatOperatorAction_t operatorAction, double time, int32_t numParams, const double params[], const cudensitymatState_t stateIn[], cudensitymatState_t stateOut, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except* nogil:
-    return _cudensitymat._cudensitymatOperatorActionCompute(handle, operatorAction, time, numParams, params, stateIn, stateOut, workspace, stream)
+cdef cudensitymatStatus_t cudensitymatOperatorActionCompute(const cudensitymatHandle_t handle, cudensitymatOperatorAction_t operatorAction, double time, int64_t batchSize, int32_t numParams, const double* params, const cudensitymatState_t stateIn[], cudensitymatState_t stateOut, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except* nogil:
+    return _cudensitymat._cudensitymatOperatorActionCompute(handle, operatorAction, time, batchSize, numParams, params, stateIn, stateOut, workspace, stream)
 
 
 cdef cudensitymatStatus_t cudensitymatCreateExpectation(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, cudensitymatExpectation_t* expectation) except* nogil:
@@ -157,8 +195,8 @@ cdef cudensitymatStatus_t cudensitymatExpectationPrepare(const cudensitymatHandl
     return _cudensitymat._cudensitymatExpectationPrepare(handle, expectation, state, computeType, workspaceSizeLimit, workspace, stream)
 
 
-cdef cudensitymatStatus_t cudensitymatExpectationCompute(const cudensitymatHandle_t handle, cudensitymatExpectation_t expectation, double time, int32_t numParams, const double params[], const cudensitymatState_t state, void* expectationValue, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except* nogil:
-    return _cudensitymat._cudensitymatExpectationCompute(handle, expectation, time, numParams, params, state, expectationValue, workspace, stream)
+cdef cudensitymatStatus_t cudensitymatExpectationCompute(const cudensitymatHandle_t handle, cudensitymatExpectation_t expectation, double time, int64_t batchSize, int32_t numParams, const double* params, const cudensitymatState_t state, void* expectationValue, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except* nogil:
+    return _cudensitymat._cudensitymatExpectationCompute(handle, expectation, time, batchSize, numParams, params, state, expectationValue, workspace, stream)
 
 
 cdef cudensitymatStatus_t cudensitymatCreateWorkspace(const cudensitymatHandle_t handle, cudensitymatWorkspaceDescriptor_t* workspaceDescr) except* nogil:

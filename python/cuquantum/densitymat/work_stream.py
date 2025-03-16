@@ -1,4 +1,4 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -11,10 +11,10 @@ import weakref
 import collections
 
 import cupy as cp
-import cuquantum.cutensornet as cutn
-from cuquantum.cutensornet.memory import BaseCUDAMemoryManager
-from cuquantum.cutensornet._internal import utils as cutn_utils
-from cuquantum.cutensornet._internal.mem_limit import check_memory_str
+from cuquantum.tensornet import memory
+from cuquantum.tensornet.memory import BaseCUDAMemoryManager
+from cuquantum._internal import utils as cutn_utils
+from cuquantum._internal.mem_limit import check_memory_str
 
 from cuquantum.bindings import cudensitymat as cudm
 from ._internal.library_handle import LibraryHandle
@@ -52,16 +52,18 @@ class WorkStream:
 
     Methods:
 
-        set_communicator(comm, provider="None") -> None
+        set_communicator(comm: "mpi4py.MPI.Comm" | Tuple[int,int], provider="None") -> None
             Register a communicator with the library.
-            Currently only ``mpi4py.Comm`` objects are supported and the only supported provider is ``"MPI"``.
-        
+            The communicator can be passed either as a a ``mpi4py.MPI.Comm`` object or
+            as a Tuple of two integers, the pointer to the communicater and the size (in bytes) of the communicator.
+            Currently the only supported provider is ``"MPI"``.
+
         get_proc_rank() -> int
             Return the process rank if a communicator was set previously via :meth:`WorkStream.set_communicator`.
-        
+
         get_num_ranks() -> int
             Return the number of processes in the communicator that was set previously via :meth:`WorkStream.set_communicator`.
-        
+
         get_communicator()
             Return the communicator object if set previously via :meth:`WorkStream.set_communicator`.
 
@@ -69,7 +71,7 @@ class WorkStream:
             Release the workspace.
 
     .. note::
-        - Releasing the workspace releases both its workspace buffer and resets the maximum required size among the objects that uses this ``WorkStream`` instance. 
+        - Releasing the workspace releases both its workspace buffer and resets the maximum required size among the objects that uses this ``WorkStream`` instance.
         - Objects which have previously been exposed to this ``WorkStream`` instance do not require explicit calls to their ``prepare`` methods after the workspace has been released.
         - Releasing the workspace buffer may be useful when intermediate computations do not involve the cuDensityMat API, or when the following computations require less workspace than the preceding ones.
         - Objects can only interact with each other if they use the same ``WorkStream`` and cannot change the ``WorkStream`` they use.
@@ -78,7 +80,7 @@ class WorkStream:
 
     .. attention::
         The ``compute_type`` argument is currently not used and will default to the data type.
-    
+
     Examples:
 
         >>> import cupy as cp
@@ -92,7 +94,7 @@ class WorkStream:
     device_id: Optional[int] = None
     stream: Optional[cp.cuda.Stream] = None
     memory_limit: Optional[Union[int, str]] = r"80%"
-    allocator: Optional[BaseCUDAMemoryManager] = cutn.memory._MEMORY_MANAGER["cupy"]
+    allocator: Optional[BaseCUDAMemoryManager] = memory._MEMORY_MANAGER["cupy"]
     compute_type: Optional[str] = None
     logger: Optional[Logger] = None
 
@@ -180,7 +182,9 @@ class WorkStream:
         """
         return self._size_scratch, self._required_size_upper_bound
 
-    def set_communicator(self, comm, provider: str = "None") -> None:
+    def set_communicator(
+        self, comm: "mpi4py.MPI.Comm" | Tuple[int, int], provider: str = "None"
+    ) -> None:
         """
         Register a communicator with the library.
         Currently only ``mpi4py.Comm`` objects are supported and the only supported provider is "MPI".
@@ -280,7 +284,7 @@ class WorkStream:
     def _update_required_size_upper_bound(self, memspace="DEVICE", kind="SCRATCH") -> tuple[int]:
         """
         Updates the upper bound to workspace sizes required among all previous prepare calls.
-        
+
         Returns:
             int:
                 Workspace size required by most recent prepare call.

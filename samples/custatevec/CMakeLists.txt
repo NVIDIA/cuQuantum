@@ -1,8 +1,16 @@
-# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 cmake_minimum_required(VERSION 3.13.0 FATAL_ERROR)
+
+# Guard against automatically setting CMAKE_CUDA_ARCHITECTURES by CMP0104
+if(DEFINED CMAKE_CUDA_ARCHITECTURES AND CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES_DEFINED TRUE)
+else()
+  set(CMAKE_CUDA_ARCHITECTURES_DEFINED FALSE)
+endif()
+
 project(custatevec_example LANGUAGES C CXX CUDA)
 
 include(GNUInstallDirs)
@@ -66,12 +74,18 @@ set(CMAKE_CUDA_STANDARD 11)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 
-set(CMAKE_CUDA_FLAGS_ARCH_SM70 "-gencode arch=compute_70,code=sm_70")
-set(CMAKE_CUDA_FLAGS_ARCH_SM75 "-gencode arch=compute_75,code=sm_75")
-set(CMAKE_CUDA_FLAGS_ARCH_SM80 "-gencode arch=compute_80,code=sm_80 -gencode arch=compute_80,code=compute_80")
-set(CMAKE_CUDA_FLAGS_ARCH_SM90 "-gencode arch=compute_90,code=sm_90 -gencode arch=compute_90,code=compute_90")
-set(CMAKE_CUDA_FLAGS_ARCH "${CMAKE_CUDA_FLAGS_ARCH_SM70} ${CMAKE_CUDA_FLAGS_ARCH_SM75} ${CMAKE_CUDA_FLAGS_ARCH_SM80} ${CMAKE_CUDA_FLAGS_ARCH_SM90}")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_ARCH}")
+find_package(CUDAToolkit REQUIRED)
+if(NOT CMAKE_CUDA_ARCHITECTURES_DEFINED)
+  if(
+    (${CUDAToolkit_VERSION_MAJOR} LESS 12) OR
+    (${CUDAToolkit_VERSION_MAJOR} EQUAL 12 AND ${CUDAToolkit_VERSION_MINOR} LESS 8)
+  )
+    set(CMAKE_CUDA_ARCHITECTURES 70-real;80-real;90)
+  else()
+    set(CMAKE_CUDA_ARCHITECTURES 70-real;80-real;90-real;100-real;120-real;100-virtual)
+  endif()
+endif()
+message(STATUS "Target CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 
 # ##########################################
 # custatevec_example utility function
@@ -83,7 +97,8 @@ function(add_custatevec_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
   add_executable(${EXAMPLE_TARGET} ${EXAMPLE_SOURCES})
   target_include_directories(
     ${EXAMPLE_TARGET}
-      PUBLIC
+    PUBLIC
+        ${CMAKE_CURRENT_BINARY_DIR}/../include
         ${CUDA_INCLUDE_DIRS}
         ${CUSTATEVEC_ROOT}/include
   )
@@ -100,12 +115,6 @@ function(add_custatevec_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
         cudart
         cublas
         cublasLt
-  )
-  set_target_properties(
-    ${EXAMPLE_TARGET}
-    PROPERTIES
-      CUDA_ARCHITECTURES
-        "70;75;80;90"
   )
   # Install example
   install(

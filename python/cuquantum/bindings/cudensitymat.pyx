@@ -1,11 +1,14 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
+#
+# This code was automatically generated with version 25.03.0. Do not modify it directly.
 
 cimport cython
 from cpython.memoryview cimport PyMemoryView_FromMemory
-from cpython.buffer cimport PyBUF_WRITE
+from cpython.buffer cimport PyBUF_READ, PyBUF_WRITE
 
+from libc.stdlib cimport malloc, free
 from libcpp.vector cimport vector
 
 from ._utils cimport (get_resource_ptr, get_nested_resource_ptr, nested_resource, nullable_unique_ptr,
@@ -13,77 +16,246 @@ from ._utils cimport (get_resource_ptr, get_nested_resource_ptr, nested_resource
                       cuqnt_alloc_wrapper, cuqnt_free_wrapper, logger_callback_with_data)
 
 from enum import IntEnum as _IntEnum
+from collections import defaultdict
+from typing import Callable
+import traceback
 import warnings as _warnings
 
-import numpy as _numpy
+import numpy as np
+import cupy as cp
 
 
 ###############################################################################
 # Callback wrappers
 ###############################################################################
 
+_callback_holders = defaultdict(lambda: set())
+
+
 cdef cuda_to_numpy_data_type(cudaDataType_t data_type):
     """Convert cudaDataType_t to NumPy data type."""
     if data_type == CUDA_R_32F:
-        return _numpy.dtype("float32")
+        return np.dtype("float32")
     elif data_type == CUDA_R_64F:
-        return _numpy.dtype("float64")
+        return np.dtype("float64")
     elif data_type == CUDA_C_32F:
-        return _numpy.dtype("complex64")
+        return np.dtype("complex64")
     elif data_type == CUDA_C_64F:
-        return _numpy.dtype("complex128")
+        return np.dtype("complex128")
+    else:
+        raise ValueError(
+            "Data types other than single/double-precision real or single/double-precision " 
+            "complex are not supported."
+        )
 
 
-cdef int32_t scalar_callback_wrapper(cudensitymatScalarCallback_t _callback_,
-                                     double time, int32_t num_params, const double * _params_,
-                                     cudaDataType_t _data_type_, void * _storage_) with gil:
-    """Scalar callback wrapper."""
-    callback = <object>(<void *>_callback_)
-    
-    # Reconstruct tuple from pointer
-    cdef tuple params = tuple(_params_[i] for i in range(num_params))
+cdef class WrappedScalarCallback:
 
-    # Construct NumPy array for data storage
-    data_type = cuda_to_numpy_data_type(_data_type_)
-    memory_view = PyMemoryView_FromMemory(<char *>_storage_, data_type.itemsize, PyBUF_WRITE)
-    storage = _numpy.ndarray((1,), dtype=data_type, buffer=memory_view)
+    def __cinit__(self, callback: Callable, device: CallbackDevice):
+        self.callback = callback
+        self.device = device
 
-    # Python function call
+        self.c_struct = <cudensitymatWrappedScalarCallback_t*>malloc(sizeof(cudensitymatWrappedScalarCallback_t))
+        if self.c_struct == NULL:
+            raise MemoryError("Failed to allocate memory for WrappedScalarCallback.")
+
+        self.c_struct.callback = <cudensitymatScalarCallback_t>(<void*>callback)
+        self.c_struct.device = device
+        if device == CallbackDevice.CPU:
+            self.c_struct.wrapper = <void*>cpu_scalar_callback_wrapper
+        else:
+            self.c_struct.wrapper = <void*>gpu_scalar_callback_wrapper
+
+    def __dealloc__(self):
+        if self.c_struct != NULL:
+            free(self.c_struct)
+
+
+cdef class WrappedTensorCallback:
+
+    def __cinit__(self, callback: Callable, device: CallbackDevice):
+        self.callback = callback
+        self.device = device
+
+        self.c_struct = <cudensitymatWrappedTensorCallback_t*>malloc(sizeof(cudensitymatWrappedTensorCallback_t))
+        if self.c_struct == NULL:
+            raise MemoryError("Failed to allocate memory for WrappedTensorCallback.")
+
+        self.c_struct.callback = <cudensitymatTensorCallback_t>(<void*>callback)
+        self.c_struct.device = device
+        if device == CallbackDevice.CPU:
+            self.c_struct.wrapper = <void*>cpu_tensor_callback_wrapper
+        else:
+            self.c_struct.wrapper = <void*>gpu_tensor_callback_wrapper
+
+    def __dealloc__(self):
+        if self.c_struct != NULL:
+            free(self.c_struct)
+
+
+cdef int32_t cpu_scalar_callback_wrapper(cudensitymatScalarCallback_t _callback_,
+                                         double time,
+                                         int64_t batch_size,
+                                         int32_t num_params,
+                                         const double * _params_,
+                                         cudaDataType_t _data_type_,
+                                         void * _storage_,
+                                         cudaStream_t _stream_) with gil:
+    """CPU scalar callback wrapper."""
     try:
-        callback(time, params, storage)
-    except:
+        # Reconstruct CUDA stream from stream pointer
+        stream = cp.cuda.ExternalStream(<intptr_t>_stream_)
+
+        with stream:
+            # Reconstruct callback from pointer
+            callback = <object>(<void *>_callback_)
+
+            # Reconstruct params NumPy array from pointer and size
+            params_size = sizeof(double) * num_params * batch_size
+            params_buffer = PyMemoryView_FromMemory(<char *>_params_, params_size, PyBUF_READ)
+            params = np.ndarray((num_params, batch_size), dtype=np.float64, buffer=params_buffer, order='F')
+            
+            # Reconstruct storage NumPy array from pointer and size
+            data_type = cuda_to_numpy_data_type(_data_type_)
+            storage_size = data_type.itemsize * batch_size
+            storage_buffer = PyMemoryView_FromMemory(<char *>_storage_, storage_size, PyBUF_WRITE)
+            storage = np.ndarray((batch_size,), dtype=data_type, buffer=storage_buffer)
+
+            # Python function call
+            callback(time, params, storage)
+
+    except Exception:
+        traceback.print_exc()
         return -1
 
     return 0
 
 
-cdef int32_t tensor_callback_wrapper(cudensitymatTensorCallback_t _callback_,
-                                     cudensitymatElementaryOperatorSparsity_t sparsity,
-                                     int32_t num_modes, const int64_t * _mode_extents_,
-                                     const int32_t * _diagonal_offsets_,
-                                     double time, int32_t num_params, const double * _params_,
-                                     cudaDataType_t _data_type_, void * _storage_) with gil:
-    """Tensor callback wrapper."""
-    callback = <object>(<void *>_callback_)
-
-    # Reconstruct tuples from pointers
-    mode_extents = tuple(_mode_extents_[i] for i in range(num_modes))
-    params = tuple(_params_[i] for i in range(num_params))
-
-    # Construct NumPy array for data storage
-    data_type = cuda_to_numpy_data_type(_data_type_)
-    _size = _numpy.prod(mode_extents)
-    cdef size_t size = data_type.itemsize * _size
-    memory_view = PyMemoryView_FromMemory(<char *>_storage_, size, PyBUF_WRITE)
-    storage = _numpy.ndarray(mode_extents, dtype=data_type, buffer=memory_view, order='F')
-    
-    # Python function call
+cdef int32_t gpu_scalar_callback_wrapper(cudensitymatScalarCallback_t _callback_,
+                                         double time,
+                                         int64_t batch_size,
+                                         int32_t num_params,
+                                         const double * _params_,
+                                         cudaDataType_t _data_type_,
+                                         void * _storage_,
+                                         cudaStream_t _stream_) with gil:
+    """GPU scalar callback wrapper."""
     try:
-        callback(time, params, storage)
-    except Exception as e:
-        print("Caught exception in python callback:")
-        print(e)
+        # Reconstruct CUDA stream from stream pointer
+        stream = cp.cuda.ExternalStream(<intptr_t>_stream_)
+
+        with stream:
+            # Reconstruct callback from pointer
+            callback = <object>(<void *>_callback_)
+
+            # Reconstruct params CuPy array from pointer and size
+            params_size = sizeof(double) * num_params * batch_size        
+            params_memory = cp.cuda.UnownedMemory(<intptr_t>_params_, params_size, None)
+            params_memory_ptr = cp.cuda.MemoryPointer(params_memory, 0)
+            params = cp.ndarray((num_params, batch_size), dtype=cp.float64, memptr=params_memory_ptr, order='F')
+
+            # Reconstruct CuPy array from data storage
+            data_type = cuda_to_numpy_data_type(_data_type_)
+            storage_size = data_type.itemsize * batch_size
+            storage_memory = cp.cuda.UnownedMemory(<intptr_t>_storage_, storage_size, None)
+            storage_memory_ptr = cp.cuda.MemoryPointer(storage_memory, 0)
+            storage = cp.ndarray((batch_size,), dtype=data_type, memptr=storage_memory_ptr)
+            
+            # Python function call
+            callback(time, params, storage)
+
+    except Exception:
+        traceback.print_exc()
         return -1
+
+    return 0
+
+
+cdef int32_t cpu_tensor_callback_wrapper(cudensitymatTensorCallback_t _callback_,
+                                         cudensitymatElementaryOperatorSparsity_t sparsity,
+                                         int32_t num_modes,
+                                         const int64_t * _mode_extents_,
+                                         const int32_t * _diagonal_offsets_,
+                                         double time,
+                                         int64_t batch_size,
+                                         int32_t num_params,
+                                         const double * _params_,
+                                         cudaDataType_t _data_type_,
+                                         void * _storage_,
+                                         cudaStream_t _stream_) with gil:
+    """CPU tensor callback wrapper."""
+    try:
+        # Reconstruct CUDA stream from stream pointer
+        stream = cp.cuda.ExternalStream(<intptr_t>_stream_)
+        
+        with stream:
+            # Reconstruct callback and mode extents from pointers
+            callback = <object>(<void *>_callback_)
+            mode_extents = tuple(_mode_extents_[i] for i in range(num_modes))
+
+            # Reconstruct params NumPy array from pointer and size
+            params_size = sizeof(double) * num_params * batch_size
+            params_buffer = PyMemoryView_FromMemory(<char *>_params_, params_size, PyBUF_READ)
+            params = np.ndarray((num_params, batch_size), dtype=np.float64, buffer=params_buffer, order='F')
+
+            # Reconstruct NumPy array from data storage
+            data_type = cuda_to_numpy_data_type(_data_type_)
+            storage_size = data_type.itemsize * np.prod(mode_extents) * batch_size
+            storage_buffer = PyMemoryView_FromMemory(<char *>_storage_, storage_size, PyBUF_WRITE)
+            storage = np.ndarray((*mode_extents, batch_size), dtype=data_type, buffer=storage_buffer, order='F')
+
+            # Python function call
+            callback(time, params, storage)
+
+    except Exception:
+        traceback.print_exc()
+        return -1
+
+    return 0
+
+
+cdef int32_t gpu_tensor_callback_wrapper(cudensitymatTensorCallback_t _callback_,
+                                         cudensitymatElementaryOperatorSparsity_t sparsity,
+                                         int32_t num_modes,
+                                         const int64_t * _mode_extents_,
+                                         const int32_t * _diagonal_offsets_,
+                                         double time,
+                                         int64_t batch_size,
+                                         int32_t num_params,
+                                         const double * _params_,
+                                         cudaDataType_t _data_type_,
+                                         void * _storage_,
+                                         cudaStream_t _stream_) with gil:
+    """GPU tensor callback wrapper."""
+    try:
+        # Reconstruct CUDA stream from stream pointer
+        stream = cp.cuda.ExternalStream(<intptr_t>_stream_)
+
+        with stream:
+            # Reconstruct callback and mode extents from pointers
+            callback = <object>(<void *>_callback_)
+            mode_extents = tuple(_mode_extents_[i] for i in range(num_modes))
+
+            # Reconstruct params CuPy array from pointer and size
+            params_size = sizeof(double) * num_params * batch_size        
+            params_memory = cp.cuda.UnownedMemory(<intptr_t>_params_, params_size, None)
+            params_memory_ptr = cp.cuda.MemoryPointer(params_memory, 0)
+            params = cp.ndarray((num_params, batch_size), dtype=cp.float64, memptr=params_memory_ptr, order='F')
+
+            # Construct CuPy array from data storage
+            data_type = cuda_to_numpy_data_type(_data_type_)
+            storage_size = data_type.itemsize * np.prod(mode_extents) * batch_size
+            storage_memory = cp.cuda.UnownedMemory(<intptr_t>_storage_, storage_size, None)
+            storage_memory_ptr = cp.cuda.MemoryPointer(storage_memory, 0)
+            storage = cp.ndarray((*mode_extents, batch_size), dtype=data_type, memptr=storage_memory_ptr, order='F')
+
+            # Python function call
+            callback(time, params, storage)
+
+    except Exception:
+        traceback.print_exc()
+        return -1
+
     return 0
 
 
@@ -110,7 +282,7 @@ class Status(_IntEnum):
     CUTENSOR_VERSION_MISMATCH = CUDENSITYMAT_STATUS_CUTENSOR_VERSION_MISMATCH
     NO_DEVICE_ALLOCATOR = CUDENSITYMAT_STATUS_NO_DEVICE_ALLOCATOR
     CUTENSOR_ERROR = CUDENSITYMAT_STATUS_CUTENSOR_ERROR
-    CUDMLVER_ERROR = CUDENSITYMAT_STATUS_CUDMLVER_ERROR
+    CUSOLVER_ERROR = CUDENSITYMAT_STATUS_CUSOLVER_ERROR
     DEVICE_ALLOCATOR_ERROR = CUDENSITYMAT_STATUS_DEVICE_ALLOCATOR_ERROR
     DISTRIBUTED_FAILURE = CUDENSITYMAT_STATUS_DISTRIBUTED_FAILURE
     INTERRUPTED = CUDENSITYMAT_STATUS_INTERRUPTED
@@ -118,15 +290,18 @@ class Status(_IntEnum):
 
 class ComputeType(_IntEnum):
     """See `cudensitymatComputeType_t`."""
-    COMPUTE_64F = CUDENSITYMAT_COMPUTE_64F
     COMPUTE_32F = CUDENSITYMAT_COMPUTE_32F
+    COMPUTE_64F = CUDENSITYMAT_COMPUTE_64F
 
 class DistributedProvider(_IntEnum):
     """See `cudensitymatDistributedProvider_t`."""
     NONE = CUDENSITYMAT_DISTRIBUTED_PROVIDER_NONE
     MPI = CUDENSITYMAT_DISTRIBUTED_PROVIDER_MPI
-    NCCL = CUDENSITYMAT_DISTRIBUTED_PROVIDER_NCCL
-    NVSHMEM = CUDENSITYMAT_DISTRIBUTED_PROVIDER_NVSHMEM
+
+class CallbackDevice(_IntEnum):
+    """See `cudensitymatCallbackDevice_t`."""
+    CPU = CUDENSITYMAT_CALLBACK_DEVICE_CPU
+    GPU = CUDENSITYMAT_CALLBACK_DEVICE_GPU
 
 class StatePurity(_IntEnum):
     """See `cudensitymatStatePurity_t`."""
@@ -185,6 +360,16 @@ cpdef inline check_status(int status):
 # Wrapper functions
 ###############################################################################
 
+cpdef get_version():
+    """Returns the semantic version number of the cuDensityMat library.
+
+    .. seealso:: `cudensitymatGetVersion`
+    """
+    with nogil:
+        status = cudensitymatGetVersion()
+    check_status(status)
+
+
 cpdef intptr_t create() except? 0:
     """Creates and initializes the library context.
 
@@ -214,7 +399,7 @@ cpdef destroy(intptr_t handle):
 
 
 cpdef reset_distributed_configuration(intptr_t handle, int provider, intptr_t comm_ptr, size_t comm_size):
-    """Resets the current distributed execution configuration associated with the given library context.
+    """Resets the current distributed execution configuration associated with the given library context by importing a user-provided inter-process communicator (e.g., MPI_Comm).
 
     Args:
         handle (intptr_t): Library handle.
@@ -230,7 +415,7 @@ cpdef reset_distributed_configuration(intptr_t handle, int provider, intptr_t co
 
 
 cpdef int32_t get_num_ranks(intptr_t handle) except? -1:
-    """Returns the total number of distributed processes associated with the given library context.
+    """Returns the total number of distributed processes associated with the given library context in its current distributed execution configuration.
 
     Args:
         handle (intptr_t): Library handle.
@@ -248,7 +433,7 @@ cpdef int32_t get_num_ranks(intptr_t handle) except? -1:
 
 
 cpdef int32_t get_proc_rank(intptr_t handle) except? -1:
-    """Returns the rank of the current process in the distributed configuration associated with the given library context.
+    """Returns the rank of the current process in the distributed execution configuration associated with the given library context.
 
     Args:
         handle (intptr_t): Library handle.
@@ -266,7 +451,7 @@ cpdef int32_t get_proc_rank(intptr_t handle) except? -1:
 
 
 cpdef reset_random_seed(intptr_t handle, int32_t random_seed):
-    """Resets the random seed used by the random number generator inside the library context.
+    """Resets the context-level random seed used by the random number generator inside the library context.
 
     Args:
         handle (intptr_t): Library handle.
@@ -285,14 +470,14 @@ cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_space_modes
     Args:
         handle (intptr_t): Library handle.
         purity (StatePurity): Desired quantum state purity.
-        num_space_modes (int32_t): Number of space modes (number of degrees of freedom).
-        space_mode_extents (object): Extents of the space modes (dimensions of the degrees of freedom). It can be:
+        num_space_modes (int32_t): Number of space modes (number of quantum degrees of freedom).
+        space_mode_extents (object): Extents of the space modes (dimensions of the quantum degrees of freedom). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
 
-        batch_size (int64_t): Batch size (number of equally-shaped quantum states). Setting the batch size to zero is the same as setting it to 1.
-        data_type (int): Representation data type (type of tensor elements).
+        batch_size (int64_t): Batch size (number of equally-shaped quantum states in the batch). Note that setting the batch size to zero is the same as setting it to 1 (no batching).
+        data_type (int): Numerical representation data type (type of tensor elements).
 
     Returns:
         intptr_t: Empty quantum state (or a batch of quantum states).
@@ -346,11 +531,11 @@ cpdef state_attach_component_storage(intptr_t handle, intptr_t state, int32_t nu
     Args:
         handle (intptr_t): Library handle.
         state (intptr_t): Quantum state (or a batch of quantum states).
-        num_state_components (int32_t): Number of components (tensors) in the quantum state representation (on the current process).
+        num_state_components (int32_t): Number of components (tensors) in the quantum state representation (on the current process). The number of components can be retrived by calling the API function ``cudensitymatStateGetNumComponents``.
         component_buffer (object): Pointers to user-owned GPU-accessible storage buffers for all components (tensors) constituting the quantum state representation (on the current process). It can be:
 
             - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``intptr_t``.
+            - a Python sequence of :class:`int`\s (as pointer addresses).
 
         component_buffer_size (object): Sizes of the provded storage buffers for all components (tensors) constituting the quantum state representation (on the current process). It can be:
 
@@ -360,8 +545,8 @@ cpdef state_attach_component_storage(intptr_t handle, intptr_t state, int32_t nu
 
     .. seealso:: `cudensitymatStateAttachComponentStorage`
     """
-    cdef nullable_unique_ptr[ vector[intptr_t] ] _component_buffer_
-    get_resource_ptr[intptr_t](_component_buffer_, component_buffer, <intptr_t*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _component_buffer_
+    get_resource_ptrs[void](_component_buffer_, component_buffer, <void*>NULL)
     cdef nullable_unique_ptr[ vector[size_t] ] _component_buffer_size_
     get_resource_ptr[size_t](_component_buffer_size_, component_buffer_size, <size_t*>NULL)
     with nogil:
@@ -377,7 +562,7 @@ cpdef state_get_component_num_modes(intptr_t handle, intptr_t state, int32_t sta
         state (intptr_t): Quantum state (or a batch of quantum states).
         state_component_local_id (int32_t): Component local id (on the current parallel process).
         state_component_global_id (intptr_t): Component global id (across all parallel processes).
-        state_component_num_modes (intptr_t): Component tensor order (number of modes).
+        state_component_num_modes (intptr_t): Number of modes in the queried component tensor.
         batch_mode_location (intptr_t): Location of the batch mode (or -1 if the batch mode is absent).
 
     .. seealso:: `cudensitymatStateGetComponentNumModes`
@@ -395,9 +580,9 @@ cpdef state_get_component_info(intptr_t handle, intptr_t state, int32_t state_co
         state (intptr_t): Quantum state (or a batch of quantum states).
         state_component_local_id (int32_t): Component local id (on the current parallel process).
         state_component_global_id (intptr_t): Component global id (across all parallel processes).
-        state_component_num_modes (intptr_t): Component tensor order (number of modes).
+        state_component_num_modes (intptr_t): Number of modes in the queried component tensor.
         state_component_mode_extents (intptr_t): Component tensor mode extents (the size of the array must be sufficient, see ``cudensitymatStateGetComponentNumModes``).
-        state_component_mode_offsets (intptr_t): Component tensor mode offsets (the size of the array must be sufficient, see ``cudensitymatStateGetComponentNumModes``).
+        state_component_mode_offsets (intptr_t): Component tensor mode offsets defining the locally stored slice (the size of the array must be sufficient, see ``cudensitymatStateGetComponentNumModes``).
 
     .. seealso:: `cudensitymatStateGetComponentInfo`
     """
@@ -422,13 +607,13 @@ cpdef state_initialize_zero(intptr_t handle, intptr_t state, intptr_t stream):
 
 
 cpdef state_compute_scaling(intptr_t handle, intptr_t state, intptr_t scaling_factors, intptr_t stream):
-    """Initializes the quantum state to a random value.
+    """Multiplies the quantum state(s) by a scalar factor(s).
 
     Args:
         handle (intptr_t): Library handle.
         state (intptr_t): Quantum state (or a batch of quantum states).
-        scaling_factors (intptr_t): CUDA stream.
-        stream (intptr_t): Library handle.
+        scaling_factors (intptr_t): Array of scaling factor(s) of dimension equal to the batch size in the GPU-accessible RAM (same data type as used by the quantum state).
+        stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateComputeScaling`
     """
@@ -459,7 +644,7 @@ cpdef state_compute_trace(intptr_t handle, intptr_t state, intptr_t trace, intpt
     Args:
         handle (intptr_t): Library handle.
         state (intptr_t): Quantum state (or a batch of quantum states).
-        trace (intptr_t): Pointer to the trace(s) vector storage in the GPU-accessible RAM (same data type as used by the state).
+        trace (intptr_t): Pointer to the trace(s) vector storage in the GPU-accessible RAM (same data type as used by the quantum state).
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateComputeTrace`
@@ -476,7 +661,7 @@ cpdef state_compute_accumulation(intptr_t handle, intptr_t state_in, intptr_t st
         handle (intptr_t): Library handle.
         state_in (intptr_t): Accumulated quantum state (or a batch of quantum states).
         state_out (intptr_t): Accumulating quantum state (or a batch of quantum states).
-        scaling_factors (intptr_t): Array of scaling factor(s) of dimension equal to the batch size in the GPU-accessible RAM (same data type as used by the state).
+        scaling_factors (intptr_t): Array of scaling factor(s) of dimension equal to the batch size in the GPU-accessible RAM (same data type as used by the quantum state).
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateComputeAccumulation`
@@ -503,26 +688,13 @@ cpdef state_compute_inner_product(intptr_t handle, intptr_t state_left, intptr_t
     check_status(status)
 
 
-cpdef destroy_elementary_operator(intptr_t elem_operator):
-    """Destroys an elementary tensor operator.
-
-    Args:
-        elem_operator (intptr_t): Elementary tensor operator.
-
-    .. seealso:: `cudensitymatDestroyElementaryOperator`
-    """
-    with nogil:
-        status = cudensitymatDestroyElementaryOperator(<ElementaryOperator>elem_operator)
-    check_status(status)
-
-
 cpdef intptr_t create_operator_term(intptr_t handle, int32_t num_space_modes, space_mode_extents) except? 0:
-    """Creates an empty operator term which is going to be a sum of tensor products of individual tensor operators, where each individual tensor operator within a product acts on disjoint quantum state modes (quantum degrees of freedom).
+    """Creates an empty operator term which is going to be a sum of products of either elementary tensor operators or full matrix operators. Each individual elementary tensor operator within a product acts on a subset of space modes, either from the left or from the right (for each mode). Each full matrix operator within a product acts on all space modes, either from the left or from the right (for all modes).
 
     Args:
         handle (intptr_t): Library handle.
-        num_space_modes (int32_t): Number of modes (degrees of freedom) defining the primary/dual tensor product space in which the operator term will act.
-        space_mode_extents (object): Extents of the modes (degrees of freedom) defining the primary/dual tensor product space in which the operator term will act. It can be:
+        num_space_modes (int32_t): Number of modes (quantum degrees of freedom) defining the primary/dual tensor product space in which the operator term will act.
+        space_mode_extents (object): Extents of the modes (quantum degrees of freedom) defining the primary/dual tensor product space in which the operator term will act. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
@@ -542,21 +714,8 @@ cpdef intptr_t create_operator_term(intptr_t handle, int32_t num_space_modes, sp
     return <intptr_t>operator_term
 
 
-cpdef destroy_operator_term(intptr_t operator_term):
-    """Destroys an operator term.
-
-    Args:
-        operator_term (intptr_t): Operator term.
-
-    .. seealso:: `cudensitymatDestroyOperatorTerm`
-    """
-    with nogil:
-        status = cudensitymatDestroyOperatorTerm(<OperatorTerm>operator_term)
-    check_status(status)
-
-
 cpdef intptr_t create_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents) except? 0:
-    """Creates an empty operator which is going to be a collection of operator terms.
+    """Creates an empty operator which is going to be a collection of operator terms with some coefficients.
 
     Args:
         handle (intptr_t): Library handle.
@@ -581,19 +740,6 @@ cpdef intptr_t create_operator(intptr_t handle, int32_t num_space_modes, space_m
     return <intptr_t>superoperator
 
 
-cpdef destroy_operator(intptr_t superoperator):
-    """Destroys an operator.
-
-    Args:
-        superoperator (intptr_t): Operator.
-
-    .. seealso:: `cudensitymatDestroyOperator`
-    """
-    with nogil:
-        status = cudensitymatDestroyOperator(<Operator>superoperator)
-    check_status(status)
-
-
 cpdef operator_prepare_action(intptr_t handle, intptr_t superoperator, intptr_t state_in, intptr_t state_out, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream):
     """Prepares the operator for an action on a quantum state.
 
@@ -614,19 +760,16 @@ cpdef operator_prepare_action(intptr_t handle, intptr_t superoperator, intptr_t 
     check_status(status)
 
 
-cpdef operator_compute_action(intptr_t handle, intptr_t superoperator, double time, int32_t num_params, params, intptr_t state_in, intptr_t state_out, intptr_t workspace, intptr_t stream):
+cpdef operator_compute_action(intptr_t handle, intptr_t superoperator, double time, int64_t batch_size, int32_t num_params, intptr_t params, intptr_t state_in, intptr_t state_out, intptr_t workspace, intptr_t stream):
     """Computes the action of the operator on a given input quantum state, accumulating the result in the output quantum state (accumulative action).
 
     Args:
         handle (intptr_t): Library handle.
         superoperator (intptr_t): Operator.
         time (double): Time value.
+        batch_size (int64_t): Batch size (>=1).
         num_params (int32_t): Number of variable parameters defined by the user.
-        params (object): Variable parameters defined by the user. It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``float``.
-
+        params (intptr_t): F-order 2d-array of user-defined real parameter values: params[num_params, batch_size].
         state_in (intptr_t): Input quantum state (or a batch of input quantum states).
         state_out (intptr_t): Updated resulting quantum state which accumulates operator action on the input quantum state.
         workspace (intptr_t): Allocated workspace descriptor.
@@ -634,10 +777,8 @@ cpdef operator_compute_action(intptr_t handle, intptr_t superoperator, double ti
 
     .. seealso:: `cudensitymatOperatorComputeAction`
     """
-    cdef nullable_unique_ptr[ vector[double] ] _params_
-    get_resource_ptr[double](_params_, params, <double*>NULL)
     with nogil:
-        status = cudensitymatOperatorComputeAction(<const Handle>handle, <const Operator>superoperator, time, num_params, <const double*>(_params_.data()), <const State>state_in, <State>state_out, <WorkspaceDescriptor>workspace, <Stream>stream)
+        status = cudensitymatOperatorComputeAction(<const Handle>handle, <const Operator>superoperator, time, batch_size, num_params, <const double*>params, <const State>state_in, <State>state_out, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(status)
 
 
@@ -686,7 +827,7 @@ cpdef operator_action_prepare(intptr_t handle, intptr_t operator_action, state_i
     Args:
         handle (intptr_t): Library handle.
         operator_action (intptr_t): Operator(s) action specification.
-        state_in (object): Input quantum state(s) for all operator(s) defining the current Operator Action. Each input quantum state can be a batch of quantum states itself (with the same batch dimension). It can be:
+        state_in (object): Input quantum state(s) for all operator(s) defining the current Operator Action. Each input quantum state can be a batch of quantum states itself (with the same batch size). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
@@ -706,19 +847,16 @@ cpdef operator_action_prepare(intptr_t handle, intptr_t operator_action, state_i
     check_status(status)
 
 
-cpdef operator_action_compute(intptr_t handle, intptr_t operator_action, double time, int32_t num_params, params, state_in, intptr_t state_out, intptr_t workspace, intptr_t stream):
+cpdef operator_action_compute(intptr_t handle, intptr_t operator_action, double time, int64_t batch_size, int32_t num_params, intptr_t params, state_in, intptr_t state_out, intptr_t workspace, intptr_t stream):
     """Executes the action of one or more operators constituting the aggreggate operator(s) action on the same number of input quantum states, accumulating the results into a single output quantum state.
 
     Args:
         handle (intptr_t): Library handle.
         operator_action (intptr_t): Operator(s) action.
         time (double): Time value.
+        batch_size (int64_t): Batch size (>=1).
         num_params (int32_t): Number of variable parameters defined by the user.
-        params (object): Variable parameters defined by the user. It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``float``.
-
+        params (intptr_t): F-order 2d-array of user-defined real parameter values: params[num_params, batch_size].
         state_in (object): Input quantum state(s). Each input quantum state can be a batch of quantum states, in general. It can be:
 
             - an :class:`int` as the pointer address to the array, or
@@ -730,12 +868,10 @@ cpdef operator_action_compute(intptr_t handle, intptr_t operator_action, double 
 
     .. seealso:: `cudensitymatOperatorActionCompute`
     """
-    cdef nullable_unique_ptr[ vector[double] ] _params_
-    get_resource_ptr[double](_params_, params, <double*>NULL)
     cdef nullable_unique_ptr[ vector[State*] ] _state_in_
     get_resource_ptrs[State](_state_in_, state_in, <State*>NULL)
     with nogil:
-        status = cudensitymatOperatorActionCompute(<const Handle>handle, <OperatorAction>operator_action, time, num_params, <const double*>(_params_.data()), <const State*>(_state_in_.data()), <State>state_out, <WorkspaceDescriptor>workspace, <Stream>stream)
+        status = cudensitymatOperatorActionCompute(<const Handle>handle, <OperatorAction>operator_action, time, batch_size, num_params, <const double*>params, <const State*>(_state_in_.data()), <State>state_out, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(status)
 
 
@@ -790,19 +926,16 @@ cpdef expectation_prepare(intptr_t handle, intptr_t expectation, intptr_t state,
     check_status(status)
 
 
-cpdef expectation_compute(intptr_t handle, intptr_t expectation, double time, int32_t num_params, params, intptr_t state, intptr_t expectation_value, intptr_t workspace, intptr_t stream):
+cpdef expectation_compute(intptr_t handle, intptr_t expectation, double time, int64_t batch_size, int32_t num_params, intptr_t params, intptr_t state, intptr_t expectation_value, intptr_t workspace, intptr_t stream):
     """Computes the operator expectation value(s) with respect to the given quantum state(s).
 
     Args:
         handle (intptr_t): Library handle.
         expectation (intptr_t): Expectation value object.
         time (double): Specified time.
+        batch_size (int64_t): Batch size (>=1).
         num_params (int32_t): Number of variable parameters defined by the user.
-        params (object): Variable parameters defined by the user. It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``float``.
-
+        params (intptr_t): F-order 2d-array of user-defined real parameter values: params[num_params, batch_size].
         state (intptr_t): Quantum state (or a batch of quantum states).
         expectation_value (intptr_t): Pointer to the expectation value(s) vector storage in GPU-accessible RAM of the same data type as used by the state and operator.
         workspace (intptr_t): Allocated workspace descriptor.
@@ -810,10 +943,8 @@ cpdef expectation_compute(intptr_t handle, intptr_t expectation, double time, in
 
     .. seealso:: `cudensitymatExpectationCompute`
     """
-    cdef nullable_unique_ptr[ vector[double] ] _params_
-    get_resource_ptr[double](_params_, params, <double*>NULL)
     with nogil:
-        status = cudensitymatExpectationCompute(<const Handle>handle, <Expectation>expectation, time, num_params, <const double*>(_params_.data()), <const State>state, <void*>expectation_value, <WorkspaceDescriptor>workspace, <Stream>stream)
+        status = cudensitymatExpectationCompute(<const Handle>handle, <Expectation>expectation, time, batch_size, num_params, <const double*>params, <const State>state, <void*>expectation_value, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(status)
 
 
@@ -942,7 +1073,7 @@ cpdef tuple state_get_component_storage_size(intptr_t handle, intptr_t state, in
     return tuple(component_buffer_size)
 
 
-cpdef intptr_t create_elementary_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents, int sparsity, int32_t num_diagonals, diagonal_offsets, int data_type, intptr_t tensor_data, tensor_callback) except? 0:
+cpdef intptr_t create_elementary_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents, int sparsity, int32_t num_diagonals, diagonal_offsets, int data_type, intptr_t tensor_data, wrapped_tensor_callback) except? 0:
     """Creates an elementary tensor operator acting on a given number of quantum state modes (aka space modes).
 
     Args:
@@ -975,20 +1106,113 @@ cpdef intptr_t create_elementary_operator(intptr_t handle, int32_t num_space_mod
     get_resource_ptr[int32_t](_diagonal_offsets_, diagonal_offsets, <int32_t*>NULL)
     cdef ElementaryOperator elem_operator
 
-    cdef cudensitymatWrappedTensorCallback_t wrapped_tensor_callback
-    if tensor_callback is not None:
-        wrapped_tensor_callback.callback = <cudensitymatTensorCallback_t>(<void *>tensor_callback)
+    cdef cudensitymatWrappedTensorCallback_t _wrapped_tensor_callback_
+    if wrapped_tensor_callback is not None:
+        _wrapped_tensor_callback_ = (<WrappedTensorCallback>wrapped_tensor_callback).c_struct[0]
     else:
-        wrapped_tensor_callback.callback = NULL
-    wrapped_tensor_callback.wrapper = <void *>tensor_callback_wrapper
+        _wrapped_tensor_callback_ = cudensitymatTensorCallbackNone
 
     with nogil:
-        status = cudensitymatCreateElementaryOperator(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), <_ElementaryOperatorSparsity>sparsity, num_diagonals, <const int32_t*>(_diagonal_offsets_.data()), <DataType>data_type, <void*>tensor_data, wrapped_tensor_callback, &elem_operator)
+        status = cudensitymatCreateElementaryOperator(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), <_ElementaryOperatorSparsity>sparsity, num_diagonals, <const int32_t*>(_diagonal_offsets_.data()), <DataType>data_type, <void*>tensor_data, _wrapped_tensor_callback_, &elem_operator)
     check_status(status)
+
+    if wrapped_tensor_callback is not None:
+        _callback_holders[<intptr_t>elem_operator].add((<WrappedTensorCallback>wrapped_tensor_callback).callback)
     return <intptr_t>elem_operator
 
 
-cpdef operator_term_append_elementary_product(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, coefficient, coefficient_callback):
+cpdef intptr_t create_elementary_operator_batch(intptr_t handle, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int sparsity, int32_t num_diagonals, diagonal_offsets, int data_type, intptr_t tensor_data, wrapped_tensor_callback) except? 0:
+    # TODO: Docstring should be updated.
+    """Creates an elementary tensor operator acting on a given number of quantum state modes (aka space modes).
+
+    Args:
+        handle (intptr_t): Library handle.
+        num_space_modes (int32_t): Number of the (state) space modes acted on.
+        space_mode_extents (object): Extents of the (state) space modes acted on. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+        sparsity (ElementaryOperatorSparsity): Tensor operator sparsity defining the storage scheme.
+        num_diagonals (int32_t): For multi-diagonal tensor operator matrices, specifies the total number of non-zero diagonals.
+        diagonal_offsets (object): Offsets of the non-zero diagonals (for example, the main diagonal has offset 0, the diagonal right above the main diagonal has offset +1, the diagonal right below the main diagonal has offset -1, and so on). It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
+
+        data_type (int): Tensor operator data type.
+        tensor_data (intptr_t): GPU-accessible pointer to the tensor operator elements storage.
+        tensor_callback (object): Optional user-defined tensor callback function which can be called later to fill in the tensor elements in the provided storage, or NULL.
+
+    Returns:
+        intptr_t: Elementary tensor operator.
+
+    .. seealso:: `cudensitymatCreateElementaryOperator`
+    """
+    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
+    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _diagonal_offsets_
+    get_resource_ptr[int32_t](_diagonal_offsets_, diagonal_offsets, <int32_t*>NULL)
+    cdef ElementaryOperator elem_operator
+
+    cdef cudensitymatWrappedTensorCallback_t _wrapped_tensor_callback_
+    if wrapped_tensor_callback is not None:
+        _wrapped_tensor_callback_ = (<WrappedTensorCallback>wrapped_tensor_callback).c_struct[0]
+    else:
+        _wrapped_tensor_callback_ = cudensitymatTensorCallbackNone
+
+    with nogil:
+        status = cudensitymatCreateElementaryOperatorBatch(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), batch_size, <_ElementaryOperatorSparsity>sparsity, num_diagonals, <const int32_t*>(_diagonal_offsets_.data()), <DataType>data_type, <void*>tensor_data, _wrapped_tensor_callback_, &elem_operator)
+    check_status(status)
+
+    if wrapped_tensor_callback is not None:
+        _callback_holders[<intptr_t>elem_operator].add((<WrappedTensorCallback>wrapped_tensor_callback).callback)
+    return <intptr_t>elem_operator
+
+
+cpdef intptr_t create_matrix_operator_dense_local(intptr_t handle, int32_t num_space_modes, space_mode_extents, int data_type, intptr_t matrix_data, wrapped_matrix_callback) except? 0:
+    # TODO: Docstring is missing.
+    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
+    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef MatrixOperator matrix_operator
+
+    cdef cudensitymatWrappedTensorCallback_t _wrapped_matrix_callback_
+    if wrapped_matrix_callback is not None:
+        _wrapped_matrix_callback_ = (<WrappedTensorCallback>wrapped_matrix_callback).c_struct[0]
+    else:
+        _wrapped_matrix_callback_ = cudensitymatTensorCallbackNone
+
+    with nogil:
+        status = cudensitymatCreateMatrixOperatorDenseLocal(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), <DataType>data_type, <void*>matrix_data, _wrapped_matrix_callback_, &matrix_operator)
+    check_status(status)
+
+    if wrapped_matrix_callback is not None:
+        _callback_holders[<intptr_t>matrix_operator].add((<WrappedTensorCallback>wrapped_matrix_callback).callback)
+    return <intptr_t>matrix_operator
+
+
+cpdef intptr_t create_matrix_operator_dense_local_batch(intptr_t handle, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int data_type, intptr_t matrix_data, wrapped_matrix_callback) except? 0:
+    # TODO: Docstring is missing.
+    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
+    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef MatrixOperator matrix_operator
+
+    cdef cudensitymatWrappedTensorCallback_t _wrapped_matrix_callback_
+    if wrapped_matrix_callback is not None:
+        _wrapped_matrix_callback_ = (<WrappedTensorCallback>wrapped_matrix_callback).c_struct[0]
+    else:
+        _wrapped_matrix_callback_ = cudensitymatTensorCallbackNone
+
+    with nogil:
+        status = cudensitymatCreateMatrixOperatorDenseLocalBatch(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), batch_size, <DataType>data_type, <void*>matrix_data, _wrapped_matrix_callback_, &matrix_operator)
+    check_status(status)
+
+    if wrapped_matrix_callback is not None:
+        _callback_holders[<intptr_t>matrix_operator].add((<WrappedTensorCallback>wrapped_matrix_callback).callback)
+    return <intptr_t>matrix_operator
+
+
+cpdef operator_term_append_elementary_product(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, coefficient, wrapped_coefficient_callback):
     """Appends a product of elementary tensor operators acting on quantum state modes to the operator term.
 
     Args:
@@ -1026,22 +1250,43 @@ cpdef operator_term_append_elementary_product(intptr_t handle, intptr_t operator
     _coefficient_.x = coefficient.real
     _coefficient_.y = coefficient.imag
 
-    cdef cudensitymatScalarCallback_t _coefficient_callback
-    if coefficient_callback:
-        _coefficient_callback = <cudensitymatScalarCallback_t>(<void*>coefficient_callback)
+    cdef cudensitymatWrappedScalarCallback_t _wrapped_coefficient_callback_
+    if wrapped_coefficient_callback is not None:
+        _wrapped_coefficient_callback_ = (<WrappedScalarCallback>wrapped_coefficient_callback).c_struct[0]
     else:
-        _coefficient_callback = <cudensitymatScalarCallback_t>NULL
-    
-    cdef cudensitymatWrappedScalarCallback_t wrapped_coefficient_callback
-    wrapped_coefficient_callback.wrapper = <void *>scalar_callback_wrapper
-    wrapped_coefficient_callback.callback = _coefficient_callback
+        _wrapped_coefficient_callback_ = cudensitymatScalarCallbackNone
     
     with nogil:
-        status = cudensitymatOperatorTermAppendElementaryProduct(<const Handle>handle, <OperatorTerm>operator_term, num_elem_operators, <const ElementaryOperator*>(_elem_operators_.data()), <const int32_t*>(_state_modes_acted_on_.data()), <const int32_t*>(_mode_action_duality_.data()), _coefficient_, wrapped_coefficient_callback)
+        status = cudensitymatOperatorTermAppendElementaryProduct(<const Handle>handle, <OperatorTerm>operator_term, num_elem_operators, <const ElementaryOperator*>(_elem_operators_.data()), <const int32_t*>(_state_modes_acted_on_.data()), <const int32_t*>(_mode_action_duality_.data()), _coefficient_, _wrapped_coefficient_callback_)
     check_status(status)
 
+    if wrapped_coefficient_callback is not None:
+        _callback_holders[operator_term].add((<WrappedScalarCallback>wrapped_coefficient_callback).callback)
 
-cpdef operator_term_append_general_product(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, num_operator_modes, operator_mode_extents, operator_mode_strides, state_modes_acted_on, mode_action_duality, int data_type, tensor_data, tensor_callbacks, coefficient, coefficient_callback):
+
+cpdef operator_term_append_elementary_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, wrapped_coefficient_callback):
+    cdef nullable_unique_ptr[ vector[ElementaryOperator*] ] _elem_operators_
+    get_resource_ptrs[ElementaryOperator](_elem_operators_, elem_operators, <ElementaryOperator*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_acted_on_
+    get_resource_ptr[int32_t](_state_modes_acted_on_, state_modes_acted_on, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mode_action_duality_
+    get_resource_ptr[int32_t](_mode_action_duality_, mode_action_duality, <int32_t*>NULL)
+
+    cdef cudensitymatWrappedScalarCallback_t _wrapped_coefficient_callback_
+    if wrapped_coefficient_callback is not None:
+        _wrapped_coefficient_callback_ = (<WrappedScalarCallback>wrapped_coefficient_callback).c_struct[0]
+    else:
+        _wrapped_coefficient_callback_ = cudensitymatScalarCallbackNone
+
+    with nogil:
+        status = cudensitymatOperatorTermAppendElementaryProductBatch(<const Handle>handle, <OperatorTerm>operator_term, num_elem_operators, <const ElementaryOperator*>(_elem_operators_.data()), <const int32_t*>(_state_modes_acted_on_.data()), <const int32_t*>(_mode_action_duality_.data()), batch_size, <const cuDoubleComplex *>static_coefficients, <cuDoubleComplex *>total_coefficients, _wrapped_coefficient_callback_)
+    check_status(status)
+
+    if wrapped_coefficient_callback is not None:
+        _callback_holders[operator_term].add((<WrappedScalarCallback>wrapped_coefficient_callback).callback)
+
+
+cpdef operator_term_append_general_product(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, num_operator_modes, operator_mode_extents, operator_mode_strides, state_modes_acted_on, mode_action_duality, int data_type, tensor_data, wrapped_tensor_callbacks, coefficient, wrapped_coefficient_callback):
     """Appends a product of generic dense tensor operators acting on different quantum state modes to the operator term.
 
     Args:
@@ -1106,40 +1351,86 @@ cpdef operator_term_append_general_product(intptr_t handle, intptr_t operator_te
     cdef nullable_unique_ptr[ vector[intptr_t] ] _tensor_data_
     get_resource_ptr[intptr_t](_tensor_data_, tensor_data, <intptr_t*>NULL)
     
-    cdef vector[cudensitymatWrappedTensorCallback_t] _tensor_callbacks_
-    cdef cudensitymatWrappedTensorCallback_t wrapped_tensor_callback
+    cdef vector[cudensitymatWrappedTensorCallback_t] _wrapped_tensor_callbacks_
+    cdef wrapped_tensor_callback
     
     for i in range(num_elem_operators):
-        if tensor_callbacks[i] is not None:
-            wrapped_tensor_callback.callback = <cudensitymatTensorCallback_t>(<void *>tensor_callbacks[i])
+        if wrapped_tensor_callbacks[i] is not None:
+            _wrapped_tensor_callbacks_.push_back((<WrappedTensorCallback>wrapped_tensor_callbacks[i]).c_struct[0])
         else:
-            wrapped_tensor_callback.callback = <cudensitymatTensorCallback_t>NULL
-        wrapped_tensor_callback.wrapper = <void *>tensor_callback_wrapper
-        _tensor_callbacks_.push_back(wrapped_tensor_callback)
+            _wrapped_tensor_callbacks_.push_back(cudensitymatTensorCallbackNone)
 
     cdef cuDoubleComplex _coefficient_
     _coefficient_.x = coefficient.real
     _coefficient_.y = coefficient.imag
 
-    cdef cudensitymatScalarCallback_t _coefficient_callback
-    if coefficient_callback:
-        _coefficient_callback = <cudensitymatScalarCallback_t>(<void*>coefficient_callback)
+    cdef cudensitymatWrappedScalarCallback_t _wrapped_coefficient_callback_
+    if wrapped_coefficient_callback is not None:
+        _wrapped_coefficient_callback_ = (<WrappedScalarCallback>wrapped_coefficient_callback).c_struct[0]
     else:
-        _coefficient_callback = <cudensitymatScalarCallback_t>NULL
-    
-    cdef cudensitymatWrappedScalarCallback_t wrapped_coefficient_callback
-    wrapped_coefficient_callback.wrapper = <void *>scalar_callback_wrapper
-    wrapped_coefficient_callback.callback = _coefficient_callback
+        _wrapped_coefficient_callback_ = cudensitymatScalarCallbackNone
     
     with nogil:
         status = cudensitymatOperatorTermAppendGeneralProduct(<const Handle>handle, <OperatorTerm>operator_term, num_elem_operators, <const int32_t*>(_num_operator_modes_.data()), <const int64_t**>(_operator_mode_extents_.ptrs.data()), 
         <const int64_t**>(_operator_mode_strides_.ptrs.data()), 
         # NULL,
-        <const int32_t*>(_state_modes_acted_on_.data()), <const int32_t*>(_mode_action_duality_.data()), <DataType>data_type, <void**>(_tensor_data_.data()), <cudensitymatWrappedTensorCallback_t*>(_tensor_callbacks_.data()), _coefficient_, wrapped_coefficient_callback)
+        <const int32_t*>(_state_modes_acted_on_.data()), <const int32_t*>(_mode_action_duality_.data()), <DataType>data_type, <void**>(_tensor_data_.data()), <cudensitymatWrappedTensorCallback_t*>(_wrapped_tensor_callbacks_.data()), _coefficient_, _wrapped_coefficient_callback_)
     check_status(status)
 
+    if wrapped_coefficient_callback is not None:
+        _callback_holders[operator_term].add((<WrappedScalarCallback>wrapped_coefficient_callback).callback)
 
-cpdef operator_append_term(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, coefficient, coefficient_callback):
+
+cpdef operator_term_append_matrix_product(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, coefficient, wrapped_coefficient_callback):
+    cdef nullable_unique_ptr[ vector[MatrixOperator*] ] _matrix_operators_
+    get_resource_ptrs[MatrixOperator](_matrix_operators_, matrix_operators, <MatrixOperator*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _matrix_conjugation_
+    get_resource_ptr[int32_t](_matrix_conjugation_, matrix_conjugation, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _action_duality_
+    get_resource_ptr[int32_t](_action_duality_, action_duality, <int32_t*>NULL)
+
+    cdef cuDoubleComplex _coefficient_
+    _coefficient_.x = coefficient.real
+    _coefficient_.y = coefficient.imag
+
+    cdef cudensitymatWrappedScalarCallback_t _wrapped_coefficient_callback_
+    if wrapped_coefficient_callback is not None:
+        _wrapped_coefficient_callback_ = (<WrappedScalarCallback>wrapped_coefficient_callback).c_struct[0]
+    else:
+        _wrapped_coefficient_callback_ = cudensitymatScalarCallbackNone
+    
+    with nogil:
+        status = cudensitymatOperatorTermAppendMatrixProduct(<const Handle>handle, <OperatorTerm>operator_term, num_matrix_operators, <const MatrixOperator*>(_matrix_operators_.data()), <const int32_t*>(_matrix_conjugation_.data()), <const int32_t*>(_action_duality_.data()), _coefficient_, _wrapped_coefficient_callback_)
+    check_status(status)
+
+    if wrapped_coefficient_callback is not None:
+        _callback_holders[operator_term].add((<WrappedScalarCallback>wrapped_coefficient_callback).callback)
+
+
+cpdef operator_term_append_matrix_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, wrapped_coefficient_callback):
+
+    cdef nullable_unique_ptr[ vector[MatrixOperator*] ] _matrix_operators_
+    get_resource_ptrs[MatrixOperator](_matrix_operators_, matrix_operators, <MatrixOperator*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _matrix_conjugation_
+    get_resource_ptr[int32_t](_matrix_conjugation_, matrix_conjugation, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _action_duality_
+    get_resource_ptr[int32_t](_action_duality_, action_duality, <int32_t*>NULL)
+
+    cdef cudensitymatWrappedScalarCallback_t _wrapped_coefficient_callback_
+    if wrapped_coefficient_callback is not None:
+        _wrapped_coefficient_callback_ = (<WrappedScalarCallback>wrapped_coefficient_callback).c_struct[0]
+    else:
+        _wrapped_coefficient_callback_ = cudensitymatScalarCallbackNone
+    
+    with nogil:
+        status = cudensitymatOperatorTermAppendMatrixProductBatch(<const Handle>handle, <OperatorTerm>operator_term, num_matrix_operators, <const MatrixOperator*>(_matrix_operators_.data()), <const int32_t*>(_matrix_conjugation_.data()), <const int32_t*>(_action_duality_.data()), batch_size, <const cuDoubleComplex *>static_coefficients, <cuDoubleComplex *>total_coefficients, _wrapped_coefficient_callback_)
+    check_status(status)
+
+    if wrapped_coefficient_callback is not None:
+        _callback_holders[operator_term].add((<WrappedScalarCallback>wrapped_coefficient_callback).callback)
+
+
+cpdef operator_append_term(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, coefficient, wrapped_coefficient_callback):
     """Appends an operator term to the operator.
 
     Args:
@@ -1156,16 +1447,98 @@ cpdef operator_append_term(intptr_t handle, intptr_t superoperator, intptr_t ope
     _coefficient_.x = coefficient.real
     _coefficient_.y = coefficient.imag
 
-    cdef cudensitymatScalarCallback_t _coefficient_callback
-    if coefficient_callback:
-        _coefficient_callback = <cudensitymatScalarCallback_t>(<void*>coefficient_callback)
+    cdef cudensitymatWrappedScalarCallback_t _wrapped_coefficient_callback_
+    if wrapped_coefficient_callback is not None:
+        _wrapped_coefficient_callback_ = (<WrappedScalarCallback>wrapped_coefficient_callback).c_struct[0]
     else:
-        _coefficient_callback = <cudensitymatScalarCallback_t>NULL
-    
-    cdef cudensitymatWrappedScalarCallback_t wrapped_coefficient_callback
-    wrapped_coefficient_callback.wrapper = <void *>scalar_callback_wrapper
-    wrapped_coefficient_callback.callback = _coefficient_callback
+        _wrapped_coefficient_callback_ = cudensitymatScalarCallbackNone
 
     with nogil:
-        status = cudensitymatOperatorAppendTerm(<const Handle>handle, <Operator>superoperator, <OperatorTerm>operator_term, duality, _coefficient_, wrapped_coefficient_callback)
+        status = cudensitymatOperatorAppendTerm(<const Handle>handle, <Operator>superoperator, <OperatorTerm>operator_term, duality, _coefficient_, _wrapped_coefficient_callback_)
     check_status(status)
+
+    if wrapped_coefficient_callback is not None:
+        _callback_holders[operator_term].add((<WrappedScalarCallback>wrapped_coefficient_callback).callback)
+
+
+cpdef operator_append_term_batch(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, wrapped_coefficient_callback):
+    """Appends an operator term to the operator.
+
+    Args:
+        handle (intptr_t): Library handle.
+        superoperator (intptr_t): Operator.
+        operator_term (intptr_t): Operator term.
+        duality (int32_t): Duality status of the operator term action as a whole. If not zero, the duality status of each mode action inside the operator term will be flipped, that is, action from the left will be replaced by action from the right, and vice versa.
+        coefficient (complex): Constant complex scalar coefficient associated with the operator term.
+        coefficient_callback (object): User-defined complex scalar callback function which can be called later to update the scalar coefficient associated with the operator term, or NULL. The total coefficient associated with the operator term is a product of the constant coefficient and the result of the scalar callback function, if defined.
+
+    .. seealso:: `cudensitymatOperatorAppendTerm`
+    """
+    cdef cudensitymatWrappedScalarCallback_t _wrapped_coefficient_callback_
+    if wrapped_coefficient_callback is not None:
+        _wrapped_coefficient_callback_ = (<WrappedScalarCallback>wrapped_coefficient_callback).c_struct[0]
+    else:
+        _wrapped_coefficient_callback_ = cudensitymatScalarCallbackNone
+
+    with nogil:
+        status = cudensitymatOperatorAppendTermBatch(<const Handle>handle, <Operator>superoperator, <OperatorTerm>operator_term, duality, batch_size, <const cuDoubleComplex *>static_coefficients, <cuDoubleComplex *>total_coefficients, _wrapped_coefficient_callback_)
+    check_status(status)
+
+    if wrapped_coefficient_callback is not None:
+        _callback_holders[superoperator].add((<WrappedScalarCallback>wrapped_coefficient_callback).callback)
+
+
+cpdef destroy_elementary_operator(intptr_t elem_operator):
+    """Destroys an elementary tensor operator (simple or batched).
+
+    Args:
+        elem_operator (intptr_t): Elementary tensor operator.
+
+    .. seealso:: `cudensitymatDestroyElementaryOperator`
+    """
+    with nogil:
+        status = cudensitymatDestroyElementaryOperator(<ElementaryOperator>elem_operator)
+    check_status(status)
+    _callback_holders.pop(elem_operator, None)
+
+
+cpdef destroy_matrix_operator(intptr_t matrix_operator):
+    """Destroys a full matrix operator (simple or batched).
+
+    Args:
+        matrix_operator (intptr_t): Full matrix operator.
+
+    .. seealso:: `cudensitymatDestroyMatrixOperator`
+    """
+    with nogil:
+        status = cudensitymatDestroyMatrixOperator(<MatrixOperator>matrix_operator)
+    check_status(status)
+    _callback_holders.pop(matrix_operator, None)
+
+
+cpdef destroy_operator_term(intptr_t operator_term):
+    """Destroys an operator term.
+
+    Args:
+        operator_term (intptr_t): Operator term.
+
+    .. seealso:: `cudensitymatDestroyOperatorTerm`
+    """
+    with nogil:
+        status = cudensitymatDestroyOperatorTerm(<OperatorTerm>operator_term)
+    check_status(status)
+    _callback_holders.pop(operator_term, None)
+
+
+cpdef destroy_operator(intptr_t superoperator):
+    """Destroys an operator.
+
+    Args:
+        superoperator (intptr_t): Operator.
+
+    .. seealso:: `cudensitymatDestroyOperator`
+    """
+    with nogil:
+        status = cudensitymatDestroyOperator(<Operator>superoperator)
+    check_status(status)
+    _callback_holders.pop(superoperator, None)
