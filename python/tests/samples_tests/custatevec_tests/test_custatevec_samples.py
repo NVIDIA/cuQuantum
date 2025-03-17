@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -11,8 +11,8 @@ import pytest
 from ..test_utils import run_sample
 
 
-samples_path = os.path.join(
-    os.path.dirname(__file__), '..', '..', '..', 'samples', 'custatevec')
+samples_path = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), '..', '..', '..', 'samples', 'bindings', 'custatevec'))
 sample_files = glob.glob(samples_path+'**/*.py', recursive=True)
 
 # Handle MPI tests separately.

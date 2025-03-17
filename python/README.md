@@ -14,9 +14,9 @@ For instructions on installing *cuQuantum Python*, refer to our
 The build-time dependencies of the cuQuantum Python package include:
 
 * CUDA Toolkit 11.x or 12.x
-* cuStateVec 1.7.0+
-* cuTensorNet 2.6.0+
-* cuDensityMat >=0.0.5, <0.1.0
+* cuStateVec 1.8.0+
+* cuTensorNet 2.7.0+
+* cuDensityMat >=0.1.0
 * Python 3.10+
 * Cython >=0.29.22,<3
 * pip 21.3.1+
@@ -56,7 +56,7 @@ Runtime dependencies of the cuQuantum Python package include:
 * An NVIDIA GPU with compute capability 7.0+
 * Driver: Linux (450.80.02+ for CUDA 11, 525.60.13+ for CUDA 12)
 * CUDA Toolkit 11.x or 12.x
-* cuStateVec 1.7.0+
+* cuStateVec 1.8.0+
 * cuTensorNet 2.6.0+
 * cuDensityMat >=0.0.5, <0.1.0
 * Python 3.10+

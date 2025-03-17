@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -19,7 +19,7 @@ class TestModuleUtils:
         'libs', (True, False)
     )
     @pytest.mark.parametrize(
-        'target', (None, 'custatevec', 'cutensornet', True)
+        'target', (None, 'custatevec', 'cutensornet', 'cudensitymat', True)
     )
     def test_cuquantum(self, includes, libs, target):
         # We need to launch a subprocess to have a clean ld state
@@ -32,6 +32,7 @@ class TestModuleUtils:
             if target is True:
                 cmd.extend(('--target', 'custatevec'))
                 cmd.extend(('--target', 'cutensornet'))
+                cmd.extend(('--target', 'cudensitymat'))
             else:
                 cmd.extend(('--target', target))
 

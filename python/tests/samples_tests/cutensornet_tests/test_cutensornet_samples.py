@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -49,9 +49,14 @@ for circuit_type, current_version in circuit_versions.items():
         )
 
 
-samples_path = os.path.join(
-    os.path.dirname(__file__), '..', '..', '..', 'samples', 'cutensornet')
-sample_files = glob.glob(samples_path+'/**/*.py', recursive=True)
+sample_files = []
+notebook_files = []
+
+for sub_directory in ('tensornet', 'bindings/cutensornet'):
+    samples_path = os.path.abspath(os.path.join(
+        os.path.dirname(__file__), '..', '..', '..', 'samples', sub_directory))
+    sample_files += glob.glob(samples_path+'/**/*.py', recursive=True)
+    notebook_files += glob.glob(samples_path+'/**/*.ipynb', recursive=True)
 
 # Handle MPI tests separately.
 mpi_re = r".*_mpi[_]?.*\.py"
@@ -65,9 +70,6 @@ class TestcuTensorNetSamples:
 
     def test_sample(self, sample):
         run_sample(samples_path, sample)
-
-
-notebook_files = glob.glob(samples_path+'/**/*.ipynb', recursive=True)
 
 
 @pytest.mark.parametrize(

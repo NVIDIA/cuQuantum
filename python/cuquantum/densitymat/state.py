@@ -1,4 +1,4 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -10,8 +10,8 @@ import collections
 
 import cupy as cp
 import numpy as np
-from cuquantum.cutensornet._internal import utils as cutn_utils, tensor_wrapper, typemaps
-from cuquantum.cutensornet._internal.tensor_ifc import Tensor
+from cuquantum._internal import utils as cutn_utils, tensor_wrapper, typemaps
+from cuquantum._internal.tensor_ifc import Tensor
 
 from cuquantum.bindings import cudensitymat as cudm
 from .work_stream import WorkStream
@@ -172,7 +172,7 @@ class State(ABC):
         Scale the state by scalar factor(s).
 
         Args:
-            factors: Scalar factor(s) used in scaling the state. If a single number is provided, 
+            factors: Scalar factor(s) used in scaling the state. If a single number is provided,
                 scale all batched states by the same factor.
         """
         factors_arr = self._check_and_return_factors(factors)
@@ -242,10 +242,10 @@ class State(ABC):
     ) -> None:
         """
         Inplace accumulate another state scaled by factor(s) into this state.
-        
+
         Args:
             other: The other state to be scaled and accumulated into this state.
-            factors: Scalar factor(s) used in scaling `other`. If a single number is provided, 
+            factors: Scalar factor(s) used in scaling `other`. If a single number is provided,
                 scale all batched states in `other` by the same factor. Defaults to 1.
         """
         self._check_state_compatibility(other)
@@ -439,7 +439,7 @@ class DenseState(State):
     def storage_size(self) -> int:
         """
         Storage buffer size in number of elements of data type `dtype`.
-        
+
         Returns:
             int: Storage buffer size in number of elements of data type `dtype`.
         """
@@ -483,8 +483,8 @@ class DenseState(State):
             data: The data buffer to be attached to the state.
 
         .. note::
-            The data buffer needs to match the hilbert space dimensions, batch size and data type 
-            passed to the ``__init__`` function. In addition, the data buffer needs to be Fortran 
+            The data buffer needs to match the hilbert space dimensions, batch size and data type
+            passed to the ``__init__`` function. In addition, the data buffer needs to be Fortran
             contiguous and located on the same device as the :class:`WorkStream` passed to the ``__init__`` function.
         """
         self._attach_component_storage((data,))
@@ -499,10 +499,10 @@ class DenseState(State):
 
     def clone(self, buf: cp.ndarray) -> "DenseState":
         """Clone the state with a new data buffer.
-        
+
         Args:
             buf: The data buffer to be attached to the new state.
-            
+
         Returns:
             A state with same metadata as the original state and a new data buffer.
         """
@@ -545,13 +545,13 @@ class DensePureState(DenseState):
         hilbert_space_dims: A tuple of the local Hilbert space dimensions.
         batch_size: Batch dimension of the state.
         dtype: Numeric data type of the state's coefficients.
-    
+
     Examples:
         >>> import cupy as cp
         >>> from cuquantum.densitymat import WorkStream, DensePureState
 
         To create a ``DensePureState`` of batch size 1 and double-precision complex data type, we need to first initialize it and then attach the storage buffer through the :meth:`attach_storage` method as follows
-        
+
         >>> ctx = WorkStream(stream=cp.cuda.Stream())
         >>> hilbert_space_dims = (2, 2, 2)
         >>> rho = DensePureState(ctx, hilbert_space_dims, 1, "complex128")
@@ -591,7 +591,7 @@ class DenseMixedState(DenseState):
         >>> from cuquantum.densitymat import WorkStream, DenseMixedState
 
         To create a ``DenseMixedState`` of batch size 1 and double-precision complex data type, we need to first initialize it and then attach the storage buffer through the :meth:`attach_storage` method as follows
-        
+
         >>> ctx = WorkStream(stream=cp.cuda.Stream())
         >>> hilbert_space_dims = (2, 2, 2)
         >>> rho = DenseMixedState(ctx, hilbert_space_dims, 1, "complex128")

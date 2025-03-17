@@ -1,4 +1,4 @@
-/* Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES.
+/* Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -31,9 +31,10 @@ bool verbose = true;
 void exampleWorkflow(cudensitymatHandle_t handle)
 {
   // Define the composite Hilbert space shape and
-  // quantum state batch size (number of individual quantum states)
+  // quantum state batch size (number of individual quantum states in a batched simulation)
   const std::vector<int64_t> spaceShape({2,2,2,2,2,2,2,2}); // dimensions of quantum degrees of freedom
   const int64_t batchSize = 1;                              // number of quantum states per batch (default is 1)
+  const int32_t numParams = 1;                              // number of external user-provided Hamiltonian parameters
 
   if (verbose) {
     std::cout << "Hilbert space rank = " << spaceShape.size() << "; Shape = (";
@@ -42,6 +43,10 @@ void exampleWorkflow(cudensitymatHandle_t handle)
     std::cout << ")" << std::endl;
     std::cout << "Quantum state batch size = " << batchSize << std::endl;
   }
+
+  // Place external user-provided Hamiltonian parameters in GPU memory
+  std::vector<double> cpuHamParams(numParams * batchSize, 13.42); // each parameter can have a different value, of course
+  auto * hamiltonianParams = static_cast<double *>(createArrayGPU(cpuHamParams));
 
   // Construct a user-defined Liouvillian operator using a convenience C++ class
   UserDefinedLiouvillian liouvillian(handle, spaceShape);
@@ -59,10 +64,10 @@ void exampleWorkflow(cudensitymatHandle_t handle)
                       &inputState));
 
   // Query the size of the quantum state storage
-  std::size_t storageSize {0}; // only one storage component (tensor) is needed
+  std::size_t storageSize {0}; // only one storage component (tensor) is needed (no tensor factorization)
   HANDLE_CUDM_ERROR(cudensitymatStateGetComponentStorageSize(handle,
                       inputState,
-                      1,               // only one storage component
+                      1,               // only one storage component (tensor)
                       &storageSize));  // storage size in bytes
   const std::size_t stateVolume = storageSize / sizeof(std::complex<double>);  // quantum state tensor volume (number of elements)
   if (verbose)
@@ -102,7 +107,7 @@ void exampleWorkflow(cudensitymatHandle_t handle)
   // Attach initialized GPU storage to the output quantum state
   HANDLE_CUDM_ERROR(cudensitymatStateAttachComponentStorage(handle,
                       outputState,
-                      1,                                                 // only one storage component (no tensor factorization)
+                      1,                                                 // only one storage component (tensor)
                       std::vector<void*>({outputStateElems}).data(),     // pointer to the GPU storage for the quantum state
                       std::vector<std::size_t>({storageSize}).data()));  // size of the GPU storage for the quantum state
   if (verbose)
@@ -165,7 +170,7 @@ void exampleWorkflow(cudensitymatHandle_t handle)
                       outputState,
                       0x0));
   if (verbose)
-    std::cout << "Initialized the output state to zero\n";
+    std::cout << "Initialized the output quantum state to zero\n";
 
   // Apply the Liouvillian operator to the input quatum state
   // and accumulate its action into the output quantum state (note += semantics)
@@ -175,8 +180,9 @@ void exampleWorkflow(cudensitymatHandle_t handle)
     HANDLE_CUDM_ERROR(cudensitymatOperatorComputeAction(handle,
                         liouvillian.get(),
                         0.01,                                  // time point
-                        1,                                     // number of external user-defined Hamiltonian parameters
-                        std::vector<double>({13.42}).data(),   // Hamiltonian parameter(s)
+                        batchSize,                             // user-defined batch size
+                        numParams,                             // number of external user-defined Hamiltonian parameters
+                        hamiltonianParams,                     // external Hamiltonian parameters in GPU memory
                         inputState,                            // input quantum state
                         outputState,                           // output quantum state
                         workspaceDescr,                        // workspace descriptor
@@ -195,7 +201,7 @@ void exampleWorkflow(cudensitymatHandle_t handle)
                       norm2,
                       0x0));
   if (verbose)
-    std::cout << "Computed the output state norm\n";
+    std::cout << "Computed the output quantum state norm\n";
   HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
   destroyArrayGPU(norm2);
 
@@ -212,6 +218,9 @@ void exampleWorkflow(cudensitymatHandle_t handle)
   // Destroy quantum state storage
   destroyArrayGPU(outputStateElems);
   destroyArrayGPU(inputStateElems);
+
+  // Destroy external Hamiltonian parameters
+  destroyArrayGPU(static_cast<void *>(hamiltonianParams));
 
   if (verbose)
     std::cout << "Destroyed resources\n" << std::flush;

@@ -58,15 +58,15 @@ The cuTENSOR library path would depend on the CUDA major version. Please refer t
 
 ## Support
 
-* **Supported SM Architectures:** SM 7.0, SM 7.5, SM 8.0, SM 8.6, SM 9.0
+* **Supported SM Architectures:** SM 7.0, SM 7.5, SM 8.0, SM 8.6, SM 9.0, SM 10.0, SM 12.0
 * **Supported OSes:** Linux
-* **Supported CPU Architectures**: x86_64, aarch64-sbsa, ppc64le
+* **Supported CPU Architectures**: x86_64, aarch64-sbsa
 * **Language**: C++11 or above
 
 ## Prerequisites
 
 * [CUDA Toolkit 11.x](https://developer.nvidia.com/cuda-downloads) and compatible driver r450+ (see [CUDA Driver Release Notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#cuda-major-component-versions)).
-* cuTENSOR 2.0.2+.
+* cuTENSOR 2.2.0+.
 * GNU OpenMP (GOMP) runtime.
 * CMake 3.17+ if using `cmake`.
 

@@ -1,12 +1,19 @@
-# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 cmake_minimum_required(VERSION 3.13.0 FATAL_ERROR)
+
+# Guard against automatically setting CMAKE_CUDA_ARCHITECTURES by CMP0104
+if(DEFINED CMAKE_CUDA_ARCHITECTURES AND CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES_DEFINED TRUE)
+else()
+  set(CMAKE_CUDA_ARCHITECTURES_DEFINED FALSE)
+endif()
+
 project(cutensornet_example LANGUAGES C CXX CUDA)
 
 include(GNUInstallDirs)
-find_package(CUDA 11.0 REQUIRED)
 
 # ##########################################
 # cutensornet_example build mode
@@ -67,6 +74,19 @@ set(CMAKE_CUDA_STANDARD 11)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 
+find_package(CUDAToolkit REQUIRED)
+if(NOT CMAKE_CUDA_ARCHITECTURES_DEFINED)
+  if(
+    (${CUDAToolkit_VERSION_MAJOR} LESS 12) OR
+    (${CUDAToolkit_VERSION_MAJOR} EQUAL 12 AND ${CUDAToolkit_VERSION_MINOR} LESS 8)
+  )
+    set(CMAKE_CUDA_ARCHITECTURES 70-real;75-real;80-real;86-real;90)
+  else()
+    set(CMAKE_CUDA_ARCHITECTURES 70-real;75-real;80-real;86-real;90-real;100-real;120-real;100-virtual)
+  endif()
+endif()
+message(STATUS "Target CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+
 # ##########################################
 # cutensornet_example utility function
 # ##########################################
@@ -93,19 +113,6 @@ function(add_cutensornet_example GROUP_TARGET EXAMPLE_NAME EXAMPLE_SOURCES)
         cutensornet
         $<$<BOOL:${MPI_FOUND}>:MPI::MPI_CXX>
   )
-  if((${CUDA_VERSION_MAJOR} GREATER_EQUAL 12) OR (${CUDA_VERSION_MAJOR} EQUAL 11 AND ${CUDA_VERSION_MINOR} GREATER_EQUAL 8))
-    set_target_properties(
-      ${EXAMPLE_TARGET}
-        PROPERTIES
-          POSITION_INDEPENDENT_CODE ON
-          CUDA_ARCHITECTURES "70;75;80;86;90")
-  else()
-    set_target_properties(
-      ${EXAMPLE_TARGET}
-        PROPERTIES
-          POSITION_INDEPENDENT_CODE ON
-          CUDA_ARCHITECTURES "70;75;80;86")
-  endif()
   # Install example
   install(
       TARGETS ${EXAMPLE_TARGET}

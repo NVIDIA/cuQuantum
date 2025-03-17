@@ -153,6 +153,10 @@ int main()
   cutensornetTensorSVDAlgo_t algo = CUTENSORNET_TENSOR_SVD_ALGO_GESVDJ; 
   HANDLE_CUTN_ERROR(cutensornetStateConfigure(cutnHandle, quantumState, 
                     CUTENSORNET_STATE_CONFIG_MPS_SVD_ALGO, &algo, sizeof(algo)));
+  // Set up simple update gauge option for MPS simulation, this is optional but recommended
+  cutensornetStateMPSGaugeOption_t gauge_option = CUTENSORNET_STATE_MPS_GAUGE_SIMPLE; 
+  HANDLE_CUTN_ERROR(cutensornetStateConfigure(cutnHandle, quantumState, 
+                    CUTENSORNET_STATE_CONFIG_MPS_GAUGE_OPTION, &gauge_option, sizeof(gauge_option)));
   std::cout << "Configured the MPS factorization computation\n";
 
   // Sphinx: MPS Amplitudes #12

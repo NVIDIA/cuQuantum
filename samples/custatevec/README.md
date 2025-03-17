@@ -25,7 +25,7 @@ make -j8
 
 * **Supported GPU Architectures:** any NVIDIA GPU with compute capability 7.0 or later
 * **Supported OSes:** Linux
-* **Supported CPU Architectures**: x86_64, arm64, ppc64le
+* **Supported CPU Architectures**: x86_64, arm64
 * **Language**: `C++11`
 
 # Prerequisites

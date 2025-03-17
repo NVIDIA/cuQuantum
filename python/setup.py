@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -35,9 +35,9 @@ with open(os.path.join(source_root, "tests/requirements.txt")) as f:
 install_requires = [
     'numpy>=1.21, <3.0',  # ">=1.21,<3"
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.7',   # ">=1.7.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.6',  # ">=2.6.0,<3"
-    f'cudensitymat-cu{utils.cuda_major_ver}~=0.0.5', # ">=0.0.5,<0.1"
+    f'custatevec-cu{utils.cuda_major_ver}~=1.8',   # ">=1.8.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.7',  # ">=2.7.0,<3"
+    f'cudensitymat-cu{utils.cuda_major_ver}~=0.1', # ">=0.1,<0.2"
 ]
 if utils.cuda_major_ver == '11':
     install_requires.append('cupy-cuda11x>=13.0')  # no ambiguity
@@ -78,33 +78,33 @@ def cleanup_dst_files():
 # Note: the extension attributes are overwritten in build_extension()
 ext_modules = [
     Extension(
-        "cuquantum.custatevec.custatevec",
-        sources=["cuquantum/custatevec/custatevec.pyx"],
+        "cuquantum.bindings.custatevec",
+        sources=["cuquantum/bindings/custatevec.pyx"],
         language="c++",
     ),
     Extension(
-        "cuquantum.custatevec.cycustatevec",
-        sources=["cuquantum/custatevec/cycustatevec.pyx"],
+        "cuquantum.bindings.cycustatevec",
+        sources=["cuquantum/bindings/cycustatevec.pyx"],
         language="c++",
     ),
     Extension(
-        "cuquantum.custatevec._internal.custatevec",
-        sources=["cuquantum/custatevec/_internal/custatevec.pyx"],
+        "cuquantum.bindings._internal.custatevec",
+        sources=["cuquantum/bindings/_internal/custatevec.pyx"],
         language="c++",
     ),
     Extension(
-        "cuquantum.cutensornet.cutensornet",
-        sources=["cuquantum/cutensornet/cutensornet.pyx"],
+        "cuquantum.bindings.cutensornet",
+        sources=["cuquantum/bindings/cutensornet.pyx"],
         language="c++",
     ),
     Extension(
-        "cuquantum.cutensornet.cycutensornet",
-        sources=["cuquantum/cutensornet/cycutensornet.pyx"],
+        "cuquantum.bindings.cycutensornet",
+        sources=["cuquantum/bindings/cycutensornet.pyx"],
         language="c++",
     ),
     Extension(
-        "cuquantum.cutensornet._internal.cutensornet",
-        sources=["cuquantum/cutensornet/_internal/cutensornet.pyx"],
+        "cuquantum.bindings._internal.cutensornet",
+        sources=["cuquantum/bindings/_internal/cutensornet.pyx"],
         language="c++",
     ),
     Extension(
@@ -125,12 +125,6 @@ ext_modules = [
     Extension(
         "cuquantum.bindings._utils",
         sources=["cuquantum/bindings/_utils.pyx"],
-        include_dirs=[os.path.join(utils.cuda_path, 'include')],
-        language="c++",
-    ),
-    Extension(
-        "cuquantum._utils",
-        sources=["cuquantum/_utils.pyx"],
         include_dirs=[os.path.join(utils.cuda_path, 'include')],
         language="c++",
     ),

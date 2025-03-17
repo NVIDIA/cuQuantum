@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -16,11 +16,11 @@ def get_lib_path(name):
 
     # We have switched to use dlopen, force library loading via internal API
     if "custatevec" in name:
-        from cuquantum import custatevec as cusv
-        cusv._internal.custatevec._inspect_function_pointers()
+        from cuquantum import bindings
+        bindings._internal.custatevec._inspect_function_pointers()
     elif "cutensor" in name:  # cutensor or cutensornet
-        from cuquantum import cutensornet as cutn
-        cutn._internal.cutensornet._inspect_function_pointers()
+        from cuquantum import bindings
+        bindings._internal.cutensornet._inspect_function_pointers()
     elif "cudensitymat" in name:
         from cuquantum import bindings
         bindings._internal.cudensitymat._inspect_function_pointers()
