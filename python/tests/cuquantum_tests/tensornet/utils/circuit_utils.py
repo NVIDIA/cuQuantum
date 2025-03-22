@@ -268,11 +268,17 @@ class QiskitComputeEngine(_BaseComputeEngine):
     def _compute_state_vector(self):
         precision = self._get_precision()
         circuit = circuit_parser_utils_qiskit.remove_measurements(self.circuit)
-        circuit.save_statevector()
-        simulator = AerSimulator(precision=precision)
-        circuit = qiskit.transpile(circuit, simulator)
-        result = simulator.run(circuit).result()
-        sv = np.asarray(result.get_statevector()).reshape((2,)*circuit.num_qubits)
+        if np.lib.NumpyVersion(qiskit.__version__) >= '1.3.0':
+            from qiskit.quantum_info import Statevector
+            # A WAR with Qiskit bug: https://github.com/Qiskit/qiskit/issues/13778
+            # This currently does not support precision arg
+            result = Statevector.from_instruction(circuit).data
+        else:
+            circuit.save_statevector()
+            simulator = AerSimulator(precision=precision)
+            circuit = qiskit.transpile(circuit, simulator)
+            result = simulator.run(circuit).result().get_statevector()
+        sv = np.asarray(result).reshape((2,)*circuit.num_qubits)
         # statevector returned by qiskit's simulator is labelled by the inverse of :attr:`qiskit.QuantumCircuit.qubits`
         # this is different from `cirq` and different from the implementation in :class:`CircuitToEinsum`
         sv = sv.transpose(list(range(circuit.num_qubits))[::-1])
