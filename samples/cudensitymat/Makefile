@@ -25,10 +25,11 @@ else
 	             $(ARCH_FLAGS_SM100) $(ARCH_FLAGS_SM120)
 endif
 
-CXX_FLAGS        = -std=c++11 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(ARCH_FLAGS)
+CXX_FLAGS        = -std=c++17 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(ARCH_FLAGS)
 
 all: check-env
-	${CUDA_PATH}/bin/nvcc operator_action_example.cpp ${CXX_FLAGS} -o operator_action_example 
+	${CUDA_PATH}/bin/nvcc operator_action_example.cpp ${CXX_FLAGS} -o operator_action_example
+	${CUDA_PATH}/bin/nvcc operator_action_gradient_example.cpp ${CXX_FLAGS} -o operator_action_gradient_example
   ifdef MPI_ROOT
 	${CUDA_PATH}/bin/nvcc operator_action_mpi_example.cpp ${CXX_FLAGS} -L${MPI_ROOT}/lib -lmpi -I${MPI_ROOT}/include -o operator_action_mpi_example
   endif
@@ -36,8 +37,13 @@ all: check-env
 operator_action_example:
 	${CUDA_PATH}/bin/nvcc operator_action_example.cpp ${CXX_FLAGS} -o operator_action_example
 
+operator_action_gradient_example:
+	${CUDA_PATH}/bin/nvcc operator_action_gradient_example.cpp ${CXX_FLAGS} -o operator_action_gradient_example
+
+ifdef MPI_ROOT
 operator_action_mpi_example:
 	${CUDA_PATH}/bin/nvcc operator_action_mpi_example.cpp ${CXX_FLAGS} -L${MPI_ROOT}/lib -lmpi -I${MPI_ROOT}/include -o operator_action_mpi_example
+endif
 
 check-env:
 	@ echo "" && \
@@ -59,5 +65,7 @@ check-env:
 	fi
 
 clean:
-	rm -f operator_action_example operator_action_example.o
+	rm -f operator_action_example operator_action_example.o operator_action_gradient_example operator_action_gradient_example.o
+ifdef MPI_ROOT
 	rm -f operator_action_mpi_example operator_action_mpi_example.o
+endif

@@ -134,7 +134,7 @@ num_slices = np.zeros((1,), dtype=num_slices_dtype)
 cutn.contraction_optimizer_info_get_attribute(
     handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.NUM_SLICES,
     num_slices.ctypes.data, num_slices.dtype.itemsize)
-num_slices = int(num_slices)
+num_slices = num_slices.item()
 
 assert num_slices > 0
 
@@ -250,7 +250,7 @@ flops = np.zeros((1,), dtype=flops_dtype)
 cutn.contraction_optimizer_info_get_attribute(
     handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
     flops.ctypes.data, flops.dtype.itemsize)
-flops = float(flops)
+flops = flops.item()
 
 print(f"num_slices: {num_slices}")
 print(f"First run (intermediate tensors get cached): {firstTimeCUTENSORNET * 1000 / num_slices} ms / slice")

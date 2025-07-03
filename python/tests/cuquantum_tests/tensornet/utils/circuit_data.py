@@ -17,8 +17,10 @@ except ImportError:
     qiskit = None
 try:
     import torch
+    VALID_BACKENDS = ['numpy', 'cupy', 'torch']
 except ImportError:
     torch = None
+    VALID_BACKENDS = ['numpy', 'cupy']
 
 from .test_utils import DEFAULT_RNG
 
@@ -76,12 +78,7 @@ except:
 
 def get_qiskit_unitary_gate(rng=DEFAULT_RNG, control=None):
     # random unitary two qubit gate
-    try:
-        # qiskit 1.0
-        from qiskit.circuit.library import UnitaryGate
-    except ModuleNotFoundError:
-        # qiskit < 1.0
-        from qiskit.extensions import UnitaryGate
+    from qiskit.circuit.library import UnitaryGate
     from qiskit.quantum_info import random_unitary
     random_unitary = random_unitary(4, seed=rng)
     gate = UnitaryGate(random_unitary)
@@ -92,7 +89,7 @@ def get_qiskit_unitary_gate(rng=DEFAULT_RNG, control=None):
 
 
 def get_qiskit_qft_circuit(n_qubits):
-    return qiskit.circuit.library.QFT(n_qubits, do_swaps=False).decompose()
+    return qiskit.circuit.library.QFTGate(n_qubits).definition
 
 
 def get_qiskit_random_circuit(n_qubits, depth):
@@ -173,28 +170,12 @@ if qiskit:
         for depth in DEPTH_RANGE:
             qiskit_circuits.append(get_qiskit_random_circuit(n_qubits, depth))
 
-try:
-    from cuquantum_benchmarks.frontends.frontend_qiskit import Qiskit as cuqnt_qiskit
-    from cuquantum_benchmarks.benchmarks import qpe, quantum_volume, qaoa
-    qiskit_generators = [qpe.QPE, quantum_volume.QuantumVolume, qaoa.QAOA]
-    config = {'measure': True, 'unfold': True, 'p': 4}
-    for generator in qiskit_generators:
-        for n_qubits in (5, 6):
-            seq = generator.generateGatesSequence(n_qubits, config)
-            circuit = cuqnt_qiskit(n_qubits, config).generateCircuit(seq)
-            qiskit_circuits.append(circuit)
-except:
-    pass
-
 testing_circuits = cirq_circuits + qiskit_circuits
+input_testing_circuits = cirq_circuits[:1] + qiskit_circuits[:1]
 
 @pytest.fixture(scope="session")
 def backend_cycle():
-    # TODO: The second condition should be removed once PyTorch has full support for Blackwell
-    if torch is None or int(cp.cuda.Device().compute_capability) >= 100:
-        return itertools.cycle(['numpy', 'cupy'])
-    else:
-        return itertools.cycle(['numpy', 'cupy', 'torch'])
+    return itertools.cycle(VALID_BACKENDS)
 
 @pytest.fixture(scope="function")
 def backend(backend_cycle):

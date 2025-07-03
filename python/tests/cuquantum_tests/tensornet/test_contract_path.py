@@ -5,7 +5,7 @@
 import copy
 import pytest
 
-import cuquantum
+from cuquantum.tensornet import contract_path, einsum_path, OptimizerInfo
 
 from .utils.data import einsum_expressions
 from .utils.test_utils import compute_and_normalize_numpy_path
@@ -46,15 +46,15 @@ class TestContractPath:
 
         data = factory.convert_by_format(operands)
         try:
-            if func is cuquantum.contract_path:
+            if func is contract_path:
                 if path is not None:
                     optimizer_opts = set_path_to_optimizer_options(
                         optimizer_opts, path)
                 path, info = func(
                     *data, options=network_opts, optimize=optimizer_opts)
                 assert isinstance(path, list)
-                assert isinstance(info, cuquantum.OptimizerInfo)
-            else:  # cuquantum.einsum_path()
+                assert isinstance(info, OptimizerInfo)
+            else:  # einsum_path()
                 optimize = kwargs.pop('optimize')
                 assert optimize == True
                 path, info = func(*data, optimize=optimize)
@@ -84,9 +84,9 @@ class TestContractPath:
     )
     def test_contract_path(self, einsum_expr_pack, use_numpy_path):
         self._test_runner(
-            cuquantum.contract_path, einsum_expr_pack, use_numpy_path)
+            contract_path, einsum_expr_pack, use_numpy_path)
 
     def test_einsum_path(self, einsum_expr_pack):
         # We only support optimize=True and don't allow setting the path
         self._test_runner(
-            cuquantum.einsum_path, einsum_expr_pack, False, optimize=True)
+            einsum_path, einsum_expr_pack, False, optimize=True)

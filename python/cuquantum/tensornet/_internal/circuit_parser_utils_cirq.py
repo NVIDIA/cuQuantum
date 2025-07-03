@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 
+import cirq
 from cirq import protocols, unitary, Circuit, MeasurementGate
 import cupy as cp
 
@@ -28,7 +29,7 @@ def get_inverse_circuit(circuit):
     """
     return protocols.inverse(circuit)
 
-def unfold_circuit(circuit, dtype='complex128', backend=cp):
+def unfold_circuit(circuit, dtype='complex128', backend=cp, check_diagonal=True, **kwargs):
     """
     Unfold the circuit to obtain the qubits and all gate tensors.
 
@@ -43,13 +44,19 @@ def unfold_circuit(circuit, dtype='complex128', backend=cp):
     qubits = sorted(circuit.all_qubits())
     asarray = _get_backend_asarray_func(backend)
     gates = []
+    gates_are_diagonal = []
     for moment in circuit.moments:
         for operation in moment:
             gate_qubits = operation.qubits
-            tensor = unitary(operation).reshape((2,) * 2 * len(gate_qubits))
+            operand = unitary(operation.gate)
+            if check_diagonal:
+                gates_are_diagonal.append(cirq.is_diagonal(operand, atol=1e-14))
+            else:
+                gates_are_diagonal.append(False)
+            tensor = operand.reshape((2,) * 2 * len(gate_qubits))
             tensor = asarray(tensor, dtype=dtype)
             gates.append((tensor, operation.qubits))
-    return qubits, gates
+    return qubits, gates, gates_are_diagonal
 
 def get_lightcone_circuit(circuit, coned_qubits):
     """

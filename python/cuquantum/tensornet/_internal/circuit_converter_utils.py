@@ -1,7 +1,8 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import importlib
 import types
 
 try:
@@ -17,7 +18,7 @@ try:
 except ImportError:
     qiskit = circuit_parser_utils_qiskit = None
 
-from ..._internal.tensor_wrapper import _get_backend_asarray_func
+from ..._internal.tensor_wrapper import _get_backend_asarray_func, infer_tensor_package
 from ...bindings._utils import WHITESPACE_UNICODE
 
 
@@ -25,7 +26,7 @@ EINSUM_SYMBOLS_BASE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 WHITESPACE_SYMBOLS_ID = None
 
 CIRQ_MIN_VERSION = '0.6.0'
-QISKIT_MIN_VERSION = '0.24.0'  # qiskit metapackage version
+QISKIT_MIN_VERSION = '1.4.2'  # qiskit metapackage version
 
 EMPTY_DICT = types.MappingProxyType({})
 
@@ -88,7 +89,7 @@ def infer_parser(circuit):
         base = circuit.__module__.split('.')[0]
         raise NotImplementedError(f'circuit from {base} not supported')
 
-def parse_inputs(qubits, gates, dtype, backend):
+def parse_inputs(qubits, gates, gates_are_diagonal, dtype, backend):
     """
     Given a sequence of qubits and gates, generate the mode labels, 
     tensor operands and qubits_frontier map for the initial states and gate operations.
@@ -98,7 +99,8 @@ def parse_inputs(qubits, gates, dtype, backend):
     mode_labels, qubits_frontier, next_frontier = _init_mode_labels_from_qubits(qubits)
     gate_mode_labels, gate_operands = parse_gates_to_mode_labels_operands(gates, 
                                                                           qubits_frontier, 
-                                                                          next_frontier)
+                                                                          next_frontier,
+                                                                          gates_are_diagonal)
     mode_labels += gate_mode_labels
     operands += gate_operands                                         
     return mode_labels, operands, qubits_frontier
@@ -196,17 +198,20 @@ def get_pauli_gates(pauli_map, dtype='complex128', backend=cp):
                    'Y': pauli_y,
                    'Z': pauli_z}
     gates = []
+    gates_are_diagonal = []
     for qubit, pauli_char in pauli_map.items():
         operand = operand_map.get(pauli_char)
         if operand is None:
             raise ValueError('pauli string character must be one of I/X/Y/Z')
         gates.append((operand, (qubit,)))
-    return gates
+        gates_are_diagonal.append(pauli_char in {'I', 'Z'})
+    return gates, gates_are_diagonal
 
 def parse_gates_to_mode_labels_operands(
     gates, 
     qubits_frontier, 
-    next_frontier
+    next_frontier,
+    gates_are_diagonal,
 ):
     """
     Populate the indices for all gate tensors
@@ -215,21 +220,41 @@ def parse_gates_to_mode_labels_operands(
         gates: An list of gate tensors and the corresponding qubits.
         qubits_frontier: The map of the qubits to its current frontier index.
         next_frontier: The next index to use. 
+        gates_are_diagonal: Whether the gate operands are diagonal
 
     Returns:
         Gate mode labels and gate operands.
     """
+    assert len(gates_are_diagonal) == len(gates)
     mode_labels = []
     operands = []
+    
+    if not gates:
+        # corner case where no gates are included
+        return mode_labels, operands
 
-    for tensor, gate_qubits in gates:
-        operands.append(tensor)
-        input_mode_labels = []
-        output_mode_labels = []
-        for q in gate_qubits:
-            input_mode_labels.append(qubits_frontier[q])
-            output_mode_labels.append(next_frontier)
-            qubits_frontier[q] = next_frontier
-            next_frontier += 1
-        mode_labels.append(output_mode_labels+input_mode_labels)
+    package = infer_tensor_package(gates[0][0])
+    module = importlib.import_module(package)
+
+    def _get_diag(t):
+        if t.ndim == 2:
+            return t.diagonal()
+        modes = [i for i in range(t.ndim // 2)]
+        return module.einsum(t, modes*2, modes)
+
+    for (tensor, gate_qubits), is_diag in zip(gates, gates_are_diagonal):
+        if is_diag:
+            modes = [qubits_frontier[q] for q in gate_qubits]
+            operands.append(_get_diag(tensor))
+            mode_labels.append(modes)
+        else:
+            operands.append(tensor)
+            input_mode_labels = []
+            output_mode_labels = []
+            for q in gate_qubits:
+                input_mode_labels.append(qubits_frontier[q])
+                output_mode_labels.append(next_frontier)
+                qubits_frontier[q] = next_frontier
+                next_frontier += 1
+            mode_labels.append(output_mode_labels+input_mode_labels)
     return mode_labels, operands

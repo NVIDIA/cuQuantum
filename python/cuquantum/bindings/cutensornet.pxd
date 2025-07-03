@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.03.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.06.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -30,6 +30,7 @@ ctypedef cutensornetStateSampler_t StateSampler
 ctypedef cutensornetStateAccessor_t StateAccessor
 ctypedef cutensornetStateExpectation_t StateExpectation
 ctypedef cutensornetNetworkOperator_t NetworkOperator
+ctypedef cutensornetStateProjectionMPS_t StateProjectionMPS
 ctypedef cutensornetNodePair_t NodePair
 ctypedef cutensornetSliceInfoPair_t SliceInfoPair
 ctypedef cutensornetTensorQualifiers_t TensorQualifiers
@@ -83,6 +84,8 @@ ctypedef cutensornetBoundaryCondition_t _BoundaryCondition
 ctypedef cutensornetStateAttributes_t _StateAttribute
 ctypedef cutensornetStateMPOApplication_t _StateMPOApplication
 ctypedef cutensornetStateMPSGaugeOption_t _StateMPSGaugeOption
+ctypedef cutensornetStateProjectionMPSOrthoOption_t _StateProjectionMPSOrthoOption
+ctypedef cutensornetStateProjectionMPSAttributes_t _StateProjectionMPSAttribute
 
 
 ###############################################################################
@@ -92,52 +95,52 @@ ctypedef cutensornetStateMPSGaugeOption_t _StateMPSGaugeOption
 cpdef intptr_t create() except? 0
 cpdef destroy(intptr_t handle)
 cpdef intptr_t create_network_descriptor(intptr_t handle, int32_t num_inputs, num_modes_in, extents_in, strides_in, modes_in, qualifiers_in, int32_t num_modes_out, extents_out, strides_out, modes_out, int data_type, int compute_type) except? 0
-cpdef destroy_network_descriptor(intptr_t desc)
-cpdef intptr_t get_output_tensor_descriptor(intptr_t handle, intptr_t desc_net) except? 0
+cpdef destroy_network_descriptor(intptr_t network_desc)
+cpdef intptr_t get_output_tensor_descriptor(intptr_t handle, intptr_t network_desc) except? 0
 cpdef intptr_t create_workspace_descriptor(intptr_t handle) except? 0
-cpdef workspace_compute_contraction_sizes(intptr_t handle, intptr_t desc_net, intptr_t optimizer_info, intptr_t work_desc)
+cpdef workspace_compute_contraction_sizes(intptr_t handle, intptr_t network_desc, intptr_t optimizer_info, intptr_t work_desc)
 cpdef int64_t workspace_get_memory_size(intptr_t handle, intptr_t work_desc, int work_pref, int mem_space, int work_kind) except? -1
 cpdef workspace_set_memory(intptr_t handle, intptr_t work_desc, int mem_space, int work_kind, intptr_t memory_ptr, int64_t memory_size)
 cpdef tuple workspace_get_memory(intptr_t handle, intptr_t work_desc, int mem_space, int work_kind)
-cpdef destroy_workspace_descriptor(intptr_t desc)
+cpdef destroy_workspace_descriptor(intptr_t work_desc)
 cpdef intptr_t create_contraction_optimizer_config(intptr_t handle) except? 0
 cpdef destroy_contraction_optimizer_config(intptr_t optimizer_config)
 cpdef get_contraction_optimizer_config_attribute_dtype(int attr)
-cpdef contraction_optimizer_config_get_attribute(intptr_t handle, intptr_t optimizer_config, int attr, intptr_t buf, size_t size_in_bytes)
-cpdef contraction_optimizer_config_set_attribute(intptr_t handle, intptr_t optimizer_config, int attr, intptr_t buf, size_t size_in_bytes)
+cpdef contraction_optimizer_config_get_attribute(intptr_t handle, intptr_t optimizer_config, int attr, intptr_t buffer, size_t size_in_bytes)
+cpdef contraction_optimizer_config_set_attribute(intptr_t handle, intptr_t optimizer_config, int attr, intptr_t buffer, size_t size_in_bytes)
 cpdef destroy_contraction_optimizer_info(intptr_t optimizer_info)
-cpdef intptr_t create_contraction_optimizer_info(intptr_t handle, intptr_t desc_net) except? 0
-cpdef contraction_optimize(intptr_t handle, intptr_t desc_net, intptr_t optimizer_config, uint64_t workspace_size_constraint, intptr_t optimizer_info)
+cpdef intptr_t create_contraction_optimizer_info(intptr_t handle, intptr_t network_desc) except? 0
+cpdef contraction_optimize(intptr_t handle, intptr_t network_desc, intptr_t optimizer_config, uint64_t workspace_size_constraint, intptr_t optimizer_info)
 cpdef get_contraction_optimizer_info_attribute_dtype(int attr)
-cpdef contraction_optimizer_info_get_attribute(intptr_t handle, intptr_t optimizer_info, int attr, intptr_t buf, size_t size_in_bytes)
-cpdef contraction_optimizer_info_set_attribute(intptr_t handle, intptr_t optimizer_info, int attr, intptr_t buf, size_t size_in_bytes)
+cpdef contraction_optimizer_info_get_attribute(intptr_t handle, intptr_t optimizer_info, int attr, intptr_t buffer, size_t size_in_bytes)
+cpdef contraction_optimizer_info_set_attribute(intptr_t handle, intptr_t optimizer_info, int attr, intptr_t buffer, size_t size_in_bytes)
 cpdef size_t contraction_optimizer_info_get_packed_size(intptr_t handle, intptr_t optimizer_info) except? 0
 cpdef contraction_optimizer_info_pack_data(intptr_t handle, intptr_t optimizer_info, buffer, size_t size_in_bytes)
-cpdef intptr_t create_contraction_optimizer_info_from_packed_data(intptr_t handle, intptr_t desc_net, buffer, size_t size_in_bytes) except? 0
+cpdef intptr_t create_contraction_optimizer_info_from_packed_data(intptr_t handle, intptr_t network_desc, buffer, size_t size_in_bytes) except? 0
 cpdef update_contraction_optimizer_info_from_packed_data(intptr_t handle, buffer, size_t size_in_bytes, intptr_t optimizer_info)
-cpdef intptr_t create_contraction_plan(intptr_t handle, intptr_t desc_net, intptr_t optimizer_info, intptr_t work_desc) except? 0
+cpdef intptr_t create_contraction_plan(intptr_t handle, intptr_t network_desc, intptr_t optimizer_info, intptr_t work_desc) except? 0
 cpdef destroy_contraction_plan(intptr_t plan)
 cpdef contraction_autotune(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_data_out, intptr_t work_desc, intptr_t pref, intptr_t stream)
 cpdef intptr_t create_contraction_autotune_preference(intptr_t handle) except? 0
 cpdef get_contraction_autotune_preference_attribute_dtype(int attr)
-cpdef contraction_autotune_preference_get_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buf, size_t size_in_bytes)
-cpdef contraction_autotune_preference_set_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buf, size_t size_in_bytes)
+cpdef contraction_autotune_preference_get_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buffer, size_t size_in_bytes)
+cpdef contraction_autotune_preference_set_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buffer, size_t size_in_bytes)
 cpdef destroy_contraction_autotune_preference(intptr_t autotune_preference)
 cpdef intptr_t create_slice_group_from_id_range(intptr_t handle, int64_t slice_id_start, int64_t slice_id_stop, int64_t slice_id_step) except? 0
 cpdef destroy_slice_group(intptr_t slice_group)
 cpdef contract_slices(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_data_out, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream)
-cpdef intptr_t create_tensor_descriptor(intptr_t handle, int32_t num_modes, extents, strides, modes, int data_type) except? 0
-cpdef destroy_tensor_descriptor(intptr_t desc_tensor)
+cpdef intptr_t create_tensor_descriptor(intptr_t handle, int32_t num_modes, extents, strides, mode_labels, int data_type) except? 0
+cpdef destroy_tensor_descriptor(intptr_t tensor_desc)
 cpdef intptr_t create_tensor_svd_config(intptr_t handle) except? 0
 cpdef destroy_tensor_svd_config(intptr_t svd_config)
 cpdef get_tensor_svd_config_attribute_dtype(int attr)
-cpdef tensor_svd_config_get_attribute(intptr_t handle, intptr_t svd_config, int attr, intptr_t buf, size_t size_in_bytes)
-cpdef tensor_svd_config_set_attribute(intptr_t handle, intptr_t svd_config, int attr, intptr_t buf, size_t size_in_bytes)
+cpdef tensor_svd_config_get_attribute(intptr_t handle, intptr_t svd_config, int attr, intptr_t buffer, size_t size_in_bytes)
+cpdef tensor_svd_config_set_attribute(intptr_t handle, intptr_t svd_config, int attr, intptr_t buffer, size_t size_in_bytes)
 cpdef workspace_compute_svd_sizes(intptr_t handle, intptr_t desc_tensor_in, intptr_t desc_tensor_u, intptr_t desc_tensor_v, intptr_t svd_config, intptr_t work_desc)
 cpdef workspace_compute_qr_sizes(intptr_t handle, intptr_t desc_tensor_in, intptr_t desc_tensor_q, intptr_t desc_tensor_r, intptr_t work_desc)
 cpdef intptr_t create_tensor_svd_info(intptr_t handle) except? 0
 cpdef get_tensor_svd_info_attribute_dtype(int attr)
-cpdef tensor_svd_info_get_attribute(intptr_t handle, intptr_t svd_info, int attr, intptr_t buf, size_t size_in_bytes)
+cpdef tensor_svd_info_get_attribute(intptr_t handle, intptr_t svd_info, int attr, intptr_t buffer, size_t size_in_bytes)
 cpdef destroy_tensor_svd_info(intptr_t svd_info)
 cpdef tensor_svd(intptr_t handle, intptr_t desc_tensor_in, intptr_t raw_data_in, intptr_t desc_tensor_u, intptr_t u, intptr_t s, intptr_t desc_tensor_v, intptr_t v, intptr_t svd_config, intptr_t svd_info, intptr_t work_desc, intptr_t stream)
 cpdef tensor_qr(intptr_t handle, intptr_t desc_tensor_in, intptr_t raw_data_in, intptr_t desc_tensor_q, intptr_t q, intptr_t desc_tensor_r, intptr_t r, intptr_t work_desc, intptr_t stream)
@@ -156,8 +159,8 @@ cpdef int32_t distributed_get_num_ranks(intptr_t handle) except? -1
 cpdef int32_t distributed_get_proc_rank(intptr_t handle) except? -1
 cpdef distributed_synchronize(intptr_t handle)
 cpdef get_network_attribute_dtype(int attr)
-cpdef network_get_attribute(intptr_t handle, intptr_t network_desc, int attr, intptr_t buf, size_t size_in_bytes)
-cpdef network_set_attribute(intptr_t handle, intptr_t network_desc, int attr, intptr_t buf, size_t size_in_bytes)
+cpdef network_get_attribute(intptr_t handle, intptr_t network_desc, int attr, intptr_t buffer, size_t size_in_bytes)
+cpdef network_set_attribute(intptr_t handle, intptr_t network_desc, int attr, intptr_t buffer, size_t size_in_bytes)
 cpdef workspace_purge_cache(intptr_t handle, intptr_t work_desc, int mem_space)
 cpdef compute_gradients_backward(intptr_t handle, intptr_t plan, raw_data_in, intptr_t output_gradient, gradients, int32_t accumulate_output, intptr_t work_desc, intptr_t stream)
 cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_state_modes, state_mode_extents, int data_type) except? 0
@@ -209,3 +212,12 @@ cpdef sampler_get_info(intptr_t handle, intptr_t tensor_network_sampler, int att
 cpdef int64_t state_apply_unitary_channel(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, int32_t num_tensors, tensor_data, tensor_mode_strides, probabilities) except? -1
 cpdef state_capture_mps(intptr_t handle, intptr_t tensor_network_state)
 cpdef int64_t state_apply_general_channel(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, int32_t num_tensors, tensor_data, tensor_mode_strides) except? -1
+cpdef intptr_t create_state_projection_mps(intptr_t handle, int32_t num_states, tensor_network_states, intptr_t coeffs, int32_t symmetric, int32_t num_envs, intptr_t spec_envs, int boundary_condition, int32_t num_tensors, qudits_per_tensor, extents_out, strides_out, dual_tensors_data_out, intptr_t ortho_spec) except? 0
+cpdef get_state_projection_mps_attribute_dtype(int attr)
+cpdef state_projection_mps_configure(intptr_t handle, intptr_t tensor_network_projection, int attribute, intptr_t attribute_value, size_t attribute_size)
+cpdef state_projection_mps_prepare(intptr_t handle, intptr_t tensor_network_projection, size_t max_workspace_size_device, intptr_t work_desc, intptr_t cuda_stream)
+cpdef state_projection_mps_compute_tensor_env(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, strides_in, intptr_t env_tensor_data_in, strides_out, intptr_t env_tensor_data_out, int32_t apply_inv_metric, int32_t re_resolve_channels, intptr_t work_desc, intptr_t cuda_stream)
+cpdef state_projection_mps_get_tensor_info(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, intptr_t extents, intptr_t recommended_strides)
+cpdef state_projection_mps_extract_tensor(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream)
+cpdef state_projection_mps_insert_tensor(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, intptr_t ortho_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream)
+cpdef destroy_state_projection_mps(intptr_t tensor_network_projection)

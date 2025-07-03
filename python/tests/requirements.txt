@@ -5,8 +5,9 @@ cffi >=1.0.0
 nbformat
 nbconvert
 cirq-core
-qiskit>=1.4.2,<2
+qiskit>=1.4.2,<3
 qiskit-aer
 pylatexenc
 jsonschema == 4.17.3
 networkx
+mpi4py

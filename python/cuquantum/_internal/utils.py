@@ -492,21 +492,21 @@ def get_mpi_comm_pointer(comm):
     mpi_comm_size = MPI._sizeof(MPI.Comm)
     return comm_ptr, mpi_comm_size
 
-def deprecate_function(my_func, message):
+def deprecate_function(my_func, message, deprecation_class):
     def add_deprecation_warning(message):
         def decorator(func):
             @functools.wraps(func) 
             def wrapper(*args, **kwargs):
-                warnings.warn(message, DeprecationWarning, stacklevel=2)
+                warnings.warn(message, deprecation_class, stacklevel=2)
                 return func(*args, **kwargs)
             return wrapper
         return decorator
     return add_deprecation_warning(message)(my_func)
 
-def deprecate_class(cls, message):
+def deprecate_class(cls, message, deprecation_class):
     class DeprecatedClass(cls):
         def __new__(cls, *args, **kwargs):
-            warnings.warn(message, DeprecationWarning, stacklevel=2)
+            warnings.warn(message, deprecation_class, stacklevel=2)
             return super(DeprecatedClass, cls).__new__(cls)
 
         def __init__(self, *args, **kwargs):
@@ -516,10 +516,10 @@ def deprecate_class(cls, message):
     DeprecatedClass.__doc__ = cls.__doc__
     return DeprecatedClass
 
-def deprecate(api, message):
+def deprecate(api, message, deprecation_class):
     if inspect.isfunction(api):
-        return deprecate_function(api, message)
+        return deprecate_function(api, message, deprecation_class)
     elif inspect.isclass(api):
-        return deprecate_class(api, message)
+        return deprecate_class(api, message, deprecation_class)
     else:
         raise ValueError(f'API type {type(api)} not supported')

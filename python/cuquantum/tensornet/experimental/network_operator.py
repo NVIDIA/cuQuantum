@@ -28,7 +28,7 @@ class NetworkOperator:
                 - ``'complex64'``
                 - ``'complex128'`` (default)
         
-        options : Specify options for the state computation as a :class:`~cuquantum.NetworkOptions` object. 
+        options : Specify options for the state computation as a :class:`cuquantum.tensornet.NetworkOptions` object. 
             Alternatively, a `dict` containing the parameters for the ``NetworkOptions`` constructor can also be provided. 
             If not specified, the value will be set to the default-constructed ``NetworkOptions`` object.
     """
@@ -215,7 +215,7 @@ class NetworkOperator:
                 - ``'complex128'`` (default)
 
             backend : A string specifying the ndarray backend for the device tensor operands. Currently supports ``'cupy'`` (default) and ``'torch'``.
-            options : Specify options for the state computation as a :class:`~cuquantum.NetworkOptions` object. 
+            options : Specify options for the state computation as a :class:`cuquantum.tensornet.NetworkOptions` object. 
                 Alternatively, a `dict` containing the parameters for the ``NetworkOptions`` constructor can also be provided. 
                 If not specified, the value will be set to the default-constructed ``NetworkOptions`` object.
             stream : Provide the CUDA stream to use for tensor network operator construction, which is needed for stream-ordered operations such as allocating memory. 

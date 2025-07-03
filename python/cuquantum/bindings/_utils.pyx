@@ -21,7 +21,7 @@ cdef bint is_nested_sequence(data):
             return True
 
 
-cdef int cuqnt_alloc_wrapper(void* ctx, void** ptr, size_t size, Stream stream) with gil:
+cdef int cuqnt_alloc_wrapper(void* ctx, void** ptr, size_t size, Stream stream) noexcept with gil:
     """Assuming the user provides an alloc routine: ptr = alloc(size, stream).
 
     Note: this function holds the Python GIL.
@@ -39,7 +39,7 @@ cdef int cuqnt_alloc_wrapper(void* ctx, void** ptr, size_t size, Stream stream) 
         return 0
 
 
-cdef int cuqnt_free_wrapper(void* ctx, void* ptr, size_t size, Stream stream) with gil:
+cdef int cuqnt_free_wrapper(void* ctx, void* ptr, size_t size, Stream stream) noexcept with gil:
     """Assuming the user provides a free routine: free(ptr, size, stream).
 
     Note: this function holds the Python GIL.

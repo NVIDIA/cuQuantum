@@ -7,11 +7,13 @@ import numpy as np
 import pytest
 from typing import Sequence
 from numbers import Number
-import gc
 
 from cuquantum.densitymat import DenseMixedState, DensePureState, WorkStream
 
 from mpi4py import MPI
+
+# mark all tests in this file as mpi tests
+pytestmark = pytest.mark.mpi
 
 # TODO: Add tests for non-blocking execution, non-0 stream arg
 
@@ -67,7 +69,6 @@ class TestStateAPI:
         cp.cuda.Device(self.device_id).use()
 
     def teardown_method(self):
-        gc.collect()
         self.ctx=None
 
     @pytest.mark.parametrize("hilbert_space", [(10,), (4, 6), (2, 3), (4,), (7,), (3, 3, 3)])
@@ -134,7 +135,6 @@ class TestStateAPI:
             init="random",
             mixed=(purity == "MIXED"),
         )
-        gc.collect()
         shape, offsets = psi.local_info
         psi_arr = psi.view().get()
         assert not np.any(np.isnan(psi_arr))

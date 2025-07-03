@@ -16,10 +16,10 @@ import pytest
 
 import cuquantum
 from cuquantum import ComputeType, cudaDataType
-from cuquantum import custatevec as cusv
+from cuquantum.bindings import custatevec as cusv
 
-from .. import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type,
-                MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase)
+from . import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type, 
+               MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase, BindingsDeprecationTestBase)
 
 
 ###################################################################
@@ -203,25 +203,14 @@ class TestMultiGpuSV:
 
 class TestLibHelper:
 
-    def test_get_version(self):
+    def test_get_property(self):
         ver = cusv.get_version()
         major = ver // 1000
         minor = (ver % 1000) // 100
 
-        # run-time version must be compatible with build-time version
-        assert major == cusv.MAJOR_VER
-        assert minor >= cusv.MINOR_VER
-
-        # sanity check (build-time versions should agree)
-        assert cusv.VERSION == (cusv.MAJOR_VER * 1000
-            + cusv.MINOR_VER * 100
-            + cusv.PATCH_VER)
-
-    def test_get_property(self):
-        # run-time version must be compatible with build-time version
-        assert cusv.MAJOR_VER == cusv.get_property(
+        assert major == cusv.get_property(
             cuquantum.libraryPropertyType.MAJOR_VERSION)
-        assert cusv.MINOR_VER <= cusv.get_property(
+        assert minor <= cusv.get_property(
             cuquantum.libraryPropertyType.MINOR_VERSION)
 
 class TestMathMode:
@@ -1633,7 +1622,7 @@ class TestCommunicator:
     @pytest.mark.parametrize(
         "communicator_args", (
             (cusv.CommunicatorType.MPICH, 'libmpi.so'),  # see NVIDIA/cuQuantum#31
-            (cusv.CommunicatorType.OPENMPI, ''),
+            (cusv.CommunicatorType.OPENMPI, 'libmpi.so'),
             # TODO: can we use cffi to generate the wrapper lib on the fly?
             (cusv.CommunicatorType.EXTERNAL, ''),
         )
@@ -1976,3 +1965,8 @@ class TestLogger(LoggerTestBase):
 
     mod = cusv
     prefix = "custatevec"
+
+
+class TestBindingDeprecation(BindingsDeprecationTestBase):
+
+    lib_name = "custatevec"

@@ -48,6 +48,7 @@ all: check-env
 	${CUDA_PATH}/bin/nvcc high_level/mpo_mps_sampling_example.cu -o mpo_mps_sampling_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/mps_sampling_example.cu -o mps_sampling_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/qft_mps_sampling_example.cu -o qft_mps_sampling_example ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc high_level/proj_mps_circuit_dmrg_example.cu -o proj_mps_circuit_dmrg_example ${CXX_FLAGS}
     ifdef MPI_ROOT
 		${CUDA_PATH}/bin/nvcc tensornet_example_mpi.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi ${CXX_FLAGS} -lmpi
 		${CUDA_PATH}/bin/nvcc tensornet_example_mpi_auto.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi_auto ${CXX_FLAGS} -lmpi
@@ -92,6 +93,7 @@ clean:
 	rm -f mps_sampling_example mps_sampling_example.o
 	rm -f mpo_mps_sampling_example mpo_mps_sampling_example.o
 	rm -f qft_mps_sampling_example qft_mps_sampling_example.o
+	rm -f proj_mps_circuit_dmrg_example proj_mps_circuit_dmrg_example.o
 	rm -f tensornet_example_mpi tensornet_example_mpi.o
 	rm -f tensornet_example_mpi_auto tensornet_example_mpi_auto.o
 	rm -f sampling_mpi_example sampling_mpi_example.o

@@ -27,7 +27,7 @@ try:
     import torch
     from .tensor_ifc_torch import TorchTensor
     _TENSOR_TYPES['torch']  = TorchTensor
-    torch_asarray = functools.partial(torch.as_tensor, device='cuda')
+    torch_asarray = functools.partial(torch.tensor, device='cuda')
 except ImportError as e:
     torch = None
     torch_asarray = None

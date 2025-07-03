@@ -161,6 +161,7 @@ class LocalDenseMatrixOperator(MatrixOperator):
                 self._dtype,
                 self._data.data_ptr,
                 (self.callback._get_internal_wrapper(which="tensor") if self.callback is not None else None),
+                (self.callback._get_internal_gradient_wrapper(which="tensor") if self.callback is not None else None),
             )
         elif self.batch_size == 1:
             self._ptr = cudm.create_matrix_operator_dense_local(
@@ -170,6 +171,7 @@ class LocalDenseMatrixOperator(MatrixOperator):
                 self._dtype,
                 self._data.data_ptr,
                 (self.callback._get_internal_wrapper(which="tensor") if self.callback is not None else None),
+                (self.callback._get_internal_gradient_wrapper(which="tensor") if self.callback is not None else None),
             )
         self._set_finalizer()
         register_with(self, self._ctx, self._ctx.logger)

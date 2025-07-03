@@ -12,6 +12,9 @@ from .custatevec_tests.test_custatevec_samples import sample_files as cusv_sampl
 from .cutensornet_tests.test_cutensornet_samples import sample_files as cutn_samples
 from .cutensornet_tests.test_cutensornet_samples import notebook_files as cutn_notebooks
 
+# All tests here marked as utility tests
+pytestmark = pytest.mark.utility
+
 testing_python_samples = set(cudm_samples + cusv_samples + cutn_samples)
 testing_notebook_samples = set(cutn_notebooks)
 

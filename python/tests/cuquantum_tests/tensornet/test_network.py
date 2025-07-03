@@ -9,8 +9,8 @@ import sys
 import opt_einsum as oe
 import pytest
 
-from cuquantum import cutensornet as cutn
-from cuquantum import Network
+from cuquantum.bindings import cutensornet as cutn
+from cuquantum.tensornet import Network
 from cuquantum._internal.utils import infer_object_package
 
 from .utils.data import backend_names, dtype_names, einsum_expressions

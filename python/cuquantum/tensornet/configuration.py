@@ -24,7 +24,7 @@ from .memory import BaseCUDAMemoryManager
 
 @dataclass
 class NetworkOptions(object):
-    """A data class for providing options to the :class:`cuquantum.Network` object.
+    """A data class for providing options to the :class:`cuquantum.tensornet.Network` object.
 
     Attributes:
         compute_type (cuquantum.ComputeType): CUDA compute type. A suitable compute type will be selected if not specified.
@@ -99,13 +99,13 @@ class OptimizerOptions(object):
     Attributes:
         samples: Number of samples for hyperoptimization. See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES`.
         threads: Number of threads for the hyperoptimizer. See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_THREADS`.
-        path: Options for the path finder (:class:`~cuquantum.PathFinderOptions` object or dict containing the ``(parameter, value)``
+        path: Options for the path finder (:class:`cuquantum.tensornet.PathFinderOptions` object or dict containing the ``(parameter, value)``
             items for ``PathFinderOptions``). Alternatively, the path can be provided as a sequence of pairs in the
             :func:`numpy.einsum_path` format.
-        slicing: Options for the slicer (:class:`~cuquantum.SlicerOptions` object or dict containing the ``(parameter, value)`` items for
+        slicing: Options for the slicer (:class:`cuquantum.tensornet.SlicerOptions` object or dict containing the ``(parameter, value)`` items for
             ``SlicerOptions``). Alternatively, a sequence of sliced modes or sequence of ``(sliced mode, sliced extent)`` pairs
             can be directly provided.
-        reconfiguration: Options for the reconfiguration algorithm as a :class:`~cuquantum.ReconfigOptions` object or dict containing the
+        reconfiguration: Options for the reconfiguration algorithm as a :class:`cuquantum.tensornet.ReconfigOptions` object or dict containing the
             ``(parameter, value)`` items for ``ReconfigOptions``.
         seed: Optional seed for the random number generator. See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SEED`.
         cost_function: The objective function to use for finding the optimal contraction path.

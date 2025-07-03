@@ -21,13 +21,13 @@ except ImportError:
     cirq = circuit_parser_utils_cirq = None
 try:
     import qiskit
-    from qiskit_aer import AerSimulator, QasmSimulator
+    from qiskit_aer import AerSimulator
     from cuquantum.tensornet._internal import circuit_parser_utils_qiskit
 except ImportError:
-    qiskit = AerSimulator = QasmSimulator = circuit_parser_utils_qiskit = None
+    qiskit = AerSimulator = circuit_parser_utils_qiskit = None
 
-from cuquantum import cutensornet as cutn
-from cuquantum import CircuitToEinsum, contract
+from cuquantum.bindings import cutensornet as cutn
+from cuquantum.tensornet import CircuitToEinsum, contract
 from cuquantum._internal.utils import infer_object_package
 from cuquantum.tensornet._internal.circuit_converter_utils import get_pauli_gates
 
@@ -97,18 +97,21 @@ def expectation_from_sv(sv, pauli_strings):
         n = sv.ndim
         pauli_map = dict(zip(range(n), pauli_strings))
         backend = importlib.import_module(infer_object_package(sv))
-        pauli_gates = get_pauli_gates(pauli_map, dtype=sv.dtype, backend=backend)
+        pauli_gates, gates_are_diagonal = get_pauli_gates(pauli_map, dtype=sv.dtype, backend=backend)
         # bra/ket indices
         if backend is torch:
             inputs = [sv, list(range(n)), sv.conj().resolve_conj(), list(range(n))]
         else:
             inputs = [sv, list(range(n)), sv.conj(), list(range(n))]
-        for o, qs in pauli_gates:
+        for (o, qs), is_diagonal in zip(pauli_gates, gates_are_diagonal):
             q = qs[0]
-            inputs[3][q] += n # update ket indices
             if infer_object_package(sv) == 'torch' and str(sv.device) == 'cpu':
                 o = o.to(device=sv.device)
-            inputs.extend([o, [q+n, q]])
+            if is_diagonal:
+                inputs.extend([o.diagonal(), [q,]])
+            else:
+                inputs[3][q] += n # update ket indices
+                inputs.extend([o, [q+n, q]])
         return oe.contract(*inputs).item()
     else:
         value = 0
@@ -266,18 +269,12 @@ class QiskitComputeEngine(_BaseComputeEngine):
         return precision
     
     def _compute_state_vector(self):
-        precision = self._get_precision()
         circuit = circuit_parser_utils_qiskit.remove_measurements(self.circuit)
-        if np.lib.NumpyVersion(qiskit.__version__) >= '1.3.0':
-            from qiskit.quantum_info import Statevector
-            # A WAR with Qiskit bug: https://github.com/Qiskit/qiskit/issues/13778
-            # This currently does not support precision arg
-            result = Statevector.from_instruction(circuit).data
-        else:
-            circuit.save_statevector()
-            simulator = AerSimulator(precision=precision)
-            circuit = qiskit.transpile(circuit, simulator)
-            result = simulator.run(circuit).result().get_statevector()
+        from qiskit.quantum_info import Statevector
+        # A WAR with Qiskit bug: https://github.com/Qiskit/qiskit/issues/13778
+        # This currently does not support precision arg
+        result = Statevector.from_instruction(circuit).data
+        
         sv = np.asarray(result).reshape((2,)*circuit.num_qubits)
         # statevector returned by qiskit's simulator is labelled by the inverse of :attr:`qiskit.QuantumCircuit.qubits`
         # this is different from `cirq` and different from the implementation in :class:`CircuitToEinsum`
@@ -293,7 +290,7 @@ class QiskitComputeEngine(_BaseComputeEngine):
         circuit.add_register(new_creg)
         circuit.measure(modes, new_creg)
         precision = self._get_precision()
-        backend = QasmSimulator(precision=precision)
+        backend = AerSimulator(precision=precision)
         result = backend.run(qiskit.transpile(circuit, backend), shots=nshots, seed=self.sample_rng.integers(2023)).result()
         counts  = result.get_counts(circuit)
         sampling = {}

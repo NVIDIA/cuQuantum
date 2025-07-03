@@ -83,7 +83,7 @@ def run_distributed_index_bit_swaps(
     if name == "Open MPI":
         # use built-in OpenMPI communicator
         communicator_type = cusv.CommunicatorType.OPENMPI
-        soname = ""
+        soname = "libmpi.so"
     elif name == "MPICH":
         # use built-in MPICH communicator
         communicator_type = cusv.CommunicatorType.MPICH

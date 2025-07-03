@@ -91,6 +91,21 @@ endif()
 set(CUTENSOR_INC_DIR ${CUTENSOR_ROOT}/include)
 set(CUTENSOR_LIB_DIR ${CUTENSOR_ROOT}/lib/${CUDAToolkit_VERSION_MAJOR})
 
+# cuTensorNet
+if(NOT DEFINED ENV{CUTENSORNET_ROOT} AND NOT DEFINED CUTENSORNET_ROOT)
+  message(FATAL_ERROR "CUTENSORNET_ROOT is not set!")
+else()
+  if(DEFINED ENV{CUTENSORNET_ROOT})
+    set(CUTENSORNET_ROOT "$ENV{CUTENSORNET_ROOT}")
+  endif()
+  message(STATUS "Looking for cuTensorNet in ${CUTENSORNET_ROOT}")
+  if(NOT EXISTS ${CUTENSORNET_ROOT})
+    message(FATAL_ERROR "Cannot find CUTENSORNET_ROOT")
+  endif()
+endif()
+set(CUTENSORNET_INC_DIR ${CUTENSORNET_ROOT}/include)
+set(CUTENSORNET_LIB_DIR "${CUTENSORNET_ROOT}/lib")
+
 # Find cuDensityMat
 if(NOT DEFINED ENV{CUDENSITYMAT_ROOT} AND NOT DEFINED CUDENSITYMAT_ROOT)
   message(FATAL_ERROR "CUDENSITYMAT_ROOT is not set!")
@@ -106,7 +121,7 @@ endif()
 set(CUDENSITYMAT_INC_DIR ${CUDENSITYMAT_ROOT}/include)
 set(CUDENSITYMAT_LIB_DIR ${CUDENSITYMAT_ROOT}/lib)
 
-# Single-GPU example
+# Single-GPU operator action example
 add_executable(operator_action_example
   operator_action_example.cpp
 )
@@ -121,25 +136,26 @@ set_target_properties(operator_action_example
 target_include_directories(operator_action_example
   PUBLIC
     ${CUDENSITYMAT_INC_DIR}
-    ${CUTENSOR_INC_DIR}
     ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
 
 target_link_directories(operator_action_example
   PUBLIC
     ${CUDENSITYMAT_LIB_DIR}
+    ${CUTENSORNET_LIB_DIR}
     ${CUTENSOR_LIB_DIR}
 )
 
 target_link_libraries(operator_action_example
   PUBLIC
     cudensitymat
+    cutensornet
     cutensor
     CUDA::cublas
     CUDA::cudart
 )
 
-# Multi-GPU example
+# Multi-GPU operator action example
 if(MPI_FOUND)
 
   add_executable(operator_action_mpi_example
@@ -161,7 +177,6 @@ if(MPI_FOUND)
   target_include_directories(operator_action_mpi_example
     PUBLIC
       ${CUDENSITYMAT_INC_DIR}
-      ${CUTENSOR_INC_DIR}
       ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
       ${MPI_CXX_INCLUDE_DIRS}
   )
@@ -169,12 +184,14 @@ if(MPI_FOUND)
   target_link_directories(operator_action_mpi_example
     PUBLIC
       ${CUDENSITYMAT_LIB_DIR}
+      ${CUTENSORNET_LIB_DIR}
       ${CUTENSOR_LIB_DIR}
   )
 
   target_link_libraries(operator_action_mpi_example
     PUBLIC
       cudensitymat
+      cutensornet
       cutensor
       CUDA::cublas
       CUDA::cudart
@@ -182,3 +199,37 @@ if(MPI_FOUND)
   )
 
 endif() # MPI_FOUND
+
+# Single-GPU operator action gradient example
+add_executable(operator_action_gradient_example
+  operator_action_gradient_example.cpp
+)
+
+set_target_properties(operator_action_gradient_example
+  PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD}
+    CUDA_STANDARD ${CMAKE_CUDA_STANDARD}
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_include_directories(operator_action_gradient_example
+  PUBLIC
+    ${CUDENSITYMAT_INC_DIR}
+    ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+
+target_link_directories(operator_action_gradient_example
+  PUBLIC
+    ${CUDENSITYMAT_LIB_DIR}
+    ${CUTENSORNET_LIB_DIR}
+    ${CUTENSOR_LIB_DIR}
+)
+
+target_link_libraries(operator_action_gradient_example
+  PUBLIC
+    cudensitymat
+    cutensornet
+    cutensor
+    CUDA::cublas
+    CUDA::cudart
+)

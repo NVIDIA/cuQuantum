@@ -15,6 +15,8 @@ from mpi4py import MPI
 NUM_DEVICES = cp.cuda.runtime.getDeviceCount()
 # TODO: mostly redundant with tests in test_context.py, consolidate in the future
 
+# mark all tests in this file as mpi tests
+pytestmark = pytest.mark.mpi
 
 @pytest.mark.parametrize(
     "hilbert_space_dims",

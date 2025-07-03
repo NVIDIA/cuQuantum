@@ -19,7 +19,7 @@ try:
     import torch
 except ImportError:
     torch = None
-from cuquantum.cutensornet.experimental import NetworkState, NetworkOperator
+from cuquantum.tensornet.experimental import NetworkState, NetworkOperator
 
 from .circuit_data import cirq_circuits, get_qiskit_unitary_gate, qiskit_circuits
 from .test_utils import DEFAULT_RNG
@@ -153,18 +153,22 @@ def svd_algorithm(svd_algorithm_cycle):
 
 STATE_UPDATE_CONFIGS = ({}, {'max_extent': 2}, {'rel_cutoff': 0.12, 'gauge_option': 'simple'})
 
-def create_vqc_states(config):
+def create_vqc_states(config, with_control=False):
     # specify the dimensions of the tensor network state
     n_state_modes = 6
     state_mode_extents = (2, ) * n_state_modes
     dtype = 'complex128'
 
     # create random operators
-    cp.random.seed(4) # seed is chosen such that the value based truncation in STATE_UPDATE_CONFIGS will yield different output MPS extents for state_a and state_b
+    cp.random.seed(8) # seed is chosen such that the value based truncation in STATE_UPDATE_CONFIGS will yield different output MPS extents for state_a and state_b
     random_complex = lambda *args, **kwargs: cp.random.random(*args, **kwargs) + 1.j * cp.random.random(*args, **kwargs)
     op_one_body = random_complex((2, 2,))
-    op_two_body_x = random_complex((2, 2, 2, 2))
-    op_two_body_y = random_complex((2, 2, 2, 2))
+    if with_control:
+        op_two_body_x = random_complex((2, 2,))
+        op_two_body_y = random_complex((2, 2,))
+    else:
+        op_two_body_x = random_complex((2, 2, 2, 2))
+        op_two_body_y = random_complex((2, 2, 2, 2))
 
     state_a = NetworkState(state_mode_extents, dtype=dtype, config=config)
     state_b = NetworkState(state_mode_extents, dtype=dtype, config=config)
@@ -179,15 +183,18 @@ def create_vqc_states(config):
 
     two_body_op_ids = []
     # apply two body tensor operators to the tensor network state
-    for i in range(6):
-        for site in range(i, n_state_modes, 2):
-            if site + 1 < n_state_modes:
-                modes_two_body = (site, site+1)
-                # op_two_body differs between state_a and state_b, therefore setting immutable to False
-                tensor_id_a = state_a.apply_tensor_operator(modes_two_body, op_two_body_x, immutable=False)
-                tensor_id_b = state_b.apply_tensor_operator(modes_two_body, op_two_body_y, immutable=False)
-                assert tensor_id_a == tensor_id_b
-                two_body_op_ids.append(tensor_id_a)
+    for i in range(0, n_state_modes, 2):
+        if with_control:
+            control_mode = (i, )
+            target_mode = (i+1, )  
+        else:
+            control_mode = None
+            target_mode = (i, i+1)
+            
+        tensor_id_a = state_a.apply_tensor_operator(target_mode, op_two_body_x, control_modes=control_mode, control_values=0, immutable=False)
+        tensor_id_b = state_b.apply_tensor_operator(target_mode, op_two_body_y, control_modes=control_mode, control_values=0, immutable=False)
+        assert tensor_id_a == tensor_id_b
+        two_body_op_ids.append(tensor_id_a)
     
     pauli_string = {'IXIXIX': 0.5, 'IYIYIY': 0.2, 'IZIZIZ': 0.3, 'IIIIII': 0.1, 'ZIZIZI': 0.4, 'XIXIXI': 0.2}
     operator = NetworkOperator.from_pauli_strings(pauli_string, dtype='complex128')

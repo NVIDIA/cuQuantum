@@ -12,7 +12,7 @@ then use network_state_config to create the NetworkState object in tests.
 from abc import ABC
 from typing import Iterator
 import numpy as np
-from cuquantum.cutensornet.experimental import NetworkState, TNConfig, MPSConfig
+from cuquantum.tensornet.experimental import NetworkState, TNConfig, MPSConfig
 from .quantum_channels import QuantumChannel
 
 # in pytest cases, python objects are not displayed nicely, so let's use string tags

@@ -44,8 +44,8 @@ class ContractDecomposeAlgorithm:
 
 
     Attributes:
-        qr_method: The QR method used for the decomposition. See :class:`~cuquantum.cutensornet.tensor.QRMethod`.
-        svd_method: The SVD method used for the decomposition. See :class:`~cuquantum.cutensornet.tensor.SVDMethod`.
+        qr_method: The QR method used for the decomposition. See :class:`cuquantum.tensornet.tensor.QRMethod`.
+        svd_method: The SVD method used for the decomposition. See :class:`cuquantum.tensornet.tensor.SVDMethod`.
     """
 
     qr_method: Optional[Union[QRMethod, Literal[False, None],Dict]] = dataclasses.field(default_factory=QRMethod)
@@ -68,10 +68,10 @@ class ContractDecomposeInfo:
     """A data class for capturing contract-decompose information.
 
     Attributes:
-        qr_method: The QR method used for the decomposition. See :class:`~cuquantum.cutensornet.tensor.QRMethod`.
-        svd_method: The SVD method used for the decomposition. See :class:`~cuquantum.cutensornet.tensor.SVDMethod`.
-        svd_info: The SVD information during runtime. See :class:`~cuquantum.cutensornet.tensor.SVDInfo`.
-        optimizer_info: The information for the contraction path to form the intermediate tensor. See :class:`~OptimizerInfo`
+        qr_method: The QR method used for the decomposition. See :class:`cuquantum.tensornet.tensor.QRMethod`.
+        svd_method: The SVD method used for the decomposition. See :class:`cuquantum.tensornet.tensor.SVDMethod`.
+        svd_info: The SVD information during runtime. See :class:`cuquantum.tensornet.tensor.SVDInfo`.
+        optimizer_info: The information for the contraction path to form the intermediate tensor. See :class:`cuquantum.tensornet.OptimizerInfo`
     """
 
     qr_method: Union[QRMethod, Literal[False, None],Dict]

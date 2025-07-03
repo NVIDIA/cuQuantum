@@ -171,7 +171,7 @@ num_slices = np.zeros((1,), dtype=num_slices_dtype)
 cutn.contraction_optimizer_info_get_attribute(
     handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.NUM_SLICES,
     num_slices.ctypes.data, num_slices.dtype.itemsize)
-num_slices = int(num_slices)
+num_slices = num_slices.item()
 
 assert num_slices > 0
 
@@ -268,7 +268,7 @@ if rank == root:
     C_d = C_d.reshape(extent_C, order='F')
     D_d = D_d.reshape(extent_D, order='F')    
     R_d = R_d.reshape(extent_R, order='F')
-    path, _ = cuquantum.einsum_path("abcdef,bgheij,magfik,lchdjm->kl", A_d, B_d, C_d, D_d)
+    path, _ = cuquantum.tensornet.einsum_path("abcdef,bgheij,magfik,lchdjm->kl", A_d, B_d, C_d, D_d)
     out = cp.einsum("abcdef,bgheij,magfik,lchdjm->kl", A_d, B_d, C_d, D_d, optimize=path)
 
     if not cp.allclose(out, R_d):
@@ -283,7 +283,7 @@ flops = np.zeros((1,), dtype=flops_dtype)
 cutn.contraction_optimizer_info_get_attribute(
     handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
     flops.ctypes.data, flops.dtype.itemsize)
-flops = float(flops)
+flops = flops.item()
 
 if rank == root:
     print(f"num_slices: {num_slices}")

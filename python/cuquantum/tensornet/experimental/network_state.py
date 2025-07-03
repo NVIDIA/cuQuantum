@@ -54,7 +54,7 @@ class NetworkState:
             If provided, users have the option to provide a sequence of these labels as the input arguments for the following APIs including 
             :meth:`apply_tensor_operator`, :meth:`apply_mpo`, :meth:`compute_batched_amplitudes`, :meth:`compute_reduced_density_matrix` and 
             :meth:`compute_sampling`. See the docstring for each of these APIs for more details.
-        options : Specify options for the state computation as a :class:`~cuquantum.NetworkOptions` object. 
+        options : Specify options for the state computation as a :class:`cuquantum.tensornet.NetworkOptions` object. 
             Alternatively, a `dict` containing the parameters for the ``NetworkOptions`` constructor can also be provided. 
             If not specified, the value will be set to the default-constructed ``NetworkOptions`` object.
     
@@ -67,7 +67,7 @@ class NetworkState:
 
         In this example, we aim to directly perform simulation on a quantum circuit instance using tensor network contraction method.
 
-        >>> from cuquantum.cutensornet.experimental import NetworkState, TNConfig
+        >>> from cuquantum.tensornet.experimental import NetworkState, TNConfig
         >>> import cirq
 
         Define a random cirq.Circuit, note that qiskit.QuantumCircuit is supported as well using the same API call
@@ -401,7 +401,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 - A :class:`MPSConfig` object for MPS based tensor network simulation.
                 - A `dict` containing the parameters for the :class:`TNConfig` or :class:`MPSConfig` constructor.
             
-            options : Specify options for the computation as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
+            options : Specify options for the computation as a :class:`~cuquantum.tensornet.NetworkOptions` object. Alternatively, a `dict`
                 containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
                 the value will be set to the default-constructed ``NetworkOptions`` object.
             stream : Provide the CUDA stream to use for state initialization, which is needed for stream-ordered operations such as allocating memory. 
@@ -412,25 +412,30 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
               users are encouraged to use :meth:`apply_tensor_operator` to construct the :class:`NetworkState` object.
         """
         options = utils.check_or_create_options(NetworkOptions, options, "network options")
+        if utils.infer_object_package(circuit) == 'qiskit':
+            parser_options = {'decompose_gates': True}
+        else:
+            # cirq.Circuit does not support decompose_gates option
+            parser_options = None
         with utils.device_ctx(options.device_id):
-            converter = CircuitToEinsum(circuit, dtype=dtype, backend=backend)
+            converter = CircuitToEinsum(circuit, dtype=dtype, backend=backend, options=parser_options)
         return cls.from_converter(converter, config=config, options=options, stream=stream)
     
     
     @classmethod
     def from_converter(cls, converter, *, config=None, options=None, stream=None):
         """
-        Create a :class:`NetworkState` object from the given :class:`cuquantum.CircuitToEinsum` converter.
+        Create a :class:`NetworkState` object from the given :class:`cuquantum.tensornet.CircuitToEinsum` converter.
 
         Args:
-            converter : A :class:`cuquantum.CircuitToEinsum` object.
+            converter : A :class:`cuquantum.tensornet.CircuitToEinsum` object.
             config : The simulation configuration for the state simulator. It can be:
 
                 - A :class:`TNConfig` object for contraction based tensor network simulation (default).
                 - A :class:`MPSConfig` object for MPS based tensor network simulation.
                 - A `dict` containing the parameters for the :class:`TNConfig` or :class:`MPSConfig` constructor.
             
-            options : Specify options for the state computation as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
+            options : Specify options for the state computation as a :class:`cuquantum.tensornet.NetworkOptions` object. Alternatively, a `dict`
                 containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
                 the value will be set to the default-constructed ``NetworkOptions`` object.
             stream : Provide the CUDA stream to use for state initialization, which is needed for stream-ordered operations such as allocating memory. 
@@ -532,7 +537,6 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
         Notes:
             - For MPS simulation, the size of ``modes`` shall be restricted to no larger than 2 (two-body operator).
-            - For controlled tensor operators, this method currently only supports immutable operators.
         """
         # operand indices (b, a, B, A) required for modes a, b
         operand = operand.T
@@ -543,8 +547,6 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 modes, operand.data_ptr, operand.strides, immutable, adjoint, unitary)
             self.logger.debug(f"The tensor operand has been applied to the state with an ID ({tensor_id}).")
         else:
-            if not immutable:
-                raise ValueError(f"NetworkState currently only supports immutable controlled tensor operators")
             tensor_id = cutn.state_apply_controlled_tensor_operator(self.handle, self.state, len(control_modes), 
                 control_modes, control_values, len(modes), modes, operand.data_ptr, operand.strides, immutable, adjoint, unitary)
             self.logger.debug(f"The controlled tensor operand has been applied to the state with an ID ({tensor_id}).")

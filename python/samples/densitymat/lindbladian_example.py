@@ -1,3 +1,7 @@
+# Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 from typing import Callable, Union, Sequence, Tuple
 from numbers import Number
 

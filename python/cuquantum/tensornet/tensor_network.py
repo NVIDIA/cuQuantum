@@ -77,9 +77,9 @@ class Network:
             can be specified using the Einstein summation convention.
         operands: A sequence of tensors (ndarray-like objects). The currently supported types are :class:`numpy.ndarray`,
             :class:`cupy.ndarray`, and :class:`torch.Tensor`.
-        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`~cuquantum.tensornet.tensor_qualifiers_dtype` objects
+        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`cuquantum.bindings.cutensornet.tensor_qualifiers_dtype` objects
             of length equal to the number of operands.
-        options: Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
+        options: Specify options for the tensor network as a :class:`cuquantum.tensornet.NetworkOptions` object. Alternatively, a `dict`
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
         stream: Provide the CUDA stream to use for network construction, which is needed for stream-ordered operations such as allocating memory. Acceptable inputs include ``cudaStream_t`` (as
@@ -91,7 +91,7 @@ class Network:
 
     Examples:
 
-        >>> from cuquantum import Network
+        >>> from cuquantum.tensornet import Network
         >>> import numpy as np
 
         Define the parameters of the tensor network:
@@ -198,7 +198,7 @@ class Network:
 
         For PyTorch CPU/GPU tensors with the ``requires_grad`` attribute set up, one does not need to pass the ``qualifiers``
         argument. Note that this :class:`Network` class and its methods are **not** PyTorch operators and do **not** add any
-        node to PyTorch's autograd graph. For a native, differentiable PyTorch operator, use the :func:`cuquantum.contract`
+        node to PyTorch's autograd graph. For a native, differentiable PyTorch operator, use the :func:`cuquantum.tensornet.contract`
         function.
 
         See :func:`contract` for more examples on specifying the Einstein summation expression as well
@@ -901,10 +901,10 @@ The data type '{self.data_type}' is currently not supported.
     def reset_operands(self, *operands, stream=None):
         """Reset the operands held by this :class:`Network` instance.
 
-        This method has two use cases: (1) it can be used to provide new operands for execution when the
-           original operands are on the CPU, or (2) it can be used to release the internal reference to the previous operands and make their memory available for
-           other use by passing ``None`` for the ``operands`` argument. In this case, this method must be called again to provide the desired operands before another
-           call to execution APIs like :meth:`autotune`, :meth:`contract`, or :meth:`gradients`.
+        This method has two use cases: (1) it can be used to provide new operands for execution when the 
+        original operands are on the CPU, or (2) it can be used to release the internal reference to the previous operands and make their memory available for 
+        other use by passing ``None`` for the ``operands`` argument. In this case, this method must be called again to provide the desired operands before another
+        call to execution APIs like :meth:`autotune`, :meth:`contract`, or :meth:`gradients`.
 
         This method is not needed when the operands reside on the GPU and in-place operations are used to update the operand values.
 
@@ -1233,9 +1233,9 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
             can be specified using the Einstein summation convention.
         operands : A sequence of tensors (ndarray-like objects). The currently supported types are :class:`numpy.ndarray`,
             :class:`cupy.ndarray`, and :class:`torch.Tensor`.
-        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`~cuquantum.tensor_qualifiers_dtype` objects
+        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`cuquantum.bindings.cutensornet.tensor_qualifiers_dtype` objects
             of length equal to the number of operands.
-        options : Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
+        options : Specify options for the tensor network as a :class:`cuquantum.tensornet.NetworkOptions` object. Alternatively, a `dict`
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
         optimize :  This parameter specifies options for path optimization as an :class:`OptimizerOptions` object. Alternatively, a
@@ -1257,7 +1257,7 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
         .. code-block:: python
 
             from cuquantum.bindings import cutensornet as cutn
-            from cuquantum import contract, NetworkOptions
+            from cuquantum.tensornet import contract, NetworkOptions
 
             handle = cutn.create()
             network_opts = NetworkOptions(handle=handle, ...)
@@ -1270,7 +1270,7 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
 
         Use NumPy operands:
 
-        >>> from cuquantum import contract
+        >>> from cuquantum.tensornet import contract
         >>> import numpy as np
         >>> a = np.arange(6.).reshape(3, 2)
         >>> b = np.arange(6.).reshape(2, 3)
@@ -1302,7 +1302,7 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
 
         Provide options for the tensor network:
 
-        >>> from cuquantum import NetworkOptions
+        >>> from cuquantum.tensornet import NetworkOptions
         >>> n = NetworkOptions(device_id=1)
         >>> r = contract('ij,jk->ik', a, b, options=n)
 
@@ -1312,7 +1312,7 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
 
         Specify options for the optimizer:
 
-        >>> from cuquantum import OptimizerOptions, PathFinderOptions
+        >>> from cuquantum.tensornet import OptimizerOptions, PathFinderOptions
         >>> p = PathFinderOptions(imbalance_factor=230, cutoff_size=8)
         >>> o = OptimizerOptions(path=p, seed=123)
         >>> r = contract('ij,jk,kl', a, b, a, optimize=o)
@@ -1410,9 +1410,9 @@ def contract_path(*operands, qualifiers=None, options=None, optimize=None):
             can be specified using the Einstein summation convention.
         operands : A sequence of tensors (ndarray-like objects). The currently supported types are :class:`numpy.ndarray`,
             :class:`cupy.ndarray`, and :class:`torch.Tensor`.
-        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`~cuquantum.tensor_qualifiers_dtype` objects
+        qualifiers: Specify the tensor qualifiers as a :class:`numpy.ndarray` of :class:`cuquantum.bindings.cutensornet.tensor_qualifiers_dtype` objects
             of length equal to the number of operands.
-        options : Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
+        options : Specify options for the tensor network as a :class:`cuquantum.tensornet.NetworkOptions` object. Alternatively, a `dict`
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
         optimize :  This parameter specifies options for path optimization as an :class:`OptimizerOptions` object. Alternatively, a
@@ -1432,7 +1432,7 @@ def contract_path(*operands, qualifiers=None, options=None, optimize=None):
         .. code-block:: python
 
             from cuquantum.bindings import cutensornet as cutn
-            from cuquantum import contract, NetworkOptions
+            from cuquantum.tensornet import contract, NetworkOptions
 
             handle = cutn.create()
             network_opts = NetworkOptions(handle=handle, ...)

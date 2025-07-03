@@ -5,15 +5,41 @@
 import cupy as cp
 import numpy as np
 from qiskit import QuantumCircuit
-from qiskit.circuit import Barrier, Delay, Gate, Measure
-try:
-    # qiskit 1.0
-    from qiskit.circuit.library import UnitaryGate
-except ImportError:
-    # qiskit < 1.0
-    from qiskit.extensions import UnitaryGate
+from qiskit.circuit import Barrier, ControlledGate, Delay, Gate, Measure
+from qiskit.circuit.library import (
+    UnitaryGate, ZGate, SGate, SdgGate, TGate, 
+    TdgGate, PhaseGate, RZGate, CZGate, CCZGate, RZZGate,
+    DiagonalGate, IGate, U1Gate
+)
+
+from qiskit.quantum_info import (
+    Operator, 
+    Choi,
+    SuperOp,
+    Kraus,
+    Stinespring,
+    Chi,
+    PTM,
+)
+
+DIAGONAL_GATE_CLASSES = (
+    ZGate, SGate, SdgGate, TGate, TdgGate,
+    PhaseGate, RZGate, CZGate, CCZGate, RZZGate,
+    DiagonalGate, IGate, U1Gate,
+)
 
 from ..._internal.tensor_wrapper import _get_backend_asarray_func
+
+# https://docs.quantum.ibm.com/api/qiskit/quantum_info#channels
+NOISY_CHANNEL_TYPES = (
+    Operator, 
+    Choi,
+    SuperOp,
+    Kraus,
+    Stinespring,
+    Chi,
+    PTM,
+)
 
 def remove_measurements(circuit):
     """
@@ -21,8 +47,8 @@ def remove_measurements(circuit):
     """
     circuit = circuit.copy()
     circuit.remove_final_measurements()
-    for operation, _, _ in circuit:
-        if isinstance(operation, Measure):
+    for instruction in circuit.data:
+        if isinstance(instruction.operation, Measure):
             raise ValueError('mid-circuit measurement not supported in tensor network simulation')
     return circuit
 
@@ -32,81 +58,121 @@ def get_inverse_circuit(circuit):
     """
     return circuit.inverse()
 
-def is_primitive_gate(operation):
+def should_parse_operation_operand(operation, qubits, decompose_gates):
     """
-    Return whether an operation is of primitive gate type, i.e, standard gate, customized unitary gate and 
-    parameterized SingletonGate (for qiskit>=0.45.0). 
+    Return whether the input operation should be parsed as full operand or further decomposed.
+    If the operation is a Gate instance and also satisifies at least one of the following conditions, directly parse the operand:
+        1. is a customized unitary gate
+        2. number of qubits no larger than two
+        3. number of qubits larger than two but decompose_gate is set to False
     """
-    operation_name = str(type(operation))
-    return ('standard_gate' in operation_name # standard gate
-        or isinstance(operation, UnitaryGate) # customized unitary gate
-        or ('_Singleton' in operation_name and operation.definition is None) ) # paramterized Singleton Gate
+    return isinstance(operation, Gate) and (isinstance(operation, UnitaryGate) or len(qubits) <= 2 or not decompose_gates)
 
-def get_decomposed_gates(circuit, qubit_map=None, gates=None, gate_process_func=None, global_phase=0):
+def is_diagonal_gate(inst):
+    if isinstance(inst, ControlledGate):
+        return is_diagonal_gate(inst.base_gate)
+    return isinstance(inst, DIAGONAL_GATE_CLASSES)
+
+def parse_gate_sequence(
+    circuit, 
+    *, 
+    asarray=None, 
+    dtype='complex128', 
+    qubit_map=None, 
+    gates=None, 
+    global_phase=0, 
+    decompose_gates=True, 
+    check_diagonal=True, 
+    gates_are_diagonal=None
+):
     """
-    Return the gate sequence for the given circuit. Compound gates/instructions will be decomposed 
-    to standard gates or customized unitary gates or parameterized SingletonGate(for qiskit>=0.45.0)
+    Return the gate sequence for the given circuit.
+    Args:
+        circuit: A :class:`qiskit.QuantumCircuit` object. 
+        asarray: An asarray function to convert the operand to the ndarray for a specific package.
+            If is None, the original operation will be returned
+        dtype: The dtype to convert the operation operand to
+        qubit_map: A dictionary mapping the local operation qubits to the global qubits.
+        gates: The current gate sequences
+        global_phase: An additional global phase to add to.
+        decompose_gate: Whether the operation should be decomposed when operand is being parsed into ndarrays.
     """
     if gates is None:
         gates = []
+    if gates_are_diagonal is None:
+        gates_are_diagonal = []
     global_phase += circuit.global_phase
-    for operation, gate_qubits, _ in circuit:
+    for instruction in circuit.data:
+        operation = instruction.operation
+        gate_qubits = instruction.qubits
         if qubit_map:
             gate_qubits = [qubit_map[q] for q in gate_qubits]
-        if isinstance(operation, Gate):
-            if is_primitive_gate(operation):
-                try:
-                    if callable(gate_process_func):
-                        gates.append(gate_process_func(operation, gate_qubits))
-                    else:
-                        gates.append((operation, gate_qubits))
-                    continue
-                except:
-                    # certain standard_gates do not have materialized to_matrix implemented.
-                    # jump to the next level unfold in such case
-                    assert operation.definition is not None
-        else:
-            if isinstance(operation, (Barrier, Delay)):
-                # no physical meaning in tensor network simulation
-                continue
-            elif not isinstance(operation.definition, QuantumCircuit):
-                # Instruction as composite gate
-                raise ValueError(f'operation type {type(operation)} not supported')
+        if isinstance(operation, (Barrier, Delay)):
+            # no physical meaning in tensor network simulation
+            continue
+        if isinstance(operation, NOISY_CHANNEL_TYPES):
+            raise RuntimeError("CircuitToEinsum currently doesn't support qiskit Circuits with QuantumChannels")
+        if asarray is None:
+            gates.append((operation, gate_qubits))
+            continue
+        if should_parse_operation_operand(operation, gate_qubits, decompose_gates):
+            tensor = Operator(operation).data.reshape((2,2)*len(gate_qubits))
+            tensor = asarray(tensor, dtype=dtype)
+            # in qiskit notation, qubits are labelled in the inverse order
+            gates.append((tensor, gate_qubits[::-1]))
+            gates_are_diagonal.append(check_diagonal and is_diagonal_gate(operation))
+            continue
+        # Instruction as composite gate
+        if not isinstance(operation.definition, QuantumCircuit):            
+            raise ValueError(f'operation type {type(operation)} not supported')
         # for composite gate, must provide a map from the sub circuit to the original circuit
         next_qubit_map = dict(zip(operation.definition.qubits, gate_qubits))
-        gates, global_phase = get_decomposed_gates(operation.definition, qubit_map=next_qubit_map, gates=gates, gate_process_func=gate_process_func, global_phase=global_phase)
-    return gates, global_phase
+        gates, global_phase, gates_are_diagonal = parse_gate_sequence(
+            operation.definition, 
+            asarray=asarray, 
+            dtype=dtype, 
+            qubit_map=next_qubit_map, 
+            gates=gates, 
+            global_phase=global_phase,
+            decompose_gates=decompose_gates,
+            check_diagonal=check_diagonal,
+            gates_are_diagonal=gates_are_diagonal,
+        )
+    return gates, global_phase, gates_are_diagonal
 
-def unfold_circuit(circuit, dtype='complex128', backend=cp):
+def unfold_circuit(circuit, *, dtype='complex128', backend=cp, decompose_gates=True, check_diagonal=True):
     """
-    Unfold the circuit to obtain the qubits and all gate tensors. All :class:`qiskit.circuit.Gate` and 
-    :class:`qiskit.circuit.Instruction` in the circuit will be decomposed into either standard gates or customized unitary gates.
-    Barrier and delay operations will be discarded.
+    Unfold the circuit to obtain the qubits and all gate tensors. 
 
     Args:
         circuit: A :class:`qiskit.QuantumCircuit` object. All parameters in the circuit must be binded.
         dtype: Data type for the tensor operands.
         backend: The package the tensor operands belong to.
+        decompose_gates: Whether to decompose composite gates down to at most two qubits.
 
     Returns:
         All qubits and gate operations from the input circuit
     """
+    if circuit.parameters:
+        raise ValueError(f"Input circuit contains following parameters: {circuit.parameters}. Must be fully parameterized")
     asarray = _get_backend_asarray_func(backend)
     qubits = circuit.qubits
-    
-    def gate_process_func(operation, gate_qubits):
-        tensor = operation.to_matrix().reshape((2,2)*len(gate_qubits))
-        tensor = asarray(tensor, dtype=dtype)
-        # in qiskit notation, qubits are labelled in the inverse order
-        return tensor, gate_qubits[::-1]
-    
-    gates, global_phase = get_decomposed_gates(circuit, gate_process_func=gate_process_func, global_phase=0)
+
+    gates, global_phase, gates_are_diagonal = parse_gate_sequence(
+        circuit, 
+        asarray=asarray,
+        dtype=dtype,
+        global_phase=0, 
+        decompose_gates=decompose_gates,
+        check_diagonal=check_diagonal,
+    )
     if global_phase != 0:
         phase = np.exp(1j*global_phase)
         phase_gate = asarray([[phase, 0], [0, phase]], dtype=dtype)
         gates = [(phase_gate, qubits[:1]), ] + gates
+        gates_are_diagonal = [True] + gates_are_diagonal
 
-    return qubits, gates
+    return qubits, gates, gates_are_diagonal
 
 def get_lightcone_circuit(circuit, coned_qubits):
     """
@@ -120,7 +186,8 @@ def get_lightcone_circuit(circuit, coned_qubits):
         A :class:`qiskit.QuantumCircuit` object that potentially contains less number of gates
     """
     coned_qubits = set(coned_qubits)
-    gates, global_phase = get_decomposed_gates(circuit)
+    # No need to explicitly decompose gates here
+    gates, global_phase, _ = parse_gate_sequence(circuit, asarray=None, decompose_gates=False, check_diagonal=False)
     newqc = QuantumCircuit(circuit.qubits)
     ix = len(gates)
     tail_operations = []

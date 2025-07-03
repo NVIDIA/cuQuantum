@@ -6,9 +6,12 @@ from cuquantum.densitymat import WorkStream
 
 import cupy as cp
 from mpi4py import MPI
+import pytest
 
 NUM_DEVICES = cp.cuda.runtime.getDeviceCount()
 
+# mark all tests in this file as mpi tests
+pytestmark = pytest.mark.mpi
 
 def test_work_stream_mpi():
     comm = MPI.COMM_WORLD

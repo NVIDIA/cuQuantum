@@ -34,7 +34,7 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
         outputs : A sequence of modes for output tensors in "neutral format" (sequence of sequences).
         size_dict : A dictionary mapping the modes to the extent.
         algorithm : A ``ContractDecomposeAlgorithm`` object specifying the algorithm for the gate split operation.
-        options : Specify options for the operation as a :class:`~cuquantum.NetworkOptions` object.
+        options : Specify options for the operation as a :class:`cuquantum.tensornet.NetworkOptions` object.
         max_mid_extent : The maximal mid extent (reduced) expected for the output of the operation.
         stream : Provide the CUDA stream to use for the autotuning operation. Acceptable inputs include ``cudaStream_t``
             (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
@@ -157,7 +157,7 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
     Evaluate the compound expression for contraction and decomposition on the input operands. 
 
     The expression follows a combination of Einstein summation notation for contraction and the decomposition notation for decomposition
-    (as in :func:`~cuquantum.cutensornet.tensor.decompose`). 
+    (as in :func:`cuquantum.tensornet.tensor.decompose`). 
     The input represents a tensor network that will be contracted to form an intermediate tensor for subsequent decomposition operation, 
     yielding two or three outputs depending on the final decomposition method. 
     The expression requires explicit specification of modes for the input and output tensors (excluding ``S`` for SVD method). 
@@ -175,10 +175,10 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
             If not specified, the value will be set to the default-constructed ``ContractDecomposeAlgorithm`` object.
         operands : A sequence of tensors (ndarray-like objects). The currently supported types are :class:`numpy.ndarray`,
             :class:`cupy.ndarray`, and :class:`torch.Tensor`.
-        options : Specify options for the tensor network as a :class:`~cuquantum.NetworkOptions` object. Alternatively, a `dict`
+        options : Specify options for the tensor network as a :class:`cuquantum.tensornet.NetworkOptions` object. Alternatively, a `dict`
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
-        optimize :  This parameter specifies options for path optimization as an :class:`~cuquantum.OptimizerOptions` object. Alternatively, a
+        optimize :  This parameter specifies options for path optimization as an :class:`cuquantum.tensornet.OptimizerOptions` object. Alternatively, a
             dictionary containing the parameters for the ``OptimizerOptions`` constructor can also be provided. If not
             specified, the value will be set to the default-constructed ``OptimizerOptions`` object.
         stream: Provide the CUDA stream to use for the autotuning operation. Acceptable inputs include ``cudaStream_t``
@@ -202,7 +202,7 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
         :class:`MemoryLimitExceeded`: the memory needed to perform the operation is larger than the ``options.memory_limit``
 
     The contract and decompose expression adopts a combination of Einstein summation notation for contraction and the decomposition notation
-    introduced in :func:`~cuquantum.cutensornet.tensor.decompose`.
+    introduced in :func:`cuquantum.tensornet.tensor.decompose`.
     The ``subscripts`` string is a list of subscript labels where each label refers to a mode of the corresponding operand. 
     The subscript labels are separated by either comma or identifier ``->``. 
     The subscript labels before the identifier ``->`` are viewed as inputs, and the ones after are viewed as outputs, respectively.
@@ -279,7 +279,7 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
         .. code-block:: python
 
             from cuquantum.bindings import cutensornet as cutn
-            from cuquantum.cutensornet.experimental import contract_decompose
+            from cuquantum.tensornet.experimental import contract_decompose
 
             handle = cutn.create()
             q, r = contract_decompose(..., options={"handle": handle}, ...)

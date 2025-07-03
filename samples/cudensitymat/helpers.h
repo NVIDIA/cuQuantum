@@ -54,17 +54,44 @@
 #endif
 
 
-/** Helper function for creating an array copy in GPU memory:
+/** Helper function for creating an array in GPU memory:
  *   RealComplexType = {float, double, complex<float>, complex<double>} */
 template <typename RealComplexType>
-void * createArrayGPU(const std::vector<RealComplexType> & cpuArray)
+void * createArrayGPU(std::size_t arrayLen)
 {
   void * gpuArray {nullptr};
-  const std::size_t arraySize = cpuArray.size() * sizeof(RealComplexType);
-  if (arraySize > 0) {
-    HANDLE_CUDA_ERROR(cudaMalloc(&gpuArray, arraySize));
+  HANDLE_CUDA_ERROR(cudaMalloc(&gpuArray, arrayLen * sizeof(RealComplexType)));
+  return gpuArray;
+}
+
+
+/** Helper function for initializing an array in GPU memory from a CPU array:
+ *   RealComplexType = {float, double, complex<float>, complex<double>} */
+template <typename RealComplexType>
+void initializeArrayGPU(const std::vector<RealComplexType> & cpuArray,
+                        void * gpuArray)
+{
+  const std::size_t arrayLen = cpuArray.size();
+  if (arrayLen > 0) {
     HANDLE_CUDA_ERROR(cudaMemcpy(gpuArray, static_cast<const void*>(cpuArray.data()),
-                                 arraySize, cudaMemcpyHostToDevice));
+                                 arrayLen * sizeof(RealComplexType), cudaMemcpyHostToDevice));
+  }
+  return;
+}
+
+
+/** Helper function for creating and initializing an array in GPU memory:
+ *   RealComplexType = {float, double, complex<float>, complex<double>} */
+template <typename RealComplexType>
+void * createInitializeArrayGPU(const std::vector<RealComplexType> & cpuArray)
+{
+  void * gpuArray {nullptr};
+  const std::size_t arrayLen = cpuArray.size();
+  if (arrayLen > 0) {
+    gpuArray = createArrayGPU<RealComplexType>(arrayLen);
+    if (gpuArray != nullptr) {
+      initializeArrayGPU(cpuArray, gpuArray);
+    }
   }
   return gpuArray;
 }
@@ -78,7 +105,8 @@ inline void destroyArrayGPU(void * gpuArray)
 }
 
 
-/** Helper function for printing a GPU array */
+/** Helper function for printing a GPU array after GPU synchronization
+ *   RealComplexType = {float, double, complex<float>, complex<double>} */
 template <typename RealComplexType>
 void printArrayGPU(void * gpuArray,
                    std::size_t arrayLen)
@@ -87,7 +115,7 @@ void printArrayGPU(void * gpuArray,
   const std::size_t arraySize = arrayLen * sizeof(RealComplexType);
   HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
   HANDLE_CUDA_ERROR(cudaMemcpy(cpuArray.data(), gpuArray, arraySize, cudaMemcpyDeviceToHost));
-  std::cout << "\nPrinting array " << gpuArray << "[" << arrayLen << "]:\n";
+  std::cout << "Printing array " << gpuArray << "[" << arrayLen << "]:\n";
   for (std::size_t i = 0; i < arrayLen; ++i) {
     std::cout << " " << i << "   " << cpuArray[i] << std::endl;
   }

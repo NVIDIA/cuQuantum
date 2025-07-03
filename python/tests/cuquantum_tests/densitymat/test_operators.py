@@ -155,3 +155,37 @@ class TestOperators:
             a, b = get_dense_example(hilbert_space_dims)
             ops.append(Operator(hilbert_space_dims, (a, np.random.rand()), (b, np.random.rand())))
         OperatorAction(ctx, ops)
+
+    @pytest.mark.parametrize("hilbert_space_dims", [(4, 5, 2, 6, 3, 7)])
+    @pytest.mark.parametrize("n_ops", [1, 2])
+    def test_operator(self, work_stream, hilbert_space_dims, n_ops):
+        ctx = work_stream
+        ops = []
+        op=Operator(hilbert_space_dims)
+        # in place addition Operator.append(OperatorTerm)
+        for _ in range(n_ops):
+            a, b = get_dense_example(hilbert_space_dims)
+            op.append(a, coeff = np.random.rand())
+            op.append(b, coeff = np.random.rand())
+        op_action = OperatorAction(ctx, [op])
+        op_action = None
+        # in place addition Operator += OperatorTerm
+        op=Operator(hilbert_space_dims)
+        for _ in range(n_ops):
+            a, b = get_dense_example(hilbert_space_dims)
+            op += a
+            op += b
+        op_action = OperatorAction(ctx, [op])
+        op_action = None
+        # in  place addition Operator += Operator
+        op=Operator(hilbert_space_dims)
+        for _ in range(n_ops):
+            a, b = get_dense_example(hilbert_space_dims)
+            op += Operator(hilbert_space_dims, (a, np.random.rand()), (b, np.random.rand()))
+        op_action = OperatorAction(ctx, [op])
+        op_action = None
+
+        
+
+
+    
