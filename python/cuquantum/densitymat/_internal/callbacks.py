@@ -2,23 +2,25 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from dataclasses import dataclass
-from numbers import Number
-from typing import Optional, Callable, Union, Tuple, Iterable
-from operator import mul, add, sub
 from abc import ABC, abstractmethod
-from cuquantum._internal.tensor_ifc import Tensor
-from cuquantum._internal.tensor_wrapper import wrap_operand
+from numbers import Number
+from operator import mul
+from typing import Union, Tuple
+
 import numpy as np
 import cupy as cp
+
+from cuquantum.bindings.cudensitymat import WrappedScalarCallback, WrappedScalarGradientCallback
+from cuquantum._internal.utils import precondition
+from cuquantum._internal.tensor_wrapper import wrap_operand
 from .utils import check_and_get_batchsize, maybe_move_arrays, NDArrayType, device_ctx_from_array
 from ..callbacks import Callback, GPUCallback, CPUCallback
-from cuquantum.bindings.cudensitymat import WrappedScalarCallback
-from cuquantum._internal.utils import precondition
+
 
 CoefficientType = Union[
+    Number,
+    NDArrayType,
     Callback,
-    Union[Number, NDArrayType],
     Tuple[Number, Callback],
     Tuple[NDArrayType, Callback]
 ]
@@ -26,8 +28,6 @@ CoefficientType = Union[
 
 def _check_for_static_and_dynamic_type(coeff: Tuple):
     if not isinstance(coeff, tuple):
-        return False
-    if not len(coeff) == 2:
         return False
     if len(coeff) != 2:
         return False
@@ -60,6 +60,13 @@ class CallbackCoefficient(ABC):
         Callable wrapped as ::class`Callback` instance.
         """
         return self._callback
+
+    @property
+    def has_gradient(self) -> bool:
+        """
+        Whether this :class:`CallbackCoefficient` has a gradient callback.
+        """
+        return self.callback.has_gradient if self.callback is not None else False
 
     @staticmethod
     def create(coeff: CoefficientType = complex(1), batch_size=1) -> "CallbackCoefficient":
@@ -99,7 +106,10 @@ class CallbackCoefficient(ABC):
             return ScalarCallbackCoefficient(static_coeff, dynamic_coeff)
         else:
             if static_coeff is None or isinstance(static_coeff, Number):
-                static_coeff = np.ones(batch_size, dtype=np.complex128)
+                _static_coeff = np.ones(batch_size, dtype=np.complex128)
+                if static_coeff is not None:
+                    _static_coeff *= static_coeff
+                static_coeff = _static_coeff
             elif static_batch_size == 1 and isinstance(static_coeff, NDArrayType):
                 raise ValueError("Inconsistent batch size and coefficient array dimension.")
             return BatchedCallbackCoefficient(
@@ -124,7 +134,10 @@ class CallbackCoefficient(ABC):
             raise TypeError(
                 f"Cannot perform {what} between {type(self).__name__} and {type(other).__name__}."
             )
-
+        if self.has_gradient or other.has_gradient:
+            raise NotImplementedError(
+                f"Currently we do not support {what} between {type(self).__name__}s if at least one of them has a gradient callback."
+            )
         if self.batch_size != other.batch_size and not (
             self.batch_size == 1 or other.batch_size == 1
         ):
@@ -239,10 +252,19 @@ class CallbackCoefficient(ABC):
         else:
             return None
 
+    @property
+    def gradient_wrapper(self) -> WrappedScalarGradientCallback | None:
+        if self.has_gradient:
+            return self.callback._get_internal_gradient_wrapper("scalar")
+        else:
+            return None
 
-# TODO: maybe disable in-place callback for ScalarCallbackCoefficient
-# TODO: add test for inplace callback for ScalarCallbackCoefficient, if not supported disable
+# TODO: ScalarCallbackCoefficient now enabled in cuDM, test coverage not in place yet
 class ScalarCallbackCoefficient(CallbackCoefficient):
+    """
+    ScalarCallbackCoefficient is a wrapper class for a static coefficient and a callback.
+    """
+
     def __init__(self, static_coeff: Number, dynamic_coeff: Callback | None):
         super().__init__(static_coeff, dynamic_coeff, 1)
         
@@ -256,8 +278,9 @@ class ScalarCallbackCoefficient(CallbackCoefficient):
     def to_array(
         self, t: float = 0.0, args: NDArrayType | None = None, device: str | int | None = None
     ) -> Number:
-        r"""
+        """
         Return the total (static * dynamic) coefficient.
+
         Returns:
             Scalar
         """
@@ -301,6 +324,10 @@ class ScalarCallbackCoefficient(CallbackCoefficient):
 
 
 class BatchedCallbackCoefficient(CallbackCoefficient):
+    """
+    BatchedCallbackCoefficient is a wrapper class for a static coefficient and a callback.
+    """
+
     def __init__(self, static_coeff: NDArrayType, dynamic_coeff: Callback | None, batch_size):
         assert batch_size == static_coeff.size
         _static_coeff = wrap_operand(static_coeff)

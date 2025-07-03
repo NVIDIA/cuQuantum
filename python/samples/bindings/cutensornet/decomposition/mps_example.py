@@ -88,8 +88,8 @@ class MPSHelper:
         Args:
             abs_cutoff: The cutoff value for absolute singular value truncation.
             rel_cutoff: The cutoff value for relative singular value truncation.
-            renorm (cuquantum.cutensornet.TensorSVDNormalization): The option for renormalization of the truncated singular values.
-            partition (cuquantum.cutensornet.TensorSVDPartition): The option for partitioning of the singular values.
+            renorm (cuquantum.bindings.cutensornet.TensorSVDNormalization): The option for renormalization of the truncated singular values.
+            partition (cuquantum.bindings.cutensornet.TensorSVDPartition): The option for partitioning of the singular values.
         """        
         
         if partition != cutn.TensorSVDPartition.UV_EQUAL:
@@ -110,7 +110,7 @@ class MPSHelper:
         """Set the algorithm to use for all gate split operations.
         
         Args:
-            gate_algo (cuquantum.cutensornet.GateSplitAlgo): The gate splitting algorithm to use.
+            gate_algo (cuquantum.bindings.cutensornet.GateSplitAlgo): The gate splitting algorithm to use.
         """
 
         self.gate_algo = gate_algo

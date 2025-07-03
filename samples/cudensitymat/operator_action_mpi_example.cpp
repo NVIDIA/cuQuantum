@@ -39,7 +39,6 @@ void exampleWorkflow(cudensitymatHandle_t handle)
   // quantum state batch size (number of individual quantum states in a batched simulation)
   const std::vector<int64_t> spaceShape({2,2,2,2,2,2,2,2}); // dimensions of quantum degrees of freedom
   const int64_t batchSize = 1;                              // number of quantum states per batch (default is 1)
-  const int32_t numParams = 1;                              // number of external user-provided Hamiltonian parameters
 
   if (verbose) {
     std::cout << "Hilbert space rank = " << spaceShape.size() << "; Shape = (";
@@ -49,14 +48,20 @@ void exampleWorkflow(cudensitymatHandle_t handle)
     std::cout << "Quantum state batch size = " << batchSize << std::endl;
   }
 
-  // Place external user-provided Hamiltonian parameters in GPU memory
-  std::vector<double> cpuHamParams(numParams * batchSize, 13.42); // each parameter can have a different value, of course
-  auto * hamiltonianParams = static_cast<double *>(createArrayGPU(cpuHamParams));
-
   // Construct a user-defined Liouvillian operator using a convenience C++ class
-  UserDefinedLiouvillian liouvillian(handle, spaceShape);
+  UserDefinedLiouvillian liouvillian(handle, spaceShape, batchSize);
   if (verbose)
     std::cout << "Constructed the Liouvillian operator\n";
+
+  // Set and place external user-provided Hamiltonian parameters in GPU memory
+  const int32_t numParams = liouvillian.getNumParameters(); // number of external user-provided Hamiltonian parameters
+  std::vector<double> cpuHamParams(numParams * batchSize);
+  for (int64_t j = 0; j < batchSize; ++j) {
+    for (int32_t i = 0; i < numParams; ++i) {
+      cpuHamParams[j * numParams + i] = double(i+1) / double(j+1); // just setting some parameter values for each instance of the batch
+    }
+  }
+  auto * hamiltonianParams = static_cast<double *>(createInitializeArrayGPU(cpuHamParams));
 
   // Declare the input quantum state
   cudensitymatState_t inputState;
@@ -65,7 +70,7 @@ void exampleWorkflow(cudensitymatHandle_t handle)
                       spaceShape.size(),
                       spaceShape.data(),
                       batchSize,
-                      CUDA_C_64F,  // data type must match that of the operators created above
+                      dataType,
                       &inputState));
 
   // Query the size of the quantum state storage
@@ -74,18 +79,36 @@ void exampleWorkflow(cudensitymatHandle_t handle)
                       inputState,
                       1,               // only one storage component (tensor)
                       &storageSize));  // storage size in bytes
-  const std::size_t stateVolume = storageSize / sizeof(std::complex<double>);  // quantum state tensor volume (number of elements)
+  const std::size_t stateVolume = storageSize / sizeof(NumericalType);  // quantum state tensor volume (number of elements)
   if (verbose)
     std::cout << "Quantum state storage size (bytes) = " << storageSize << std::endl;
 
-  // Prepare some initial value for the input quantum state
-  std::vector<std::complex<double>> inputStateValue(stateVolume);
-  for (std::size_t i = 0; i < stateVolume; ++i) {
-    inputStateValue[i] = std::complex<double>{double(i+1), double(-(i+2))}; // just some value
+  // Prepare some initial value for the input quantum state batch
+  std::vector<NumericalType> inputStateValue(stateVolume);
+  if constexpr (std::is_same_v<NumericalType, float>) {
+    for (std::size_t i = 0; i < stateVolume; ++i) {
+      inputStateValue[i] = 1.0f / float(i+1); // just some value
+    }
+  } else if constexpr (std::is_same_v<NumericalType, double>) {
+    for (std::size_t i = 0; i < stateVolume; ++i) {
+      inputStateValue[i] = 1.0 / double(i+1); // just some value
+    }
+  } else if constexpr (std::is_same_v<NumericalType, std::complex<float>>) {
+    for (std::size_t i = 0; i < stateVolume; ++i) {
+      inputStateValue[i] = NumericalType{1.0f / float(i+1), -1.0f / float(i+2)}; // just some value
+    }
+  } else if constexpr (std::is_same_v<NumericalType, std::complex<double>>) {
+    for (std::size_t i = 0; i < stateVolume; ++i) {
+      inputStateValue[i] = NumericalType{1.0 / double(i+1), -1.0 / double(i+2)}; // just some value
+    }
+  } else {
+    std::cerr << "Error: Unsupported data type!\n";
+    std::exit(1);
   }
-
   // Allocate initialized GPU storage for the input quantum state with prepared values
-  auto * inputStateElems = createArrayGPU(inputStateValue);
+  auto * inputStateElems = createInitializeArrayGPU(inputStateValue);
+  if (verbose)
+    std::cout << "Allocated input quantum state storage and initialized it to some value\n";
 
   // Attach initialized GPU storage to the input quantum state
   HANDLE_CUDM_ERROR(cudensitymatStateAttachComponentStorage(handle,
@@ -103,13 +126,15 @@ void exampleWorkflow(cudensitymatHandle_t handle)
                       spaceShape.size(),
                       spaceShape.data(),
                       batchSize,
-                      CUDA_C_64F,  // data type must match that of the operators created above
+                      dataType,
                       &outputState));
 
   // Allocate initialized GPU storage for the output quantum state
-  auto * outputStateElems = createArrayGPU(std::vector<std::complex<double>>(stateVolume, {0.0, 0.0}));
+  auto * outputStateElems = createArrayGPU<NumericalType>(stateVolume);
+  if (verbose)
+    std::cout << "Allocated output quantum state storage\n";
 
-  // Attach initialized GPU storage to the output quantum state
+  // Attach GPU storage to the output quantum state
   HANDLE_CUDM_ERROR(cudensitymatStateAttachComponentStorage(handle,
                       outputState,
                       1,                                                 // only one storage component (tensor)
@@ -142,7 +167,7 @@ void exampleWorkflow(cudensitymatHandle_t handle)
   const auto finishTime = std::chrono::high_resolution_clock::now();
   const std::chrono::duration<double> timeSec = finishTime - startTime;
   if (verbose)
-    std::cout << "Operator action prepation time (sec) = " << timeSec.count() << std::endl;
+    std::cout << "Operator action preparation time (sec) = " << timeSec.count() << std::endl;
 
   // Query the required workspace buffer size (bytes)
   std::size_t requiredBufferSize {0};
@@ -155,8 +180,8 @@ void exampleWorkflow(cudensitymatHandle_t handle)
     std::cout << "Required workspace buffer size (bytes) = " << requiredBufferSize << std::endl;
 
   // Allocate GPU storage for the workspace buffer
-  const std::size_t bufferVolume = requiredBufferSize / sizeof(std::complex<double>);
-  auto * workspaceBuffer = createArrayGPU(std::vector<std::complex<double>>(bufferVolume, {0.0, 0.0}));
+  const std::size_t bufferVolume = requiredBufferSize / sizeof(NumericalType);
+  auto * workspaceBuffer = createArrayGPU<NumericalType>(bufferVolume);
   if (verbose)
     std::cout << "Allocated workspace buffer of size (bytes) = " << requiredBufferSize << std::endl;
 
@@ -170,21 +195,20 @@ void exampleWorkflow(cudensitymatHandle_t handle)
   if (verbose)
     std::cout << "Attached workspace buffer of size (bytes) = " << requiredBufferSize << std::endl;
 
-  // Zero out the output quantum state
-  HANDLE_CUDM_ERROR(cudensitymatStateInitializeZero(handle,
-                      outputState,
-                      0x0));
-  if (verbose)
-    std::cout << "Initialized the output quantum state to zero\n";
-
   // Apply the Liouvillian operator to the input quatum state
-  // and accumulate its action into the output quantum state (note += semantics)
+  // and accumulate its action into the output quantum state (note accumulative += semantics)
   for (int32_t repeat = 0; repeat < NUM_REPEATS; ++repeat) { // repeat multiple times for accurate timing
+    // Zero out the output quantum state
+    HANDLE_CUDM_ERROR(cudensitymatStateInitializeZero(handle,
+                        outputState,
+                        0x0));
+    if (verbose)
+      std::cout << "Initialized the output quantum state to zero\n";
     HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
     const auto startTime = std::chrono::high_resolution_clock::now();
     HANDLE_CUDM_ERROR(cudensitymatOperatorComputeAction(handle,
                         liouvillian.get(),
-                        0.01,                                  // time point
+                        0.3,                                   // time point (some value)
                         batchSize,                             // user-defined batch size
                         numParams,                             // number of external user-defined Hamiltonian parameters
                         hamiltonianParams,                     // external Hamiltonian parameters in GPU memory
@@ -200,14 +224,19 @@ void exampleWorkflow(cudensitymatHandle_t handle)
   }
 
   // Compute the squared norm of the output quantum state
-  void * norm2 = createArrayGPU(std::vector<double>(batchSize, 0.0));
+  void * norm2 = createInitializeArrayGPU(std::vector<double>(batchSize, 0.0));
   HANDLE_CUDM_ERROR(cudensitymatStateComputeNorm(handle,
                       outputState,
                       norm2,
                       0x0));
-  if (verbose)
-    std::cout << "Computed the output quantum state norm\n";
+  if (verbose) {
+    std::cout << "Computed the output quantum state norm:\n";
+    printArrayGPU<double>(norm2, batchSize);
+  }
+
   HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
+
+  // Destroy the norm2 array
   destroyArrayGPU(norm2);
 
   // Destroy workspace descriptor
@@ -284,6 +313,8 @@ int main(int argc, char ** argv)
   HANDLE_CUDM_ERROR(cudensitymatDestroy(handle));
   if (verbose)
     std::cout << "Destroyed the library handle\n";
+
+  HANDLE_CUDA_ERROR(cudaDeviceReset());
 
   // Finalize the MPI library
 #ifdef MPI_ENABLED

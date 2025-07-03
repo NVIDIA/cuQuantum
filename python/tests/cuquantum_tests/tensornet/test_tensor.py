@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from cuquantum import tensor
+from cuquantum.tensornet import tensor
 from cuquantum.tensornet._internal.decomposition_utils import DECOMPOSITION_DTYPE_NAMES
 from cuquantum._internal.utils import infer_object_package
 from cuquantum.tensornet.configuration import MemoryLimitExceeded
@@ -108,7 +108,7 @@ class TestDecompose:
         "return_info", (False, True)
     )
     def test_svd(
-            self, decompose_expr, xp, dtype, order, stream, return_info, blocking):
+            self, decompose_expr, xp, dtype, order, stream, blocking, return_info):
         methods = get_svd_methods_for_test(3, dtype)
         for method in methods:
             self._run_decompose(

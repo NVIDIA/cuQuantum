@@ -6,16 +6,16 @@ import logging
 
 import pytest
 
-from cuquantum import cutensornet as cutn
-from cuquantum import BaseCUDAMemoryManager
 from cuquantum import ComputeType
-from cuquantum import MemoryPointer
-from cuquantum import NetworkOptions
-from cuquantum import OptimizerInfo
-from cuquantum import OptimizerOptions
-from cuquantum import PathFinderOptions
-from cuquantum import ReconfigOptions
-from cuquantum import SlicerOptions
+from cuquantum.bindings import cutensornet as cutn
+from cuquantum.tensornet import BaseCUDAMemoryManager
+from cuquantum.tensornet import MemoryPointer
+from cuquantum.tensornet import NetworkOptions
+from cuquantum.tensornet import OptimizerInfo
+from cuquantum.tensornet import OptimizerOptions
+from cuquantum.tensornet import PathFinderOptions
+from cuquantum.tensornet import ReconfigOptions
+from cuquantum.tensornet import SlicerOptions
 
 
 class _OptionsBase:

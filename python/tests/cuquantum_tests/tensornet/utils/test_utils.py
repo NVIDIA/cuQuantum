@@ -17,9 +17,9 @@ try:
 except ImportError:
     torch = None
 
-from cuquantum import cutensornet as cutn
-from cuquantum import OptimizerOptions
-from cuquantum import tensor
+from cuquantum.bindings import cutensornet as cutn
+from cuquantum.tensornet import OptimizerOptions
+from cuquantum.tensornet import tensor
 from cuquantum.tensornet.experimental._internal.network_state_utils import _get_asarray_function
 from cuquantum.tensornet._internal.circuit_converter_utils import EINSUM_SYMBOLS_BASE
 from cuquantum.tensornet._internal.decomposition_utils import DECOMPOSITION_DTYPE_NAMES

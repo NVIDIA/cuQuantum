@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 25.03.0. Do not modify it directly.
+# This code was automatically generated with version 25.06.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -27,9 +27,15 @@ ctypedef cudensitymatTimeRange_t TimeRange
 ctypedef cudensitymatDistributedCommunicator_t DistributedCommunicator
 ctypedef cudensitymatScalarCallback_t ScalarCallback
 ctypedef cudensitymatTensorCallback_t TensorCallback
+ctypedef cudensitymatScalarGradientCallback_t ScalarGradientCallback
+ctypedef cudensitymatTensorGradientCallback_t TensorGradientCallback
 ctypedef cudensitymatDistributedInterface_t DistributedInterface
 ctypedef cudensitymatLoggerCallback_t LoggerCallback
 ctypedef cudensitymatLoggerCallbackData_t LoggerCallbackData
+ctypedef cudensitymatWrappedScalarCallback_t _WrappedScalarCallback
+ctypedef cudensitymatWrappedTensorCallback_t _WrappedTensorCallback
+ctypedef cudensitymatWrappedScalarGradientCallback_t _WrappedScalarGradientCallback
+ctypedef cudensitymatWrappedTensorGradientCallback_t _WrappedTensorGradientCallback
 
 ctypedef cudaStream_t Stream
 ctypedef cudaDataType DataType
@@ -38,12 +44,22 @@ ctypedef libraryPropertyType_t LibraryPropertyType
 cdef class WrappedScalarCallback:
     cdef object callback
     cdef cudensitymatCallbackDevice_t device
-    cdef cudensitymatWrappedScalarCallback_t* c_struct
+    cdef cudensitymatWrappedScalarCallback_t _struct
 
 cdef class WrappedTensorCallback:
     cdef object callback
     cdef cudensitymatCallbackDevice_t device
-    cdef cudensitymatWrappedTensorCallback_t* c_struct
+    cdef cudensitymatWrappedTensorCallback_t _struct
+
+cdef class WrappedScalarGradientCallback:
+    cdef object callback
+    cdef cudensitymatCallbackDevice_t device
+    cdef cudensitymatWrappedScalarGradientCallback_t _struct
+
+cdef class WrappedTensorGradientCallback:
+    cdef object callback
+    cdef cudensitymatCallbackDevice_t device
+    cdef cudensitymatWrappedTensorGradientCallback_t _struct
 
 
 ###############################################################################
@@ -54,6 +70,7 @@ ctypedef cudensitymatStatus_t _Status
 ctypedef cudensitymatComputeType_t _ComputeType
 ctypedef cudensitymatDistributedProvider_t _DistributedProvider
 ctypedef cudensitymatCallbackDevice_t _CallbackDevice
+ctypedef cudensitymatDifferentiationDir_t _DifferentiationDir
 ctypedef cudensitymatStatePurity_t _StatePurity
 ctypedef cudensitymatElementaryOperatorSparsity_t _ElementaryOperatorSparsity
 ctypedef cudensitymatMemspace_t _Memspace
@@ -83,10 +100,26 @@ cpdef state_compute_norm(intptr_t handle, intptr_t state, intptr_t norm, intptr_
 cpdef state_compute_trace(intptr_t handle, intptr_t state, intptr_t trace, intptr_t stream)
 cpdef state_compute_accumulation(intptr_t handle, intptr_t state_in, intptr_t state_out, intptr_t scaling_factors, intptr_t stream)
 cpdef state_compute_inner_product(intptr_t handle, intptr_t state_left, intptr_t state_right, intptr_t inner_product, intptr_t stream)
+cpdef intptr_t create_elementary_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents, int sparsity, int32_t num_diagonals, diagonal_offsets, int data_type, intptr_t tensor_data, tensor_callback, tensor_gradient_callback) except? 0
+cpdef intptr_t create_elementary_operator_batch(intptr_t handle, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int sparsity, int32_t num_diagonals, diagonal_offsets, int data_type, intptr_t tensor_data, tensor_callback, tensor_gradient_callback) except? 0
+cpdef destroy_elementary_operator(intptr_t elem_operator)
+cpdef intptr_t create_matrix_operator_dense_local(intptr_t handle, int32_t num_space_modes, space_mode_extents, int data_type, intptr_t matrix_data, matrix_callback, matrix_gradient_callback) except? 0
+cpdef intptr_t create_matrix_operator_dense_local_batch(intptr_t handle, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int data_type, intptr_t matrix_data, matrix_callback, matrix_gradient_callback) except? 0
+cpdef destroy_matrix_operator(intptr_t matrix_operator)
 cpdef intptr_t create_operator_term(intptr_t handle, int32_t num_space_modes, space_mode_extents) except? 0
+cpdef destroy_operator_term(intptr_t operator_term)
+cpdef operator_term_append_elementary_product(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, complex coefficient, coefficient_callback, coefficient_gradient_callback)
+cpdef operator_term_append_elementary_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback)
+cpdef operator_term_append_matrix_product(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, complex coefficient, coefficient_callback, coefficient_gradient_callback)
+cpdef operator_term_append_matrix_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback)
 cpdef intptr_t create_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents) except? 0
+cpdef destroy_operator(intptr_t superoperator)
+cpdef operator_append_term(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, complex coefficient, coefficient_callback, coefficient_gradient_callback)
+cpdef operator_append_term_batch(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback)
 cpdef operator_prepare_action(intptr_t handle, intptr_t superoperator, intptr_t state_in, intptr_t state_out, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
 cpdef operator_compute_action(intptr_t handle, intptr_t superoperator, double time, int64_t batch_size, int32_t num_params, intptr_t params, intptr_t state_in, intptr_t state_out, intptr_t workspace, intptr_t stream)
+cpdef operator_prepare_action_backward_diff(intptr_t handle, intptr_t superoperator, intptr_t state_in, intptr_t state_out_adj, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
+cpdef operator_compute_action_backward_diff(intptr_t handle, intptr_t superoperator, double time, int64_t batch_size, int32_t num_params, intptr_t params, intptr_t state_in, intptr_t state_out_adj, intptr_t state_in_adj, intptr_t params_grad, intptr_t workspace, intptr_t stream)
 cpdef intptr_t create_operator_action(intptr_t handle, int32_t num_operators, operators) except? 0
 cpdef destroy_operator_action(intptr_t operator_action)
 cpdef operator_action_prepare(intptr_t handle, intptr_t operator_action, state_in, intptr_t state_out, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
@@ -104,18 +137,3 @@ cpdef tuple workspace_get_memory(intptr_t handle, intptr_t workspace_descr, int 
 ###############################################################################
 
 cpdef tuple state_get_component_storage_size(intptr_t handle, intptr_t state, int32_t num_state_components)
-cpdef intptr_t create_elementary_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents, int sparsity, int32_t num_diagonals, diagonal_offsets, int data_type, intptr_t tensor_data, wrapped_tensor_callback) except? 0
-cpdef intptr_t create_elementary_operator_batch(intptr_t handle, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int sparsity, int32_t num_diagonals, diagonal_offsets, int data_type, intptr_t tensor_data, wrapped_tensor_callback) except? 0
-cpdef intptr_t create_matrix_operator_dense_local(intptr_t handle, int32_t num_space_modes, space_mode_extents, int data_type, intptr_t matrix_data, wrapped_matrix_callback) except? 0
-cpdef intptr_t create_matrix_operator_dense_local_batch(intptr_t handle, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int data_type, intptr_t matrix_data, wrapped_matrix_callback) except? 0
-cpdef operator_term_append_elementary_product(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, coefficient, wrapped_coefficient_callback)
-cpdef operator_term_append_elementary_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, wrapped_coefficient_callback)
-cpdef operator_term_append_general_product(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, num_operator_modes, operator_mode_extents, operator_mode_strides, state_modes_acted_on, mode_action_duality, int data_type, tensor_data, wrapped_tensor_callbacks, coefficient, wrapped_coefficient_callback)
-cpdef operator_term_append_matrix_product(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, coefficient, wrapped_coefficient_callback)
-cpdef operator_term_append_matrix_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, wrapped_coefficient_callback)
-cpdef operator_append_term(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, coefficient, coefficient_callback)
-cpdef operator_append_term_batch(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback)
-cpdef destroy_elementary_operator(intptr_t elem_operator)
-cpdef destroy_matrix_operator(intptr_t matrix_operator)
-cpdef destroy_operator_term(intptr_t operator_term)
-cpdef destroy_operator(intptr_t superoperator)

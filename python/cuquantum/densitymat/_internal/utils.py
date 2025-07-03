@@ -171,7 +171,7 @@ def maybe_move_array(
 def maybe_move_arrays(a, b):
     _a = wrap_operand(a)
     _b = wrap_operand(b)
-    print(_a, _b, _a.device_id, _b.device_id)
+
     if _b.device_id is None:
         b, _ = maybe_move_array(b, a)
         return a, b

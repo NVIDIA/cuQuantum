@@ -64,13 +64,13 @@ message(STATUS "Using CUTENSORNET_ROOT = ${CUTENSORNET_ROOT}")
 # ##########################################
 
 # Global CXX flags/options
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Global CUDA CXX flags/options
 set(CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER})
-set(CMAKE_CUDA_STANDARD 11)
+set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 
@@ -143,6 +143,7 @@ add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_sampler" high_level/mps_sampling_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_sampler_mpo" high_level/mpo_mps_sampling_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_sampler_qft" high_level/qft_mps_sampling_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_sampler_circuit_dmrg" high_level/proj_mps_circuit_dmrg_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.svd" approxTN/tensor_svd_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.qr" approxTN/tensor_qr_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gate" approxTN/gate_split_example.cu)

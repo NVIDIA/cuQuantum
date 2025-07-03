@@ -9,8 +9,8 @@ import numpy as np
 
 import opt_einsum as oe
 
-from cuquantum import CircuitToEinsum
-from cuquantum.cutensornet.experimental import NetworkState, TNConfig, MPSConfig, NetworkOperator
+from cuquantum.tensornet import CircuitToEinsum
+from cuquantum.tensornet.experimental import NetworkState, TNConfig, MPSConfig, NetworkOperator
 from cuquantum.tensornet.experimental._internal.network_state_utils import get_pauli_map
 from cuquantum.tensornet._internal.decomposition_utils import compute_mid_extent
 from cuquantum._internal.utils import infer_object_package
@@ -1343,7 +1343,7 @@ class ExactStateAPITester(BaseTester):
 
     @classmethod
     def from_circuit(cls, circuit, dtype, mps_options=EMPTY_DICT, backend='cupy', handle=None, rng=DEFAULT_RNG, **kwargs):
-        converter = CircuitToEinsum(circuit, dtype, backend=backend)
+        converter = CircuitToEinsum(circuit, dtype=dtype, backend=backend)
         reference_engine = ConverterComputeEngine(converter, backend=backend, handle=handle, sample_rng=rng)
         target_engines = []
         algorithm = mps_options.pop('algorithm', 'gesvd')

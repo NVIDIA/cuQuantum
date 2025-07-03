@@ -174,13 +174,13 @@ cdef int get_nested_resource_ptr(nested_resource[ResT] &in_out_ptr, object obj, 
 
 
 # Cython limitation: need standalone typedef if we wanna use it for casting
-ctypedef int (*DeviceAllocType)(void*, void**, size_t, Stream)
-ctypedef int (*DeviceFreeType)(void*, void*, size_t, Stream)
+ctypedef int (*DeviceAllocType)(void*, void**, size_t, Stream) noexcept nogil
+ctypedef int (*DeviceFreeType)(void*, void*, size_t, Stream) noexcept nogil
 
 
 cdef bint is_nested_sequence(data)
-cdef int cuqnt_alloc_wrapper(void* ctx, void** ptr, size_t size, Stream stream) with gil
-cdef int cuqnt_free_wrapper(void* ctx, void* ptr, size_t size, Stream stream) with gil
+cdef int cuqnt_alloc_wrapper(void* ctx, void** ptr, size_t size, Stream stream) noexcept with gil
+cdef int cuqnt_free_wrapper(void* ctx, void* ptr, size_t size, Stream stream) noexcept with gil
 cdef void logger_callback_with_data(
         int32_t log_level, const char* func_name, const char* message,
         void* func_arg) with gil

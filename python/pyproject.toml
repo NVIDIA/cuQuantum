@@ -4,10 +4,5 @@
 
 
 [build-system]
-# Ideally we wanna add cuquantum to this list too, but its version
-# constraint needs to be dynamically determined, and setuptools'
-# support for dynamic dependencies is still on beta, so we use a
-# custom PEP-517 backend to handle that instead.
-requires = ["Cython>=0.29.22,<3", "packaging", "setuptools>=61.0.0", "wheel"]
-build-backend = "pep517"
-backend-path = ["builder"]
+requires = ["Cython>=0.29.22", "packaging", "setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"

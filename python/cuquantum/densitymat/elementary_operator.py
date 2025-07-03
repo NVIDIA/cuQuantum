@@ -93,6 +93,10 @@ class ElementaryOperator(ABC):
         Data buffer of the elementary operator.
         """
         return self._data.tensor
+    
+    @property
+    def has_gradient(self) -> bool:
+        return self.callback.has_gradient if self.callback is not None else False
 
     @property
     def device_id(self) -> None | int:
@@ -133,7 +137,8 @@ class ElementaryOperator(ABC):
     def _check_binary_operation_compability(self, other: "ElementaryOperator", what: str = ""):
         if not isinstance(other, ElementaryOperator):
             raise TypeError(f"Cannot perform {what} between {type(self).__name__} and {type(other).__name__}.")
-
+        if self.has_gradient or other.has_gradient:
+            raise NotImplementedError(f"{what} is not yet supported between ElementaryOperators of which at least one has a gradient callback.")
         if self.shape != other.shape:
             raise ValueError(
                 f"Cannot perform {what} between {type(self).__name__} and {type(other).__name__} "
@@ -224,6 +229,7 @@ class ElementaryOperator(ABC):
                 self._dtype,
                 self._data.data_ptr,
                 (self.callback._get_internal_wrapper("tensor") if self.callback is not None else None),
+                (self.callback._get_internal_gradient_wrapper("tensor") if (self.callback is not None and self.callback.has_gradient) else None),
             )
         elif self.batch_size == 1:
             self._ptr = cudm.create_elementary_operator(
@@ -236,6 +242,7 @@ class ElementaryOperator(ABC):
                 self._dtype,
                 self._data.data_ptr,
                 (self.callback._get_internal_wrapper("tensor") if self.callback is not None else None),
+                (self.callback._get_internal_gradient_wrapper("tensor") if (self.callback is not None and self.callback.has_gradient) else None),
             )
         else:
             raise RuntimeError(f"Unsupported batch size {self.batch_size} of ElementaryOperator.")
@@ -398,6 +405,8 @@ class DenseOperator(ElementaryOperator):
         """
         Multiply this instance with a scalar on the left.
         """
+        if self.has_gradient:
+            raise NotImplementedError("Multiplication with a scalar is not yet supported for ElementaryOperators with a gradient callback.")
         scalar = self._prepare_scalar_for_unary_op(scalar)
         if self.device_id is None:
             return DenseOperator._unary_operation(lambda x: x * scalar)(self)
@@ -410,6 +419,7 @@ class DenseOperator(ElementaryOperator):
         """
         Multiply this instance with a scalar on the right.
         """
+
         return self.__mul__(scalar)
 
     @_unary_operation
@@ -420,6 +430,8 @@ class DenseOperator(ElementaryOperator):
         """
         Return the conjugate complex transpose of this instance.
         """
+        if self.has_gradient:
+            raise NotImplementedError("Complex conjugate transpose is not yet supported for ElementaryOperators with a gradient callback.")
         return self._dag()
 
     @staticmethod
@@ -648,6 +660,8 @@ class MultidiagonalOperator(ElementaryOperator):
         """
         Return the `DenseOperator` form of the multidiagonal elementary operator.
         """
+        if self.has_gradient:
+            raise NotImplementedError("Conversion to dense is not yet supported for ElementaryOperators with a gradient callback.")
         return self._to_dense()
 
     def to_array(
@@ -668,13 +682,15 @@ class MultidiagonalOperator(ElementaryOperator):
             This function returns the dense array form of the multidiagonal elementary operator.
             If the original data buffer containing the diagonal elements is needed, use the :attr:`data` attribute if no callback was passed or invoke :attr:`callback` with arguments `t` and `args`.
         """
-        return self.to_dense().to_array(t, args, device)
+        return self._to_dense().to_array(t, args, device)
 
     @precondition(ElementaryOperator._check_scalar_operation_compability)
     def __mul__(self, scalar: Union[Number, NDArrayType]) -> "MultidiagonalOperator":
         """
         Multiply this instance with a scalar on the left.
         """
+        if self.has_gradient:
+            raise NotImplementedError("Multiplication with a scalar is not yet supported for ElementaryOperators with a gradient callback.")
         scalar = self._prepare_scalar_for_unary_op(scalar)
         if self.device_id is None:
             return MultidiagonalOperator._unary_operation()(lambda x, _: x * scalar)(self)
@@ -697,6 +713,8 @@ class MultidiagonalOperator(ElementaryOperator):
         """
         Return the conjugate complex transpose of this instance.
         """
+        if self.has_gradient:
+            raise NotImplementedError("Complex conjugate transpose is not yet supported for ElementaryOperators with a gradient callback.")
         offsets = [-offset for offset in self.offsets]
         return self._dag(offsets)
 

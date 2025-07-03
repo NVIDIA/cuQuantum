@@ -8,7 +8,6 @@ import sys
 
 import pytest
 
-
 # TODO: mark this test as slow and don't run it every time
 class TestModuleUtils:
 
@@ -18,9 +17,12 @@ class TestModuleUtils:
     @pytest.mark.parametrize(
         'libs', (True, False)
     )
-    @pytest.mark.parametrize(
-        'target', (None, 'custatevec', 'cutensornet', 'cudensitymat', True)
-    )
+    @pytest.mark.parametrize("target", [
+        pytest.param(None, marks=pytest.mark.utility),
+        pytest.param("cudensitymat", marks=pytest.mark.cudensitymat),
+        pytest.param("custatevec", marks=pytest.mark.custatevec),
+        pytest.param("cutensornet", marks=pytest.mark.cutensornet),
+    ])
     def test_cuquantum(self, includes, libs, target):
         # We need to launch a subprocess to have a clean ld state
         cmd = [sys.executable, '-m', 'cuquantum']
@@ -29,12 +31,7 @@ class TestModuleUtils:
         if libs:
             cmd.append('--libs')
         if target:
-            if target is True:
-                cmd.extend(('--target', 'custatevec'))
-                cmd.extend(('--target', 'cutensornet'))
-                cmd.extend(('--target', 'cudensitymat'))
-            else:
-                cmd.extend(('--target', target))
+            cmd.extend(('--target', target))
 
         result = subprocess.run(cmd, capture_output=True, env=os.environ)
         if result.returncode:

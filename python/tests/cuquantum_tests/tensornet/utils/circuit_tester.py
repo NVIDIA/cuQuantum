@@ -14,8 +14,8 @@ try:
 except ImportError:
     qiskit = None
 
-from cuquantum import CircuitToEinsum
-from cuquantum.cutensornet.experimental import NetworkState
+from cuquantum.tensornet import CircuitToEinsum
+from cuquantum.tensornet.experimental import NetworkState, MPSConfig
 from cuquantum._internal.utils import infer_object_package
 
 from .circuit_utils import CirqComputeEngine, ConverterComputeEngine, QiskitComputeEngine, get_contraction_tolerance, get_mps_tolerance, probablity_from_sv
@@ -120,8 +120,7 @@ class BaseTester:
 
         for engine in self.all_engines:
             if isinstance(engine, NetworkState):
-                if engine.config.__class__.__name__ == 'MPSConfig':
-                    # TODO: after cuquantum.cutensornet.experimental.MPSConfig is removed, update to isinstance(engine.config, MPSConfig)
+                if isinstance(engine.config, MPSConfig):
                     tolerance = get_mps_tolerance(engine.dtype)
                 else:
                     tolerance = get_contraction_tolerance(engine.dtype)
@@ -263,8 +262,8 @@ class BaseTester:
 class CircuitToEinsumTester(BaseTester):
 
     @classmethod
-    def from_circuit(cls, circuit, dtype, backend, handle=None, **kwargs):
-        converter = CircuitToEinsum(circuit, dtype=dtype, backend=backend)
+    def from_circuit(cls, circuit, dtype, backend, options=None, **kwargs):
+        converter = CircuitToEinsum(circuit, dtype=dtype, backend=backend, options=options)
         # Framework provider as reference
         if qiskit and isinstance(circuit, qiskit.QuantumCircuit):
             reference_engine = QiskitComputeEngine(circuit, backend, dtype=dtype)
@@ -273,7 +272,7 @@ class CircuitToEinsumTester(BaseTester):
         else:
             raise ValueError(f"circuit type {type(circuit)} not supported")
         # engines to test on
-        target_engines = [ConverterComputeEngine(converter, backend=backend, handle=handle)]
+        target_engines = [ConverterComputeEngine(converter, backend=backend)]
         return cls(reference_engine, target_engines, converter=converter, **kwargs)
     
     def test_misc(self):

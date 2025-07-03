@@ -893,751 +893,751 @@ cpdef dict _inspect_function_pointers():
 # Wrapper functions
 ###############################################################################
 
-cdef custatevecStatus_t _custatevecCreate(custatevecHandle_t* handle) except* nogil:
+cdef custatevecStatus_t _custatevecCreate(custatevecHandle_t* handle) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecCreate
     _check_or_init_custatevec()
     if __custatevecCreate == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecCreate is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t*) nogil>__custatevecCreate)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t*) noexcept nogil>__custatevecCreate)(
         handle)
 
 
-cdef custatevecStatus_t _custatevecDestroy(custatevecHandle_t handle) except* nogil:
+cdef custatevecStatus_t _custatevecDestroy(custatevecHandle_t handle) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecDestroy
     _check_or_init_custatevec()
     if __custatevecDestroy == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecDestroy is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t) nogil>__custatevecDestroy)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t) noexcept nogil>__custatevecDestroy)(
         handle)
 
 
-cdef custatevecStatus_t _custatevecGetDefaultWorkspaceSize(custatevecHandle_t handle, size_t* workspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecGetDefaultWorkspaceSize(custatevecHandle_t handle, size_t* workspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecGetDefaultWorkspaceSize
     _check_or_init_custatevec()
     if __custatevecGetDefaultWorkspaceSize == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecGetDefaultWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, size_t*) nogil>__custatevecGetDefaultWorkspaceSize)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, size_t*) noexcept nogil>__custatevecGetDefaultWorkspaceSize)(
         handle, workspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecSetWorkspace(custatevecHandle_t handle, void* workspace, size_t workspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecSetWorkspace(custatevecHandle_t handle, void* workspace, size_t workspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSetWorkspace
     _check_or_init_custatevec()
     if __custatevecSetWorkspace == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSetWorkspace is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, size_t) nogil>__custatevecSetWorkspace)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, size_t) noexcept nogil>__custatevecSetWorkspace)(
         handle, workspace, workspaceSizeInBytes)
 
 
-cdef const char* _custatevecGetErrorName(custatevecStatus_t status) except* nogil:
+cdef const char* _custatevecGetErrorName(custatevecStatus_t status) except?NULL nogil:
     global __custatevecGetErrorName
     _check_or_init_custatevec()
     if __custatevecGetErrorName == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecGetErrorName is not found")
-    return (<const char* (*)(custatevecStatus_t) nogil>__custatevecGetErrorName)(
+    return (<const char* (*)(custatevecStatus_t) noexcept nogil>__custatevecGetErrorName)(
         status)
 
 
-cdef const char* _custatevecGetErrorString(custatevecStatus_t status) except* nogil:
+cdef const char* _custatevecGetErrorString(custatevecStatus_t status) except?NULL nogil:
     global __custatevecGetErrorString
     _check_or_init_custatevec()
     if __custatevecGetErrorString == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecGetErrorString is not found")
-    return (<const char* (*)(custatevecStatus_t) nogil>__custatevecGetErrorString)(
+    return (<const char* (*)(custatevecStatus_t) noexcept nogil>__custatevecGetErrorString)(
         status)
 
 
-cdef custatevecStatus_t _custatevecGetProperty(libraryPropertyType type, int32_t* value) except* nogil:
+cdef custatevecStatus_t _custatevecGetProperty(libraryPropertyType type, int32_t* value) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecGetProperty
     _check_or_init_custatevec()
     if __custatevecGetProperty == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecGetProperty is not found")
-    return (<custatevecStatus_t (*)(libraryPropertyType, int32_t*) nogil>__custatevecGetProperty)(
+    return (<custatevecStatus_t (*)(libraryPropertyType, int32_t*) noexcept nogil>__custatevecGetProperty)(
         type, value)
 
 
-cdef size_t _custatevecGetVersion() except* nogil:
+cdef size_t _custatevecGetVersion() except?0 nogil:
     global __custatevecGetVersion
     _check_or_init_custatevec()
     if __custatevecGetVersion == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecGetVersion is not found")
-    return (<size_t (*)() nogil>__custatevecGetVersion)(
+    return (<size_t (*)() noexcept nogil>__custatevecGetVersion)(
         )
 
 
-cdef custatevecStatus_t _custatevecSetStream(custatevecHandle_t handle, cudaStream_t streamId) except* nogil:
+cdef custatevecStatus_t _custatevecSetStream(custatevecHandle_t handle, cudaStream_t streamId) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSetStream
     _check_or_init_custatevec()
     if __custatevecSetStream == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSetStream is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaStream_t) nogil>__custatevecSetStream)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaStream_t) noexcept nogil>__custatevecSetStream)(
         handle, streamId)
 
 
-cdef custatevecStatus_t _custatevecGetStream(custatevecHandle_t handle, cudaStream_t* streamId) except* nogil:
+cdef custatevecStatus_t _custatevecGetStream(custatevecHandle_t handle, cudaStream_t* streamId) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecGetStream
     _check_or_init_custatevec()
     if __custatevecGetStream == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecGetStream is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaStream_t*) nogil>__custatevecGetStream)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaStream_t*) noexcept nogil>__custatevecGetStream)(
         handle, streamId)
 
 
-cdef custatevecStatus_t _custatevecLoggerSetCallbackData(custatevecLoggerCallbackData_t callback, void* userData) except* nogil:
+cdef custatevecStatus_t _custatevecLoggerSetCallbackData(custatevecLoggerCallbackData_t callback, void* userData) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecLoggerSetCallbackData
     _check_or_init_custatevec()
     if __custatevecLoggerSetCallbackData == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecLoggerSetCallbackData is not found")
-    return (<custatevecStatus_t (*)(custatevecLoggerCallbackData_t, void*) nogil>__custatevecLoggerSetCallbackData)(
+    return (<custatevecStatus_t (*)(custatevecLoggerCallbackData_t, void*) noexcept nogil>__custatevecLoggerSetCallbackData)(
         callback, userData)
 
 
-cdef custatevecStatus_t _custatevecLoggerOpenFile(const char* logFile) except* nogil:
+cdef custatevecStatus_t _custatevecLoggerOpenFile(const char* logFile) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecLoggerOpenFile
     _check_or_init_custatevec()
     if __custatevecLoggerOpenFile == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecLoggerOpenFile is not found")
-    return (<custatevecStatus_t (*)(const char*) nogil>__custatevecLoggerOpenFile)(
+    return (<custatevecStatus_t (*)(const char*) noexcept nogil>__custatevecLoggerOpenFile)(
         logFile)
 
 
-cdef custatevecStatus_t _custatevecLoggerSetLevel(int32_t level) except* nogil:
+cdef custatevecStatus_t _custatevecLoggerSetLevel(int32_t level) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecLoggerSetLevel
     _check_or_init_custatevec()
     if __custatevecLoggerSetLevel == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecLoggerSetLevel is not found")
-    return (<custatevecStatus_t (*)(int32_t) nogil>__custatevecLoggerSetLevel)(
+    return (<custatevecStatus_t (*)(int32_t) noexcept nogil>__custatevecLoggerSetLevel)(
         level)
 
 
-cdef custatevecStatus_t _custatevecLoggerSetMask(int32_t mask) except* nogil:
+cdef custatevecStatus_t _custatevecLoggerSetMask(int32_t mask) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecLoggerSetMask
     _check_or_init_custatevec()
     if __custatevecLoggerSetMask == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecLoggerSetMask is not found")
-    return (<custatevecStatus_t (*)(int32_t) nogil>__custatevecLoggerSetMask)(
+    return (<custatevecStatus_t (*)(int32_t) noexcept nogil>__custatevecLoggerSetMask)(
         mask)
 
 
-cdef custatevecStatus_t _custatevecLoggerForceDisable() except* nogil:
+cdef custatevecStatus_t _custatevecLoggerForceDisable() except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecLoggerForceDisable
     _check_or_init_custatevec()
     if __custatevecLoggerForceDisable == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecLoggerForceDisable is not found")
-    return (<custatevecStatus_t (*)() nogil>__custatevecLoggerForceDisable)(
+    return (<custatevecStatus_t (*)() noexcept nogil>__custatevecLoggerForceDisable)(
         )
 
 
-cdef custatevecStatus_t _custatevecGetDeviceMemHandler(custatevecHandle_t handle, custatevecDeviceMemHandler_t* handler) except* nogil:
+cdef custatevecStatus_t _custatevecGetDeviceMemHandler(custatevecHandle_t handle, custatevecDeviceMemHandler_t* handler) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecGetDeviceMemHandler
     _check_or_init_custatevec()
     if __custatevecGetDeviceMemHandler == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecGetDeviceMemHandler is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDeviceMemHandler_t*) nogil>__custatevecGetDeviceMemHandler)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDeviceMemHandler_t*) noexcept nogil>__custatevecGetDeviceMemHandler)(
         handle, handler)
 
 
-cdef custatevecStatus_t _custatevecSetDeviceMemHandler(custatevecHandle_t handle, const custatevecDeviceMemHandler_t* handler) except* nogil:
+cdef custatevecStatus_t _custatevecSetDeviceMemHandler(custatevecHandle_t handle, const custatevecDeviceMemHandler_t* handler) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSetDeviceMemHandler
     _check_or_init_custatevec()
     if __custatevecSetDeviceMemHandler == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSetDeviceMemHandler is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const custatevecDeviceMemHandler_t*) nogil>__custatevecSetDeviceMemHandler)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const custatevecDeviceMemHandler_t*) noexcept nogil>__custatevecSetDeviceMemHandler)(
         handle, handler)
 
 
-cdef custatevecStatus_t _custatevecAbs2SumOnZBasis(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, double* abs2sum0, double* abs2sum1, const int32_t* basisBits, const uint32_t nBasisBits) except* nogil:
+cdef custatevecStatus_t _custatevecAbs2SumOnZBasis(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, double* abs2sum0, double* abs2sum1, const int32_t* basisBits, const uint32_t nBasisBits) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAbs2SumOnZBasis
     _check_or_init_custatevec()
     if __custatevecAbs2SumOnZBasis == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAbs2SumOnZBasis is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, double*, double*, const int32_t*, const uint32_t) nogil>__custatevecAbs2SumOnZBasis)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, double*, double*, const int32_t*, const uint32_t) noexcept nogil>__custatevecAbs2SumOnZBasis)(
         handle, sv, svDataType, nIndexBits, abs2sum0, abs2sum1, basisBits, nBasisBits)
 
 
-cdef custatevecStatus_t _custatevecAbs2SumArray(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, double* abs2sum, const int32_t* bitOrdering, const uint32_t bitOrderingLen, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen) except* nogil:
+cdef custatevecStatus_t _custatevecAbs2SumArray(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, double* abs2sum, const int32_t* bitOrdering, const uint32_t bitOrderingLen, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAbs2SumArray
     _check_or_init_custatevec()
     if __custatevecAbs2SumArray == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAbs2SumArray is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, double*, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t) nogil>__custatevecAbs2SumArray)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, double*, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t) noexcept nogil>__custatevecAbs2SumArray)(
         handle, sv, svDataType, nIndexBits, abs2sum, bitOrdering, bitOrderingLen, maskBitString, maskOrdering, maskLen)
 
 
-cdef custatevecStatus_t _custatevecCollapseOnZBasis(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, const int32_t parity, const int32_t* basisBits, const uint32_t nBasisBits, double norm) except* nogil:
+cdef custatevecStatus_t _custatevecCollapseOnZBasis(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, const int32_t parity, const int32_t* basisBits, const uint32_t nBasisBits, double norm) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecCollapseOnZBasis
     _check_or_init_custatevec()
     if __custatevecCollapseOnZBasis == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecCollapseOnZBasis is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const int32_t, const int32_t*, const uint32_t, double) nogil>__custatevecCollapseOnZBasis)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const int32_t, const int32_t*, const uint32_t, double) noexcept nogil>__custatevecCollapseOnZBasis)(
         handle, sv, svDataType, nIndexBits, parity, basisBits, nBasisBits, norm)
 
 
-cdef custatevecStatus_t _custatevecCollapseByBitString(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, const int32_t* bitString, const int32_t* bitOrdering, const uint32_t bitStringLen, double norm) except* nogil:
+cdef custatevecStatus_t _custatevecCollapseByBitString(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, const int32_t* bitString, const int32_t* bitOrdering, const uint32_t bitStringLen, double norm) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecCollapseByBitString
     _check_or_init_custatevec()
     if __custatevecCollapseByBitString == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecCollapseByBitString is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const int32_t*, const int32_t*, const uint32_t, double) nogil>__custatevecCollapseByBitString)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const int32_t*, const int32_t*, const uint32_t, double) noexcept nogil>__custatevecCollapseByBitString)(
         handle, sv, svDataType, nIndexBits, bitString, bitOrdering, bitStringLen, norm)
 
 
-cdef custatevecStatus_t _custatevecMeasureOnZBasis(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, int32_t* parity, const int32_t* basisBits, const uint32_t nBasisBits, const double randnum, custatevecCollapseOp_t collapse) except* nogil:
+cdef custatevecStatus_t _custatevecMeasureOnZBasis(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, int32_t* parity, const int32_t* basisBits, const uint32_t nBasisBits, const double randnum, custatevecCollapseOp_t collapse) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecMeasureOnZBasis
     _check_or_init_custatevec()
     if __custatevecMeasureOnZBasis == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecMeasureOnZBasis is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, int32_t*, const int32_t*, const uint32_t, const double, custatevecCollapseOp_t) nogil>__custatevecMeasureOnZBasis)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, int32_t*, const int32_t*, const uint32_t, const double, custatevecCollapseOp_t) noexcept nogil>__custatevecMeasureOnZBasis)(
         handle, sv, svDataType, nIndexBits, parity, basisBits, nBasisBits, randnum, collapse)
 
 
-cdef custatevecStatus_t _custatevecBatchMeasure(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, int32_t* bitString, const int32_t* bitOrdering, const uint32_t bitStringLen, const double randnum, custatevecCollapseOp_t collapse) except* nogil:
+cdef custatevecStatus_t _custatevecBatchMeasure(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, int32_t* bitString, const int32_t* bitOrdering, const uint32_t bitStringLen, const double randnum, custatevecCollapseOp_t collapse) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecBatchMeasure
     _check_or_init_custatevec()
     if __custatevecBatchMeasure == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecBatchMeasure is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, int32_t*, const int32_t*, const uint32_t, const double, custatevecCollapseOp_t) nogil>__custatevecBatchMeasure)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, int32_t*, const int32_t*, const uint32_t, const double, custatevecCollapseOp_t) noexcept nogil>__custatevecBatchMeasure)(
         handle, sv, svDataType, nIndexBits, bitString, bitOrdering, bitStringLen, randnum, collapse)
 
 
-cdef custatevecStatus_t _custatevecBatchMeasureWithOffset(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, int32_t* bitString, const int32_t* bitOrdering, const uint32_t bitStringLen, const double randnum, custatevecCollapseOp_t collapse, const double offset, const double abs2sum) except* nogil:
+cdef custatevecStatus_t _custatevecBatchMeasureWithOffset(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, int32_t* bitString, const int32_t* bitOrdering, const uint32_t bitStringLen, const double randnum, custatevecCollapseOp_t collapse, const double offset, const double abs2sum) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecBatchMeasureWithOffset
     _check_or_init_custatevec()
     if __custatevecBatchMeasureWithOffset == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecBatchMeasureWithOffset is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, int32_t*, const int32_t*, const uint32_t, const double, custatevecCollapseOp_t, const double, const double) nogil>__custatevecBatchMeasureWithOffset)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, int32_t*, const int32_t*, const uint32_t, const double, custatevecCollapseOp_t, const double, const double) noexcept nogil>__custatevecBatchMeasureWithOffset)(
         handle, sv, svDataType, nIndexBits, bitString, bitOrdering, bitStringLen, randnum, collapse, offset, abs2sum)
 
 
-cdef custatevecStatus_t _custatevecApplyPauliRotation(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, double theta, const custatevecPauli_t* paulis, const int32_t* targets, const uint32_t nTargets, const int32_t* controls, const int32_t* controlBitValues, const uint32_t nControls) except* nogil:
+cdef custatevecStatus_t _custatevecApplyPauliRotation(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, double theta, const custatevecPauli_t* paulis, const int32_t* targets, const uint32_t nTargets, const int32_t* controls, const int32_t* controlBitValues, const uint32_t nControls) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecApplyPauliRotation
     _check_or_init_custatevec()
     if __custatevecApplyPauliRotation == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecApplyPauliRotation is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, double, const custatevecPauli_t*, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t) nogil>__custatevecApplyPauliRotation)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, double, const custatevecPauli_t*, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t) noexcept nogil>__custatevecApplyPauliRotation)(
         handle, sv, svDataType, nIndexBits, theta, paulis, targets, nTargets, controls, controlBitValues, nControls)
 
 
-cdef custatevecStatus_t _custatevecApplyMatrixGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t adjoint, const uint32_t nTargets, const uint32_t nControls, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecApplyMatrixGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t adjoint, const uint32_t nTargets, const uint32_t nControls, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecApplyMatrixGetWorkspaceSize
     _check_or_init_custatevec()
     if __custatevecApplyMatrixGetWorkspaceSize == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecApplyMatrixGetWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t, const uint32_t, const uint32_t, custatevecComputeType_t, size_t*) nogil>__custatevecApplyMatrixGetWorkspaceSize)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t, const uint32_t, const uint32_t, custatevecComputeType_t, size_t*) noexcept nogil>__custatevecApplyMatrixGetWorkspaceSize)(
         handle, svDataType, nIndexBits, matrix, matrixDataType, layout, adjoint, nTargets, nControls, computeType, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecApplyMatrix(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t adjoint, const int32_t* targets, const uint32_t nTargets, const int32_t* controls, const int32_t* controlBitValues, const uint32_t nControls, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecApplyMatrix(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t adjoint, const int32_t* targets, const uint32_t nTargets, const int32_t* controls, const int32_t* controlBitValues, const uint32_t nControls, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecApplyMatrix
     _check_or_init_custatevec()
     if __custatevecApplyMatrix == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecApplyMatrix is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) nogil>__custatevecApplyMatrix)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) noexcept nogil>__custatevecApplyMatrix)(
         handle, sv, svDataType, nIndexBits, matrix, matrixDataType, layout, adjoint, targets, nTargets, controls, controlBitValues, nControls, computeType, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecComputeExpectationGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nBasisBits, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecComputeExpectationGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nBasisBits, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecComputeExpectationGetWorkspaceSize
     _check_or_init_custatevec()
     if __custatevecComputeExpectationGetWorkspaceSize == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecComputeExpectationGetWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, custatevecComputeType_t, size_t*) nogil>__custatevecComputeExpectationGetWorkspaceSize)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, custatevecComputeType_t, size_t*) noexcept nogil>__custatevecComputeExpectationGetWorkspaceSize)(
         handle, svDataType, nIndexBits, matrix, matrixDataType, layout, nBasisBits, computeType, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecComputeExpectation(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, void* expectationValue, cudaDataType_t expectationDataType, double* residualNorm, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t* basisBits, const uint32_t nBasisBits, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecComputeExpectation(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, void* expectationValue, cudaDataType_t expectationDataType, double* residualNorm, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t* basisBits, const uint32_t nBasisBits, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecComputeExpectation
     _check_or_init_custatevec()
     if __custatevecComputeExpectation == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecComputeExpectation is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, void*, cudaDataType_t, double*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) nogil>__custatevecComputeExpectation)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, void*, cudaDataType_t, double*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) noexcept nogil>__custatevecComputeExpectation)(
         handle, sv, svDataType, nIndexBits, expectationValue, expectationDataType, residualNorm, matrix, matrixDataType, layout, basisBits, nBasisBits, computeType, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecSamplerCreate(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecSamplerDescriptor_t* sampler, uint32_t nMaxShots, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecSamplerCreate(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecSamplerDescriptor_t* sampler, uint32_t nMaxShots, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSamplerCreate
     _check_or_init_custatevec()
     if __custatevecSamplerCreate == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSamplerCreate is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, custatevecSamplerDescriptor_t*, uint32_t, size_t*) nogil>__custatevecSamplerCreate)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, custatevecSamplerDescriptor_t*, uint32_t, size_t*) noexcept nogil>__custatevecSamplerCreate)(
         handle, sv, svDataType, nIndexBits, sampler, nMaxShots, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecSamplerDestroy(custatevecSamplerDescriptor_t sampler) except* nogil:
+cdef custatevecStatus_t _custatevecSamplerDestroy(custatevecSamplerDescriptor_t sampler) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSamplerDestroy
     _check_or_init_custatevec()
     if __custatevecSamplerDestroy == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSamplerDestroy is not found")
-    return (<custatevecStatus_t (*)(custatevecSamplerDescriptor_t) nogil>__custatevecSamplerDestroy)(
+    return (<custatevecStatus_t (*)(custatevecSamplerDescriptor_t) noexcept nogil>__custatevecSamplerDestroy)(
         sampler)
 
 
-cdef custatevecStatus_t _custatevecSamplerPreprocess(custatevecHandle_t handle, custatevecSamplerDescriptor_t sampler, void* extraWorkspace, const size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecSamplerPreprocess(custatevecHandle_t handle, custatevecSamplerDescriptor_t sampler, void* extraWorkspace, const size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSamplerPreprocess
     _check_or_init_custatevec()
     if __custatevecSamplerPreprocess == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSamplerPreprocess is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSamplerDescriptor_t, void*, const size_t) nogil>__custatevecSamplerPreprocess)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSamplerDescriptor_t, void*, const size_t) noexcept nogil>__custatevecSamplerPreprocess)(
         handle, sampler, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecSamplerGetSquaredNorm(custatevecHandle_t handle, custatevecSamplerDescriptor_t sampler, double* norm) except* nogil:
+cdef custatevecStatus_t _custatevecSamplerGetSquaredNorm(custatevecHandle_t handle, custatevecSamplerDescriptor_t sampler, double* norm) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSamplerGetSquaredNorm
     _check_or_init_custatevec()
     if __custatevecSamplerGetSquaredNorm == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSamplerGetSquaredNorm is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSamplerDescriptor_t, double*) nogil>__custatevecSamplerGetSquaredNorm)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSamplerDescriptor_t, double*) noexcept nogil>__custatevecSamplerGetSquaredNorm)(
         handle, sampler, norm)
 
 
-cdef custatevecStatus_t _custatevecSamplerApplySubSVOffset(custatevecHandle_t handle, custatevecSamplerDescriptor_t sampler, int32_t subSVOrd, uint32_t nSubSVs, double offset, double norm) except* nogil:
+cdef custatevecStatus_t _custatevecSamplerApplySubSVOffset(custatevecHandle_t handle, custatevecSamplerDescriptor_t sampler, int32_t subSVOrd, uint32_t nSubSVs, double offset, double norm) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSamplerApplySubSVOffset
     _check_or_init_custatevec()
     if __custatevecSamplerApplySubSVOffset == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSamplerApplySubSVOffset is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSamplerDescriptor_t, int32_t, uint32_t, double, double) nogil>__custatevecSamplerApplySubSVOffset)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSamplerDescriptor_t, int32_t, uint32_t, double, double) noexcept nogil>__custatevecSamplerApplySubSVOffset)(
         handle, sampler, subSVOrd, nSubSVs, offset, norm)
 
 
-cdef custatevecStatus_t _custatevecSamplerSample(custatevecHandle_t handle, custatevecSamplerDescriptor_t sampler, custatevecIndex_t* bitStrings, const int32_t* bitOrdering, const uint32_t bitStringLen, const double* randnums, const uint32_t nShots, custatevecSamplerOutput_t output) except* nogil:
+cdef custatevecStatus_t _custatevecSamplerSample(custatevecHandle_t handle, custatevecSamplerDescriptor_t sampler, custatevecIndex_t* bitStrings, const int32_t* bitOrdering, const uint32_t bitStringLen, const double* randnums, const uint32_t nShots, custatevecSamplerOutput_t output) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSamplerSample
     _check_or_init_custatevec()
     if __custatevecSamplerSample == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSamplerSample is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSamplerDescriptor_t, custatevecIndex_t*, const int32_t*, const uint32_t, const double*, const uint32_t, custatevecSamplerOutput_t) nogil>__custatevecSamplerSample)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSamplerDescriptor_t, custatevecIndex_t*, const int32_t*, const uint32_t, const double*, const uint32_t, custatevecSamplerOutput_t) noexcept nogil>__custatevecSamplerSample)(
         handle, sampler, bitStrings, bitOrdering, bitStringLen, randnums, nShots, output)
 
 
-cdef custatevecStatus_t _custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const custatevecIndex_t* permutation, const void* diagonals, cudaDataType_t diagonalsDataType, const int32_t* targets, const uint32_t nTargets, const uint32_t nControls, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const custatevecIndex_t* permutation, const void* diagonals, cudaDataType_t diagonalsDataType, const int32_t* targets, const uint32_t nTargets, const uint32_t nControls, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize
     _check_or_init_custatevec()
     if __custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const custatevecIndex_t*, const void*, cudaDataType_t, const int32_t*, const uint32_t, const uint32_t, size_t*) nogil>__custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const custatevecIndex_t*, const void*, cudaDataType_t, const int32_t*, const uint32_t, const uint32_t, size_t*) noexcept nogil>__custatevecApplyGeneralizedPermutationMatrixGetWorkspaceSize)(
         handle, svDataType, nIndexBits, permutation, diagonals, diagonalsDataType, targets, nTargets, nControls, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecApplyGeneralizedPermutationMatrix(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecIndex_t* permutation, const void* diagonals, cudaDataType_t diagonalsDataType, const int32_t adjoint, const int32_t* targets, const uint32_t nTargets, const int32_t* controls, const int32_t* controlBitValues, const uint32_t nControls, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecApplyGeneralizedPermutationMatrix(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecIndex_t* permutation, const void* diagonals, cudaDataType_t diagonalsDataType, const int32_t adjoint, const int32_t* targets, const uint32_t nTargets, const int32_t* controls, const int32_t* controlBitValues, const uint32_t nControls, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecApplyGeneralizedPermutationMatrix
     _check_or_init_custatevec()
     if __custatevecApplyGeneralizedPermutationMatrix == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecApplyGeneralizedPermutationMatrix is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, custatevecIndex_t*, const void*, cudaDataType_t, const int32_t, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, void*, size_t) nogil>__custatevecApplyGeneralizedPermutationMatrix)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, custatevecIndex_t*, const void*, cudaDataType_t, const int32_t, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, void*, size_t) noexcept nogil>__custatevecApplyGeneralizedPermutationMatrix)(
         handle, sv, svDataType, nIndexBits, permutation, diagonals, diagonalsDataType, adjoint, targets, nTargets, controls, controlBitValues, nControls, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecComputeExpectationsOnPauliBasis(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, double* expectationValues, const custatevecPauli_t** pauliOperatorsArray, const uint32_t nPauliOperatorArrays, const int32_t** basisBitsArray, const uint32_t* nBasisBitsArray) except* nogil:
+cdef custatevecStatus_t _custatevecComputeExpectationsOnPauliBasis(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, double* expectationValues, const custatevecPauli_t** pauliOperatorsArray, const uint32_t nPauliOperatorArrays, const int32_t** basisBitsArray, const uint32_t* nBasisBitsArray) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecComputeExpectationsOnPauliBasis
     _check_or_init_custatevec()
     if __custatevecComputeExpectationsOnPauliBasis == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecComputeExpectationsOnPauliBasis is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, double*, const custatevecPauli_t**, const uint32_t, const int32_t**, const uint32_t*) nogil>__custatevecComputeExpectationsOnPauliBasis)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, double*, const custatevecPauli_t**, const uint32_t, const int32_t**, const uint32_t*) noexcept nogil>__custatevecComputeExpectationsOnPauliBasis)(
         handle, sv, svDataType, nIndexBits, expectationValues, pauliOperatorsArray, nPauliOperatorArrays, basisBitsArray, nBasisBitsArray)
 
 
-cdef custatevecStatus_t _custatevecAccessorCreate(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecAccessorDescriptor_t* accessor, const int32_t* bitOrdering, const uint32_t bitOrderingLen, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecAccessorCreate(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecAccessorDescriptor_t* accessor, const int32_t* bitOrdering, const uint32_t bitOrderingLen, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAccessorCreate
     _check_or_init_custatevec()
     if __custatevecAccessorCreate == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAccessorCreate is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, custatevecAccessorDescriptor_t*, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, size_t*) nogil>__custatevecAccessorCreate)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, custatevecAccessorDescriptor_t*, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, size_t*) noexcept nogil>__custatevecAccessorCreate)(
         handle, sv, svDataType, nIndexBits, accessor, bitOrdering, bitOrderingLen, maskBitString, maskOrdering, maskLen, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecAccessorCreateView(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecAccessorDescriptor_t* accessor, const int32_t* bitOrdering, const uint32_t bitOrderingLen, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecAccessorCreateView(custatevecHandle_t handle, const void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecAccessorDescriptor_t* accessor, const int32_t* bitOrdering, const uint32_t bitOrderingLen, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAccessorCreateView
     _check_or_init_custatevec()
     if __custatevecAccessorCreateView == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAccessorCreateView is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, custatevecAccessorDescriptor_t*, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, size_t*) nogil>__custatevecAccessorCreateView)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, custatevecAccessorDescriptor_t*, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, size_t*) noexcept nogil>__custatevecAccessorCreateView)(
         handle, sv, svDataType, nIndexBits, accessor, bitOrdering, bitOrderingLen, maskBitString, maskOrdering, maskLen, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecAccessorDestroy(custatevecAccessorDescriptor_t accessor) except* nogil:
+cdef custatevecStatus_t _custatevecAccessorDestroy(custatevecAccessorDescriptor_t accessor) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAccessorDestroy
     _check_or_init_custatevec()
     if __custatevecAccessorDestroy == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAccessorDestroy is not found")
-    return (<custatevecStatus_t (*)(custatevecAccessorDescriptor_t) nogil>__custatevecAccessorDestroy)(
+    return (<custatevecStatus_t (*)(custatevecAccessorDescriptor_t) noexcept nogil>__custatevecAccessorDestroy)(
         accessor)
 
 
-cdef custatevecStatus_t _custatevecAccessorSetExtraWorkspace(custatevecHandle_t handle, custatevecAccessorDescriptor_t accessor, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecAccessorSetExtraWorkspace(custatevecHandle_t handle, custatevecAccessorDescriptor_t accessor, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAccessorSetExtraWorkspace
     _check_or_init_custatevec()
     if __custatevecAccessorSetExtraWorkspace == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAccessorSetExtraWorkspace is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecAccessorDescriptor_t, void*, size_t) nogil>__custatevecAccessorSetExtraWorkspace)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecAccessorDescriptor_t, void*, size_t) noexcept nogil>__custatevecAccessorSetExtraWorkspace)(
         handle, accessor, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecAccessorGet(custatevecHandle_t handle, custatevecAccessorDescriptor_t accessor, void* externalBuffer, const custatevecIndex_t begin, const custatevecIndex_t end) except* nogil:
+cdef custatevecStatus_t _custatevecAccessorGet(custatevecHandle_t handle, custatevecAccessorDescriptor_t accessor, void* externalBuffer, const custatevecIndex_t begin, const custatevecIndex_t end) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAccessorGet
     _check_or_init_custatevec()
     if __custatevecAccessorGet == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAccessorGet is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecAccessorDescriptor_t, void*, const custatevecIndex_t, const custatevecIndex_t) nogil>__custatevecAccessorGet)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecAccessorDescriptor_t, void*, const custatevecIndex_t, const custatevecIndex_t) noexcept nogil>__custatevecAccessorGet)(
         handle, accessor, externalBuffer, begin, end)
 
 
-cdef custatevecStatus_t _custatevecAccessorSet(custatevecHandle_t handle, custatevecAccessorDescriptor_t accessor, const void* externalBuffer, const custatevecIndex_t begin, const custatevecIndex_t end) except* nogil:
+cdef custatevecStatus_t _custatevecAccessorSet(custatevecHandle_t handle, custatevecAccessorDescriptor_t accessor, const void* externalBuffer, const custatevecIndex_t begin, const custatevecIndex_t end) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAccessorSet
     _check_or_init_custatevec()
     if __custatevecAccessorSet == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAccessorSet is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecAccessorDescriptor_t, const void*, const custatevecIndex_t, const custatevecIndex_t) nogil>__custatevecAccessorSet)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecAccessorDescriptor_t, const void*, const custatevecIndex_t, const custatevecIndex_t) noexcept nogil>__custatevecAccessorSet)(
         handle, accessor, externalBuffer, begin, end)
 
 
-cdef custatevecStatus_t _custatevecSwapIndexBits(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, const int2* bitSwaps, const uint32_t nBitSwaps, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen) except* nogil:
+cdef custatevecStatus_t _custatevecSwapIndexBits(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, const int2* bitSwaps, const uint32_t nBitSwaps, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSwapIndexBits
     _check_or_init_custatevec()
     if __custatevecSwapIndexBits == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSwapIndexBits is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const int2*, const uint32_t, const int32_t*, const int32_t*, const uint32_t) nogil>__custatevecSwapIndexBits)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const int2*, const uint32_t, const int32_t*, const int32_t*, const uint32_t) noexcept nogil>__custatevecSwapIndexBits)(
         handle, sv, svDataType, nIndexBits, bitSwaps, nBitSwaps, maskBitString, maskOrdering, maskLen)
 
 
-cdef custatevecStatus_t _custatevecTestMatrixTypeGetWorkspaceSize(custatevecHandle_t handle, custatevecMatrixType_t matrixType, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nTargets, const int32_t adjoint, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecTestMatrixTypeGetWorkspaceSize(custatevecHandle_t handle, custatevecMatrixType_t matrixType, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nTargets, const int32_t adjoint, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecTestMatrixTypeGetWorkspaceSize
     _check_or_init_custatevec()
     if __custatevecTestMatrixTypeGetWorkspaceSize == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecTestMatrixTypeGetWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecMatrixType_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const int32_t, custatevecComputeType_t, size_t*) nogil>__custatevecTestMatrixTypeGetWorkspaceSize)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecMatrixType_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const int32_t, custatevecComputeType_t, size_t*) noexcept nogil>__custatevecTestMatrixTypeGetWorkspaceSize)(
         handle, matrixType, matrix, matrixDataType, layout, nTargets, adjoint, computeType, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecTestMatrixType(custatevecHandle_t handle, double* residualNorm, custatevecMatrixType_t matrixType, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nTargets, const int32_t adjoint, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecTestMatrixType(custatevecHandle_t handle, double* residualNorm, custatevecMatrixType_t matrixType, const void* matrix, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nTargets, const int32_t adjoint, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecTestMatrixType
     _check_or_init_custatevec()
     if __custatevecTestMatrixType == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecTestMatrixType is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, double*, custatevecMatrixType_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const int32_t, custatevecComputeType_t, void*, size_t) nogil>__custatevecTestMatrixType)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, double*, custatevecMatrixType_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const int32_t, custatevecComputeType_t, void*, size_t) noexcept nogil>__custatevecTestMatrixType)(
         handle, residualNorm, matrixType, matrix, matrixDataType, layout, nTargets, adjoint, computeType, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecMultiDeviceSwapIndexBits(custatevecHandle_t* handles, const uint32_t nHandles, void** subSVs, const cudaDataType_t svDataType, const uint32_t nGlobalIndexBits, const uint32_t nLocalIndexBits, const int2* indexBitSwaps, const uint32_t nIndexBitSwaps, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen, const custatevecDeviceNetworkType_t deviceNetworkType) except* nogil:
+cdef custatevecStatus_t _custatevecMultiDeviceSwapIndexBits(custatevecHandle_t* handles, const uint32_t nHandles, void** subSVs, const cudaDataType_t svDataType, const uint32_t nGlobalIndexBits, const uint32_t nLocalIndexBits, const int2* indexBitSwaps, const uint32_t nIndexBitSwaps, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen, const custatevecDeviceNetworkType_t deviceNetworkType) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecMultiDeviceSwapIndexBits
     _check_or_init_custatevec()
     if __custatevecMultiDeviceSwapIndexBits == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecMultiDeviceSwapIndexBits is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t*, const uint32_t, void**, const cudaDataType_t, const uint32_t, const uint32_t, const int2*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, const custatevecDeviceNetworkType_t) nogil>__custatevecMultiDeviceSwapIndexBits)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t*, const uint32_t, void**, const cudaDataType_t, const uint32_t, const uint32_t, const int2*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, const custatevecDeviceNetworkType_t) noexcept nogil>__custatevecMultiDeviceSwapIndexBits)(
         handles, nHandles, subSVs, svDataType, nGlobalIndexBits, nLocalIndexBits, indexBitSwaps, nIndexBitSwaps, maskBitString, maskOrdering, maskLen, deviceNetworkType)
 
 
-cdef custatevecStatus_t _custatevecCommunicatorCreate(custatevecHandle_t handle, custatevecCommunicatorDescriptor_t* communicator, custatevecCommunicatorType_t communicatorType, const char* soname) except* nogil:
+cdef custatevecStatus_t _custatevecCommunicatorCreate(custatevecHandle_t handle, custatevecCommunicatorDescriptor_t* communicator, custatevecCommunicatorType_t communicatorType, const char* soname) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecCommunicatorCreate
     _check_or_init_custatevec()
     if __custatevecCommunicatorCreate == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecCommunicatorCreate is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecCommunicatorDescriptor_t*, custatevecCommunicatorType_t, const char*) nogil>__custatevecCommunicatorCreate)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecCommunicatorDescriptor_t*, custatevecCommunicatorType_t, const char*) noexcept nogil>__custatevecCommunicatorCreate)(
         handle, communicator, communicatorType, soname)
 
 
-cdef custatevecStatus_t _custatevecCommunicatorDestroy(custatevecHandle_t handle, custatevecCommunicatorDescriptor_t communicator) except* nogil:
+cdef custatevecStatus_t _custatevecCommunicatorDestroy(custatevecHandle_t handle, custatevecCommunicatorDescriptor_t communicator) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecCommunicatorDestroy
     _check_or_init_custatevec()
     if __custatevecCommunicatorDestroy == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecCommunicatorDestroy is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecCommunicatorDescriptor_t) nogil>__custatevecCommunicatorDestroy)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecCommunicatorDescriptor_t) noexcept nogil>__custatevecCommunicatorDestroy)(
         handle, communicator)
 
 
-cdef custatevecStatus_t _custatevecDistIndexBitSwapSchedulerCreate(custatevecHandle_t handle, custatevecDistIndexBitSwapSchedulerDescriptor_t* scheduler, const uint32_t nGlobalIndexBits, const uint32_t nLocalIndexBits) except* nogil:
+cdef custatevecStatus_t _custatevecDistIndexBitSwapSchedulerCreate(custatevecHandle_t handle, custatevecDistIndexBitSwapSchedulerDescriptor_t* scheduler, const uint32_t nGlobalIndexBits, const uint32_t nLocalIndexBits) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecDistIndexBitSwapSchedulerCreate
     _check_or_init_custatevec()
     if __custatevecDistIndexBitSwapSchedulerCreate == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecDistIndexBitSwapSchedulerCreate is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDistIndexBitSwapSchedulerDescriptor_t*, const uint32_t, const uint32_t) nogil>__custatevecDistIndexBitSwapSchedulerCreate)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDistIndexBitSwapSchedulerDescriptor_t*, const uint32_t, const uint32_t) noexcept nogil>__custatevecDistIndexBitSwapSchedulerCreate)(
         handle, scheduler, nGlobalIndexBits, nLocalIndexBits)
 
 
-cdef custatevecStatus_t _custatevecDistIndexBitSwapSchedulerDestroy(custatevecHandle_t handle, custatevecDistIndexBitSwapSchedulerDescriptor_t scheduler) except* nogil:
+cdef custatevecStatus_t _custatevecDistIndexBitSwapSchedulerDestroy(custatevecHandle_t handle, custatevecDistIndexBitSwapSchedulerDescriptor_t scheduler) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecDistIndexBitSwapSchedulerDestroy
     _check_or_init_custatevec()
     if __custatevecDistIndexBitSwapSchedulerDestroy == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecDistIndexBitSwapSchedulerDestroy is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDistIndexBitSwapSchedulerDescriptor_t) nogil>__custatevecDistIndexBitSwapSchedulerDestroy)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDistIndexBitSwapSchedulerDescriptor_t) noexcept nogil>__custatevecDistIndexBitSwapSchedulerDestroy)(
         handle, scheduler)
 
 
-cdef custatevecStatus_t _custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps(custatevecHandle_t handle, custatevecDistIndexBitSwapSchedulerDescriptor_t scheduler, const int2* indexBitSwaps, const uint32_t nIndexBitSwaps, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen, uint32_t* nSwapBatches) except* nogil:
+cdef custatevecStatus_t _custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps(custatevecHandle_t handle, custatevecDistIndexBitSwapSchedulerDescriptor_t scheduler, const int2* indexBitSwaps, const uint32_t nIndexBitSwaps, const int32_t* maskBitString, const int32_t* maskOrdering, const uint32_t maskLen, uint32_t* nSwapBatches) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps
     _check_or_init_custatevec()
     if __custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDistIndexBitSwapSchedulerDescriptor_t, const int2*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, uint32_t*) nogil>__custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDistIndexBitSwapSchedulerDescriptor_t, const int2*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, uint32_t*) noexcept nogil>__custatevecDistIndexBitSwapSchedulerSetIndexBitSwaps)(
         handle, scheduler, indexBitSwaps, nIndexBitSwaps, maskBitString, maskOrdering, maskLen, nSwapBatches)
 
 
-cdef custatevecStatus_t _custatevecDistIndexBitSwapSchedulerGetParameters(custatevecHandle_t handle, custatevecDistIndexBitSwapSchedulerDescriptor_t scheduler, const int32_t swapBatchIndex, const int32_t orgSubSVIndex, custatevecSVSwapParameters_t* parameters) except* nogil:
+cdef custatevecStatus_t _custatevecDistIndexBitSwapSchedulerGetParameters(custatevecHandle_t handle, custatevecDistIndexBitSwapSchedulerDescriptor_t scheduler, const int32_t swapBatchIndex, const int32_t orgSubSVIndex, custatevecSVSwapParameters_t* parameters) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecDistIndexBitSwapSchedulerGetParameters
     _check_or_init_custatevec()
     if __custatevecDistIndexBitSwapSchedulerGetParameters == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecDistIndexBitSwapSchedulerGetParameters is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDistIndexBitSwapSchedulerDescriptor_t, const int32_t, const int32_t, custatevecSVSwapParameters_t*) nogil>__custatevecDistIndexBitSwapSchedulerGetParameters)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecDistIndexBitSwapSchedulerDescriptor_t, const int32_t, const int32_t, custatevecSVSwapParameters_t*) noexcept nogil>__custatevecDistIndexBitSwapSchedulerGetParameters)(
         handle, scheduler, swapBatchIndex, orgSubSVIndex, parameters)
 
 
-cdef custatevecStatus_t _custatevecSVSwapWorkerCreate(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t* svSwapWorker, custatevecCommunicatorDescriptor_t communicator, void* orgSubSV, int32_t orgSubSVIndex, cudaEvent_t orgEvent, cudaDataType_t svDataType, cudaStream_t stream, size_t* extraWorkspaceSizeInBytes, size_t* minTransferWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecSVSwapWorkerCreate(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t* svSwapWorker, custatevecCommunicatorDescriptor_t communicator, void* orgSubSV, int32_t orgSubSVIndex, cudaEvent_t orgEvent, cudaDataType_t svDataType, cudaStream_t stream, size_t* extraWorkspaceSizeInBytes, size_t* minTransferWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSVSwapWorkerCreate
     _check_or_init_custatevec()
     if __custatevecSVSwapWorkerCreate == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSVSwapWorkerCreate is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t*, custatevecCommunicatorDescriptor_t, void*, int32_t, cudaEvent_t, cudaDataType_t, cudaStream_t, size_t*, size_t*) nogil>__custatevecSVSwapWorkerCreate)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t*, custatevecCommunicatorDescriptor_t, void*, int32_t, cudaEvent_t, cudaDataType_t, cudaStream_t, size_t*, size_t*) noexcept nogil>__custatevecSVSwapWorkerCreate)(
         handle, svSwapWorker, communicator, orgSubSV, orgSubSVIndex, orgEvent, svDataType, stream, extraWorkspaceSizeInBytes, minTransferWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecSVSwapWorkerDestroy(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker) except* nogil:
+cdef custatevecStatus_t _custatevecSVSwapWorkerDestroy(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSVSwapWorkerDestroy
     _check_or_init_custatevec()
     if __custatevecSVSwapWorkerDestroy == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSVSwapWorkerDestroy is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t) nogil>__custatevecSVSwapWorkerDestroy)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t) noexcept nogil>__custatevecSVSwapWorkerDestroy)(
         handle, svSwapWorker)
 
 
-cdef custatevecStatus_t _custatevecSVSwapWorkerSetExtraWorkspace(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecSVSwapWorkerSetExtraWorkspace(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSVSwapWorkerSetExtraWorkspace
     _check_or_init_custatevec()
     if __custatevecSVSwapWorkerSetExtraWorkspace == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSVSwapWorkerSetExtraWorkspace is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, void*, size_t) nogil>__custatevecSVSwapWorkerSetExtraWorkspace)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, void*, size_t) noexcept nogil>__custatevecSVSwapWorkerSetExtraWorkspace)(
         handle, svSwapWorker, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecSVSwapWorkerSetTransferWorkspace(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, void* transferWorkspace, size_t transferWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecSVSwapWorkerSetTransferWorkspace(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, void* transferWorkspace, size_t transferWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSVSwapWorkerSetTransferWorkspace
     _check_or_init_custatevec()
     if __custatevecSVSwapWorkerSetTransferWorkspace == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSVSwapWorkerSetTransferWorkspace is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, void*, size_t) nogil>__custatevecSVSwapWorkerSetTransferWorkspace)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, void*, size_t) noexcept nogil>__custatevecSVSwapWorkerSetTransferWorkspace)(
         handle, svSwapWorker, transferWorkspace, transferWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecSVSwapWorkerSetSubSVsP2P(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, void** dstSubSVsP2P, const int32_t* dstSubSVIndicesP2P, cudaEvent_t* dstEvents, const uint32_t nDstSubSVsP2P) except* nogil:
+cdef custatevecStatus_t _custatevecSVSwapWorkerSetSubSVsP2P(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, void** dstSubSVsP2P, const int32_t* dstSubSVIndicesP2P, cudaEvent_t* dstEvents, const uint32_t nDstSubSVsP2P) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSVSwapWorkerSetSubSVsP2P
     _check_or_init_custatevec()
     if __custatevecSVSwapWorkerSetSubSVsP2P == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSVSwapWorkerSetSubSVsP2P is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, void**, const int32_t*, cudaEvent_t*, const uint32_t) nogil>__custatevecSVSwapWorkerSetSubSVsP2P)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, void**, const int32_t*, cudaEvent_t*, const uint32_t) noexcept nogil>__custatevecSVSwapWorkerSetSubSVsP2P)(
         handle, svSwapWorker, dstSubSVsP2P, dstSubSVIndicesP2P, dstEvents, nDstSubSVsP2P)
 
 
-cdef custatevecStatus_t _custatevecSVSwapWorkerSetParameters(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, const custatevecSVSwapParameters_t* parameters, int peer) except* nogil:
+cdef custatevecStatus_t _custatevecSVSwapWorkerSetParameters(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, const custatevecSVSwapParameters_t* parameters, int peer) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSVSwapWorkerSetParameters
     _check_or_init_custatevec()
     if __custatevecSVSwapWorkerSetParameters == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSVSwapWorkerSetParameters is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, const custatevecSVSwapParameters_t*, int) nogil>__custatevecSVSwapWorkerSetParameters)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, const custatevecSVSwapParameters_t*, int) noexcept nogil>__custatevecSVSwapWorkerSetParameters)(
         handle, svSwapWorker, parameters, peer)
 
 
-cdef custatevecStatus_t _custatevecSVSwapWorkerExecute(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, custatevecIndex_t begin, custatevecIndex_t end) except* nogil:
+cdef custatevecStatus_t _custatevecSVSwapWorkerExecute(custatevecHandle_t handle, custatevecSVSwapWorkerDescriptor_t svSwapWorker, custatevecIndex_t begin, custatevecIndex_t end) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSVSwapWorkerExecute
     _check_or_init_custatevec()
     if __custatevecSVSwapWorkerExecute == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSVSwapWorkerExecute is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, custatevecIndex_t, custatevecIndex_t) nogil>__custatevecSVSwapWorkerExecute)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSVSwapWorkerDescriptor_t, custatevecIndex_t, custatevecIndex_t) noexcept nogil>__custatevecSVSwapWorkerExecute)(
         handle, svSwapWorker, begin, end)
 
 
-cdef custatevecStatus_t _custatevecInitializeStateVector(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecStateVectorType_t svType) except* nogil:
+cdef custatevecStatus_t _custatevecInitializeStateVector(custatevecHandle_t handle, void* sv, cudaDataType_t svDataType, const uint32_t nIndexBits, custatevecStateVectorType_t svType) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecInitializeStateVector
     _check_or_init_custatevec()
     if __custatevecInitializeStateVector == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecInitializeStateVector is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, custatevecStateVectorType_t) nogil>__custatevecInitializeStateVector)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, custatevecStateVectorType_t) noexcept nogil>__custatevecInitializeStateVector)(
         handle, sv, svDataType, nIndexBits, svType)
 
 
-cdef custatevecStatus_t _custatevecApplyMatrixBatchedGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, custatevecMatrixMapType_t mapType, const int32_t* matrixIndices, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t adjoint, const uint32_t nMatrices, const uint32_t nTargets, const uint32_t nControls, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecApplyMatrixBatchedGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, custatevecMatrixMapType_t mapType, const int32_t* matrixIndices, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t adjoint, const uint32_t nMatrices, const uint32_t nTargets, const uint32_t nControls, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecApplyMatrixBatchedGetWorkspaceSize
     _check_or_init_custatevec()
     if __custatevecApplyMatrixBatchedGetWorkspaceSize == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecApplyMatrixBatchedGetWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, custatevecMatrixMapType_t, const int32_t*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t, const uint32_t, const uint32_t, const uint32_t, custatevecComputeType_t, size_t*) nogil>__custatevecApplyMatrixBatchedGetWorkspaceSize)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, custatevecMatrixMapType_t, const int32_t*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t, const uint32_t, const uint32_t, const uint32_t, custatevecComputeType_t, size_t*) noexcept nogil>__custatevecApplyMatrixBatchedGetWorkspaceSize)(
         handle, svDataType, nIndexBits, nSVs, svStride, mapType, matrixIndices, matrices, matrixDataType, layout, adjoint, nMatrices, nTargets, nControls, computeType, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecApplyMatrixBatched(custatevecHandle_t handle, void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, custatevecIndex_t svStride, custatevecMatrixMapType_t mapType, const int32_t* matrixIndices, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t adjoint, const uint32_t nMatrices, const int32_t* targets, const uint32_t nTargets, const int32_t* controls, const int32_t* controlBitValues, const uint32_t nControls, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecApplyMatrixBatched(custatevecHandle_t handle, void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, custatevecIndex_t svStride, custatevecMatrixMapType_t mapType, const int32_t* matrixIndices, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const int32_t adjoint, const uint32_t nMatrices, const int32_t* targets, const uint32_t nTargets, const int32_t* controls, const int32_t* controlBitValues, const uint32_t nControls, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecApplyMatrixBatched
     _check_or_init_custatevec()
     if __custatevecApplyMatrixBatched == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecApplyMatrixBatched is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const uint32_t, custatevecIndex_t, custatevecMatrixMapType_t, const int32_t*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t, const uint32_t, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) nogil>__custatevecApplyMatrixBatched)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const uint32_t, custatevecIndex_t, custatevecMatrixMapType_t, const int32_t*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const int32_t, const uint32_t, const int32_t*, const uint32_t, const int32_t*, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) noexcept nogil>__custatevecApplyMatrixBatched)(
         handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, mapType, matrixIndices, matrices, matrixDataType, layout, adjoint, nMatrices, targets, nTargets, controls, controlBitValues, nControls, computeType, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecAbs2SumArrayBatched(custatevecHandle_t handle, const void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, double* abs2sumArrays, const custatevecIndex_t abs2sumArrayStride, const int32_t* bitOrdering, const uint32_t bitOrderingLen, const custatevecIndex_t* maskBitStrings, const int32_t* maskOrdering, const uint32_t maskLen) except* nogil:
+cdef custatevecStatus_t _custatevecAbs2SumArrayBatched(custatevecHandle_t handle, const void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, double* abs2sumArrays, const custatevecIndex_t abs2sumArrayStride, const int32_t* bitOrdering, const uint32_t bitOrderingLen, const custatevecIndex_t* maskBitStrings, const int32_t* maskOrdering, const uint32_t maskLen) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecAbs2SumArrayBatched
     _check_or_init_custatevec()
     if __custatevecAbs2SumArrayBatched == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecAbs2SumArrayBatched is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, double*, const custatevecIndex_t, const int32_t*, const uint32_t, const custatevecIndex_t*, const int32_t*, const uint32_t) nogil>__custatevecAbs2SumArrayBatched)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, double*, const custatevecIndex_t, const int32_t*, const uint32_t, const custatevecIndex_t*, const int32_t*, const uint32_t) noexcept nogil>__custatevecAbs2SumArrayBatched)(
         handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, abs2sumArrays, abs2sumArrayStride, bitOrdering, bitOrderingLen, maskBitStrings, maskOrdering, maskLen)
 
 
-cdef custatevecStatus_t _custatevecCollapseByBitStringBatchedGetWorkspaceSize(custatevecHandle_t handle, const uint32_t nSVs, const custatevecIndex_t* bitStrings, const double* norms, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecCollapseByBitStringBatchedGetWorkspaceSize(custatevecHandle_t handle, const uint32_t nSVs, const custatevecIndex_t* bitStrings, const double* norms, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecCollapseByBitStringBatchedGetWorkspaceSize
     _check_or_init_custatevec()
     if __custatevecCollapseByBitStringBatchedGetWorkspaceSize == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecCollapseByBitStringBatchedGetWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const uint32_t, const custatevecIndex_t*, const double*, size_t*) nogil>__custatevecCollapseByBitStringBatchedGetWorkspaceSize)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const uint32_t, const custatevecIndex_t*, const double*, size_t*) noexcept nogil>__custatevecCollapseByBitStringBatchedGetWorkspaceSize)(
         handle, nSVs, bitStrings, norms, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecCollapseByBitStringBatched(custatevecHandle_t handle, void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, const custatevecIndex_t* bitStrings, const int32_t* bitOrdering, const uint32_t bitStringLen, const double* norms, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecCollapseByBitStringBatched(custatevecHandle_t handle, void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, const custatevecIndex_t* bitStrings, const int32_t* bitOrdering, const uint32_t bitStringLen, const double* norms, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecCollapseByBitStringBatched
     _check_or_init_custatevec()
     if __custatevecCollapseByBitStringBatched == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecCollapseByBitStringBatched is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, const custatevecIndex_t*, const int32_t*, const uint32_t, const double*, void*, size_t) nogil>__custatevecCollapseByBitStringBatched)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, const custatevecIndex_t*, const int32_t*, const uint32_t, const double*, void*, size_t) noexcept nogil>__custatevecCollapseByBitStringBatched)(
         handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, bitStrings, bitOrdering, bitStringLen, norms, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecMeasureBatched(custatevecHandle_t handle, void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, custatevecIndex_t* bitStrings, const int32_t* bitOrdering, const uint32_t bitStringLen, const double* randnums, custatevecCollapseOp_t collapse) except* nogil:
+cdef custatevecStatus_t _custatevecMeasureBatched(custatevecHandle_t handle, void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, custatevecIndex_t* bitStrings, const int32_t* bitOrdering, const uint32_t bitStringLen, const double* randnums, custatevecCollapseOp_t collapse) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecMeasureBatched
     _check_or_init_custatevec()
     if __custatevecMeasureBatched == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecMeasureBatched is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, custatevecIndex_t*, const int32_t*, const uint32_t, const double*, custatevecCollapseOp_t) nogil>__custatevecMeasureBatched)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, void*, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, custatevecIndex_t*, const int32_t*, const uint32_t, const double*, custatevecCollapseOp_t) noexcept nogil>__custatevecMeasureBatched)(
         handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, bitStrings, bitOrdering, bitStringLen, randnums, collapse)
 
 
-cdef custatevecStatus_t _custatevecSubSVMigratorCreate(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t* migrator, void* deviceSlots, cudaDataType_t svDataType, int nDeviceSlots, int nLocalIndexBits) except* nogil:
+cdef custatevecStatus_t _custatevecSubSVMigratorCreate(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t* migrator, void* deviceSlots, cudaDataType_t svDataType, int nDeviceSlots, int nLocalIndexBits) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSubSVMigratorCreate
     _check_or_init_custatevec()
     if __custatevecSubSVMigratorCreate == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSubSVMigratorCreate is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSubSVMigratorDescriptor_t*, void*, cudaDataType_t, int, int) nogil>__custatevecSubSVMigratorCreate)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSubSVMigratorDescriptor_t*, void*, cudaDataType_t, int, int) noexcept nogil>__custatevecSubSVMigratorCreate)(
         handle, migrator, deviceSlots, svDataType, nDeviceSlots, nLocalIndexBits)
 
 
-cdef custatevecStatus_t _custatevecSubSVMigratorDestroy(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t migrator) except* nogil:
+cdef custatevecStatus_t _custatevecSubSVMigratorDestroy(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t migrator) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSubSVMigratorDestroy
     _check_or_init_custatevec()
     if __custatevecSubSVMigratorDestroy == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSubSVMigratorDestroy is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSubSVMigratorDescriptor_t) nogil>__custatevecSubSVMigratorDestroy)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSubSVMigratorDescriptor_t) noexcept nogil>__custatevecSubSVMigratorDestroy)(
         handle, migrator)
 
 
-cdef custatevecStatus_t _custatevecSubSVMigratorMigrate(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t migrator, int deviceSlotIndex, const void* srcSubSV, void* dstSubSV, custatevecIndex_t begin, custatevecIndex_t end) except* nogil:
+cdef custatevecStatus_t _custatevecSubSVMigratorMigrate(custatevecHandle_t handle, custatevecSubSVMigratorDescriptor_t migrator, int deviceSlotIndex, const void* srcSubSV, void* dstSubSV, custatevecIndex_t begin, custatevecIndex_t end) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSubSVMigratorMigrate
     _check_or_init_custatevec()
     if __custatevecSubSVMigratorMigrate == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSubSVMigratorMigrate is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSubSVMigratorDescriptor_t, int, const void*, void*, custatevecIndex_t, custatevecIndex_t) nogil>__custatevecSubSVMigratorMigrate)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecSubSVMigratorDescriptor_t, int, const void*, void*, custatevecIndex_t, custatevecIndex_t) noexcept nogil>__custatevecSubSVMigratorMigrate)(
         handle, migrator, deviceSlotIndex, srcSubSV, dstSubSV, begin, end)
 
 
-cdef custatevecStatus_t _custatevecComputeExpectationBatchedGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const uint32_t nBasisBits, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecComputeExpectationBatchedGetWorkspaceSize(custatevecHandle_t handle, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, const custatevecIndex_t svStride, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const uint32_t nBasisBits, custatevecComputeType_t computeType, size_t* extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecComputeExpectationBatchedGetWorkspaceSize
     _check_or_init_custatevec()
     if __custatevecComputeExpectationBatchedGetWorkspaceSize == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecComputeExpectationBatchedGetWorkspaceSize is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const uint32_t, custatevecComputeType_t, size_t*) nogil>__custatevecComputeExpectationBatchedGetWorkspaceSize)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, cudaDataType_t, const uint32_t, const uint32_t, const custatevecIndex_t, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const uint32_t, custatevecComputeType_t, size_t*) noexcept nogil>__custatevecComputeExpectationBatchedGetWorkspaceSize)(
         handle, svDataType, nIndexBits, nSVs, svStride, matrices, matrixDataType, layout, nMatrices, nBasisBits, computeType, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecComputeExpectationBatched(custatevecHandle_t handle, const void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, custatevecIndex_t svStride, double2* expectationValues, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const int32_t* basisBits, const uint32_t nBasisBits, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except* nogil:
+cdef custatevecStatus_t _custatevecComputeExpectationBatched(custatevecHandle_t handle, const void* batchedSv, cudaDataType_t svDataType, const uint32_t nIndexBits, const uint32_t nSVs, custatevecIndex_t svStride, double2* expectationValues, const void* matrices, cudaDataType_t matrixDataType, custatevecMatrixLayout_t layout, const uint32_t nMatrices, const int32_t* basisBits, const uint32_t nBasisBits, custatevecComputeType_t computeType, void* extraWorkspace, size_t extraWorkspaceSizeInBytes) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecComputeExpectationBatched
     _check_or_init_custatevec()
     if __custatevecComputeExpectationBatched == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecComputeExpectationBatched is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, const uint32_t, custatevecIndex_t, double2*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) nogil>__custatevecComputeExpectationBatched)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, const void*, cudaDataType_t, const uint32_t, const uint32_t, custatevecIndex_t, double2*, const void*, cudaDataType_t, custatevecMatrixLayout_t, const uint32_t, const int32_t*, const uint32_t, custatevecComputeType_t, void*, size_t) noexcept nogil>__custatevecComputeExpectationBatched)(
         handle, batchedSv, svDataType, nIndexBits, nSVs, svStride, expectationValues, matrices, matrixDataType, layout, nMatrices, basisBits, nBasisBits, computeType, extraWorkspace, extraWorkspaceSizeInBytes)
 
 
-cdef custatevecStatus_t _custatevecSetMathMode(custatevecHandle_t handle, custatevecMathMode_t mode) except* nogil:
+cdef custatevecStatus_t _custatevecSetMathMode(custatevecHandle_t handle, custatevecMathMode_t mode) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecSetMathMode
     _check_or_init_custatevec()
     if __custatevecSetMathMode == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecSetMathMode is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecMathMode_t) nogil>__custatevecSetMathMode)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecMathMode_t) noexcept nogil>__custatevecSetMathMode)(
         handle, mode)
 
 
-cdef custatevecStatus_t _custatevecGetMathMode(custatevecHandle_t handle, custatevecMathMode_t* mode) except* nogil:
+cdef custatevecStatus_t _custatevecGetMathMode(custatevecHandle_t handle, custatevecMathMode_t* mode) except?_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __custatevecGetMathMode
     _check_or_init_custatevec()
     if __custatevecGetMathMode == NULL:
         with gil:
             raise FunctionNotFoundError("function custatevecGetMathMode is not found")
-    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecMathMode_t*) nogil>__custatevecGetMathMode)(
+    return (<custatevecStatus_t (*)(custatevecHandle_t, custatevecMathMode_t*) noexcept nogil>__custatevecGetMathMode)(
         handle, mode)

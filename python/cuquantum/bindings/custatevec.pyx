@@ -9,7 +9,7 @@ cimport cpython
 from libcpp.vector cimport vector
 
 from ._utils cimport (get_resource_ptr, get_nested_resource_ptr, nested_resource, nullable_unique_ptr,
-                      DeviceAllocType, DeviceFreeType, cuqnt_alloc_wrapper, cuqnt_free_wrapper,
+                      get_resource_ptrs, DeviceAllocType, DeviceFreeType, cuqnt_alloc_wrapper, cuqnt_free_wrapper,
                       is_nested_sequence, logger_callback_with_data)
 
 from enum import IntEnum as _IntEnum
@@ -109,6 +109,7 @@ class MathMode(_IntEnum):
     DEFAULT = CUSTATEVEC_MATH_MODE_DEFAULT
     ALLOW_FP32_EMULATED_BF16X9 = CUSTATEVEC_MATH_MODE_ALLOW_FP32_EMULATED_BF16X9
     DISALLOW_FP32_EMULATED_BF16X9 = CUSTATEVEC_MATH_MODE_DISALLOW_FP32_EMULATED_BF16X9
+
 
 ###############################################################################
 # Error handling
@@ -1481,7 +1482,7 @@ cpdef sv_swap_worker_set_sub_svs_p2p(intptr_t handle, intptr_t sv_swap_worker, d
         dst_sub_svs_p2p (object): an array of pointers to sub state vectors that are accessed by GPUDirect P2P. It can be:
 
             - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``intptr_t``.
+            - a Python sequence of :class:`int`\s (as pointer addresses).
 
         dst_sub_sv_indices_p2p (object): the sub state vector indices of sub state vector pointers specified by the dst_sub_svs_p2p argument. It can be:
 
@@ -1497,8 +1498,8 @@ cpdef sv_swap_worker_set_sub_svs_p2p(intptr_t handle, intptr_t sv_swap_worker, d
 
     .. seealso:: `custatevecSVSwapWorkerSetSubSVsP2P`
     """
-    cdef nullable_unique_ptr[ vector[intptr_t] ] _dst_sub_svs_p2p_
-    get_resource_ptr[intptr_t](_dst_sub_svs_p2p_, dst_sub_svs_p2p, <intptr_t*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _dst_sub_svs_p2p_
+    get_resource_ptrs[void](_dst_sub_svs_p2p_, dst_sub_svs_p2p, <void*>NULL)
     cdef nullable_unique_ptr[ vector[int32_t] ] _dst_sub_sv_indices_p2p_
     get_resource_ptr[int32_t](_dst_sub_sv_indices_p2p_, dst_sub_sv_indices_p2p, <int32_t*>NULL)
     cdef nullable_unique_ptr[ vector[intptr_t] ] _dst_events_
@@ -1911,7 +1912,7 @@ cpdef set_math_mode(intptr_t handle, int mode):
 
     Args:
         handle (intptr_t): Opaque handle holding cuStateVec's library context.
-        mode (MathMode): the compute precision mode.
+        mode (MathMode): Compute precision mode.
 
     .. seealso:: `custatevecSetMathMode`
     """
@@ -1927,7 +1928,7 @@ cpdef int get_math_mode(intptr_t handle) except? -1:
         handle (intptr_t): Opaque handle holding cuStateVec's library context.
 
     Returns:
-        int: the compute precision mode.
+        int: Compute precision mode.
 
     .. seealso:: `custatevecGetMathMode`
     """
@@ -1943,10 +1944,6 @@ collapse_by_bitstring = collapse_by_bit_string
 collapse_by_bitstring_batched_get_workspace_size = collapse_by_bit_string_batched_get_workspace_size
 collapse_by_bitstring_batched = collapse_by_bit_string_batched
 Collapse = CollapseOp
-MAJOR_VER = CUSTATEVEC_VER_MAJOR
-MINOR_VER = CUSTATEVEC_VER_MINOR
-PATCH_VER = CUSTATEVEC_VER_PATCH
-VERSION = CUSTATEVEC_VERSION
 ALLOCATOR_NAME_LEN = CUSTATEVEC_ALLOCATOR_NAME_LEN
 MAX_SEGMENT_MASK_SIZE = CUSTATEVEC_MAX_SEGMENT_MASK_SIZE
 

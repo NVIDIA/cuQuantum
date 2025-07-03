@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.03.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.06.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -151,6 +151,14 @@ cdef void* __cutensornetSamplerGetInfo = NULL
 cdef void* __cutensornetStateApplyUnitaryChannel = NULL
 cdef void* __cutensornetStateCaptureMPS = NULL
 cdef void* __cutensornetStateApplyGeneralChannel = NULL
+cdef void* __cutensornetCreateStateProjectionMPS = NULL
+cdef void* __cutensornetStateProjectionMPSConfigure = NULL
+cdef void* __cutensornetStateProjectionMPSPrepare = NULL
+cdef void* __cutensornetStateProjectionMPSComputeTensorEnv = NULL
+cdef void* __cutensornetStateProjectionMPSGetTensorInfo = NULL
+cdef void* __cutensornetStateProjectionMPSExtractTensor = NULL
+cdef void* __cutensornetStateProjectionMPSInsertTensor = NULL
+cdef void* __cutensornetDestroyStateProjectionMPS = NULL
 
 
 cdef void* load_library() except* nogil:
@@ -989,6 +997,62 @@ cdef int _check_or_init_cutensornet() except -1 nogil:
             handle = load_library()
         __cutensornetStateApplyGeneralChannel = dlsym(handle, 'cutensornetStateApplyGeneralChannel')
 
+    global __cutensornetCreateStateProjectionMPS
+    __cutensornetCreateStateProjectionMPS = dlsym(RTLD_DEFAULT, 'cutensornetCreateStateProjectionMPS')
+    if __cutensornetCreateStateProjectionMPS == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetCreateStateProjectionMPS = dlsym(handle, 'cutensornetCreateStateProjectionMPS')
+
+    global __cutensornetStateProjectionMPSConfigure
+    __cutensornetStateProjectionMPSConfigure = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSConfigure')
+    if __cutensornetStateProjectionMPSConfigure == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetStateProjectionMPSConfigure = dlsym(handle, 'cutensornetStateProjectionMPSConfigure')
+
+    global __cutensornetStateProjectionMPSPrepare
+    __cutensornetStateProjectionMPSPrepare = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSPrepare')
+    if __cutensornetStateProjectionMPSPrepare == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetStateProjectionMPSPrepare = dlsym(handle, 'cutensornetStateProjectionMPSPrepare')
+
+    global __cutensornetStateProjectionMPSComputeTensorEnv
+    __cutensornetStateProjectionMPSComputeTensorEnv = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSComputeTensorEnv')
+    if __cutensornetStateProjectionMPSComputeTensorEnv == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetStateProjectionMPSComputeTensorEnv = dlsym(handle, 'cutensornetStateProjectionMPSComputeTensorEnv')
+
+    global __cutensornetStateProjectionMPSGetTensorInfo
+    __cutensornetStateProjectionMPSGetTensorInfo = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSGetTensorInfo')
+    if __cutensornetStateProjectionMPSGetTensorInfo == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetStateProjectionMPSGetTensorInfo = dlsym(handle, 'cutensornetStateProjectionMPSGetTensorInfo')
+
+    global __cutensornetStateProjectionMPSExtractTensor
+    __cutensornetStateProjectionMPSExtractTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSExtractTensor')
+    if __cutensornetStateProjectionMPSExtractTensor == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetStateProjectionMPSExtractTensor = dlsym(handle, 'cutensornetStateProjectionMPSExtractTensor')
+
+    global __cutensornetStateProjectionMPSInsertTensor
+    __cutensornetStateProjectionMPSInsertTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSInsertTensor')
+    if __cutensornetStateProjectionMPSInsertTensor == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetStateProjectionMPSInsertTensor = dlsym(handle, 'cutensornetStateProjectionMPSInsertTensor')
+
+    global __cutensornetDestroyStateProjectionMPS
+    __cutensornetDestroyStateProjectionMPS = dlsym(RTLD_DEFAULT, 'cutensornetDestroyStateProjectionMPS')
+    if __cutensornetDestroyStateProjectionMPS == NULL:
+        if handle == NULL:
+            handle = load_library()
+        __cutensornetDestroyStateProjectionMPS = dlsym(handle, 'cutensornetDestroyStateProjectionMPS')
+
     __py_cutensornet_init = True
     return 0
 
@@ -1348,6 +1412,30 @@ cpdef dict _inspect_function_pointers():
     global __cutensornetStateApplyGeneralChannel
     data["__cutensornetStateApplyGeneralChannel"] = <intptr_t>__cutensornetStateApplyGeneralChannel
 
+    global __cutensornetCreateStateProjectionMPS
+    data["__cutensornetCreateStateProjectionMPS"] = <intptr_t>__cutensornetCreateStateProjectionMPS
+
+    global __cutensornetStateProjectionMPSConfigure
+    data["__cutensornetStateProjectionMPSConfigure"] = <intptr_t>__cutensornetStateProjectionMPSConfigure
+
+    global __cutensornetStateProjectionMPSPrepare
+    data["__cutensornetStateProjectionMPSPrepare"] = <intptr_t>__cutensornetStateProjectionMPSPrepare
+
+    global __cutensornetStateProjectionMPSComputeTensorEnv
+    data["__cutensornetStateProjectionMPSComputeTensorEnv"] = <intptr_t>__cutensornetStateProjectionMPSComputeTensorEnv
+
+    global __cutensornetStateProjectionMPSGetTensorInfo
+    data["__cutensornetStateProjectionMPSGetTensorInfo"] = <intptr_t>__cutensornetStateProjectionMPSGetTensorInfo
+
+    global __cutensornetStateProjectionMPSExtractTensor
+    data["__cutensornetStateProjectionMPSExtractTensor"] = <intptr_t>__cutensornetStateProjectionMPSExtractTensor
+
+    global __cutensornetStateProjectionMPSInsertTensor
+    data["__cutensornetStateProjectionMPSInsertTensor"] = <intptr_t>__cutensornetStateProjectionMPSInsertTensor
+
+    global __cutensornetDestroyStateProjectionMPS
+    data["__cutensornetDestroyStateProjectionMPS"] = <intptr_t>__cutensornetDestroyStateProjectionMPS
+
     return data
 
 
@@ -1355,1171 +1443,1251 @@ cpdef dict _inspect_function_pointers():
 # Wrapper functions
 ###############################################################################
 
-cdef cutensornetStatus_t _cutensornetCreate(cutensornetHandle_t* handle) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreate(cutensornetHandle_t* handle) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreate
     _check_or_init_cutensornet()
     if __cutensornetCreate == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreate is not found")
-    return (<cutensornetStatus_t (*)(cutensornetHandle_t*) nogil>__cutensornetCreate)(
+    return (<cutensornetStatus_t (*)(cutensornetHandle_t*) noexcept nogil>__cutensornetCreate)(
         handle)
 
 
-cdef cutensornetStatus_t _cutensornetDestroy(cutensornetHandle_t handle) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroy(cutensornetHandle_t handle) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroy
     _check_or_init_cutensornet()
     if __cutensornetDestroy == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroy is not found")
-    return (<cutensornetStatus_t (*)(cutensornetHandle_t) nogil>__cutensornetDestroy)(
+    return (<cutensornetStatus_t (*)(cutensornetHandle_t) noexcept nogil>__cutensornetDestroy)(
         handle)
 
 
-cdef cutensornetStatus_t _cutensornetCreateNetworkDescriptor(const cutensornetHandle_t handle, int32_t numInputs, const int32_t numModesIn[], const int64_t* const extentsIn[], const int64_t* const stridesIn[], const int32_t* const modesIn[], const cutensornetTensorQualifiers_t qualifiersIn[], int32_t numModesOut, const int64_t extentsOut[], const int64_t stridesOut[], const int32_t modesOut[], cudaDataType_t dataType, cutensornetComputeType_t computeType, cutensornetNetworkDescriptor_t* descNet) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateNetworkDescriptor(const cutensornetHandle_t handle, int32_t numInputs, const int32_t numModesIn[], const int64_t* const extentsIn[], const int64_t* const stridesIn[], const int32_t* const modesIn[], const cutensornetTensorQualifiers_t qualifiersIn[], int32_t numModesOut, const int64_t extentsOut[], const int64_t stridesOut[], const int32_t modesOut[], cudaDataType_t dataType, cutensornetComputeType_t computeType, cutensornetNetworkDescriptor_t* networkDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateNetworkDescriptor
     _check_or_init_cutensornet()
     if __cutensornetCreateNetworkDescriptor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateNetworkDescriptor is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t, const int32_t*, const int64_t* const*, const int64_t* const*, const int32_t* const*, const cutensornetTensorQualifiers_t*, int32_t, const int64_t*, const int64_t*, const int32_t*, cudaDataType_t, cutensornetComputeType_t, cutensornetNetworkDescriptor_t*) nogil>__cutensornetCreateNetworkDescriptor)(
-        handle, numInputs, numModesIn, extentsIn, stridesIn, modesIn, qualifiersIn, numModesOut, extentsOut, stridesOut, modesOut, dataType, computeType, descNet)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t, const int32_t*, const int64_t* const*, const int64_t* const*, const int32_t* const*, const cutensornetTensorQualifiers_t*, int32_t, const int64_t*, const int64_t*, const int32_t*, cudaDataType_t, cutensornetComputeType_t, cutensornetNetworkDescriptor_t*) noexcept nogil>__cutensornetCreateNetworkDescriptor)(
+        handle, numInputs, numModesIn, extentsIn, stridesIn, modesIn, qualifiersIn, numModesOut, extentsOut, stridesOut, modesOut, dataType, computeType, networkDesc)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyNetworkDescriptor(cutensornetNetworkDescriptor_t desc) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyNetworkDescriptor(cutensornetNetworkDescriptor_t networkDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyNetworkDescriptor
     _check_or_init_cutensornet()
     if __cutensornetDestroyNetworkDescriptor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyNetworkDescriptor is not found")
-    return (<cutensornetStatus_t (*)(cutensornetNetworkDescriptor_t) nogil>__cutensornetDestroyNetworkDescriptor)(
-        desc)
+    return (<cutensornetStatus_t (*)(cutensornetNetworkDescriptor_t) noexcept nogil>__cutensornetDestroyNetworkDescriptor)(
+        networkDesc)
 
 
-cdef cutensornetStatus_t _cutensornetGetOutputTensorDescriptor(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t descNet, cutensornetTensorDescriptor_t* outputTensorDesc) except* nogil:
+cdef cutensornetStatus_t _cutensornetGetOutputTensorDescriptor(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t networkDesc, cutensornetTensorDescriptor_t* outputTensorDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetGetOutputTensorDescriptor
     _check_or_init_cutensornet()
     if __cutensornetGetOutputTensorDescriptor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetGetOutputTensorDescriptor is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, cutensornetTensorDescriptor_t*) nogil>__cutensornetGetOutputTensorDescriptor)(
-        handle, descNet, outputTensorDesc)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, cutensornetTensorDescriptor_t*) noexcept nogil>__cutensornetGetOutputTensorDescriptor)(
+        handle, networkDesc, outputTensorDesc)
 
 
-cdef cutensornetStatus_t _cutensornetGetTensorDetails(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t tensorDesc, int32_t* numModes, size_t* dataSize, int32_t* modeLabels, int64_t* extents, int64_t* strides) except* nogil:
+cdef cutensornetStatus_t _cutensornetGetTensorDetails(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t tensorDesc, int32_t* numModes, size_t* dataSize, int32_t* modeLabels, int64_t* extents, int64_t* strides) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetGetTensorDetails
     _check_or_init_cutensornet()
     if __cutensornetGetTensorDetails == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetGetTensorDetails is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, int32_t*, size_t*, int32_t*, int64_t*, int64_t*) nogil>__cutensornetGetTensorDetails)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, int32_t*, size_t*, int32_t*, int64_t*, int64_t*) noexcept nogil>__cutensornetGetTensorDetails)(
         handle, tensorDesc, numModes, dataSize, modeLabels, extents, strides)
 
 
-cdef cutensornetStatus_t _cutensornetCreateWorkspaceDescriptor(const cutensornetHandle_t handle, cutensornetWorkspaceDescriptor_t* workDesc) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateWorkspaceDescriptor(const cutensornetHandle_t handle, cutensornetWorkspaceDescriptor_t* workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateWorkspaceDescriptor
     _check_or_init_cutensornet()
     if __cutensornetCreateWorkspaceDescriptor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateWorkspaceDescriptor is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetWorkspaceDescriptor_t*) nogil>__cutensornetCreateWorkspaceDescriptor)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetWorkspaceDescriptor_t*) noexcept nogil>__cutensornetCreateWorkspaceDescriptor)(
         handle, workDesc)
 
 
-cdef cutensornetStatus_t _cutensornetWorkspaceComputeContractionSizes(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t descNet, const cutensornetContractionOptimizerInfo_t optimizerInfo, cutensornetWorkspaceDescriptor_t workDesc) except* nogil:
+cdef cutensornetStatus_t _cutensornetWorkspaceComputeContractionSizes(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t networkDesc, const cutensornetContractionOptimizerInfo_t optimizerInfo, cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetWorkspaceComputeContractionSizes
     _check_or_init_cutensornet()
     if __cutensornetWorkspaceComputeContractionSizes == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetWorkspaceComputeContractionSizes is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, const cutensornetContractionOptimizerInfo_t, cutensornetWorkspaceDescriptor_t) nogil>__cutensornetWorkspaceComputeContractionSizes)(
-        handle, descNet, optimizerInfo, workDesc)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, const cutensornetContractionOptimizerInfo_t, cutensornetWorkspaceDescriptor_t) noexcept nogil>__cutensornetWorkspaceComputeContractionSizes)(
+        handle, networkDesc, optimizerInfo, workDesc)
 
 
-cdef cutensornetStatus_t _cutensornetWorkspaceGetMemorySize(const cutensornetHandle_t handle, const cutensornetWorkspaceDescriptor_t workDesc, cutensornetWorksizePref_t workPref, cutensornetMemspace_t memSpace, cutensornetWorkspaceKind_t workKind, int64_t* memorySize) except* nogil:
+cdef cutensornetStatus_t _cutensornetWorkspaceGetMemorySize(const cutensornetHandle_t handle, const cutensornetWorkspaceDescriptor_t workDesc, cutensornetWorksizePref_t workPref, cutensornetMemspace_t memSpace, cutensornetWorkspaceKind_t workKind, int64_t* memorySize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetWorkspaceGetMemorySize
     _check_or_init_cutensornet()
     if __cutensornetWorkspaceGetMemorySize == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetWorkspaceGetMemorySize is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetWorkspaceDescriptor_t, cutensornetWorksizePref_t, cutensornetMemspace_t, cutensornetWorkspaceKind_t, int64_t*) nogil>__cutensornetWorkspaceGetMemorySize)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetWorkspaceDescriptor_t, cutensornetWorksizePref_t, cutensornetMemspace_t, cutensornetWorkspaceKind_t, int64_t*) noexcept nogil>__cutensornetWorkspaceGetMemorySize)(
         handle, workDesc, workPref, memSpace, workKind, memorySize)
 
 
-cdef cutensornetStatus_t _cutensornetWorkspaceSetMemory(const cutensornetHandle_t handle, cutensornetWorkspaceDescriptor_t workDesc, cutensornetMemspace_t memSpace, cutensornetWorkspaceKind_t workKind, void* const memoryPtr, int64_t memorySize) except* nogil:
+cdef cutensornetStatus_t _cutensornetWorkspaceSetMemory(const cutensornetHandle_t handle, cutensornetWorkspaceDescriptor_t workDesc, cutensornetMemspace_t memSpace, cutensornetWorkspaceKind_t workKind, void* const memoryPtr, int64_t memorySize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetWorkspaceSetMemory
     _check_or_init_cutensornet()
     if __cutensornetWorkspaceSetMemory == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetWorkspaceSetMemory is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetWorkspaceDescriptor_t, cutensornetMemspace_t, cutensornetWorkspaceKind_t, void* const, int64_t) nogil>__cutensornetWorkspaceSetMemory)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetWorkspaceDescriptor_t, cutensornetMemspace_t, cutensornetWorkspaceKind_t, void* const, int64_t) noexcept nogil>__cutensornetWorkspaceSetMemory)(
         handle, workDesc, memSpace, workKind, memoryPtr, memorySize)
 
 
-cdef cutensornetStatus_t _cutensornetWorkspaceGetMemory(const cutensornetHandle_t handle, const cutensornetWorkspaceDescriptor_t workDesc, cutensornetMemspace_t memSpace, cutensornetWorkspaceKind_t workKind, void** memoryPtr, int64_t* memorySize) except* nogil:
+cdef cutensornetStatus_t _cutensornetWorkspaceGetMemory(const cutensornetHandle_t handle, const cutensornetWorkspaceDescriptor_t workDesc, cutensornetMemspace_t memSpace, cutensornetWorkspaceKind_t workKind, void** memoryPtr, int64_t* memorySize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetWorkspaceGetMemory
     _check_or_init_cutensornet()
     if __cutensornetWorkspaceGetMemory == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetWorkspaceGetMemory is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetWorkspaceDescriptor_t, cutensornetMemspace_t, cutensornetWorkspaceKind_t, void**, int64_t*) nogil>__cutensornetWorkspaceGetMemory)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetWorkspaceDescriptor_t, cutensornetMemspace_t, cutensornetWorkspaceKind_t, void**, int64_t*) noexcept nogil>__cutensornetWorkspaceGetMemory)(
         handle, workDesc, memSpace, workKind, memoryPtr, memorySize)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyWorkspaceDescriptor(cutensornetWorkspaceDescriptor_t desc) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyWorkspaceDescriptor(cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyWorkspaceDescriptor
     _check_or_init_cutensornet()
     if __cutensornetDestroyWorkspaceDescriptor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyWorkspaceDescriptor is not found")
-    return (<cutensornetStatus_t (*)(cutensornetWorkspaceDescriptor_t) nogil>__cutensornetDestroyWorkspaceDescriptor)(
-        desc)
+    return (<cutensornetStatus_t (*)(cutensornetWorkspaceDescriptor_t) noexcept nogil>__cutensornetDestroyWorkspaceDescriptor)(
+        workDesc)
 
 
-cdef cutensornetStatus_t _cutensornetCreateContractionOptimizerConfig(const cutensornetHandle_t handle, cutensornetContractionOptimizerConfig_t* optimizerConfig) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateContractionOptimizerConfig(const cutensornetHandle_t handle, cutensornetContractionOptimizerConfig_t* optimizerConfig) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateContractionOptimizerConfig
     _check_or_init_cutensornet()
     if __cutensornetCreateContractionOptimizerConfig == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateContractionOptimizerConfig is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionOptimizerConfig_t*) nogil>__cutensornetCreateContractionOptimizerConfig)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionOptimizerConfig_t*) noexcept nogil>__cutensornetCreateContractionOptimizerConfig)(
         handle, optimizerConfig)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyContractionOptimizerConfig(cutensornetContractionOptimizerConfig_t optimizerConfig) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyContractionOptimizerConfig(cutensornetContractionOptimizerConfig_t optimizerConfig) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyContractionOptimizerConfig
     _check_or_init_cutensornet()
     if __cutensornetDestroyContractionOptimizerConfig == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyContractionOptimizerConfig is not found")
-    return (<cutensornetStatus_t (*)(cutensornetContractionOptimizerConfig_t) nogil>__cutensornetDestroyContractionOptimizerConfig)(
+    return (<cutensornetStatus_t (*)(cutensornetContractionOptimizerConfig_t) noexcept nogil>__cutensornetDestroyContractionOptimizerConfig)(
         optimizerConfig)
 
 
-cdef cutensornetStatus_t _cutensornetContractionOptimizerConfigGetAttribute(const cutensornetHandle_t handle, const cutensornetContractionOptimizerConfig_t optimizerConfig, cutensornetContractionOptimizerConfigAttributes_t attr, void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionOptimizerConfigGetAttribute(const cutensornetHandle_t handle, const cutensornetContractionOptimizerConfig_t optimizerConfig, cutensornetContractionOptimizerConfigAttributes_t attr, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionOptimizerConfigGetAttribute
     _check_or_init_cutensornet()
     if __cutensornetContractionOptimizerConfigGetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionOptimizerConfigGetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionOptimizerConfig_t, cutensornetContractionOptimizerConfigAttributes_t, void*, size_t) nogil>__cutensornetContractionOptimizerConfigGetAttribute)(
-        handle, optimizerConfig, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionOptimizerConfig_t, cutensornetContractionOptimizerConfigAttributes_t, void*, size_t) noexcept nogil>__cutensornetContractionOptimizerConfigGetAttribute)(
+        handle, optimizerConfig, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetContractionOptimizerConfigSetAttribute(const cutensornetHandle_t handle, cutensornetContractionOptimizerConfig_t optimizerConfig, cutensornetContractionOptimizerConfigAttributes_t attr, const void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionOptimizerConfigSetAttribute(const cutensornetHandle_t handle, cutensornetContractionOptimizerConfig_t optimizerConfig, cutensornetContractionOptimizerConfigAttributes_t attr, const void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionOptimizerConfigSetAttribute
     _check_or_init_cutensornet()
     if __cutensornetContractionOptimizerConfigSetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionOptimizerConfigSetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionOptimizerConfig_t, cutensornetContractionOptimizerConfigAttributes_t, const void*, size_t) nogil>__cutensornetContractionOptimizerConfigSetAttribute)(
-        handle, optimizerConfig, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionOptimizerConfig_t, cutensornetContractionOptimizerConfigAttributes_t, const void*, size_t) noexcept nogil>__cutensornetContractionOptimizerConfigSetAttribute)(
+        handle, optimizerConfig, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyContractionOptimizerInfo(cutensornetContractionOptimizerInfo_t optimizerInfo) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyContractionOptimizerInfo(cutensornetContractionOptimizerInfo_t optimizerInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyContractionOptimizerInfo
     _check_or_init_cutensornet()
     if __cutensornetDestroyContractionOptimizerInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyContractionOptimizerInfo is not found")
-    return (<cutensornetStatus_t (*)(cutensornetContractionOptimizerInfo_t) nogil>__cutensornetDestroyContractionOptimizerInfo)(
+    return (<cutensornetStatus_t (*)(cutensornetContractionOptimizerInfo_t) noexcept nogil>__cutensornetDestroyContractionOptimizerInfo)(
         optimizerInfo)
 
 
-cdef cutensornetStatus_t _cutensornetCreateContractionOptimizerInfo(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t descNet, cutensornetContractionOptimizerInfo_t* optimizerInfo) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateContractionOptimizerInfo(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t networkDesc, cutensornetContractionOptimizerInfo_t* optimizerInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateContractionOptimizerInfo
     _check_or_init_cutensornet()
     if __cutensornetCreateContractionOptimizerInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateContractionOptimizerInfo is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, cutensornetContractionOptimizerInfo_t*) nogil>__cutensornetCreateContractionOptimizerInfo)(
-        handle, descNet, optimizerInfo)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, cutensornetContractionOptimizerInfo_t*) noexcept nogil>__cutensornetCreateContractionOptimizerInfo)(
+        handle, networkDesc, optimizerInfo)
 
 
-cdef cutensornetStatus_t _cutensornetContractionOptimize(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t descNet, const cutensornetContractionOptimizerConfig_t optimizerConfig, uint64_t workspaceSizeConstraint, cutensornetContractionOptimizerInfo_t optimizerInfo) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionOptimize(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t networkDesc, const cutensornetContractionOptimizerConfig_t optimizerConfig, uint64_t workspaceSizeConstraint, cutensornetContractionOptimizerInfo_t optimizerInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionOptimize
     _check_or_init_cutensornet()
     if __cutensornetContractionOptimize == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionOptimize is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, const cutensornetContractionOptimizerConfig_t, uint64_t, cutensornetContractionOptimizerInfo_t) nogil>__cutensornetContractionOptimize)(
-        handle, descNet, optimizerConfig, workspaceSizeConstraint, optimizerInfo)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, const cutensornetContractionOptimizerConfig_t, uint64_t, cutensornetContractionOptimizerInfo_t) noexcept nogil>__cutensornetContractionOptimize)(
+        handle, networkDesc, optimizerConfig, workspaceSizeConstraint, optimizerInfo)
 
 
-cdef cutensornetStatus_t _cutensornetContractionOptimizerInfoGetAttribute(const cutensornetHandle_t handle, const cutensornetContractionOptimizerInfo_t optimizerInfo, cutensornetContractionOptimizerInfoAttributes_t attr, void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionOptimizerInfoGetAttribute(const cutensornetHandle_t handle, const cutensornetContractionOptimizerInfo_t optimizerInfo, cutensornetContractionOptimizerInfoAttributes_t attr, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionOptimizerInfoGetAttribute
     _check_or_init_cutensornet()
     if __cutensornetContractionOptimizerInfoGetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionOptimizerInfoGetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionOptimizerInfo_t, cutensornetContractionOptimizerInfoAttributes_t, void*, size_t) nogil>__cutensornetContractionOptimizerInfoGetAttribute)(
-        handle, optimizerInfo, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionOptimizerInfo_t, cutensornetContractionOptimizerInfoAttributes_t, void*, size_t) noexcept nogil>__cutensornetContractionOptimizerInfoGetAttribute)(
+        handle, optimizerInfo, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetContractionOptimizerInfoSetAttribute(const cutensornetHandle_t handle, cutensornetContractionOptimizerInfo_t optimizerInfo, cutensornetContractionOptimizerInfoAttributes_t attr, const void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionOptimizerInfoSetAttribute(const cutensornetHandle_t handle, cutensornetContractionOptimizerInfo_t optimizerInfo, cutensornetContractionOptimizerInfoAttributes_t attr, const void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionOptimizerInfoSetAttribute
     _check_or_init_cutensornet()
     if __cutensornetContractionOptimizerInfoSetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionOptimizerInfoSetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionOptimizerInfo_t, cutensornetContractionOptimizerInfoAttributes_t, const void*, size_t) nogil>__cutensornetContractionOptimizerInfoSetAttribute)(
-        handle, optimizerInfo, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionOptimizerInfo_t, cutensornetContractionOptimizerInfoAttributes_t, const void*, size_t) noexcept nogil>__cutensornetContractionOptimizerInfoSetAttribute)(
+        handle, optimizerInfo, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetContractionOptimizerInfoGetPackedSize(const cutensornetHandle_t handle, const cutensornetContractionOptimizerInfo_t optimizerInfo, size_t* sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionOptimizerInfoGetPackedSize(const cutensornetHandle_t handle, const cutensornetContractionOptimizerInfo_t optimizerInfo, size_t* sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionOptimizerInfoGetPackedSize
     _check_or_init_cutensornet()
     if __cutensornetContractionOptimizerInfoGetPackedSize == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionOptimizerInfoGetPackedSize is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionOptimizerInfo_t, size_t*) nogil>__cutensornetContractionOptimizerInfoGetPackedSize)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionOptimizerInfo_t, size_t*) noexcept nogil>__cutensornetContractionOptimizerInfoGetPackedSize)(
         handle, optimizerInfo, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetContractionOptimizerInfoPackData(const cutensornetHandle_t handle, const cutensornetContractionOptimizerInfo_t optimizerInfo, void* buffer, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionOptimizerInfoPackData(const cutensornetHandle_t handle, const cutensornetContractionOptimizerInfo_t optimizerInfo, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionOptimizerInfoPackData
     _check_or_init_cutensornet()
     if __cutensornetContractionOptimizerInfoPackData == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionOptimizerInfoPackData is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionOptimizerInfo_t, void*, size_t) nogil>__cutensornetContractionOptimizerInfoPackData)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionOptimizerInfo_t, void*, size_t) noexcept nogil>__cutensornetContractionOptimizerInfoPackData)(
         handle, optimizerInfo, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetCreateContractionOptimizerInfoFromPackedData(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t descNet, const void* buffer, size_t sizeInBytes, cutensornetContractionOptimizerInfo_t* optimizerInfo) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateContractionOptimizerInfoFromPackedData(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t networkDesc, const void* buffer, size_t sizeInBytes, cutensornetContractionOptimizerInfo_t* optimizerInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateContractionOptimizerInfoFromPackedData
     _check_or_init_cutensornet()
     if __cutensornetCreateContractionOptimizerInfoFromPackedData == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateContractionOptimizerInfoFromPackedData is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, const void*, size_t, cutensornetContractionOptimizerInfo_t*) nogil>__cutensornetCreateContractionOptimizerInfoFromPackedData)(
-        handle, descNet, buffer, sizeInBytes, optimizerInfo)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, const void*, size_t, cutensornetContractionOptimizerInfo_t*) noexcept nogil>__cutensornetCreateContractionOptimizerInfoFromPackedData)(
+        handle, networkDesc, buffer, sizeInBytes, optimizerInfo)
 
 
-cdef cutensornetStatus_t _cutensornetUpdateContractionOptimizerInfoFromPackedData(const cutensornetHandle_t handle, const void* buffer, size_t sizeInBytes, cutensornetContractionOptimizerInfo_t optimizerInfo) except* nogil:
+cdef cutensornetStatus_t _cutensornetUpdateContractionOptimizerInfoFromPackedData(const cutensornetHandle_t handle, const void* buffer, size_t sizeInBytes, cutensornetContractionOptimizerInfo_t optimizerInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetUpdateContractionOptimizerInfoFromPackedData
     _check_or_init_cutensornet()
     if __cutensornetUpdateContractionOptimizerInfoFromPackedData == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetUpdateContractionOptimizerInfoFromPackedData is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const void*, size_t, cutensornetContractionOptimizerInfo_t) nogil>__cutensornetUpdateContractionOptimizerInfoFromPackedData)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const void*, size_t, cutensornetContractionOptimizerInfo_t) noexcept nogil>__cutensornetUpdateContractionOptimizerInfoFromPackedData)(
         handle, buffer, sizeInBytes, optimizerInfo)
 
 
-cdef cutensornetStatus_t _cutensornetCreateContractionPlan(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t descNet, const cutensornetContractionOptimizerInfo_t optimizerInfo, const cutensornetWorkspaceDescriptor_t workDesc, cutensornetContractionPlan_t* plan) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateContractionPlan(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t networkDesc, const cutensornetContractionOptimizerInfo_t optimizerInfo, const cutensornetWorkspaceDescriptor_t workDesc, cutensornetContractionPlan_t* plan) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateContractionPlan
     _check_or_init_cutensornet()
     if __cutensornetCreateContractionPlan == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateContractionPlan is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, const cutensornetContractionOptimizerInfo_t, const cutensornetWorkspaceDescriptor_t, cutensornetContractionPlan_t*) nogil>__cutensornetCreateContractionPlan)(
-        handle, descNet, optimizerInfo, workDesc, plan)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, const cutensornetContractionOptimizerInfo_t, const cutensornetWorkspaceDescriptor_t, cutensornetContractionPlan_t*) noexcept nogil>__cutensornetCreateContractionPlan)(
+        handle, networkDesc, optimizerInfo, workDesc, plan)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyContractionPlan(cutensornetContractionPlan_t plan) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyContractionPlan(cutensornetContractionPlan_t plan) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyContractionPlan
     _check_or_init_cutensornet()
     if __cutensornetDestroyContractionPlan == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyContractionPlan is not found")
-    return (<cutensornetStatus_t (*)(cutensornetContractionPlan_t) nogil>__cutensornetDestroyContractionPlan)(
+    return (<cutensornetStatus_t (*)(cutensornetContractionPlan_t) noexcept nogil>__cutensornetDestroyContractionPlan)(
         plan)
 
 
-cdef cutensornetStatus_t _cutensornetContractionAutotune(const cutensornetHandle_t handle, cutensornetContractionPlan_t plan, const void* const rawDataIn[], void* rawDataOut, cutensornetWorkspaceDescriptor_t workDesc, const cutensornetContractionAutotunePreference_t pref, cudaStream_t stream) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionAutotune(const cutensornetHandle_t handle, cutensornetContractionPlan_t plan, const void* const rawDataIn[], void* rawDataOut, cutensornetWorkspaceDescriptor_t workDesc, const cutensornetContractionAutotunePreference_t pref, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionAutotune
     _check_or_init_cutensornet()
     if __cutensornetContractionAutotune == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionAutotune is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionPlan_t, const void* const*, void*, cutensornetWorkspaceDescriptor_t, const cutensornetContractionAutotunePreference_t, cudaStream_t) nogil>__cutensornetContractionAutotune)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionPlan_t, const void* const*, void*, cutensornetWorkspaceDescriptor_t, const cutensornetContractionAutotunePreference_t, cudaStream_t) noexcept nogil>__cutensornetContractionAutotune)(
         handle, plan, rawDataIn, rawDataOut, workDesc, pref, stream)
 
 
-cdef cutensornetStatus_t _cutensornetCreateContractionAutotunePreference(const cutensornetHandle_t handle, cutensornetContractionAutotunePreference_t* autotunePreference) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateContractionAutotunePreference(const cutensornetHandle_t handle, cutensornetContractionAutotunePreference_t* autotunePreference) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateContractionAutotunePreference
     _check_or_init_cutensornet()
     if __cutensornetCreateContractionAutotunePreference == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateContractionAutotunePreference is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionAutotunePreference_t*) nogil>__cutensornetCreateContractionAutotunePreference)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionAutotunePreference_t*) noexcept nogil>__cutensornetCreateContractionAutotunePreference)(
         handle, autotunePreference)
 
 
-cdef cutensornetStatus_t _cutensornetContractionAutotunePreferenceGetAttribute(const cutensornetHandle_t handle, const cutensornetContractionAutotunePreference_t autotunePreference, cutensornetContractionAutotunePreferenceAttributes_t attr, void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionAutotunePreferenceGetAttribute(const cutensornetHandle_t handle, const cutensornetContractionAutotunePreference_t autotunePreference, cutensornetContractionAutotunePreferenceAttributes_t attr, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionAutotunePreferenceGetAttribute
     _check_or_init_cutensornet()
     if __cutensornetContractionAutotunePreferenceGetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionAutotunePreferenceGetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionAutotunePreference_t, cutensornetContractionAutotunePreferenceAttributes_t, void*, size_t) nogil>__cutensornetContractionAutotunePreferenceGetAttribute)(
-        handle, autotunePreference, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetContractionAutotunePreference_t, cutensornetContractionAutotunePreferenceAttributes_t, void*, size_t) noexcept nogil>__cutensornetContractionAutotunePreferenceGetAttribute)(
+        handle, autotunePreference, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetContractionAutotunePreferenceSetAttribute(const cutensornetHandle_t handle, cutensornetContractionAutotunePreference_t autotunePreference, cutensornetContractionAutotunePreferenceAttributes_t attr, const void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractionAutotunePreferenceSetAttribute(const cutensornetHandle_t handle, cutensornetContractionAutotunePreference_t autotunePreference, cutensornetContractionAutotunePreferenceAttributes_t attr, const void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractionAutotunePreferenceSetAttribute
     _check_or_init_cutensornet()
     if __cutensornetContractionAutotunePreferenceSetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractionAutotunePreferenceSetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionAutotunePreference_t, cutensornetContractionAutotunePreferenceAttributes_t, const void*, size_t) nogil>__cutensornetContractionAutotunePreferenceSetAttribute)(
-        handle, autotunePreference, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionAutotunePreference_t, cutensornetContractionAutotunePreferenceAttributes_t, const void*, size_t) noexcept nogil>__cutensornetContractionAutotunePreferenceSetAttribute)(
+        handle, autotunePreference, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyContractionAutotunePreference(cutensornetContractionAutotunePreference_t autotunePreference) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyContractionAutotunePreference(cutensornetContractionAutotunePreference_t autotunePreference) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyContractionAutotunePreference
     _check_or_init_cutensornet()
     if __cutensornetDestroyContractionAutotunePreference == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyContractionAutotunePreference is not found")
-    return (<cutensornetStatus_t (*)(cutensornetContractionAutotunePreference_t) nogil>__cutensornetDestroyContractionAutotunePreference)(
+    return (<cutensornetStatus_t (*)(cutensornetContractionAutotunePreference_t) noexcept nogil>__cutensornetDestroyContractionAutotunePreference)(
         autotunePreference)
 
 
-cdef cutensornetStatus_t _cutensornetCreateSliceGroupFromIDRange(const cutensornetHandle_t handle, int64_t sliceIdStart, int64_t sliceIdStop, int64_t sliceIdStep, cutensornetSliceGroup_t* sliceGroup) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateSliceGroupFromIDRange(const cutensornetHandle_t handle, int64_t sliceIdStart, int64_t sliceIdStop, int64_t sliceIdStep, cutensornetSliceGroup_t* sliceGroup) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateSliceGroupFromIDRange
     _check_or_init_cutensornet()
     if __cutensornetCreateSliceGroupFromIDRange == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateSliceGroupFromIDRange is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int64_t, int64_t, int64_t, cutensornetSliceGroup_t*) nogil>__cutensornetCreateSliceGroupFromIDRange)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int64_t, int64_t, int64_t, cutensornetSliceGroup_t*) noexcept nogil>__cutensornetCreateSliceGroupFromIDRange)(
         handle, sliceIdStart, sliceIdStop, sliceIdStep, sliceGroup)
 
 
-cdef cutensornetStatus_t _cutensornetCreateSliceGroupFromIDs(const cutensornetHandle_t handle, const int64_t* beginIDSequence, const int64_t* endIDSequence, cutensornetSliceGroup_t* sliceGroup) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateSliceGroupFromIDs(const cutensornetHandle_t handle, const int64_t* beginIDSequence, const int64_t* endIDSequence, cutensornetSliceGroup_t* sliceGroup) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateSliceGroupFromIDs
     _check_or_init_cutensornet()
     if __cutensornetCreateSliceGroupFromIDs == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateSliceGroupFromIDs is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const int64_t*, const int64_t*, cutensornetSliceGroup_t*) nogil>__cutensornetCreateSliceGroupFromIDs)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const int64_t*, const int64_t*, cutensornetSliceGroup_t*) noexcept nogil>__cutensornetCreateSliceGroupFromIDs)(
         handle, beginIDSequence, endIDSequence, sliceGroup)
 
 
-cdef cutensornetStatus_t _cutensornetDestroySliceGroup(cutensornetSliceGroup_t sliceGroup) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroySliceGroup(cutensornetSliceGroup_t sliceGroup) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroySliceGroup
     _check_or_init_cutensornet()
     if __cutensornetDestroySliceGroup == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroySliceGroup is not found")
-    return (<cutensornetStatus_t (*)(cutensornetSliceGroup_t) nogil>__cutensornetDestroySliceGroup)(
+    return (<cutensornetStatus_t (*)(cutensornetSliceGroup_t) noexcept nogil>__cutensornetDestroySliceGroup)(
         sliceGroup)
 
 
-cdef cutensornetStatus_t _cutensornetContractSlices(const cutensornetHandle_t handle, cutensornetContractionPlan_t plan, const void* const rawDataIn[], void* rawDataOut, int32_t accumulateOutput, cutensornetWorkspaceDescriptor_t workDesc, const cutensornetSliceGroup_t sliceGroup, cudaStream_t stream) except* nogil:
+cdef cutensornetStatus_t _cutensornetContractSlices(const cutensornetHandle_t handle, cutensornetContractionPlan_t plan, const void* const rawDataIn[], void* rawDataOut, int32_t accumulateOutput, cutensornetWorkspaceDescriptor_t workDesc, const cutensornetSliceGroup_t sliceGroup, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetContractSlices
     _check_or_init_cutensornet()
     if __cutensornetContractSlices == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetContractSlices is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionPlan_t, const void* const*, void*, int32_t, cutensornetWorkspaceDescriptor_t, const cutensornetSliceGroup_t, cudaStream_t) nogil>__cutensornetContractSlices)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionPlan_t, const void* const*, void*, int32_t, cutensornetWorkspaceDescriptor_t, const cutensornetSliceGroup_t, cudaStream_t) noexcept nogil>__cutensornetContractSlices)(
         handle, plan, rawDataIn, rawDataOut, accumulateOutput, workDesc, sliceGroup, stream)
 
 
-cdef cutensornetStatus_t _cutensornetCreateTensorDescriptor(const cutensornetHandle_t handle, int32_t numModes, const int64_t extents[], const int64_t strides[], const int32_t modes[], cudaDataType_t dataType, cutensornetTensorDescriptor_t* descTensor) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateTensorDescriptor(const cutensornetHandle_t handle, int32_t numModes, const int64_t extents[], const int64_t strides[], const int32_t modeLabels[], cudaDataType_t dataType, cutensornetTensorDescriptor_t* tensorDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateTensorDescriptor
     _check_or_init_cutensornet()
     if __cutensornetCreateTensorDescriptor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateTensorDescriptor is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t, const int64_t*, const int64_t*, const int32_t*, cudaDataType_t, cutensornetTensorDescriptor_t*) nogil>__cutensornetCreateTensorDescriptor)(
-        handle, numModes, extents, strides, modes, dataType, descTensor)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t, const int64_t*, const int64_t*, const int32_t*, cudaDataType_t, cutensornetTensorDescriptor_t*) noexcept nogil>__cutensornetCreateTensorDescriptor)(
+        handle, numModes, extents, strides, modeLabels, dataType, tensorDesc)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyTensorDescriptor(cutensornetTensorDescriptor_t descTensor) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyTensorDescriptor(cutensornetTensorDescriptor_t tensorDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyTensorDescriptor
     _check_or_init_cutensornet()
     if __cutensornetDestroyTensorDescriptor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyTensorDescriptor is not found")
-    return (<cutensornetStatus_t (*)(cutensornetTensorDescriptor_t) nogil>__cutensornetDestroyTensorDescriptor)(
-        descTensor)
+    return (<cutensornetStatus_t (*)(cutensornetTensorDescriptor_t) noexcept nogil>__cutensornetDestroyTensorDescriptor)(
+        tensorDesc)
 
 
-cdef cutensornetStatus_t _cutensornetCreateTensorSVDConfig(const cutensornetHandle_t handle, cutensornetTensorSVDConfig_t* svdConfig) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateTensorSVDConfig(const cutensornetHandle_t handle, cutensornetTensorSVDConfig_t* svdConfig) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateTensorSVDConfig
     _check_or_init_cutensornet()
     if __cutensornetCreateTensorSVDConfig == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateTensorSVDConfig is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetTensorSVDConfig_t*) nogil>__cutensornetCreateTensorSVDConfig)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetTensorSVDConfig_t*) noexcept nogil>__cutensornetCreateTensorSVDConfig)(
         handle, svdConfig)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyTensorSVDConfig(cutensornetTensorSVDConfig_t svdConfig) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyTensorSVDConfig(cutensornetTensorSVDConfig_t svdConfig) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyTensorSVDConfig
     _check_or_init_cutensornet()
     if __cutensornetDestroyTensorSVDConfig == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyTensorSVDConfig is not found")
-    return (<cutensornetStatus_t (*)(cutensornetTensorSVDConfig_t) nogil>__cutensornetDestroyTensorSVDConfig)(
+    return (<cutensornetStatus_t (*)(cutensornetTensorSVDConfig_t) noexcept nogil>__cutensornetDestroyTensorSVDConfig)(
         svdConfig)
 
 
-cdef cutensornetStatus_t _cutensornetTensorSVDConfigGetAttribute(const cutensornetHandle_t handle, const cutensornetTensorSVDConfig_t svdConfig, cutensornetTensorSVDConfigAttributes_t attr, void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetTensorSVDConfigGetAttribute(const cutensornetHandle_t handle, const cutensornetTensorSVDConfig_t svdConfig, cutensornetTensorSVDConfigAttributes_t attr, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetTensorSVDConfigGetAttribute
     _check_or_init_cutensornet()
     if __cutensornetTensorSVDConfigGetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetTensorSVDConfigGetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorSVDConfig_t, cutensornetTensorSVDConfigAttributes_t, void*, size_t) nogil>__cutensornetTensorSVDConfigGetAttribute)(
-        handle, svdConfig, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorSVDConfig_t, cutensornetTensorSVDConfigAttributes_t, void*, size_t) noexcept nogil>__cutensornetTensorSVDConfigGetAttribute)(
+        handle, svdConfig, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetTensorSVDConfigSetAttribute(const cutensornetHandle_t handle, cutensornetTensorSVDConfig_t svdConfig, cutensornetTensorSVDConfigAttributes_t attr, const void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetTensorSVDConfigSetAttribute(const cutensornetHandle_t handle, cutensornetTensorSVDConfig_t svdConfig, cutensornetTensorSVDConfigAttributes_t attr, const void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetTensorSVDConfigSetAttribute
     _check_or_init_cutensornet()
     if __cutensornetTensorSVDConfigSetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetTensorSVDConfigSetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetTensorSVDConfig_t, cutensornetTensorSVDConfigAttributes_t, const void*, size_t) nogil>__cutensornetTensorSVDConfigSetAttribute)(
-        handle, svdConfig, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetTensorSVDConfig_t, cutensornetTensorSVDConfigAttributes_t, const void*, size_t) noexcept nogil>__cutensornetTensorSVDConfigSetAttribute)(
+        handle, svdConfig, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetWorkspaceComputeSVDSizes(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorIn, const cutensornetTensorDescriptor_t descTensorU, const cutensornetTensorDescriptor_t descTensorV, const cutensornetTensorSVDConfig_t svdConfig, cutensornetWorkspaceDescriptor_t workDesc) except* nogil:
+cdef cutensornetStatus_t _cutensornetWorkspaceComputeSVDSizes(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorIn, const cutensornetTensorDescriptor_t descTensorU, const cutensornetTensorDescriptor_t descTensorV, const cutensornetTensorSVDConfig_t svdConfig, cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetWorkspaceComputeSVDSizes
     _check_or_init_cutensornet()
     if __cutensornetWorkspaceComputeSVDSizes == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetWorkspaceComputeSVDSizes is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorSVDConfig_t, cutensornetWorkspaceDescriptor_t) nogil>__cutensornetWorkspaceComputeSVDSizes)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorSVDConfig_t, cutensornetWorkspaceDescriptor_t) noexcept nogil>__cutensornetWorkspaceComputeSVDSizes)(
         handle, descTensorIn, descTensorU, descTensorV, svdConfig, workDesc)
 
 
-cdef cutensornetStatus_t _cutensornetWorkspaceComputeQRSizes(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorIn, const cutensornetTensorDescriptor_t descTensorQ, const cutensornetTensorDescriptor_t descTensorR, cutensornetWorkspaceDescriptor_t workDesc) except* nogil:
+cdef cutensornetStatus_t _cutensornetWorkspaceComputeQRSizes(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorIn, const cutensornetTensorDescriptor_t descTensorQ, const cutensornetTensorDescriptor_t descTensorR, cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetWorkspaceComputeQRSizes
     _check_or_init_cutensornet()
     if __cutensornetWorkspaceComputeQRSizes == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetWorkspaceComputeQRSizes is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, cutensornetWorkspaceDescriptor_t) nogil>__cutensornetWorkspaceComputeQRSizes)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, cutensornetWorkspaceDescriptor_t) noexcept nogil>__cutensornetWorkspaceComputeQRSizes)(
         handle, descTensorIn, descTensorQ, descTensorR, workDesc)
 
 
-cdef cutensornetStatus_t _cutensornetCreateTensorSVDInfo(const cutensornetHandle_t handle, cutensornetTensorSVDInfo_t* svdInfo) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateTensorSVDInfo(const cutensornetHandle_t handle, cutensornetTensorSVDInfo_t* svdInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateTensorSVDInfo
     _check_or_init_cutensornet()
     if __cutensornetCreateTensorSVDInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateTensorSVDInfo is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetTensorSVDInfo_t*) nogil>__cutensornetCreateTensorSVDInfo)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetTensorSVDInfo_t*) noexcept nogil>__cutensornetCreateTensorSVDInfo)(
         handle, svdInfo)
 
 
-cdef cutensornetStatus_t _cutensornetTensorSVDInfoGetAttribute(const cutensornetHandle_t handle, const cutensornetTensorSVDInfo_t svdInfo, cutensornetTensorSVDInfoAttributes_t attr, void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetTensorSVDInfoGetAttribute(const cutensornetHandle_t handle, const cutensornetTensorSVDInfo_t svdInfo, cutensornetTensorSVDInfoAttributes_t attr, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetTensorSVDInfoGetAttribute
     _check_or_init_cutensornet()
     if __cutensornetTensorSVDInfoGetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetTensorSVDInfoGetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorSVDInfo_t, cutensornetTensorSVDInfoAttributes_t, void*, size_t) nogil>__cutensornetTensorSVDInfoGetAttribute)(
-        handle, svdInfo, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorSVDInfo_t, cutensornetTensorSVDInfoAttributes_t, void*, size_t) noexcept nogil>__cutensornetTensorSVDInfoGetAttribute)(
+        handle, svdInfo, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyTensorSVDInfo(cutensornetTensorSVDInfo_t svdInfo) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyTensorSVDInfo(cutensornetTensorSVDInfo_t svdInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyTensorSVDInfo
     _check_or_init_cutensornet()
     if __cutensornetDestroyTensorSVDInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyTensorSVDInfo is not found")
-    return (<cutensornetStatus_t (*)(cutensornetTensorSVDInfo_t) nogil>__cutensornetDestroyTensorSVDInfo)(
+    return (<cutensornetStatus_t (*)(cutensornetTensorSVDInfo_t) noexcept nogil>__cutensornetDestroyTensorSVDInfo)(
         svdInfo)
 
 
-cdef cutensornetStatus_t _cutensornetTensorSVD(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorIn, const void* const rawDataIn, cutensornetTensorDescriptor_t descTensorU, void* u, void* s, cutensornetTensorDescriptor_t descTensorV, void* v, const cutensornetTensorSVDConfig_t svdConfig, cutensornetTensorSVDInfo_t svdInfo, const cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except* nogil:
+cdef cutensornetStatus_t _cutensornetTensorSVD(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorIn, const void* const rawDataIn, cutensornetTensorDescriptor_t descTensorU, void* u, void* s, cutensornetTensorDescriptor_t descTensorV, void* v, const cutensornetTensorSVDConfig_t svdConfig, cutensornetTensorSVDInfo_t svdInfo, const cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetTensorSVD
     _check_or_init_cutensornet()
     if __cutensornetTensorSVD == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetTensorSVD is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const void* const, cutensornetTensorDescriptor_t, void*, void*, cutensornetTensorDescriptor_t, void*, const cutensornetTensorSVDConfig_t, cutensornetTensorSVDInfo_t, const cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetTensorSVD)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const void* const, cutensornetTensorDescriptor_t, void*, void*, cutensornetTensorDescriptor_t, void*, const cutensornetTensorSVDConfig_t, cutensornetTensorSVDInfo_t, const cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetTensorSVD)(
         handle, descTensorIn, rawDataIn, descTensorU, u, s, descTensorV, v, svdConfig, svdInfo, workDesc, stream)
 
 
-cdef cutensornetStatus_t _cutensornetTensorQR(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorIn, const void* const rawDataIn, const cutensornetTensorDescriptor_t descTensorQ, void* q, const cutensornetTensorDescriptor_t descTensorR, void* r, const cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except* nogil:
+cdef cutensornetStatus_t _cutensornetTensorQR(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorIn, const void* const rawDataIn, const cutensornetTensorDescriptor_t descTensorQ, void* q, const cutensornetTensorDescriptor_t descTensorR, void* r, const cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetTensorQR
     _check_or_init_cutensornet()
     if __cutensornetTensorQR == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetTensorQR is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const void* const, const cutensornetTensorDescriptor_t, void*, const cutensornetTensorDescriptor_t, void*, const cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetTensorQR)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const void* const, const cutensornetTensorDescriptor_t, void*, const cutensornetTensorDescriptor_t, void*, const cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetTensorQR)(
         handle, descTensorIn, rawDataIn, descTensorQ, q, descTensorR, r, workDesc, stream)
 
 
-cdef cutensornetStatus_t _cutensornetWorkspaceComputeGateSplitSizes(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorInA, const cutensornetTensorDescriptor_t descTensorInB, const cutensornetTensorDescriptor_t descTensorInG, const cutensornetTensorDescriptor_t descTensorU, const cutensornetTensorDescriptor_t descTensorV, const cutensornetGateSplitAlgo_t gateAlgo, const cutensornetTensorSVDConfig_t svdConfig, cutensornetComputeType_t computeType, cutensornetWorkspaceDescriptor_t workDesc) except* nogil:
+cdef cutensornetStatus_t _cutensornetWorkspaceComputeGateSplitSizes(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorInA, const cutensornetTensorDescriptor_t descTensorInB, const cutensornetTensorDescriptor_t descTensorInG, const cutensornetTensorDescriptor_t descTensorU, const cutensornetTensorDescriptor_t descTensorV, const cutensornetGateSplitAlgo_t gateAlgo, const cutensornetTensorSVDConfig_t svdConfig, cutensornetComputeType_t computeType, cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetWorkspaceComputeGateSplitSizes
     _check_or_init_cutensornet()
     if __cutensornetWorkspaceComputeGateSplitSizes == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetWorkspaceComputeGateSplitSizes is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetGateSplitAlgo_t, const cutensornetTensorSVDConfig_t, cutensornetComputeType_t, cutensornetWorkspaceDescriptor_t) nogil>__cutensornetWorkspaceComputeGateSplitSizes)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetTensorDescriptor_t, const cutensornetGateSplitAlgo_t, const cutensornetTensorSVDConfig_t, cutensornetComputeType_t, cutensornetWorkspaceDescriptor_t) noexcept nogil>__cutensornetWorkspaceComputeGateSplitSizes)(
         handle, descTensorInA, descTensorInB, descTensorInG, descTensorU, descTensorV, gateAlgo, svdConfig, computeType, workDesc)
 
 
-cdef cutensornetStatus_t _cutensornetGateSplit(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorInA, const void* rawDataInA, const cutensornetTensorDescriptor_t descTensorInB, const void* rawDataInB, const cutensornetTensorDescriptor_t descTensorInG, const void* rawDataInG, cutensornetTensorDescriptor_t descTensorU, void* u, void* s, cutensornetTensorDescriptor_t descTensorV, void* v, const cutensornetGateSplitAlgo_t gateAlgo, const cutensornetTensorSVDConfig_t svdConfig, cutensornetComputeType_t computeType, cutensornetTensorSVDInfo_t svdInfo, const cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except* nogil:
+cdef cutensornetStatus_t _cutensornetGateSplit(const cutensornetHandle_t handle, const cutensornetTensorDescriptor_t descTensorInA, const void* rawDataInA, const cutensornetTensorDescriptor_t descTensorInB, const void* rawDataInB, const cutensornetTensorDescriptor_t descTensorInG, const void* rawDataInG, cutensornetTensorDescriptor_t descTensorU, void* u, void* s, cutensornetTensorDescriptor_t descTensorV, void* v, const cutensornetGateSplitAlgo_t gateAlgo, const cutensornetTensorSVDConfig_t svdConfig, cutensornetComputeType_t computeType, cutensornetTensorSVDInfo_t svdInfo, const cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetGateSplit
     _check_or_init_cutensornet()
     if __cutensornetGateSplit == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetGateSplit is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const void*, const cutensornetTensorDescriptor_t, const void*, const cutensornetTensorDescriptor_t, const void*, cutensornetTensorDescriptor_t, void*, void*, cutensornetTensorDescriptor_t, void*, const cutensornetGateSplitAlgo_t, const cutensornetTensorSVDConfig_t, cutensornetComputeType_t, cutensornetTensorSVDInfo_t, const cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetGateSplit)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetTensorDescriptor_t, const void*, const cutensornetTensorDescriptor_t, const void*, const cutensornetTensorDescriptor_t, const void*, cutensornetTensorDescriptor_t, void*, void*, cutensornetTensorDescriptor_t, void*, const cutensornetGateSplitAlgo_t, const cutensornetTensorSVDConfig_t, cutensornetComputeType_t, cutensornetTensorSVDInfo_t, const cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetGateSplit)(
         handle, descTensorInA, rawDataInA, descTensorInB, rawDataInB, descTensorInG, rawDataInG, descTensorU, u, s, descTensorV, v, gateAlgo, svdConfig, computeType, svdInfo, workDesc, stream)
 
 
-cdef cutensornetStatus_t _cutensornetGetDeviceMemHandler(const cutensornetHandle_t handle, cutensornetDeviceMemHandler_t* devMemHandler) except* nogil:
+cdef cutensornetStatus_t _cutensornetGetDeviceMemHandler(const cutensornetHandle_t handle, cutensornetDeviceMemHandler_t* devMemHandler) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetGetDeviceMemHandler
     _check_or_init_cutensornet()
     if __cutensornetGetDeviceMemHandler == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetGetDeviceMemHandler is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetDeviceMemHandler_t*) nogil>__cutensornetGetDeviceMemHandler)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetDeviceMemHandler_t*) noexcept nogil>__cutensornetGetDeviceMemHandler)(
         handle, devMemHandler)
 
 
-cdef cutensornetStatus_t _cutensornetSetDeviceMemHandler(cutensornetHandle_t handle, const cutensornetDeviceMemHandler_t* devMemHandler) except* nogil:
+cdef cutensornetStatus_t _cutensornetSetDeviceMemHandler(cutensornetHandle_t handle, const cutensornetDeviceMemHandler_t* devMemHandler) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetSetDeviceMemHandler
     _check_or_init_cutensornet()
     if __cutensornetSetDeviceMemHandler == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetSetDeviceMemHandler is not found")
-    return (<cutensornetStatus_t (*)(cutensornetHandle_t, const cutensornetDeviceMemHandler_t*) nogil>__cutensornetSetDeviceMemHandler)(
+    return (<cutensornetStatus_t (*)(cutensornetHandle_t, const cutensornetDeviceMemHandler_t*) noexcept nogil>__cutensornetSetDeviceMemHandler)(
         handle, devMemHandler)
 
 
-cdef cutensornetStatus_t _cutensornetLoggerSetCallback(cutensornetLoggerCallback_t callback) except* nogil:
+cdef cutensornetStatus_t _cutensornetLoggerSetCallback(cutensornetLoggerCallback_t callback) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetLoggerSetCallback
     _check_or_init_cutensornet()
     if __cutensornetLoggerSetCallback == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetLoggerSetCallback is not found")
-    return (<cutensornetStatus_t (*)(cutensornetLoggerCallback_t) nogil>__cutensornetLoggerSetCallback)(
+    return (<cutensornetStatus_t (*)(cutensornetLoggerCallback_t) noexcept nogil>__cutensornetLoggerSetCallback)(
         callback)
 
 
-cdef cutensornetStatus_t _cutensornetLoggerSetCallbackData(cutensornetLoggerCallbackData_t callback, void* userData) except* nogil:
+cdef cutensornetStatus_t _cutensornetLoggerSetCallbackData(cutensornetLoggerCallbackData_t callback, void* userData) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetLoggerSetCallbackData
     _check_or_init_cutensornet()
     if __cutensornetLoggerSetCallbackData == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetLoggerSetCallbackData is not found")
-    return (<cutensornetStatus_t (*)(cutensornetLoggerCallbackData_t, void*) nogil>__cutensornetLoggerSetCallbackData)(
+    return (<cutensornetStatus_t (*)(cutensornetLoggerCallbackData_t, void*) noexcept nogil>__cutensornetLoggerSetCallbackData)(
         callback, userData)
 
 
-cdef cutensornetStatus_t _cutensornetLoggerSetFile(FILE* file) except* nogil:
+cdef cutensornetStatus_t _cutensornetLoggerSetFile(FILE* file) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetLoggerSetFile
     _check_or_init_cutensornet()
     if __cutensornetLoggerSetFile == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetLoggerSetFile is not found")
-    return (<cutensornetStatus_t (*)(FILE*) nogil>__cutensornetLoggerSetFile)(
+    return (<cutensornetStatus_t (*)(FILE*) noexcept nogil>__cutensornetLoggerSetFile)(
         file)
 
 
-cdef cutensornetStatus_t _cutensornetLoggerOpenFile(const char* logFile) except* nogil:
+cdef cutensornetStatus_t _cutensornetLoggerOpenFile(const char* logFile) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetLoggerOpenFile
     _check_or_init_cutensornet()
     if __cutensornetLoggerOpenFile == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetLoggerOpenFile is not found")
-    return (<cutensornetStatus_t (*)(const char*) nogil>__cutensornetLoggerOpenFile)(
+    return (<cutensornetStatus_t (*)(const char*) noexcept nogil>__cutensornetLoggerOpenFile)(
         logFile)
 
 
-cdef cutensornetStatus_t _cutensornetLoggerSetLevel(int32_t level) except* nogil:
+cdef cutensornetStatus_t _cutensornetLoggerSetLevel(int32_t level) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetLoggerSetLevel
     _check_or_init_cutensornet()
     if __cutensornetLoggerSetLevel == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetLoggerSetLevel is not found")
-    return (<cutensornetStatus_t (*)(int32_t) nogil>__cutensornetLoggerSetLevel)(
+    return (<cutensornetStatus_t (*)(int32_t) noexcept nogil>__cutensornetLoggerSetLevel)(
         level)
 
 
-cdef cutensornetStatus_t _cutensornetLoggerSetMask(int32_t mask) except* nogil:
+cdef cutensornetStatus_t _cutensornetLoggerSetMask(int32_t mask) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetLoggerSetMask
     _check_or_init_cutensornet()
     if __cutensornetLoggerSetMask == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetLoggerSetMask is not found")
-    return (<cutensornetStatus_t (*)(int32_t) nogil>__cutensornetLoggerSetMask)(
+    return (<cutensornetStatus_t (*)(int32_t) noexcept nogil>__cutensornetLoggerSetMask)(
         mask)
 
 
-cdef cutensornetStatus_t _cutensornetLoggerForceDisable() except* nogil:
+cdef cutensornetStatus_t _cutensornetLoggerForceDisable() except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetLoggerForceDisable
     _check_or_init_cutensornet()
     if __cutensornetLoggerForceDisable == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetLoggerForceDisable is not found")
-    return (<cutensornetStatus_t (*)() nogil>__cutensornetLoggerForceDisable)(
+    return (<cutensornetStatus_t (*)() noexcept nogil>__cutensornetLoggerForceDisable)(
         )
 
 
-cdef size_t _cutensornetGetVersion() except* nogil:
+cdef size_t _cutensornetGetVersion() except?0 nogil:
     global __cutensornetGetVersion
     _check_or_init_cutensornet()
     if __cutensornetGetVersion == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetGetVersion is not found")
-    return (<size_t (*)() nogil>__cutensornetGetVersion)(
+    return (<size_t (*)() noexcept nogil>__cutensornetGetVersion)(
         )
 
 
-cdef size_t _cutensornetGetCudartVersion() except* nogil:
+cdef size_t _cutensornetGetCudartVersion() except?0 nogil:
     global __cutensornetGetCudartVersion
     _check_or_init_cutensornet()
     if __cutensornetGetCudartVersion == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetGetCudartVersion is not found")
-    return (<size_t (*)() nogil>__cutensornetGetCudartVersion)(
+    return (<size_t (*)() noexcept nogil>__cutensornetGetCudartVersion)(
         )
 
 
-cdef const char* _cutensornetGetErrorString(cutensornetStatus_t error) except* nogil:
+cdef const char* _cutensornetGetErrorString(cutensornetStatus_t error) except?NULL nogil:
     global __cutensornetGetErrorString
     _check_or_init_cutensornet()
     if __cutensornetGetErrorString == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetGetErrorString is not found")
-    return (<const char* (*)(cutensornetStatus_t) nogil>__cutensornetGetErrorString)(
+    return (<const char* (*)(cutensornetStatus_t) noexcept nogil>__cutensornetGetErrorString)(
         error)
 
 
-cdef cutensornetStatus_t _cutensornetDistributedResetConfiguration(cutensornetHandle_t handle, const void* commPtr, size_t commSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetDistributedResetConfiguration(cutensornetHandle_t handle, const void* commPtr, size_t commSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDistributedResetConfiguration
     _check_or_init_cutensornet()
     if __cutensornetDistributedResetConfiguration == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDistributedResetConfiguration is not found")
-    return (<cutensornetStatus_t (*)(cutensornetHandle_t, const void*, size_t) nogil>__cutensornetDistributedResetConfiguration)(
+    return (<cutensornetStatus_t (*)(cutensornetHandle_t, const void*, size_t) noexcept nogil>__cutensornetDistributedResetConfiguration)(
         handle, commPtr, commSize)
 
 
-cdef cutensornetStatus_t _cutensornetDistributedGetNumRanks(const cutensornetHandle_t handle, int32_t* numRanks) except* nogil:
+cdef cutensornetStatus_t _cutensornetDistributedGetNumRanks(const cutensornetHandle_t handle, int32_t* numRanks) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDistributedGetNumRanks
     _check_or_init_cutensornet()
     if __cutensornetDistributedGetNumRanks == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDistributedGetNumRanks is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t*) nogil>__cutensornetDistributedGetNumRanks)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t*) noexcept nogil>__cutensornetDistributedGetNumRanks)(
         handle, numRanks)
 
 
-cdef cutensornetStatus_t _cutensornetDistributedGetProcRank(const cutensornetHandle_t handle, int32_t* procRank) except* nogil:
+cdef cutensornetStatus_t _cutensornetDistributedGetProcRank(const cutensornetHandle_t handle, int32_t* procRank) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDistributedGetProcRank
     _check_or_init_cutensornet()
     if __cutensornetDistributedGetProcRank == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDistributedGetProcRank is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t*) nogil>__cutensornetDistributedGetProcRank)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t*) noexcept nogil>__cutensornetDistributedGetProcRank)(
         handle, procRank)
 
 
-cdef cutensornetStatus_t _cutensornetDistributedSynchronize(const cutensornetHandle_t handle) except* nogil:
+cdef cutensornetStatus_t _cutensornetDistributedSynchronize(const cutensornetHandle_t handle) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDistributedSynchronize
     _check_or_init_cutensornet()
     if __cutensornetDistributedSynchronize == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDistributedSynchronize is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t) nogil>__cutensornetDistributedSynchronize)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t) noexcept nogil>__cutensornetDistributedSynchronize)(
         handle)
 
 
-cdef cutensornetStatus_t _cutensornetNetworkGetAttribute(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t networkDesc, cutensornetNetworkAttributes_t attr, void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetNetworkGetAttribute(const cutensornetHandle_t handle, const cutensornetNetworkDescriptor_t networkDesc, cutensornetNetworkAttributes_t attr, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetNetworkGetAttribute
     _check_or_init_cutensornet()
     if __cutensornetNetworkGetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetNetworkGetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, cutensornetNetworkAttributes_t, void*, size_t) nogil>__cutensornetNetworkGetAttribute)(
-        handle, networkDesc, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkDescriptor_t, cutensornetNetworkAttributes_t, void*, size_t) noexcept nogil>__cutensornetNetworkGetAttribute)(
+        handle, networkDesc, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetNetworkSetAttribute(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, cutensornetNetworkAttributes_t attr, const void* buf, size_t sizeInBytes) except* nogil:
+cdef cutensornetStatus_t _cutensornetNetworkSetAttribute(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, cutensornetNetworkAttributes_t attr, const void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetNetworkSetAttribute
     _check_or_init_cutensornet()
     if __cutensornetNetworkSetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetNetworkSetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, cutensornetNetworkAttributes_t, const void*, size_t) nogil>__cutensornetNetworkSetAttribute)(
-        handle, networkDesc, attr, buf, sizeInBytes)
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, cutensornetNetworkAttributes_t, const void*, size_t) noexcept nogil>__cutensornetNetworkSetAttribute)(
+        handle, networkDesc, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetWorkspacePurgeCache(const cutensornetHandle_t handle, cutensornetWorkspaceDescriptor_t workDesc, cutensornetMemspace_t memSpace) except* nogil:
+cdef cutensornetStatus_t _cutensornetWorkspacePurgeCache(const cutensornetHandle_t handle, cutensornetWorkspaceDescriptor_t workDesc, cutensornetMemspace_t memSpace) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetWorkspacePurgeCache
     _check_or_init_cutensornet()
     if __cutensornetWorkspacePurgeCache == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetWorkspacePurgeCache is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetWorkspaceDescriptor_t, cutensornetMemspace_t) nogil>__cutensornetWorkspacePurgeCache)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetWorkspaceDescriptor_t, cutensornetMemspace_t) noexcept nogil>__cutensornetWorkspacePurgeCache)(
         handle, workDesc, memSpace)
 
 
-cdef cutensornetStatus_t _cutensornetComputeGradientsBackward(const cutensornetHandle_t handle, cutensornetContractionPlan_t plan, const void* const rawDataIn[], const void* outputGradient, void* const gradients[], int32_t accumulateOutput, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except* nogil:
+cdef cutensornetStatus_t _cutensornetComputeGradientsBackward(const cutensornetHandle_t handle, cutensornetContractionPlan_t plan, const void* const rawDataIn[], const void* outputGradient, void* const gradients[], int32_t accumulateOutput, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetComputeGradientsBackward
     _check_or_init_cutensornet()
     if __cutensornetComputeGradientsBackward == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetComputeGradientsBackward is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionPlan_t, const void* const*, const void*, void* const*, int32_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetComputeGradientsBackward)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionPlan_t, const void* const*, const void*, void* const*, int32_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetComputeGradientsBackward)(
         handle, plan, rawDataIn, outputGradient, gradients, accumulateOutput, workDesc, stream)
 
 
-cdef cutensornetStatus_t _cutensornetCreateState(const cutensornetHandle_t handle, cutensornetStatePurity_t purity, int32_t numStateModes, const int64_t* stateModeExtents, cudaDataType_t dataType, cutensornetState_t* tensorNetworkState) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateState(const cutensornetHandle_t handle, cutensornetStatePurity_t purity, int32_t numStateModes, const int64_t* stateModeExtents, cudaDataType_t dataType, cutensornetState_t* tensorNetworkState) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateState
     _check_or_init_cutensornet()
     if __cutensornetCreateState == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateState is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStatePurity_t, int32_t, const int64_t*, cudaDataType_t, cutensornetState_t*) nogil>__cutensornetCreateState)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStatePurity_t, int32_t, const int64_t*, cudaDataType_t, cutensornetState_t*) noexcept nogil>__cutensornetCreateState)(
         handle, purity, numStateModes, stateModeExtents, dataType, tensorNetworkState)
 
 
-cdef cutensornetStatus_t _cutensornetStateApplyTensor(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* tensorId) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateApplyTensor(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* tensorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateApplyTensor
     _check_or_init_cutensornet()
     if __cutensornetStateApplyTensor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateApplyTensor is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, void*, const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*) nogil>__cutensornetStateApplyTensor)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, void*, const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*) noexcept nogil>__cutensornetStateApplyTensor)(
         handle, tensorNetworkState, numStateModes, stateModes, tensorData, tensorModeStrides, immutable, adjoint, unitary, tensorId)
 
 
-cdef cutensornetStatus_t _cutensornetStateUpdateTensor(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int64_t tensorId, void* tensorData, int32_t unitary) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateUpdateTensor(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int64_t tensorId, void* tensorData, int32_t unitary) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateUpdateTensor
     _check_or_init_cutensornet()
     if __cutensornetStateUpdateTensor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateUpdateTensor is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int64_t, void*, int32_t) nogil>__cutensornetStateUpdateTensor)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int64_t, void*, int32_t) noexcept nogil>__cutensornetStateUpdateTensor)(
         handle, tensorNetworkState, tensorId, tensorData, unitary)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyState(cutensornetState_t tensorNetworkState) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyState(cutensornetState_t tensorNetworkState) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyState
     _check_or_init_cutensornet()
     if __cutensornetDestroyState == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyState is not found")
-    return (<cutensornetStatus_t (*)(cutensornetState_t) nogil>__cutensornetDestroyState)(
+    return (<cutensornetStatus_t (*)(cutensornetState_t) noexcept nogil>__cutensornetDestroyState)(
         tensorNetworkState)
 
 
-cdef cutensornetStatus_t _cutensornetCreateMarginal(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numMarginalModes, const int32_t* marginalModes, int32_t numProjectedModes, const int32_t* projectedModes, const int64_t* marginalTensorStrides, cutensornetStateMarginal_t* tensorNetworkMarginal) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateMarginal(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numMarginalModes, const int32_t* marginalModes, int32_t numProjectedModes, const int32_t* projectedModes, const int64_t* marginalTensorStrides, cutensornetStateMarginal_t* tensorNetworkMarginal) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateMarginal
     _check_or_init_cutensornet()
     if __cutensornetCreateMarginal == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateMarginal is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, int32_t, const int32_t*, const int64_t*, cutensornetStateMarginal_t*) nogil>__cutensornetCreateMarginal)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, int32_t, const int32_t*, const int64_t*, cutensornetStateMarginal_t*) noexcept nogil>__cutensornetCreateMarginal)(
         handle, tensorNetworkState, numMarginalModes, marginalModes, numProjectedModes, projectedModes, marginalTensorStrides, tensorNetworkMarginal)
 
 
-cdef cutensornetStatus_t _cutensornetMarginalConfigure(const cutensornetHandle_t handle, cutensornetStateMarginal_t tensorNetworkMarginal, cutensornetMarginalAttributes_t attribute, const void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetMarginalConfigure(const cutensornetHandle_t handle, cutensornetStateMarginal_t tensorNetworkMarginal, cutensornetMarginalAttributes_t attribute, const void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetMarginalConfigure
     _check_or_init_cutensornet()
     if __cutensornetMarginalConfigure == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetMarginalConfigure is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateMarginal_t, cutensornetMarginalAttributes_t, const void*, size_t) nogil>__cutensornetMarginalConfigure)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateMarginal_t, cutensornetMarginalAttributes_t, const void*, size_t) noexcept nogil>__cutensornetMarginalConfigure)(
         handle, tensorNetworkMarginal, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetMarginalPrepare(const cutensornetHandle_t handle, cutensornetStateMarginal_t tensorNetworkMarginal, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetMarginalPrepare(const cutensornetHandle_t handle, cutensornetStateMarginal_t tensorNetworkMarginal, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetMarginalPrepare
     _check_or_init_cutensornet()
     if __cutensornetMarginalPrepare == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetMarginalPrepare is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateMarginal_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetMarginalPrepare)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateMarginal_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetMarginalPrepare)(
         handle, tensorNetworkMarginal, maxWorkspaceSizeDevice, workDesc, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetMarginalCompute(const cutensornetHandle_t handle, cutensornetStateMarginal_t tensorNetworkMarginal, const int64_t* projectedModeValues, cutensornetWorkspaceDescriptor_t workDesc, void* marginalTensor, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetMarginalCompute(const cutensornetHandle_t handle, cutensornetStateMarginal_t tensorNetworkMarginal, const int64_t* projectedModeValues, cutensornetWorkspaceDescriptor_t workDesc, void* marginalTensor, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetMarginalCompute
     _check_or_init_cutensornet()
     if __cutensornetMarginalCompute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetMarginalCompute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateMarginal_t, const int64_t*, cutensornetWorkspaceDescriptor_t, void*, cudaStream_t) nogil>__cutensornetMarginalCompute)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateMarginal_t, const int64_t*, cutensornetWorkspaceDescriptor_t, void*, cudaStream_t) noexcept nogil>__cutensornetMarginalCompute)(
         handle, tensorNetworkMarginal, projectedModeValues, workDesc, marginalTensor, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyMarginal(cutensornetStateMarginal_t tensorNetworkMarginal) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyMarginal(cutensornetStateMarginal_t tensorNetworkMarginal) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyMarginal
     _check_or_init_cutensornet()
     if __cutensornetDestroyMarginal == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyMarginal is not found")
-    return (<cutensornetStatus_t (*)(cutensornetStateMarginal_t) nogil>__cutensornetDestroyMarginal)(
+    return (<cutensornetStatus_t (*)(cutensornetStateMarginal_t) noexcept nogil>__cutensornetDestroyMarginal)(
         tensorNetworkMarginal)
 
 
-cdef cutensornetStatus_t _cutensornetCreateSampler(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numModesToSample, const int32_t* modesToSample, cutensornetStateSampler_t* tensorNetworkSampler) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateSampler(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numModesToSample, const int32_t* modesToSample, cutensornetStateSampler_t* tensorNetworkSampler) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateSampler
     _check_or_init_cutensornet()
     if __cutensornetCreateSampler == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateSampler is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, cutensornetStateSampler_t*) nogil>__cutensornetCreateSampler)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, cutensornetStateSampler_t*) noexcept nogil>__cutensornetCreateSampler)(
         handle, tensorNetworkState, numModesToSample, modesToSample, tensorNetworkSampler)
 
 
-cdef cutensornetStatus_t _cutensornetSamplerConfigure(const cutensornetHandle_t handle, cutensornetStateSampler_t tensorNetworkSampler, cutensornetSamplerAttributes_t attribute, const void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetSamplerConfigure(const cutensornetHandle_t handle, cutensornetStateSampler_t tensorNetworkSampler, cutensornetSamplerAttributes_t attribute, const void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetSamplerConfigure
     _check_or_init_cutensornet()
     if __cutensornetSamplerConfigure == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetSamplerConfigure is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateSampler_t, cutensornetSamplerAttributes_t, const void*, size_t) nogil>__cutensornetSamplerConfigure)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateSampler_t, cutensornetSamplerAttributes_t, const void*, size_t) noexcept nogil>__cutensornetSamplerConfigure)(
         handle, tensorNetworkSampler, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetSamplerPrepare(const cutensornetHandle_t handle, cutensornetStateSampler_t tensorNetworkSampler, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetSamplerPrepare(const cutensornetHandle_t handle, cutensornetStateSampler_t tensorNetworkSampler, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetSamplerPrepare
     _check_or_init_cutensornet()
     if __cutensornetSamplerPrepare == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetSamplerPrepare is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateSampler_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetSamplerPrepare)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateSampler_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetSamplerPrepare)(
         handle, tensorNetworkSampler, maxWorkspaceSizeDevice, workDesc, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetSamplerSample(const cutensornetHandle_t handle, cutensornetStateSampler_t tensorNetworkSampler, int64_t numShots, cutensornetWorkspaceDescriptor_t workDesc, int64_t* samples, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetSamplerSample(const cutensornetHandle_t handle, cutensornetStateSampler_t tensorNetworkSampler, int64_t numShots, cutensornetWorkspaceDescriptor_t workDesc, int64_t* samples, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetSamplerSample
     _check_or_init_cutensornet()
     if __cutensornetSamplerSample == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetSamplerSample is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateSampler_t, int64_t, cutensornetWorkspaceDescriptor_t, int64_t*, cudaStream_t) nogil>__cutensornetSamplerSample)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateSampler_t, int64_t, cutensornetWorkspaceDescriptor_t, int64_t*, cudaStream_t) noexcept nogil>__cutensornetSamplerSample)(
         handle, tensorNetworkSampler, numShots, workDesc, samples, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetDestroySampler(cutensornetStateSampler_t tensorNetworkSampler) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroySampler(cutensornetStateSampler_t tensorNetworkSampler) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroySampler
     _check_or_init_cutensornet()
     if __cutensornetDestroySampler == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroySampler is not found")
-    return (<cutensornetStatus_t (*)(cutensornetStateSampler_t) nogil>__cutensornetDestroySampler)(
+    return (<cutensornetStatus_t (*)(cutensornetStateSampler_t) noexcept nogil>__cutensornetDestroySampler)(
         tensorNetworkSampler)
 
 
-cdef cutensornetStatus_t _cutensornetStateFinalizeMPS(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetBoundaryCondition_t boundaryCondition, const int64_t* const extentsOut[], const int64_t* const stridesOut[]) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateFinalizeMPS(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetBoundaryCondition_t boundaryCondition, const int64_t* const extentsOut[], const int64_t* const stridesOut[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateFinalizeMPS
     _check_or_init_cutensornet()
     if __cutensornetStateFinalizeMPS == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateFinalizeMPS is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetBoundaryCondition_t, const int64_t* const*, const int64_t* const*) nogil>__cutensornetStateFinalizeMPS)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetBoundaryCondition_t, const int64_t* const*, const int64_t* const*) noexcept nogil>__cutensornetStateFinalizeMPS)(
         handle, tensorNetworkState, boundaryCondition, extentsOut, stridesOut)
 
 
-cdef cutensornetStatus_t _cutensornetStateConfigure(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetStateAttributes_t attribute, const void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateConfigure(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetStateAttributes_t attribute, const void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateConfigure
     _check_or_init_cutensornet()
     if __cutensornetStateConfigure == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateConfigure is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetStateAttributes_t, const void*, size_t) nogil>__cutensornetStateConfigure)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetStateAttributes_t, const void*, size_t) noexcept nogil>__cutensornetStateConfigure)(
         handle, tensorNetworkState, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetStatePrepare(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetStatePrepare(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStatePrepare
     _check_or_init_cutensornet()
     if __cutensornetStatePrepare == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStatePrepare is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetStatePrepare)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetStatePrepare)(
         handle, tensorNetworkState, maxWorkspaceSizeDevice, workDesc, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetStateCompute(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetWorkspaceDescriptor_t workDesc, int64_t* extentsOut[], int64_t* stridesOut[], void* stateTensorsOut[], cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateCompute(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetWorkspaceDescriptor_t workDesc, int64_t* extentsOut[], int64_t* stridesOut[], void* stateTensorsOut[], cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateCompute
     _check_or_init_cutensornet()
     if __cutensornetStateCompute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateCompute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetWorkspaceDescriptor_t, int64_t**, int64_t**, void**, cudaStream_t) nogil>__cutensornetStateCompute)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetWorkspaceDescriptor_t, int64_t**, int64_t**, void**, cudaStream_t) noexcept nogil>__cutensornetStateCompute)(
         handle, tensorNetworkState, workDesc, extentsOut, stridesOut, stateTensorsOut, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetGetOutputStateDetails(const cutensornetHandle_t handle, const cutensornetState_t tensorNetworkState, int32_t* numTensorsOut, int32_t numModesOut[], int64_t* extentsOut[], int64_t* stridesOut[]) except* nogil:
+cdef cutensornetStatus_t _cutensornetGetOutputStateDetails(const cutensornetHandle_t handle, const cutensornetState_t tensorNetworkState, int32_t* numTensorsOut, int32_t numModesOut[], int64_t* extentsOut[], int64_t* stridesOut[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetGetOutputStateDetails
     _check_or_init_cutensornet()
     if __cutensornetGetOutputStateDetails == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetGetOutputStateDetails is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetState_t, int32_t*, int32_t*, int64_t**, int64_t**) nogil>__cutensornetGetOutputStateDetails)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetState_t, int32_t*, int32_t*, int64_t**, int64_t**) noexcept nogil>__cutensornetGetOutputStateDetails)(
         handle, tensorNetworkState, numTensorsOut, numModesOut, extentsOut, stridesOut)
 
 
-cdef cutensornetStatus_t _cutensornetCreateNetworkOperator(const cutensornetHandle_t handle, int32_t numStateModes, const int64_t stateModeExtents[], cudaDataType_t dataType, cutensornetNetworkOperator_t* tensorNetworkOperator) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateNetworkOperator(const cutensornetHandle_t handle, int32_t numStateModes, const int64_t stateModeExtents[], cudaDataType_t dataType, cutensornetNetworkOperator_t* tensorNetworkOperator) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateNetworkOperator
     _check_or_init_cutensornet()
     if __cutensornetCreateNetworkOperator == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateNetworkOperator is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t, const int64_t*, cudaDataType_t, cutensornetNetworkOperator_t*) nogil>__cutensornetCreateNetworkOperator)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t, const int64_t*, cudaDataType_t, cutensornetNetworkOperator_t*) noexcept nogil>__cutensornetCreateNetworkOperator)(
         handle, numStateModes, stateModeExtents, dataType, tensorNetworkOperator)
 
 
-cdef cutensornetStatus_t _cutensornetNetworkOperatorAppendProduct(const cutensornetHandle_t handle, cutensornetNetworkOperator_t tensorNetworkOperator, cuDoubleComplex coefficient, int32_t numTensors, const int32_t numStateModes[], const int32_t* stateModes[], const int64_t* tensorModeStrides[], const void* tensorData[], int64_t* componentId) except* nogil:
+cdef cutensornetStatus_t _cutensornetNetworkOperatorAppendProduct(const cutensornetHandle_t handle, cutensornetNetworkOperator_t tensorNetworkOperator, cuDoubleComplex coefficient, int32_t numTensors, const int32_t numStateModes[], const int32_t* stateModes[], const int64_t* tensorModeStrides[], const void* tensorData[], int64_t* componentId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetNetworkOperatorAppendProduct
     _check_or_init_cutensornet()
     if __cutensornetNetworkOperatorAppendProduct == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetNetworkOperatorAppendProduct is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkOperator_t, cuDoubleComplex, int32_t, const int32_t*, const int32_t**, const int64_t**, const void**, int64_t*) nogil>__cutensornetNetworkOperatorAppendProduct)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkOperator_t, cuDoubleComplex, int32_t, const int32_t*, const int32_t**, const int64_t**, const void**, int64_t*) noexcept nogil>__cutensornetNetworkOperatorAppendProduct)(
         handle, tensorNetworkOperator, coefficient, numTensors, numStateModes, stateModes, tensorModeStrides, tensorData, componentId)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyNetworkOperator(cutensornetNetworkOperator_t tensorNetworkOperator) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyNetworkOperator(cutensornetNetworkOperator_t tensorNetworkOperator) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyNetworkOperator
     _check_or_init_cutensornet()
     if __cutensornetDestroyNetworkOperator == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyNetworkOperator is not found")
-    return (<cutensornetStatus_t (*)(cutensornetNetworkOperator_t) nogil>__cutensornetDestroyNetworkOperator)(
+    return (<cutensornetStatus_t (*)(cutensornetNetworkOperator_t) noexcept nogil>__cutensornetDestroyNetworkOperator)(
         tensorNetworkOperator)
 
 
-cdef cutensornetStatus_t _cutensornetCreateAccessor(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numProjectedModes, const int32_t* projectedModes, const int64_t* amplitudesTensorStrides, cutensornetStateAccessor_t* tensorNetworkAccessor) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateAccessor(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numProjectedModes, const int32_t* projectedModes, const int64_t* amplitudesTensorStrides, cutensornetStateAccessor_t* tensorNetworkAccessor) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateAccessor
     _check_or_init_cutensornet()
     if __cutensornetCreateAccessor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateAccessor is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, const int64_t*, cutensornetStateAccessor_t*) nogil>__cutensornetCreateAccessor)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, const int64_t*, cutensornetStateAccessor_t*) noexcept nogil>__cutensornetCreateAccessor)(
         handle, tensorNetworkState, numProjectedModes, projectedModes, amplitudesTensorStrides, tensorNetworkAccessor)
 
 
-cdef cutensornetStatus_t _cutensornetAccessorConfigure(const cutensornetHandle_t handle, cutensornetStateAccessor_t tensorNetworkAccessor, cutensornetAccessorAttributes_t attribute, const void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetAccessorConfigure(const cutensornetHandle_t handle, cutensornetStateAccessor_t tensorNetworkAccessor, cutensornetAccessorAttributes_t attribute, const void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetAccessorConfigure
     _check_or_init_cutensornet()
     if __cutensornetAccessorConfigure == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetAccessorConfigure is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateAccessor_t, cutensornetAccessorAttributes_t, const void*, size_t) nogil>__cutensornetAccessorConfigure)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateAccessor_t, cutensornetAccessorAttributes_t, const void*, size_t) noexcept nogil>__cutensornetAccessorConfigure)(
         handle, tensorNetworkAccessor, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetAccessorPrepare(const cutensornetHandle_t handle, cutensornetStateAccessor_t tensorNetworkAccessor, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetAccessorPrepare(const cutensornetHandle_t handle, cutensornetStateAccessor_t tensorNetworkAccessor, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetAccessorPrepare
     _check_or_init_cutensornet()
     if __cutensornetAccessorPrepare == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetAccessorPrepare is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateAccessor_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetAccessorPrepare)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateAccessor_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetAccessorPrepare)(
         handle, tensorNetworkAccessor, maxWorkspaceSizeDevice, workDesc, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetAccessorCompute(const cutensornetHandle_t handle, cutensornetStateAccessor_t tensorNetworkAccessor, const int64_t* projectedModeValues, cutensornetWorkspaceDescriptor_t workDesc, void* amplitudesTensor, void* stateNorm, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetAccessorCompute(const cutensornetHandle_t handle, cutensornetStateAccessor_t tensorNetworkAccessor, const int64_t* projectedModeValues, cutensornetWorkspaceDescriptor_t workDesc, void* amplitudesTensor, void* stateNorm, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetAccessorCompute
     _check_or_init_cutensornet()
     if __cutensornetAccessorCompute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetAccessorCompute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateAccessor_t, const int64_t*, cutensornetWorkspaceDescriptor_t, void*, void*, cudaStream_t) nogil>__cutensornetAccessorCompute)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateAccessor_t, const int64_t*, cutensornetWorkspaceDescriptor_t, void*, void*, cudaStream_t) noexcept nogil>__cutensornetAccessorCompute)(
         handle, tensorNetworkAccessor, projectedModeValues, workDesc, amplitudesTensor, stateNorm, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyAccessor(cutensornetStateAccessor_t tensorNetworkAccessor) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyAccessor(cutensornetStateAccessor_t tensorNetworkAccessor) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyAccessor
     _check_or_init_cutensornet()
     if __cutensornetDestroyAccessor == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyAccessor is not found")
-    return (<cutensornetStatus_t (*)(cutensornetStateAccessor_t) nogil>__cutensornetDestroyAccessor)(
+    return (<cutensornetStatus_t (*)(cutensornetStateAccessor_t) noexcept nogil>__cutensornetDestroyAccessor)(
         tensorNetworkAccessor)
 
 
-cdef cutensornetStatus_t _cutensornetCreateExpectation(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetNetworkOperator_t tensorNetworkOperator, cutensornetStateExpectation_t* tensorNetworkExpectation) except* nogil:
+cdef cutensornetStatus_t _cutensornetCreateExpectation(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetNetworkOperator_t tensorNetworkOperator, cutensornetStateExpectation_t* tensorNetworkExpectation) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetCreateExpectation
     _check_or_init_cutensornet()
     if __cutensornetCreateExpectation == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetCreateExpectation is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetNetworkOperator_t, cutensornetStateExpectation_t*) nogil>__cutensornetCreateExpectation)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetNetworkOperator_t, cutensornetStateExpectation_t*) noexcept nogil>__cutensornetCreateExpectation)(
         handle, tensorNetworkState, tensorNetworkOperator, tensorNetworkExpectation)
 
 
-cdef cutensornetStatus_t _cutensornetExpectationConfigure(const cutensornetHandle_t handle, cutensornetStateExpectation_t tensorNetworkExpectation, cutensornetExpectationAttributes_t attribute, const void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetExpectationConfigure(const cutensornetHandle_t handle, cutensornetStateExpectation_t tensorNetworkExpectation, cutensornetExpectationAttributes_t attribute, const void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetExpectationConfigure
     _check_or_init_cutensornet()
     if __cutensornetExpectationConfigure == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetExpectationConfigure is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateExpectation_t, cutensornetExpectationAttributes_t, const void*, size_t) nogil>__cutensornetExpectationConfigure)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateExpectation_t, cutensornetExpectationAttributes_t, const void*, size_t) noexcept nogil>__cutensornetExpectationConfigure)(
         handle, tensorNetworkExpectation, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetExpectationPrepare(const cutensornetHandle_t handle, cutensornetStateExpectation_t tensorNetworkExpectation, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetExpectationPrepare(const cutensornetHandle_t handle, cutensornetStateExpectation_t tensorNetworkExpectation, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetExpectationPrepare
     _check_or_init_cutensornet()
     if __cutensornetExpectationPrepare == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetExpectationPrepare is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateExpectation_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) nogil>__cutensornetExpectationPrepare)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateExpectation_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetExpectationPrepare)(
         handle, tensorNetworkExpectation, maxWorkspaceSizeDevice, workDesc, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetExpectationCompute(const cutensornetHandle_t handle, cutensornetStateExpectation_t tensorNetworkExpectation, cutensornetWorkspaceDescriptor_t workDesc, void* expectationValue, void* stateNorm, cudaStream_t cudaStream) except* nogil:
+cdef cutensornetStatus_t _cutensornetExpectationCompute(const cutensornetHandle_t handle, cutensornetStateExpectation_t tensorNetworkExpectation, cutensornetWorkspaceDescriptor_t workDesc, void* expectationValue, void* stateNorm, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetExpectationCompute
     _check_or_init_cutensornet()
     if __cutensornetExpectationCompute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetExpectationCompute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateExpectation_t, cutensornetWorkspaceDescriptor_t, void*, void*, cudaStream_t) nogil>__cutensornetExpectationCompute)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateExpectation_t, cutensornetWorkspaceDescriptor_t, void*, void*, cudaStream_t) noexcept nogil>__cutensornetExpectationCompute)(
         handle, tensorNetworkExpectation, workDesc, expectationValue, stateNorm, cudaStream)
 
 
-cdef cutensornetStatus_t _cutensornetDestroyExpectation(cutensornetStateExpectation_t tensorNetworkExpectation) except* nogil:
+cdef cutensornetStatus_t _cutensornetDestroyExpectation(cutensornetStateExpectation_t tensorNetworkExpectation) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetDestroyExpectation
     _check_or_init_cutensornet()
     if __cutensornetDestroyExpectation == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetDestroyExpectation is not found")
-    return (<cutensornetStatus_t (*)(cutensornetStateExpectation_t) nogil>__cutensornetDestroyExpectation)(
+    return (<cutensornetStatus_t (*)(cutensornetStateExpectation_t) noexcept nogil>__cutensornetDestroyExpectation)(
         tensorNetworkExpectation)
 
 
-cdef cutensornetStatus_t _cutensornetStateApplyTensorOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* tensorId) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateApplyTensorOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* tensorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateApplyTensorOperator
     _check_or_init_cutensornet()
     if __cutensornetStateApplyTensorOperator == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateApplyTensorOperator is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, void*, const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*) nogil>__cutensornetStateApplyTensorOperator)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, void*, const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*) noexcept nogil>__cutensornetStateApplyTensorOperator)(
         handle, tensorNetworkState, numStateModes, stateModes, tensorData, tensorModeStrides, immutable, adjoint, unitary, tensorId)
 
 
-cdef cutensornetStatus_t _cutensornetStateApplyControlledTensorOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numControlModes, const int32_t* stateControlModes, const int64_t* stateControlValues, int32_t numTargetModes, const int32_t* stateTargetModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* tensorId) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateApplyControlledTensorOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numControlModes, const int32_t* stateControlModes, const int64_t* stateControlValues, int32_t numTargetModes, const int32_t* stateTargetModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* tensorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateApplyControlledTensorOperator
     _check_or_init_cutensornet()
     if __cutensornetStateApplyControlledTensorOperator == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateApplyControlledTensorOperator is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, const int64_t*, int32_t, const int32_t*, void*, const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*) nogil>__cutensornetStateApplyControlledTensorOperator)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, const int64_t*, int32_t, const int32_t*, void*, const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*) noexcept nogil>__cutensornetStateApplyControlledTensorOperator)(
         handle, tensorNetworkState, numControlModes, stateControlModes, stateControlValues, numTargetModes, stateTargetModes, tensorData, tensorModeStrides, immutable, adjoint, unitary, tensorId)
 
 
-cdef cutensornetStatus_t _cutensornetStateUpdateTensorOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int64_t tensorId, void* tensorData, int32_t unitary) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateUpdateTensorOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int64_t tensorId, void* tensorData, int32_t unitary) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateUpdateTensorOperator
     _check_or_init_cutensornet()
     if __cutensornetStateUpdateTensorOperator == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateUpdateTensorOperator is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int64_t, void*, int32_t) nogil>__cutensornetStateUpdateTensorOperator)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int64_t, void*, int32_t) noexcept nogil>__cutensornetStateUpdateTensorOperator)(
         handle, tensorNetworkState, tensorId, tensorData, unitary)
 
 
-cdef cutensornetStatus_t _cutensornetStateApplyNetworkOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, const cutensornetNetworkOperator_t tensorNetworkOperator, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* operatorId) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateApplyNetworkOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, const cutensornetNetworkOperator_t tensorNetworkOperator, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* operatorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateApplyNetworkOperator
     _check_or_init_cutensornet()
     if __cutensornetStateApplyNetworkOperator == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateApplyNetworkOperator is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, const cutensornetNetworkOperator_t, const int32_t, const int32_t, const int32_t, int64_t*) nogil>__cutensornetStateApplyNetworkOperator)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, const cutensornetNetworkOperator_t, const int32_t, const int32_t, const int32_t, int64_t*) noexcept nogil>__cutensornetStateApplyNetworkOperator)(
         handle, tensorNetworkState, tensorNetworkOperator, immutable, adjoint, unitary, operatorId)
 
 
-cdef cutensornetStatus_t _cutensornetStateInitializeMPS(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetBoundaryCondition_t boundaryCondition, const int64_t* const extentsIn[], const int64_t* const stridesIn[], void* stateTensorsIn[]) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateInitializeMPS(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, cutensornetBoundaryCondition_t boundaryCondition, const int64_t* const extentsIn[], const int64_t* const stridesIn[], void* stateTensorsIn[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateInitializeMPS
     _check_or_init_cutensornet()
     if __cutensornetStateInitializeMPS == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateInitializeMPS is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetBoundaryCondition_t, const int64_t* const*, const int64_t* const*, void**) nogil>__cutensornetStateInitializeMPS)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, cutensornetBoundaryCondition_t, const int64_t* const*, const int64_t* const*, void**) noexcept nogil>__cutensornetStateInitializeMPS)(
         handle, tensorNetworkState, boundaryCondition, extentsIn, stridesIn, stateTensorsIn)
 
 
-cdef cutensornetStatus_t _cutensornetStateGetInfo(const cutensornetHandle_t handle, const cutensornetState_t tensorNetworkState, cutensornetStateAttributes_t attribute, void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateGetInfo(const cutensornetHandle_t handle, const cutensornetState_t tensorNetworkState, cutensornetStateAttributes_t attribute, void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateGetInfo
     _check_or_init_cutensornet()
     if __cutensornetStateGetInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateGetInfo is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetState_t, cutensornetStateAttributes_t, void*, size_t) nogil>__cutensornetStateGetInfo)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetState_t, cutensornetStateAttributes_t, void*, size_t) noexcept nogil>__cutensornetStateGetInfo)(
         handle, tensorNetworkState, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetNetworkOperatorAppendMPO(const cutensornetHandle_t handle, cutensornetNetworkOperator_t tensorNetworkOperator, cuDoubleComplex coefficient, int32_t numStateModes, const int32_t stateModes[], const int64_t* tensorModeExtents[], const int64_t* tensorModeStrides[], const void* tensorData[], cutensornetBoundaryCondition_t boundaryCondition, int64_t* componentId) except* nogil:
+cdef cutensornetStatus_t _cutensornetNetworkOperatorAppendMPO(const cutensornetHandle_t handle, cutensornetNetworkOperator_t tensorNetworkOperator, cuDoubleComplex coefficient, int32_t numStateModes, const int32_t stateModes[], const int64_t* tensorModeExtents[], const int64_t* tensorModeStrides[], const void* tensorData[], cutensornetBoundaryCondition_t boundaryCondition, int64_t* componentId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetNetworkOperatorAppendMPO
     _check_or_init_cutensornet()
     if __cutensornetNetworkOperatorAppendMPO == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetNetworkOperatorAppendMPO is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkOperator_t, cuDoubleComplex, int32_t, const int32_t*, const int64_t**, const int64_t**, const void**, cutensornetBoundaryCondition_t, int64_t*) nogil>__cutensornetNetworkOperatorAppendMPO)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkOperator_t, cuDoubleComplex, int32_t, const int32_t*, const int64_t**, const int64_t**, const void**, cutensornetBoundaryCondition_t, int64_t*) noexcept nogil>__cutensornetNetworkOperatorAppendMPO)(
         handle, tensorNetworkOperator, coefficient, numStateModes, stateModes, tensorModeExtents, tensorModeStrides, tensorData, boundaryCondition, componentId)
 
 
-cdef cutensornetStatus_t _cutensornetAccessorGetInfo(const cutensornetHandle_t handle, const cutensornetStateAccessor_t tensorNetworkAccessor, cutensornetAccessorAttributes_t attribute, void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetAccessorGetInfo(const cutensornetHandle_t handle, const cutensornetStateAccessor_t tensorNetworkAccessor, cutensornetAccessorAttributes_t attribute, void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetAccessorGetInfo
     _check_or_init_cutensornet()
     if __cutensornetAccessorGetInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetAccessorGetInfo is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateAccessor_t, cutensornetAccessorAttributes_t, void*, size_t) nogil>__cutensornetAccessorGetInfo)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateAccessor_t, cutensornetAccessorAttributes_t, void*, size_t) noexcept nogil>__cutensornetAccessorGetInfo)(
         handle, tensorNetworkAccessor, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetExpectationGetInfo(const cutensornetHandle_t handle, const cutensornetStateExpectation_t tensorNetworkExpectation, cutensornetExpectationAttributes_t attribute, void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetExpectationGetInfo(const cutensornetHandle_t handle, const cutensornetStateExpectation_t tensorNetworkExpectation, cutensornetExpectationAttributes_t attribute, void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetExpectationGetInfo
     _check_or_init_cutensornet()
     if __cutensornetExpectationGetInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetExpectationGetInfo is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateExpectation_t, cutensornetExpectationAttributes_t, void*, size_t) nogil>__cutensornetExpectationGetInfo)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateExpectation_t, cutensornetExpectationAttributes_t, void*, size_t) noexcept nogil>__cutensornetExpectationGetInfo)(
         handle, tensorNetworkExpectation, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetMarginalGetInfo(const cutensornetHandle_t handle, const cutensornetStateMarginal_t tensorNetworkMarginal, cutensornetMarginalAttributes_t attribute, void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetMarginalGetInfo(const cutensornetHandle_t handle, const cutensornetStateMarginal_t tensorNetworkMarginal, cutensornetMarginalAttributes_t attribute, void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetMarginalGetInfo
     _check_or_init_cutensornet()
     if __cutensornetMarginalGetInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetMarginalGetInfo is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateMarginal_t, cutensornetMarginalAttributes_t, void*, size_t) nogil>__cutensornetMarginalGetInfo)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateMarginal_t, cutensornetMarginalAttributes_t, void*, size_t) noexcept nogil>__cutensornetMarginalGetInfo)(
         handle, tensorNetworkMarginal, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetSamplerGetInfo(const cutensornetHandle_t handle, const cutensornetStateSampler_t tensorNetworkSampler, cutensornetSamplerAttributes_t attribute, void* attributeValue, size_t attributeSize) except* nogil:
+cdef cutensornetStatus_t _cutensornetSamplerGetInfo(const cutensornetHandle_t handle, const cutensornetStateSampler_t tensorNetworkSampler, cutensornetSamplerAttributes_t attribute, void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetSamplerGetInfo
     _check_or_init_cutensornet()
     if __cutensornetSamplerGetInfo == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetSamplerGetInfo is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateSampler_t, cutensornetSamplerAttributes_t, void*, size_t) nogil>__cutensornetSamplerGetInfo)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateSampler_t, cutensornetSamplerAttributes_t, void*, size_t) noexcept nogil>__cutensornetSamplerGetInfo)(
         handle, tensorNetworkSampler, attribute, attributeValue, attributeSize)
 
 
-cdef cutensornetStatus_t _cutensornetStateApplyUnitaryChannel(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, int32_t numTensors, void* tensorData[], const int64_t* tensorModeStrides, const double probabilities[], int64_t* channelId) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateApplyUnitaryChannel(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, int32_t numTensors, void* tensorData[], const int64_t* tensorModeStrides, const double probabilities[], int64_t* channelId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateApplyUnitaryChannel
     _check_or_init_cutensornet()
     if __cutensornetStateApplyUnitaryChannel == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateApplyUnitaryChannel is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, int32_t, void**, const int64_t*, const double*, int64_t*) nogil>__cutensornetStateApplyUnitaryChannel)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, int32_t, void**, const int64_t*, const double*, int64_t*) noexcept nogil>__cutensornetStateApplyUnitaryChannel)(
         handle, tensorNetworkState, numStateModes, stateModes, numTensors, tensorData, tensorModeStrides, probabilities, channelId)
 
 
-cdef cutensornetStatus_t _cutensornetStateCaptureMPS(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateCaptureMPS(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateCaptureMPS
     _check_or_init_cutensornet()
     if __cutensornetStateCaptureMPS == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateCaptureMPS is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t) nogil>__cutensornetStateCaptureMPS)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t) noexcept nogil>__cutensornetStateCaptureMPS)(
         handle, tensorNetworkState)
 
 
-cdef cutensornetStatus_t _cutensornetStateApplyGeneralChannel(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, int32_t numTensors, void* tensorData[], const int64_t* tensorModeStrides, int64_t* channelId) except* nogil:
+cdef cutensornetStatus_t _cutensornetStateApplyGeneralChannel(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, int32_t numTensors, void* tensorData[], const int64_t* tensorModeStrides, int64_t* channelId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetStateApplyGeneralChannel
     _check_or_init_cutensornet()
     if __cutensornetStateApplyGeneralChannel == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetStateApplyGeneralChannel is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, int32_t, void**, const int64_t*, int64_t*) nogil>__cutensornetStateApplyGeneralChannel)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, int32_t, void**, const int64_t*, int64_t*) noexcept nogil>__cutensornetStateApplyGeneralChannel)(
         handle, tensorNetworkState, numStateModes, stateModes, numTensors, tensorData, tensorModeStrides, channelId)
+
+
+cdef cutensornetStatus_t _cutensornetCreateStateProjectionMPS(const cutensornetHandle_t handle, int32_t numStates, const cutensornetState_t tensorNetworkStates[], const cuDoubleComplex coeffs[], int32_t symmetric, int32_t numEnvs, const cutensornetMPSEnvBounds_t specEnvs[], cutensornetBoundaryCondition_t boundaryCondition, int32_t numTensors, const int32_t quditsPerTensor[], const int64_t* extentsOut[], const int64_t* stridesOut[], void* dualTensorsDataOut[], const cutensornetMPSEnvBounds_t* orthoSpec, cutensornetStateProjectionMPS_t* tensorNetworkProjection) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetCreateStateProjectionMPS
+    _check_or_init_cutensornet()
+    if __cutensornetCreateStateProjectionMPS == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetCreateStateProjectionMPS is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, int32_t, const cutensornetState_t*, const cuDoubleComplex*, int32_t, int32_t, const cutensornetMPSEnvBounds_t*, cutensornetBoundaryCondition_t, int32_t, const int32_t*, const int64_t**, const int64_t**, void**, const cutensornetMPSEnvBounds_t*, cutensornetStateProjectionMPS_t*) noexcept nogil>__cutensornetCreateStateProjectionMPS)(
+        handle, numStates, tensorNetworkStates, coeffs, symmetric, numEnvs, specEnvs, boundaryCondition, numTensors, quditsPerTensor, extentsOut, stridesOut, dualTensorsDataOut, orthoSpec, tensorNetworkProjection)
+
+
+cdef cutensornetStatus_t _cutensornetStateProjectionMPSConfigure(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, cutensornetStateProjectionMPSAttributes_t attribute, const void* attributeValue, size_t attributeSize) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateProjectionMPSConfigure
+    _check_or_init_cutensornet()
+    if __cutensornetStateProjectionMPSConfigure == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateProjectionMPSConfigure is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateProjectionMPS_t, cutensornetStateProjectionMPSAttributes_t, const void*, size_t) noexcept nogil>__cutensornetStateProjectionMPSConfigure)(
+        handle, tensorNetworkProjection, attribute, attributeValue, attributeSize)
+
+
+cdef cutensornetStatus_t _cutensornetStateProjectionMPSPrepare(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, size_t maxWorkspaceSizeDevice, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateProjectionMPSPrepare
+    _check_or_init_cutensornet()
+    if __cutensornetStateProjectionMPSPrepare == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateProjectionMPSPrepare is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateProjectionMPS_t, size_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetStateProjectionMPSPrepare)(
+        handle, tensorNetworkProjection, maxWorkspaceSizeDevice, workDesc, cudaStream)
+
+
+cdef cutensornetStatus_t _cutensornetStateProjectionMPSComputeTensorEnv(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, const cutensornetMPSEnvBounds_t* envSpec, const int64_t stridesIn[], const void* envTensorDataIn, const int64_t stridesOut[], void* envTensorDataOut, int32_t applyInvMetric, int32_t reResolveChannels, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateProjectionMPSComputeTensorEnv
+    _check_or_init_cutensornet()
+    if __cutensornetStateProjectionMPSComputeTensorEnv == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateProjectionMPSComputeTensorEnv is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateProjectionMPS_t, const cutensornetMPSEnvBounds_t*, const int64_t*, const void*, const int64_t*, void*, int32_t, int32_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetStateProjectionMPSComputeTensorEnv)(
+        handle, tensorNetworkProjection, envSpec, stridesIn, envTensorDataIn, stridesOut, envTensorDataOut, applyInvMetric, reResolveChannels, workDesc, cudaStream)
+
+
+cdef cutensornetStatus_t _cutensornetStateProjectionMPSGetTensorInfo(const cutensornetHandle_t handle, const cutensornetStateProjectionMPS_t tensorNetworkProjection, const cutensornetMPSEnvBounds_t* envSpec, int64_t extents[], int64_t recommendedStrides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateProjectionMPSGetTensorInfo
+    _check_or_init_cutensornet()
+    if __cutensornetStateProjectionMPSGetTensorInfo == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateProjectionMPSGetTensorInfo is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetStateProjectionMPS_t, const cutensornetMPSEnvBounds_t*, int64_t*, int64_t*) noexcept nogil>__cutensornetStateProjectionMPSGetTensorInfo)(
+        handle, tensorNetworkProjection, envSpec, extents, recommendedStrides)
+
+
+cdef cutensornetStatus_t _cutensornetStateProjectionMPSExtractTensor(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, const cutensornetMPSEnvBounds_t* envSpec, const int64_t strides[], void* envTensorData, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateProjectionMPSExtractTensor
+    _check_or_init_cutensornet()
+    if __cutensornetStateProjectionMPSExtractTensor == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateProjectionMPSExtractTensor is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateProjectionMPS_t, const cutensornetMPSEnvBounds_t*, const int64_t*, void*, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetStateProjectionMPSExtractTensor)(
+        handle, tensorNetworkProjection, envSpec, strides, envTensorData, workDesc, cudaStream)
+
+
+cdef cutensornetStatus_t _cutensornetStateProjectionMPSInsertTensor(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, const cutensornetMPSEnvBounds_t* envSpec, const cutensornetMPSEnvBounds_t* orthoSpec, const int64_t strides[], const void* envTensorData, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateProjectionMPSInsertTensor
+    _check_or_init_cutensornet()
+    if __cutensornetStateProjectionMPSInsertTensor == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateProjectionMPSInsertTensor is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateProjectionMPS_t, const cutensornetMPSEnvBounds_t*, const cutensornetMPSEnvBounds_t*, const int64_t*, const void*, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetStateProjectionMPSInsertTensor)(
+        handle, tensorNetworkProjection, envSpec, orthoSpec, strides, envTensorData, workDesc, cudaStream)
+
+
+cdef cutensornetStatus_t _cutensornetDestroyStateProjectionMPS(cutensornetStateProjectionMPS_t tensorNetworkProjection) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetDestroyStateProjectionMPS
+    _check_or_init_cutensornet()
+    if __cutensornetDestroyStateProjectionMPS == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetDestroyStateProjectionMPS is not found")
+    return (<cutensornetStatus_t (*)(cutensornetStateProjectionMPS_t) noexcept nogil>__cutensornetDestroyStateProjectionMPS)(
+        tensorNetworkProjection)

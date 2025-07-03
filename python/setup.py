@@ -35,9 +35,9 @@ with open(os.path.join(source_root, "tests/requirements.txt")) as f:
 install_requires = [
     'numpy>=1.21, <3.0',  # ">=1.21,<3"
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.8',   # ">=1.8.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.7',  # ">=2.7.0,<3"
-    f'cudensitymat-cu{utils.cuda_major_ver}~=0.1', # ">=0.1,<0.2"
+    f'custatevec-cu{utils.cuda_major_ver}~=1.9',   # ">=1.9.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.8',  # ">=2.8.0,<3"
+    f'cudensitymat-cu{utils.cuda_major_ver}~=0.2', # ">=0.2.0,<0.3.0"
 ]
 if utils.cuda_major_ver == '11':
     install_requires.append('cupy-cuda11x>=13.0')  # no ambiguity
@@ -162,14 +162,13 @@ setup(
     license_files = ('LICENSE',),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
-        "License :: OSI Approved :: BSD License",
         "Operating System :: POSIX :: Linux",
         "Topic :: Education",
         "Topic :: Scientific/Engineering",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Programming Language :: Python :: Implementation :: CPython",
         "Environment :: GPU :: NVIDIA CUDA",
     ] + cuda_classifier,
@@ -182,7 +181,7 @@ setup(
         ["*.pxd", "*.pyx", "*.py"],
     ),
     zip_safe=False,
-    python_requires='>=3.10',
+    python_requires='>=3.11',
     install_requires=install_requires,
     extras_require={"test": tests_require},
     cmdclass=cmdclass,

@@ -129,7 +129,7 @@ def decompose(
         .. code-block:: python
 
             from cuquantum.bindings import cutensornet as cutn
-            from cuquantum.cutensornet.tensor import decompose, QRMethod
+            from cuquantum.tensornet.tensor import decompose, QRMethod
 
             handle = cutn.create()
             q, r = decompose(..., method=QRMethod(), options={"handle": handle}, ...)
@@ -143,7 +143,7 @@ def decompose(
 
         Use NumPy operands:
         
-        >>> from cuquantum.cutensornet.tensor import decompose, SVDMethod
+        >>> from cuquantum.tensornet.tensor import decompose, SVDMethod
         >>> import numpy as np
         >>> T = np.random.random((4,4,6,6))
 
@@ -215,7 +215,12 @@ def decompose(
 
     logger = logging.getLogger() if options.logger is None else options.logger
     logger.info(f"CUDA runtime version = {cutn.get_cudart_version()}")
-    logger.info(f"cuTensorNet version = {cutn.MAJOR_VER}.{cutn.MINOR_VER}.{cutn.PATCH_VER}")
+    # Get cuTensorNet version (as seen at run-time).
+    cutn_ver = cutn.get_version()
+    cutn_major = cutn_ver // 10000
+    cutn_minor = (cutn_ver % 10000) // 100
+    cutn_patch = cutn_ver % 100
+    logger.info(f"cuTensorNet version = {cutn_major}.{cutn_minor}.{cutn_patch}")
     logger.info("Beginning operands parsing...")
 
     # Infer the correct decomposition method, QRMethod by default

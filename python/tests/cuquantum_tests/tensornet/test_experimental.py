@@ -11,7 +11,7 @@ import pytest
 import cupy as cp
 import numpy as np
 
-from cuquantum import contract, tensor, CircuitToEinsum, OptimizerInfo
+from cuquantum.tensornet import contract, tensor, CircuitToEinsum, OptimizerInfo
 from cuquantum.tensornet.experimental import contract_decompose, ContractDecomposeAlgorithm, ContractDecomposeInfo, NetworkOperator, NetworkState, MPSConfig, TNConfig
 from cuquantum.tensornet.experimental._internal.utils import is_gate_split
 from cuquantum.tensornet.experimental._internal.network_state_utils import STATE_SUPPORTED_DTYPE_NAMES
@@ -30,7 +30,7 @@ from .utils.state_data import (
     general_factory_states,
     svd_algorithm, 
     svd_algorithm_cycle, 
-    create_vqc_states, 
+    create_vqc_states,
     STATE_UPDATE_CONFIGS,
     noisy_state_tests
 )
@@ -313,6 +313,29 @@ class TestNetworkStateFunctionality:
             
             assert cp.allclose(sv[0,1], amp)
             assert cp.allclose(sv1[0,1], amp1)
+    
+    def test_large_circuit_sampling(self):
+        try:
+            import qiskit
+        except ImportError:
+            pytest.skip("qiskit not installed")
+        
+        # a special case with large number of qubits and 16 non-zero bitstring output in the final state
+        qubit_count = 20
+        depth = qubit_count // 5
+
+        circuit = qiskit.QuantumCircuit(qubit_count)
+        qubits = circuit.qubits
+        for i in range(0, depth):
+            circuit.h(qubits[i * 5])
+            for j in range(4):
+                circuit.cx(qubits[i * 5+j], qubits[i * 5+j+1])
+
+        nshots = 10000
+        with NetworkState.from_circuit(circuit) as state:
+            samples_1 = state.compute_sampling(nshots)
+            samples_2 = state.compute_sampling(nshots, seed=123)
+            assert len(samples_1) == len(samples_2) == 16
 
 class TestNetworkStateCorrectness:
     @pytest.mark.parametrize("circuit", testing_circuits_mps)
@@ -399,10 +422,10 @@ class TestNetworkStateCorrectness:
             pytest.skip("Test skipped due to singular value degeneracy issue")
     
     @pytest.mark.parametrize("config", STATE_UPDATE_CONFIGS)
-    def test_update_reuse_correctness(self, config):
-        (state_a, op_two_body_x), (state_b, op_two_body_y), operator, two_body_op_ids = create_vqc_states(config)
-        if state_a.config.__class__.__name__ == 'TNConfig':
-            #TODO: update to isinstance check after cuquantum.cutensornet.experimental.TNConfig is removed
+    @pytest.mark.parametrize("with_control", (True, False))
+    def test_update_reuse_correctness(self, config, with_control):
+        (state_a, op_two_body_x), (state_b, op_two_body_y), operator, two_body_op_ids = create_vqc_states(config, with_control=with_control)
+        if isinstance(state_a.config, TNConfig):
             tolerance = get_contraction_tolerance("complex128")
         else:
             tolerance = get_mps_tolerance("complex128")

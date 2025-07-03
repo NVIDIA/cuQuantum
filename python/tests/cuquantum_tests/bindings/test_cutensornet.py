@@ -23,16 +23,16 @@ except:
     torch = None
 
 from cuquantum import ComputeType
-from cuquantum import cutensornet as cutn
-from cuquantum import tensor
+from cuquantum.bindings import cutensornet as cutn
+from cuquantum.tensornet import tensor, get_mpi_comm_pointer
 from cuquantum.tensornet._internal.decomposition_utils import get_svd_info_dict, parse_svd_config
 from cuquantum._internal.utils import check_or_create_options
 
 from ..tensornet.utils import approxTN_utils
 from ..tensornet.utils.data import gate_decomp_expressions, tensor_decomp_expressions
 from ..tensornet.utils.test_utils import get_stream_for_backend
-from .. import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type,
-                MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase)
+from . import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type, 
+               MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase, BindingsDeprecationTestBase)
 
 
 ###################################################################
@@ -52,6 +52,56 @@ def manage_resource(name):
             try:
                 if name == 'handle':
                     h = cutn.create()
+                elif name == 'state':
+                    self.simple_state = SimpleState(self.num_qubits, self.extents, self.strides, self.dtype, self.order, self.mps)
+                    self.qubits_dims_or_ptr = self.simple_state.qubits_dims if self.extents == 'seq' else self.simple_state.qubits_dims.ctypes.data
+                    h = self.state = cutn.create_state(self.handle, self.state_purity, self.num_qubits, 
+                                                       self.qubits_dims_or_ptr, dtype_to_data_type[self.dtype])
+                    gate_h_strides = self.simple_state.gate_h_strides if self.strides == 'seq' else self.simple_state.gate_h_strides.ctypes.data
+                    gate_cx_strides = self.simple_state.gate_cx_strides if self.strides == 'seq' else self.simple_state.gate_cx_strides.ctypes.data
+                    cutn.state_apply_tensor_operator(self.handle, self.state, 1, (0,), 
+                                                     self.simple_state.gate_h.data.ptr, gate_h_strides, 1, 0, 1)
+                    for i in range(1, self.num_qubits):
+                        cutn.state_apply_tensor_operator(self.handle, self.state, 2, (i-1, i),
+                                                         self.simple_state.gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)    
+                    if self.mps:
+                        cutn.state_finalize_mps(self.handle, self.state, cutn.BoundaryCondition.OPEN, 
+                                                self.simple_state.mps_tensor_extents, self.simple_state.mps_tensor_strides)
+                        self.simple_state._setup_mps_state(self.handle, self.state, self.workspace, self.stream)
+                elif name == 'accessor':
+                    fixed_modes = ()
+                    num_fixed_modes = len(fixed_modes)
+                    amplitudes_shape = self.simple_state.get_amplitudes_shape(fixed_modes)
+                    self.amplitudes = cp.empty(amplitudes_shape, dtype=self.dtype, order=self.order)
+                    amplitudes_strides = [s // self.amplitudes.itemsize for s in self.amplitudes.strides]
+                    h = cutn.create_accessor(self.handle, self.state, num_fixed_modes, fixed_modes, amplitudes_strides)
+                elif name == 'sampler':
+                    h = cutn.create_sampler(self.handle, self.state, self.num_qubits, 0)
+                elif name == 'hamiltonian':
+                    if self.dtype in [np.float32, np.float64]:
+                        pytest.skip("skipping test for non-complex dtype as we use Y gate as complex")
+                    h = self.hamiltonian = cutn.create_network_operator(self.handle, self.num_qubits, self.qubits_dims_or_ptr, dtype_to_data_type[self.dtype])
+                    # Construct a tensor network operator: (0.5 * Z1 * Z2) + (0.25 * Y3)
+                    self.simple_state.get_gate_z_y()
+                    num_modes = (1, 1) # Z1 acts on 1 mode, Z2 acts on 1 mode
+                    modes_Z1, modes_Z2 = (1, ), (2, ) 
+                    state_modes = (modes_Z1, modes_Z2) # state modes (Z1 * Z2) acts on
+                    gate_data = (self.simple_state.gate_z.data.ptr, self.simple_state.gate_z.data.ptr) 
+                    cutn.network_operator_append_product(self.handle, self.hamiltonian, 0.5, 2, num_modes, state_modes, 0, gate_data)
+                    num_modes = (1, ) # Y3 acts on 1 mode
+                    modes_Y3 = (3, ) 
+                    state_modes = (modes_Y3, ) # state modes (Y3) acts on
+                    gate_data = (self.simple_state.gate_y.data.ptr, ) 
+                    cutn.network_operator_append_product(self.handle, self.hamiltonian, 0.25, 1, num_modes, state_modes, 0, gate_data)
+                elif name == 'expectation':
+                    h = cutn.create_expectation(self.handle, self.state, self.hamiltonian)
+                elif name == 'marginal':
+                    marginal_modes = (0, 1) # open qubits
+                    num_marginal_modes = len(marginal_modes)
+                    rdm_shape = self.simple_state.get_rdm_shape(marginal_modes)
+                    self.rdm = cp.empty(rdm_shape, dtype=self.dtype)
+                    rdm_strides = [stride_in_bytes // self.rdm.itemsize for stride_in_bytes in self.rdm.strides]
+                    h = cutn.create_marginal(self.handle, self.state, num_marginal_modes, marginal_modes, 0, 0, rdm_strides)
                 elif name == 'dscr':
                     tn, dtype, input_form = self.tn, self.dtype, self.input_form
                     einsum, shapes = tn  # unpack
@@ -75,7 +125,7 @@ def manage_resource(name):
                     options = getattr(self, "options", {})
                     max_extent = options.get("max_extent", None)
                     subscript, shapes = tn  # unpack
-                    tn = TensorDecompositionFactory(subscript, shapes, dtype, max_extent=max_extent)
+                    tn = TensorDecompositionFactory(subscript, shapes, dtype, max_extent=max_extent, order=self.order)
                     h = []
                     for t in tn.tensor_names:
                         t = cutn.create_tensor_descriptor(
@@ -102,9 +152,6 @@ def manage_resource(name):
                     # we use this version to avoid creating a sequence; another API
                     # is tested elsewhere
                     h = cutn.create_slice_group_from_id_range(self.handle, 0, 1, 1)
-                elif name == 'state':
-                    dtype = dtype_to_data_type[getattr(np, self.dtype)]
-                    h = cutn.create_state(self.handle, self.state_purity, self.n_qubits, (2,)*self.n_qubits, dtype)
                 else:
                     assert False, f'name "{name}" not recognized'
                 setattr(self, name, h)
@@ -145,7 +192,27 @@ def manage_resource(name):
                     h = cutn.destroy_slice_group(self.slice_group)
                     del self.slice_group
                 elif name == 'state':
-                    h = cutn.destroy_state(self.state)
+                    cutn.destroy_state(self.state)
+                    del self.state
+                    del self.simple_state
+                elif name == 'accessor':
+                    cutn.destroy_accessor(self.accessor)
+                    del self.accessor
+                    del self.amplitudes
+                elif name == 'sampler':
+                    cutn.destroy_sampler(self.sampler)
+                    del self.sampler
+                elif name == 'hamiltonian':
+                    if hasattr(self, 'hamiltonian'):
+                        cutn.destroy_network_operator(self.hamiltonian)
+                        del self.hamiltonian
+                elif name == 'expectation':
+                    if hasattr(self, 'expectation'):
+                        cutn.destroy_expectation(self.expectation)
+                        del self.expectation
+                elif name == 'marginal':
+                    cutn.destroy_marginal(self.marginal)
+                    del self.marginal
         return test_func
     return decorator
 
@@ -154,17 +221,7 @@ class TestLibHelper:
 
     def test_get_version(self):
         ver = cutn.get_version()
-        major = ver // 10000
-        minor = (ver % 10000) // 100
-
-        # run-time version must be compatible with build-time version
-        assert major == cutn.MAJOR_VER
-        assert minor >= cutn.MINOR_VER
-
-        # sanity check (build-time versions should agree)
-        assert cutn.VERSION == (cutn.MAJOR_VER * 10000
-            + cutn.MINOR_VER * 100
-            + cutn.PATCH_VER)
+        assert isinstance(ver, int)
 
     def test_get_cudart_version(self):
         # CUDA runtime is statically linked, so we can't compare
@@ -179,6 +236,81 @@ class TestHandle:
     def test_handle_create_destroy(self):
         # simple rount-trip test
         pass
+
+
+class SimpleState:
+
+    def __init__(self, num_qubits, extents, strides, dtype, order, mps=False):
+        self.num_qubits = num_qubits
+        self.extents = extents
+        self.strides = strides
+        self.dtype = dtype
+        self.order = order
+        self.mps = mps
+        self.qubits_dims = np.array([2,] * self.num_qubits, dtype=np.int64)
+
+        gate_h = 2**-0.5 * cp.asarray([[1,1], [1,-1]],).reshape(2,2, order='F')
+        self.gate_h = gate_h.astype(self.dtype, order=self.order)
+        self.gate_h_strides = np.array([s // self.gate_h.itemsize for s in self.gate_h.strides], dtype=np.int64)
+
+        gate_cx = cp.asarray([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]],).reshape(2, 2, 2, 2, order='F')
+        self.gate_cx = gate_cx.astype(self.dtype, order=self.order)
+        self.gate_cx_strides = np.array([s // self.gate_cx.itemsize for s in self.gate_cx.strides], dtype=np.int64)
+
+        if self.mps:
+            self._setup_mps_tensors()
+
+    def get_gate_z_y(self):
+        gate_z = cp.asarray([[1, 0], [0, -1]],).reshape(2,2, order='F')
+        self.gate_z = gate_z.astype(self.dtype, order=self.order)
+        self.gate_z_strides = np.array([s // self.gate_z.itemsize for s in self.gate_z.strides], dtype=np.int64)
+        if self.dtype in [np.complex64, np.complex128]:
+            gate_y = cp.asarray([[0, -1j], [1j, 0]],).reshape(2,2, order='F')
+            self.gate_y = gate_y.astype(self.dtype, order=self.order)
+            self.gate_y_strides = np.array([s // self.gate_y.itemsize for s in self.gate_y.strides], dtype=np.int64)
+
+    def get_amplitudes_shape(self, fixed_modes):
+        amplitudes_shape = [self.qubits_dims[i] for i in range(self.num_qubits) if i not in fixed_modes]
+        return amplitudes_shape
+    
+    def get_rdm_shape(self, marginal_modes):
+        dims = tuple(self.qubits_dims[m] for m in marginal_modes)
+        rdm_shape = dims * 2
+        return rdm_shape
+    
+    def _setup_mps_tensors(self):
+        max_extent = self.mps
+        self.mps_tensor_extents = []
+        self.mps_tensor_strides = []
+        self.mps_tensors = []
+        self.mps_tensor_ptrs = []
+        for i in range(self.num_qubits):
+            if i == 0:
+                extents = (2, max_extent)
+            elif i == self.num_qubits - 1:
+                extents = (max_extent, 2)
+            else:
+                extents = (max_extent, 2, max_extent)
+            self.mps_tensor_extents.append(extents)
+            tensor = cp.zeros(extents, dtype=self.dtype, order=self.order)
+            self.mps_tensors.append(tensor)
+            self.mps_tensor_ptrs.append(tensor.data.ptr)
+            self.mps_tensor_strides.append([stride_in_bytes // tensor.itemsize for stride_in_bytes in tensor.strides])
+
+    def _setup_mps_state(self, handle, state, workspace, stream):
+        svd_algorithm_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.MPS_SVD_CONFIG_ALGO)
+        svd_algorithm = np.array(cutn.TensorSVDAlgo.GESVDJ, dtype=svd_algorithm_dtype)
+        cutn.state_configure(handle, state, cutn.StateAttribute.MPS_SVD_CONFIG_ALGO, 
+                                svd_algorithm.ctypes.data, svd_algorithm.dtype.itemsize)
+        free_mem = cp.cuda.Device().mem_info[0]
+        max_scratch_size = free_mem // 4 
+        cutn.state_prepare(handle, state, max_scratch_size, workspace, stream.ptr)
+        workspace_size_d = cutn.workspace_get_memory_size(handle, workspace, cutn.WorksizePref.RECOMMENDED, 
+                                                            cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        scratch_space = cp.cuda.alloc(workspace_size_d)
+        cutn.workspace_set_memory(handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, 
+                                    scratch_space.ptr, workspace_size_d)
+        cutn.state_compute(handle, state, workspace, self.mps_tensor_ptrs, stream.ptr)
 
 
 class TensorNetworkFactory:
@@ -731,6 +863,100 @@ class TestContraction(TestTensorNetworkBase):
                 assert cp.allclose(grad_cutn, cp.asarray(grad_torch))
 
 
+@testing.parameterize(*testing.product({
+    'dtype': (np.float32, np.float64, np.complex64, np.complex128),
+    'extents': ('int', 'seq'),
+    'strides': ('int', 'seq'),
+    'order': ('C', 'F'),
+    'state_purity': (cutn.StatePurity.PURE,),
+    'num_qubits': (4,),
+    'mps': (False, 2),
+    'stream': (cp.cuda.Stream.null, get_stream_for_backend(cp)),
+}))
+class TestStateBase:
+    pass
+        
+        
+class TestStateAPIs(TestStateBase):
+
+    def _configure_prepare(self, task_type, handle, property_object, workspace, stream):
+        attr_type = getattr(cutn, f"{task_type.capitalize()}Attribute").CONFIG_NUM_HYPER_SAMPLES
+        attr_dtype = getattr(cutn, f"{task_type}_get_attribute_dtype")
+        configure_func = getattr(cutn, f"{task_type}_configure")
+        prepare_func = getattr(cutn, f"{task_type}_prepare")
+
+        # Configure num_hyper_samples
+        num_hyper_samples = np.array(8, dtype=attr_dtype(attr_type))
+        configure_func(handle, property_object, attr_type,
+                      num_hyper_samples.ctypes.data, num_hyper_samples.dtype.itemsize)
+
+        # Prepare workspace
+        free_mem = cp.cuda.Device().mem_info[0]
+        max_scratch_size = free_mem // 4
+        prepare_func(handle, property_object, max_scratch_size, workspace, stream.ptr)
+
+        # Set up scratch space
+        workspace_size_d = cutn.workspace_get_memory_size(handle, workspace, cutn.WorksizePref.RECOMMENDED,
+                                                        cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        scratch_space = cp.cuda.alloc(workspace_size_d)
+        cutn.workspace_set_memory(handle, workspace, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH,
+                                scratch_space.ptr, workspace_size_d)
+        return scratch_space
+
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    @manage_resource('state')
+    @manage_resource('accessor')
+    def test_accessor_bindings(self):
+        fixed_values = ()
+        state_norm = np.empty(1, dtype=self.dtype)
+        scratch_space = self._configure_prepare('accessor', self.handle, self.accessor, self.workspace, self.stream)
+        cutn.accessor_compute(self.handle, self.accessor, fixed_values, self.workspace,
+                              self.amplitudes.data.ptr, state_norm.ctypes.data, self.stream.ptr)
+        self.stream.synchronize()
+        if self.mps == False: # for mps simulation and max_extent=2, the state norm is 1 if the state is sparsed
+            assert np.isclose(state_norm[0], 1.0, atol=1e-6)
+        
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    @manage_resource('state')
+    @manage_resource('sampler')
+    def test_sampling_bindings(self):
+        num_samples = 2000
+        samples = np.empty((self.num_qubits, num_samples), dtype=np.int64, order='F') # samples are stored in F order with shape (num_qubits, num_samples)
+        scratch_space = self._configure_prepare('sampler', self.handle, self.sampler, self.workspace, self.stream)
+        rng_dtype = cutn.sampler_get_attribute_dtype(cutn.SamplerAttribute.CONFIG_DETERMINISTIC)
+        rng = np.asarray(13, dtype=rng_dtype)
+        cutn.sampler_configure(self.handle, self.sampler, cutn.SamplerAttribute.CONFIG_DETERMINISTIC, 
+                               rng.ctypes.data, rng.dtype.itemsize)
+        cutn.sampler_sample(self.handle, self.sampler, num_samples, self.workspace, samples.ctypes.data, self.stream.ptr)
+        self.stream.synchronize()
+        
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    @manage_resource('state')
+    @manage_resource('hamiltonian')
+    @manage_resource('expectation')
+    def test_expectation_bindings(self):
+        scratch_space = self._configure_prepare('expectation', self.handle, self.expectation, self.workspace, self.stream)
+        expectation_value = np.empty(1, dtype=self.dtype)
+        state_norm = np.empty(1, dtype=self.dtype)
+        cutn.expectation_compute(self.handle, self.expectation, self.workspace, 
+                                 expectation_value.ctypes.data, state_norm.ctypes.data, self.stream.ptr)
+        self.stream.synchronize()
+        if self.mps == False:
+            assert np.isclose(state_norm[0], 1.0, atol=1e-6)
+        
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    @manage_resource('state')
+    @manage_resource('marginal')
+    def test_marginal_bindings(self): 
+        scratch_space = self._configure_prepare('marginal', self.handle, self.marginal, self.workspace, self.stream)
+        cutn.marginal_compute(self.handle, self.marginal, 0, self.workspace, self.rdm.data.ptr, self.stream.ptr)
+        self.stream.synchronize()
+        
+  
 @pytest.mark.parametrize(
     'source', ('int', 'seq', 'range')
 )
@@ -776,7 +1002,7 @@ class TensorDecompositionFactory:
     # This factory CANNOT be reused; once a tensor descriptor uses it, it must
     # be discarded.
 
-    def __init__(self, subscript, shapes, dtype, max_extent=None):
+    def __init__(self, subscript, shapes, dtype, max_extent=None, order='C'):
         self.subscript = subscript
 
         if len(shapes) not in [1, 3]:
@@ -801,30 +1027,21 @@ class TensorDecompositionFactory:
         else:
             assert max_extent > 0
             self.mid_extent = min(mid_extent, max_extent)
-
+        
+        self.order = order
         self.tensor_names = [f"input_{i}" for i in range(len(shapes))] + ["left", "right"] # note s needs to be explictly managed in the tester function
-    
+
         # xp strides in bytes, cutn strides in counts
         dtype = cp.dtype(dtype)
-        real_dtype = dtype.char.lower()
-        is_complex = dtype.char != real_dtype
         itemsize = dtype.itemsize
 
-        def _get_tensor(name, modes):
+        for i, (name, modes) in enumerate(zip(self.tensor_names, modes_in + [left_modes_out, right_modes_out])):
             if name.startswith('input'):
                 shape = [size_dict[mode] for mode in modes]
-                if is_complex:  # complex
-                    arr = (cp.random.random(shape, dtype=real_dtype)
-                           + 1j*cp.random.random(shape, dtype=real_dtype)).astype(dtype)
-                else:
-                    arr = cp.random.random(shape, dtype=dtype)
+                arr = testing.shaped_random(shape, cp, dtype, seed=i, order=self.order)
             else:
                 shape = [self.mid_extent if mode == shared_mode_out else size_dict[mode] for mode in modes]
-                arr = cp.empty(shape, dtype=dtype, order='F')
-            return arr
-
-        for name, modes in zip(self.tensor_names, modes_in + [left_modes_out, right_modes_out]):
-            arr = _get_tensor(name, modes)
+                arr = cp.empty(shape, dtype=dtype, order=self.order)
             setattr(self, f'{name}_tensor', arr)
             setattr(self, f'{name}_n_modes', len(arr.shape))
             setattr(self, f'{name}_extent', arr.shape)
@@ -892,6 +1109,7 @@ class TensorDecompositionFactory:
         {'extent': 'int', 'stride': 'int', 'mode': 'int'},
         {'extent': 'seq', 'stride': 'seq', 'mode': 'seq'},
     ),
+    'order': ('C', 'F'),
 }))
 class TestTensorQR:
 
@@ -956,6 +1174,7 @@ class TestTensorQR:
         {'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # exact gesvdp
         {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV'}, # compound truncation
     ),
+    'order': ('C', 'F'),
 }))
 class TestTensorSVD:
 
@@ -1081,6 +1300,7 @@ class TestTensorSVD:
         {'normalization':'LInf', 'partition':'UV', 'algorithm': 'gesvdp'}, # exact gesvdp
         {'max_extent': 4, 'abs_cutoff': 0.1, 'rel_cutoff': 0.1, 'normalization':'L1', 'partition':'UV'}, # compound truncation
     ),
+    'order': ('C', 'F'),
 }))
 class TestTensorGate:
     
@@ -1272,7 +1492,7 @@ class TestDistributed:
         handle = self.handle
         comm = self._get_comm(comm)
         cutn.distributed_reset_configuration(
-            handle, *cutn.get_mpi_comm_pointer(comm))
+            handle, *get_mpi_comm_pointer(comm))
         assert comm.Get_size() == cutn.distributed_get_num_ranks(handle)
         assert comm.Get_rank() == cutn.distributed_get_proc_rank(handle)
         cutn.distributed_synchronize(handle)
@@ -1292,3 +1512,8 @@ class TestMisc:
     def test_compute_type(self, cutn_compute_type):
         # check if all compute types under cutn.ComputeType are included in cuquantum.ComputeType
         cuqnt_compute_type = ComputeType(cutn_compute_type)
+
+
+class TestBindingDeprecation(BindingsDeprecationTestBase):
+
+    lib_name = "cutensornet"

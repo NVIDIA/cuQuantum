@@ -6,16 +6,48 @@
 A converter that translates a quantum circuit to tensor network Einsum equations.
 """
 
-__all__ = ['CircuitToEinsum']
+__all__ = ['CircuitToEinsum', 'CirqParserOptions', 'QiskitParserOptions']
 
 import collections.abc
 import importlib
-
+from dataclasses import dataclass
 import numpy as np
 
 from ._internal import circuit_converter_utils as circ_utils
+from .._internal import utils
 
 EMPTY_DICT = circ_utils.EMPTY_DICT
+
+@dataclass
+class CirqParserOptions:
+    """
+    A data class for providing Cirq parser options to the :class:`CircuitToEinsum` class.
+
+    Attributes:
+        check_diagonal: If True (default), the parser will check if the gate operand can be represented in a diagonal form.
+    
+    .. note::
+
+        Setting ``check_diagonal=True`` will perform value-based comparison for gate operands in :class:`cirq.Circuit` object to check if the gate operand can be represented in a diagonal form. 
+        This may lead to performance degradation in the parsing stage but can potentiallyreduce the size of the output tensor network and thus improve the contraction performance.
+    """
+    check_diagonal: bool = True
+
+
+@dataclass
+class QiskitParserOptions:
+    """
+    A data class for providing Qiskit parser options to the :class:`CircuitToEinsum` class.
+
+    Attributes:
+        decompose_gates: If True (default), the parser will decompose all standard gates into a sequence of gates that act on at most
+            two qubits. Custom (user-defined or opaque) gates will be preserved as-is. If False, each gate in the circuit is treated as a logical unit, 
+            regardless of its qubit width. 
+        check_diagonal: If True (default), the parser will check if the gate operand can be represented in a diagonal form.
+    """
+    decompose_gates: bool = True
+    check_diagonal: bool = True
+
 
 class CircuitToEinsum:
     """
@@ -29,17 +61,17 @@ class CircuitToEinsum:
         circuit : A fully parameterized :class:`cirq.Circuit` or :class:`qiskit.QuantumCircuit` object.
         dtype : The datatype for the output tensor operands. If not specified, double complex is used. 
         backend: The backend for the output tensor operands. If not specified, ``cupy`` is used.
-    
-    .. note::
-
-      - For :class:`qiskit.QuantumCircuit`, composite gates will be decomposed into either Qiskit standard gates or customized unitary gates.
+        options: Specify the parser options as a :class:`CirqParserOptions` for :class:`cirq.Circuit` 
+            or a :class:`QiskitParserOptions` for :class:`qiskit.QuantumCircuit`. 
+            Alternatively, a `dict` containing the parameters for the :class:`CirqParserOptions` or :class:`QiskitParserOptions` constructor can also be provided. 
+            If not specified, the value will be set to the default-constructed :class:`CirqParserOptions` or :class:`QiskitParserOptions` based on the circuit type. 
 
     Examples:
 
         Examples using Qiskit:
 
         >>> import qiskit.circuit.random
-        >>> from cuquantum import contract, CircuitToEinsum
+        >>> from cuquantum.tensornet import contract, CircuitToEinsum
 
         Generate a random quantum circuit:
         
@@ -81,7 +113,7 @@ class CircuitToEinsum:
         (2, 2, 2, 2)
 
     """
-    def __init__(self, circuit, dtype='complex128', backend='cupy'):
+    def __init__(self, circuit, *, dtype='complex128', backend='cupy', options=None):
         # infer library-specific parser
         self.parser = circ_utils.infer_parser(circuit)
 
@@ -90,6 +122,17 @@ class CircuitToEinsum:
         if isinstance(backend, str):
             backend = importlib.import_module(backend)
         self.backend = backend
+
+        circuit_package = utils.infer_object_package(circuit)
+        if circuit_package == 'qiskit':
+            self.options = utils.check_or_create_options(QiskitParserOptions, options, 'QiskitParserOptions')
+        elif circuit_package == 'cirq':
+            self.options = utils.check_or_create_options(CirqParserOptions, options, 'CirqParserOptions')
+        else:
+            raise ValueError(f"Unsupported circuit type: {circuit_package}")
+
+        self.check_diagonal = self.options.check_diagonal
+        self.decompose_gates = getattr(self.options, 'decompose_gates', True)
         
         if isinstance(dtype, str):
             try:
@@ -103,7 +146,8 @@ class CircuitToEinsum:
         self.dtype = dtype
 
         # unfold circuit metadata
-        self._qubits, self._gates = self.parser.unfold_circuit(circuit, dtype=self.dtype, backend=self.backend)
+        self._qubits, self._gates, self._gates_are_diagonal = self.parser.unfold_circuit(
+            circuit, dtype=self.dtype, backend=self.backend, check_diagonal=self.check_diagonal, decompose_gates=self.decompose_gates)
         self.n_qubits = len(self.qubits)
         self._metadata = None
     
@@ -212,7 +256,7 @@ class CircuitToEinsum:
         """
         n_qubits = self.n_qubits
         coned_qubits = list(where) + list(fixed.keys())
-        input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates = self._get_forward_inverse_metadata(lightcone, coned_qubits)
+        input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates, inverse_gates_diagonals = self._get_forward_inverse_metadata(lightcone, coned_qubits)
 
         # handle tensors/mode labels for qubits with fixed state
         fixed_qubits, fixed_bitstring = circ_utils.parse_fixed_qubits(fixed)
@@ -231,9 +275,8 @@ class CircuitToEinsum:
             qubits_frontier[iqubit] = next_frontier
             next_frontier += 1
 
-        igate_mode_labels, igate_operands = circ_utils.parse_gates_to_mode_labels_operands(inverse_gates, 
-                                                                                 qubits_frontier, 
-                                                                                 next_frontier)
+        igate_mode_labels, igate_operands = circ_utils.parse_gates_to_mode_labels_operands(
+            inverse_gates, qubits_frontier, next_frontier, inverse_gates_diagonals)
         mode_labels += igate_mode_labels
         operands += igate_operands
         
@@ -242,7 +285,7 @@ class CircuitToEinsum:
         
         output_left_mode_labels = []
         output_right_mode_labels = []
-        for iqubits, (left_mode_labels, right_mode_labels) in output_mode_labels_info.items():
+        for _, (left_mode_labels, right_mode_labels) in output_mode_labels_info.items():
             output_left_mode_labels.append(left_mode_labels)
             output_right_mode_labels.append(right_mode_labels)
         output_mode_labels = output_left_mode_labels + output_right_mode_labels
@@ -293,14 +336,15 @@ class CircuitToEinsum:
         else:
             pauli_map = pauli_string
         coned_qubits = pauli_map.keys()
-        input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates = self._get_forward_inverse_metadata(lightcone, coned_qubits)
+        input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates, inverse_gates_diagonals = self._get_forward_inverse_metadata(lightcone, coned_qubits)
 
-        pauli_gates = circ_utils.get_pauli_gates(pauli_map, dtype=self.dtype, backend=self.backend)
+        pauli_gates, pauli_gates_diagonal = circ_utils.get_pauli_gates(pauli_map, dtype=self.dtype, backend=self.backend)
         gates = pauli_gates + inverse_gates
 
         gate_mode_labels, gate_operands = circ_utils.parse_gates_to_mode_labels_operands(gates, 
                                                                                          qubits_frontier, 
-                                                                                         next_frontier)
+                                                                                         next_frontier,
+                                                                                         pauli_gates_diagonal + inverse_gates_diagonals)
         
         mode_labels = input_mode_labels + gate_mode_labels + [[qubits_frontier[ix]] for ix in self.qubits]
         operands = input_operands + gate_operands + input_operands[:n_qubits]
@@ -320,7 +364,7 @@ class CircuitToEinsum:
                 - ``qubits_frontier`` : A dictionary that maps all qubits to their current mode labels.
         """
         if self._metadata is None:
-            self._metadata = circ_utils.parse_inputs(self.qubits, self._gates, self.dtype, self.backend)
+            self._metadata = circ_utils.parse_inputs(self.qubits, self._gates, self._gates_are_diagonal, self.dtype, self.backend)
         return self._metadata
     
     def _get_forward_inverse_metadata(self, lightcone, coned_qubits):
@@ -342,10 +386,10 @@ class CircuitToEinsum:
         parser = self.parser
         if lightcone:
             circuit = parser.get_lightcone_circuit(self.circuit, coned_qubits)
-            _, gates = parser.unfold_circuit(circuit, dtype=self.dtype, backend=self.backend)
+            _, gates, gates_are_diagonal = parser.unfold_circuit(circuit, dtype=self.dtype, backend=self.backend, decompose_gates=self.decompose_gates, check_diagonal=self.check_diagonal)
             # in cirq, the lightcone circuit may only contain a subset of the original qubits
             # It's imperative to use qubits=self.qubits to generate the input tensors
-            input_mode_labels, input_operands, qubits_frontier = circ_utils.parse_inputs(self.qubits, gates, self.dtype, self.backend)
+            input_mode_labels, input_operands, qubits_frontier = circ_utils.parse_inputs(self.qubits, gates, gates_are_diagonal, self.dtype, self.backend)
         else:
             circuit = self.circuit
             input_mode_labels, input_operands, qubits_frontier = self._get_inputs()
@@ -355,5 +399,5 @@ class CircuitToEinsum:
         next_frontier = max(qubits_frontier.values()) + 1
         # inverse circuit
         inverse_circuit  = parser.get_inverse_circuit(circuit)
-        _, inverse_gates = parser.unfold_circuit(inverse_circuit, dtype=self.dtype, backend=self.backend)
-        return input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates
+        _, inverse_gates, inverse_gates_diagonals = parser.unfold_circuit(inverse_circuit, dtype=self.dtype, backend=self.backend, decompose_gates=self.decompose_gates, check_diagonal=self.check_diagonal)
+        return input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates, inverse_gates_diagonals

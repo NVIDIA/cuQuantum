@@ -6,7 +6,9 @@ import argparse
 import os
 import site
 import sys
+import logging
 
+logger = logging.getLogger(__name__)
 
 def get_lib_path(name):
     """Get the loaded shared library path."""
@@ -54,11 +56,21 @@ def get_lib_path(name):
     return lib.pop()
 
 
+def _get_cuquantum_lib(lib):
+    try:
+        path = os.path.normpath(get_lib_path(f"lib{lib}.so"))
+        return path
+    except Exception as e:
+        logger.warning(f"library {lib} not found: {e}")
+        return None
+
+
 def _get_cuquantum_libs():
     paths = set()
     for lib in ('custatevec', 'cutensornet', 'cutensor', 'cudensitymat'):
-        path = os.path.normpath(get_lib_path(f"lib{lib}.so"))
-        paths.add(path)
+        path = _get_cuquantum_lib(lib)
+        if path is not None:
+            paths.add(path)
     return tuple(paths)
 
 
@@ -70,21 +82,20 @@ def _get_cuquantum_includes():
             path = os.path.normpath(os.path.join(path, '../include'))
         else:
             path = os.path.join(path, 'include')
-        assert os.path.isdir(path), f"path={path} is invalid"
-        paths.add(path)
+
+        if os.path.isdir(path):
+            paths.add(path)
     return tuple(paths)
 
 
 def _get_cuquantum_target(target):
-    target = f"lib{target}.so"
-    libs = [os.path.basename(lib) for lib in _get_cuquantum_libs()]
-    for lib in libs:
-        if target in lib:
-            lib = '.'.join(lib.split('.')[:3])  # keep SONAME
-            flag = f"-l:{lib} "
-            break
-    else:
-        assert False
+    path = _get_cuquantum_lib(target)
+    if path is None:
+        # Return error as the target library was explicitly asked but not found
+        raise RuntimeError(f"library {target} not found")
+    lib = os.path.basename(path)
+    lib = '.'.join(lib.split('.')[:3])  # keep SONAME
+    flag = f"-l:{lib} "
     return flag
 
 

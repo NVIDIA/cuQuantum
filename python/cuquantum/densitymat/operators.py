@@ -34,7 +34,13 @@ __all__ = [
 ]
 
 ScalarCallbackType = Callable[[Number, Sequence], Union[Number, np.ndarray]]
-CoefficientType = Union[Number, NDArrayType, Callback, Tuple[NDArrayType, Callback]]
+CoefficientType = Union[
+    Number,
+    NDArrayType,
+    Callback,
+    Tuple[Number, Callback],
+    Tuple[NDArrayType, Callback]
+]
 _CoefficientTypeRuntimeCheckable = Union[Number, NDArrayType, Callback, Tuple]
 
 
@@ -287,10 +293,11 @@ class OperatorTerm:
                     ptrs,
                     conjugations,
                     duals,
-                    coeff.batch_size,
+                    batch_size,
                     coeff.static_coeff_ptr,
                     coeff.dynamic_coeff_ptr,
                     coeff.wrapper,
+                    coeff.gradient_wrapper,
                 )
             else:
                 cudm.operator_term_append_matrix_product(
@@ -302,6 +309,7 @@ class OperatorTerm:
                     duals,
                     coeff.static_coeff,
                     coeff.wrapper,
+                    coeff.gradient_wrapper,
                 )
 
     def _append_elementary_product(
@@ -338,10 +346,11 @@ class OperatorTerm:
                     ptrs,
                     flattened_modes,
                     flattened_duals,
-                    coeff.batch_size,
+                    batch_size,
                     coeff.static_coeff_ptr,
                     coeff.dynamic_coeff_ptr,
                     coeff.wrapper,
+                    coeff.gradient_wrapper,
                 )
             if batch_size == 1:
                 cudm.operator_term_append_elementary_product(
@@ -353,6 +362,7 @@ class OperatorTerm:
                     flattened_duals,
                     coeff.static_coeff,
                     coeff.wrapper,
+                    coeff.gradient_wrapper,
                 )
 
     def _maybe_instantiate(self, ctx: "WorkStream", hilbert_space_dims: Tuple[int]) -> None:
@@ -609,6 +619,8 @@ class Operator:
         self._batch_size: int = 1
         self._prepared_compute_batch_size: Optional[int] = None
         self._prepared_expectation_batch_size: Optional[int] = None
+        self._prepared_gradient_batch_size: Optional[int] = None
+
 
         self._dtype = None  # str
         self.terms: List[OperatorTerm] = []
@@ -623,7 +635,13 @@ class Operator:
 
         self._current_expectation_compute_type = None
         self._current_action_compute_type = None
+        self._current_gradient_compute_type = None
+
         self._upstream_finalizers = collections.OrderedDict()
+        
+        # TODO: once forward differentation is added, we need to add logic to determine gradient direction
+        self._gradient_dir = cudm.DifferentiationDir.BACKWARD
+        self._gradient_dir_str = "backward"
 
         for term in terms:
             self.append(*term)
@@ -757,6 +775,7 @@ class Operator:
                 coeff.static_coeff_ptr,
                 coeff.dynamic_coeff_ptr,
                 coeff.wrapper,
+                coeff.gradient_wrapper,
             )
         else:
             cudm.operator_append_term(
@@ -766,6 +785,7 @@ class Operator:
                 int(dual),
                 coeff.static_coeff,
                 coeff.wrapper,
+                coeff.gradient_wrapper,
             )
 
     def _maybe_instantiate(self, ctx: "WorkStream") -> None:
@@ -874,6 +894,64 @@ class Operator:
             self._ctx._validated_ptr,
             0,
         )
+        self._expectation_work_size = None
+        self._work_size, _ = self._ctx._update_required_size_upper_bound()
+    
+    def prepare_action_gradient_backward(
+        self,
+        ctx: "WorkStream",
+        state_in: "State",
+        state_out_adj: Optional["State"] = None,
+        compute_type: Optional[str] = None,
+    ) -> None:
+        """
+        Prepare the evaluation of the operator action gradient of this :class:`Operator`.
+
+        Args:
+            ctx: Library context, which contains workspace, stream and other configuration information.
+            state_in: The input quantum state to which the :class:`Operator` is to be applied.
+            state_out_adj: The output quantum state adjoint with respect to which the gradient is evaluated. Defaults to ``state_in``.
+            compute_type: The CUDA compute type to be used by the computation. 
+
+        .. attention::
+            The ``compute_type`` argument is currently not used and will default to the data type.
+        """
+        if not self._valid_state:
+            self._maybe_instantiate(ctx)
+        else:
+            if self._ctx != ctx:
+                raise ValueError(
+                    "Operator objects can only be used with a single WorkStream, and this instance was originally used with another WorkStream. Switching WorkStream is not supported."
+                )
+
+        if self.hilbert_space_dims != state_in.hilbert_space_dims:
+            raise ValueError(
+                f"Hilbert space dimensions of Operator, {self.hilbert_space_dims}, and input state, {state_in.hilbert_space_dims}, instances are not matching."
+            )
+        if state_out_adj is not None and self.hilbert_space_dims != state_out_adj.hilbert_space_dims:
+            raise ValueError(
+                f"Hilbert space dimensions of Operator, {self.hilbert_space_dims}, and output state adjoint, {state_out_adj.hilbert_space_dims}, instances are not matching."
+            )
+
+        self._prepared_gradient_batch_size = check_and_get_batchsize(self._batch_size, state_in.batch_size)
+        if state_out_adj is not None:
+            self._prepared_gradient_batch_size = check_and_get_batchsize(self._batch_size, state_out_adj.batch_size)
+
+        default_compute_type = self._ctx.compute_type if self._ctx.compute_type is not None else self.dtype
+        self._current_action_gradient_compute_type = compute_type if compute_type else default_compute_type
+        if self._gradient_dir == cudm.DifferentiationDir.BACKWARD:
+            cudm.operator_prepare_action_backward_diff(
+                self._ctx._handle._validated_ptr,
+                self._ptr,
+                state_in._validated_ptr, # input state
+                state_out_adj._validated_ptr if state_out_adj else state_in._validated_ptr, # adjoint of output state
+                cutn_typemaps.NAME_TO_COMPUTE_TYPE[self._current_action_gradient_compute_type],
+                self._ctx._memory_limit,
+                self._ctx._validated_ptr,
+                0,
+            )
+        else:
+            raise NotImplementedError(f"Gradient direction {self._gradient_dir_str} not currently supported.")
         self._expectation_work_size = None
         self._work_size, _ = self._ctx._update_required_size_upper_bound()
 
@@ -997,6 +1075,96 @@ class Operator:
                 self._ctx._stream_holder.ptr,
             )
 
+    def compute_action_gradient_backward(
+        self,
+        t: float,
+        params: NDArrayType | Sequence[float],
+        state_in: "State",
+        state_out_adj: "State",
+        state_in_adj: "State",
+    ) -> cp.ndarray:
+        """
+        Compute the action gradient of this :class:`Operator` through backward differentiation.
+        The input to the backward pass is the output state adjoint ``state_out_adj`` and this call overwrites ``state_in_adj`` with the result of the backward pass.
+
+        Args:
+            t: Time argument to be passed to all callback functions.
+            params: Additional arguments to be passed to all callback functions. The element type is required to be float (i.e "float64" for arrays).
+                If batched operators or coefficients are used, they need to be passed as 2-dimensional the last dimension of which is the batch size.
+                To avoid copy of the argument array, it can be passed as a fortran-contiguous cp.ndarray.
+            state_in: The input quantum state to which the :class:`Operator` is to be applied.
+            state_out_adj: The adjoint of the output quantum state.
+            state_in_adj: The adjoint of the input quantum state. Note that this state will be overwritten with the output of the backward pass of the gradient computation.
+
+        Returns:
+            Gradients with respect to the callback arguments.
+        """
+        # lack of preceding prepare_action call
+        if self._ctx is None:
+            raise RuntimeError(
+                "This instance has not been used with a WorkStream, please call its ``prepare_expectation`` or ``_prepare_action`` method once before calls to this method."
+            )
+        _ = self._validated_ptr  # just check the instance hasn't been finalized yet
+        if self._ctx != state_out_adj._ctx:
+            raise ValueError("This Operator's WorkStream and the WorkStream of State corresponding to adjoint of the output quantum state do not match.")
+        if self._ctx != state_in._ctx:
+            raise ValueError("This Operator's WorkStream and the WorkStream of State corresponding to the input quantum state do not match.")
+        if self._ctx != state_in_adj._ctx:
+            raise ValueError("This Operator's WorkStream and the WorkStream of State corresponding to the adjoint of the input quantum state do not match.")
+        
+        self.prepare_action_gradient_backward(self._ctx, state_in, state_out_adj, self._current_action_gradient_compute_type)
+        # unnecessary due to prepare call in each compute call, but keep in case we decide to only prepare here if required
+        if not self._prepared_gradient_batch_size == check_and_get_batchsize(self._batch_size, state_out_adj.batch_size):
+            raise ValueError("This Operator's prepared batchsize does not match the adjoint of the output state's batchsize.")
+        if not self._prepared_gradient_batch_size == check_and_get_batchsize(self._batch_size, state_in.batch_size):
+            raise ValueError("This Operator's prepared batchsize does not match the input state's batchsize.")
+        if not self._prepared_gradient_batch_size == check_and_get_batchsize(self._batch_size, state_in_adj.batch_size):
+            raise ValueError("This Operator's prepared batchsize does not match the adjoint of the input state's batchsize.")
+
+        self._ctx._maybe_allocate()
+
+        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+            self._last_compute_event,
+            elapsed,
+        ):
+
+            params, num_params, batch_size = _handle_callback_params(params, self._batch_size)
+            params_gradient = cp.zeros_like(params) 
+            params_ptr = wrap_operand(params).data_ptr
+            params_gradient_ptr = wrap_operand(params_gradient).data_ptr
+
+            # update last event in participating elementary/general operators to ensure proper stream synchronization and shutdown order
+            self._ctx._last_compute_event = self._last_compute_event
+            state_out_adj._last_compute_event = self._last_compute_event
+            state_in._last_compute_event = self._last_compute_event
+            state_in_adj._last_compute_event = self._last_compute_event
+
+            for _op in self._using_ops:
+                _op._last_compute_event = self._last_compute_event
+            # update last event for contained OperatorTerms as well
+            for term in set(self.terms):
+                term._last_compute_event = self._last_compute_event
+            _ = check_and_get_batchsize(self._batch_size, batch_size)
+            if self._gradient_dir == cudm.DifferentiationDir.BACKWARD:
+                cudm.operator_compute_action_backward_diff(
+                    self._ctx._handle._validated_ptr,
+                    self._validated_ptr,
+                    t,
+                    self._batch_size,
+                    num_params,
+                    params_ptr,
+                    state_in._validated_ptr,
+                    state_out_adj._validated_ptr,
+                    state_in_adj._validated_ptr,
+                    params_gradient_ptr,
+                    self._ctx._validated_ptr,
+                    self._ctx._stream_holder.ptr,
+                )
+            else:
+                raise NotImplementedError(f"Gradient direction {self._gradient_dir_str} not currently supported.")
+        return params_gradient
+    
+    #FIXME: for compute_action, we don't want to precondition here to avoid hard to parse error message, instead a check for self._ctx is done inside the function body ---> should it be the same here?
     @cutn_utils.precondition(_check_valid_state)
     def compute_expectation(
         self,
@@ -1089,7 +1257,7 @@ class Operator:
         Inplace add another :class:`Operator` or :class:`OperatorTerm` into this :class:`Operator`.
         """
         if isinstance(other, OperatorTerm):
-            self._append(other)
+            self.append(other)
         elif isinstance(other, Operator):
             for term, coeff, duality in _unpack_operator(other):
                 self.append(term, coeff=coeff, duality=duality)
@@ -1404,29 +1572,29 @@ def full_matrix_product(
     Return an :class:`OperatorTerm` from a product of matrix operators defined on the full Hilbert space.
 
     Args:
-        operands: Operands in the product. Each operand is a tuple of length 1 to 3 of the form ``(matrix, conjugation, dual)``, where ``matrix`` is an instance of :class:`MatrixOperator` and ``conjugation`` and ``dual`` are optional booleans and default to `False`.
+        operands: Operands in the product. Each operand is a tuple of length 1 to 3 of the form ``(matrix, conjugation, dual)``, where ``matrix`` is an instance of :class:`MatrixOperator` and ``conjugation`` and ``dual`` are optional booleans and default to ``False``.
 
-            - `conjugation=True` implies that the complex conjugate transpose of the class:`MatrixOperator` is applied.
-            - `dual=True` implies that the MatrixOperator acts from the right on the bra modes of a mixed quantum state, while `dual=False` (default) the :class:`MatrixOperator` acts from the left on the ket modes of the pure or mixed quantum state.
+            - ``conjugation=True`` implies that the complex conjugate transpose of the :class:`MatrixOperator` is applied.
+            - ``dual=True`` implies that the MatrixOperator acts from the right on the bra modes of a mixed quantum state, while ``dual=False`` (default) the :class:`MatrixOperator` acts from the left on the ket modes of the pure or mixed quantum state.
                 
         coeff: Coefficient(s) associated with this :class:`OperatorTerm`.
-        batch_size: Batch size of coefficient `coeff`, needs to be specified only if `coeff` is a :class:`Callback`.
+        batch_size: Batch size of coefficient ``coeff``, needs to be specified only if ``coeff`` is a :class:`Callback`.
 
     Returns:
-        An :class:`OperatorTerm` constructed from the product of :class:`MatrixOperator`s.
+        An :class:`OperatorTerm` constructed from the product of :class:`MatrixOperator` instances.
     """
     matrices = []
     conjugations = []
     duals = []
     if len(operands) == 0:
         raise ValueError(
-            "Empty matrix product is not supported. If you intend to express a term proportional to the identity, this is possibly by calling `tensor_product` with keyword arguments only."
+            "Empty matrix product is not supported. If you intend to express a term proportional to the identity, this is possibly by calling ``tensor_product`` with keyword arguments only."
         )
     _hilbert_space_dims = None
     dtype = None
     _batch_size = 1
     if not isinstance(coeff, _CoefficientTypeRuntimeCheckable):
-        raise TypeError(f"Unsupported input type, {type(coeff)}, for `coeff`.")
+        raise TypeError(f"Unsupported input type, {type(coeff)}, for ``coeff``.")
 
     for op in operands:
         matrices.append(op[0])

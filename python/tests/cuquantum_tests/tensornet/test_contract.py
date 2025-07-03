@@ -10,8 +10,8 @@ import numpy
 import opt_einsum
 import pytest
 
-import cuquantum
-from cuquantum import cutensornet as cutn
+from cuquantum.tensornet import contract, einsum, OptimizerInfo
+from cuquantum.bindings import cutensornet as cutn
 from cuquantum._internal.utils import infer_object_package
 from cuquantum.tensornet.configuration import MemoryLimitExceeded
 
@@ -81,7 +81,7 @@ class _TestContractBase:
                 pytest.skip("NumPy path is either not found or invalid")
 
         data = factory.convert_by_format(operands)
-        if func is cuquantum.contract:
+        if func is contract:
             return_info = kwargs.pop('return_info')
             if path is not None:
                 optimizer_opts = set_path_to_optimizer_options(
@@ -104,7 +104,7 @@ class _TestContractBase:
             if return_info:
                 out, (path, info) = out
                 assert isinstance(path, list)
-                assert isinstance(info, cuquantum.OptimizerInfo)
+                assert isinstance(info, OptimizerInfo)
 
             if gradient:
                 # compute gradients
@@ -131,7 +131,7 @@ class _TestContractBase:
                            if grad is not None else True
                            for grad in input_grads)
 
-        else:  # cuquantum.einsum()
+        else:  # einsum()
             optimize = kwargs.pop('optimize')
             if optimize == 'path':
                 optimize = path if path is not None else False
@@ -140,7 +140,7 @@ class _TestContractBase:
             except cutn.cuTensorNetError as e:
                 if (optimize is not True
                         and "CUTENSORNET_STATUS_NOT_SUPPORTED" in str(e)):
-                    pytest.skip("cuquantum.einsum() fail -- TN too large?")
+                    pytest.skip("einsum() fail -- TN too large?")
                 else:
                     raise
             except MemoryLimitExceeded as e:
@@ -158,7 +158,7 @@ class _TestContractBase:
             out, out_ref, atol=atol_mapper[dtype], rtol=rtol_mapper[dtype])
 
         # check gradients
-        if gradient and func is cuquantum.contract:
+        if gradient and func is contract:
             out_ref.backward(output_grad)
 
             # check gradients
@@ -196,7 +196,7 @@ class TestContract(_TestContractBase):
             self, einsum_expr_pack, xp, dtype, order,
             use_numpy_path, gradient, stream, return_info):
         self._test_runner(
-            cuquantum.contract, einsum_expr_pack, xp, dtype, order,
+            contract, einsum_expr_pack, xp, dtype, order,
             use_numpy_path, gradient, stream=stream, return_info=return_info)
 
 
@@ -211,5 +211,5 @@ class TestEinsum(_TestContractBase):
             self, einsum_expr_pack, xp, dtype, order,
             use_numpy_path, optimize):
         self._test_runner(
-            cuquantum.einsum, einsum_expr_pack, xp, dtype, order,
+            einsum, einsum_expr_pack, xp, dtype, order,
             use_numpy_path, None, optimize=optimize)

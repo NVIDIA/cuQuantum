@@ -17,9 +17,9 @@ from cuquantum.tensornet.experimental._internal.network_state_utils import (
     STATE_DEFAULT_DTYPE,
 )
 from cuquantum._internal import utils
-from cuquantum.cutensornet.experimental import MPSConfig
-from cuquantum import NetworkOptions
-from cuquantum import CircuitToEinsum
+from cuquantum.tensornet.experimental import MPSConfig
+from cuquantum.tensornet import NetworkOptions
+from cuquantum.tensornet import CircuitToEinsum
 
 from .network_state_wrap import TrajectorySim
 from .quantum_channels import (
