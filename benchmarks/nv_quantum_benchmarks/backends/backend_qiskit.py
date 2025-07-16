@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -7,7 +7,6 @@ import functools
 import logging
 import time
 from importlib.metadata import version
-
 import numpy as np
 import cupy as cp
 try:
@@ -22,11 +21,11 @@ except ImportError:
 from .backend import Backend
 from .._utils import get_mpi_size, get_mpi_rank
 from .._utils import call_by_root, EarlyReturnError
+from ..constants import LOGGER_NAME
 
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class Qiskit(Backend):
@@ -39,7 +38,36 @@ class Qiskit(Backend):
         self.nqubits = kwargs.pop('nqubits')
         self.version = self.find_version(identifier)
         self.backend = self.create_aer_backend(self.identifier, ngpus, ncpu_threads, *args, **kwargs)
+        self.meta = {}
+        self.meta['ncputhreads'] = ncpu_threads
 
+    def preprocess_circuit(self, circuit, *args, **kwargs):
+        if _internal_utils is not None:
+            _internal_utils.preprocess_circuit(self.identifier, circuit, *args, **kwargs)
+        
+        self.compute_mode = kwargs.pop('compute_mode')
+        valid_choices = ['statevector', 'sampling']
+        if self.compute_mode not in valid_choices:
+            raise ValueError(f"The '{self.compute_mode}' computation mode is not supported for this backend. Supported modes are: {valid_choices}")
+        
+        t0 = time.perf_counter()
+        self.transpiled_qc = qiskit.transpile(circuit, self.backend) # (circuit, basis_gates=['u3', 'cx'], backend=self.backend)
+        
+        if self.compute_mode == 'statevector':
+            self.transpiled_qc.remove_final_measurements(inplace=True)
+            self.transpiled_qc.save_statevector(label=f"statevector")
+        t1 = time.perf_counter()
+        time_transpile = t1 - t0
+
+        self.meta['compute-mode'] = f'{self.compute_mode}()'
+        self.meta['transpile time:'] = f'{time_transpile} s'
+        self.meta['#gates before transpilation: '] = dict(circuit.count_ops())
+        self.meta['#gates after transpilation: '] = dict(self.transpiled_qc.count_ops())
+        logger.info(f'data: {self.meta}')
+
+        pre_data = self.meta
+        return pre_data
+    
     def find_version(self, identifier):
         if identifier == 'cusvaer':
             return version('cusvaer')
@@ -53,33 +81,6 @@ class Qiskit(Backend):
         else:
             return qiskit.__qiskit_version__['qiskit-aer']
     
-    def preprocess_circuit(self, circuit, *args, **kwargs):
-        if _internal_utils is not None:
-            _internal_utils.preprocess_circuit(self.identifier, circuit, *args, **kwargs)
-        
-        t0 = time.perf_counter()
-        self.transpiled_qc = qiskit.transpile(circuit, self.backend) # (circuit, basis_gates=['u3', 'cx'], backend=self.backend)
-        t1 = time.perf_counter()
-        time_transpile = t1 - t0
-        logger.info(f'transpile took {time_transpile} s')
-        return {'transpile': time_transpile}
-
-    def run(self, circuit, nshots=1024):
-        run_data = {}
-        transpiled_qc = self.transpiled_qc
-        if nshots > 0:
-            results = self.backend.run(transpiled_qc, shots=nshots, memory=True)
-        else:
-            results = self.backend.run(transpiled_qc, shots=0, memory=True)
-        # workaround for memory allocation failure for cusvaer 22.11/23.03
-        if self.identifier == 'cusvaer' and self._need_sync():
-            self._synchronize()
-
-        post_res_list = results.result().get_memory()
-        post_res_list = [list(i) for i in post_res_list]
-        post_res = np.array(post_res_list)
-        return {'results': results, 'post_results': post_res, 'run_data': run_data}
-
     def create_aer_backend(self, identifier, ngpus, ncpu_threads, *args, **kwargs):
         nfused = kwargs.pop('nfused')
         try:
@@ -195,7 +196,7 @@ class Qiskit(Backend):
 
     def get_aer_blocking_setup(self, ngpus=None):
         size = get_mpi_size()  # check if running MPI
-        if size > 1:
+        if size > 1 or (ngpus is not None and ngpus>1):
             blocking_enable = True
             if self.identifier == 'aer':
                 blocking_qubits = self.nqubits - int(math.log2(size))
@@ -218,6 +219,25 @@ class Qiskit(Backend):
         # GPU selected in this process
         device_id = my_rank % ndevices_in_node
         cp.cuda.Device(device_id).synchronize()
+    
+    def run(self, circuit, nshots=1024):
+        if self.compute_mode == 'sampling':
+            job = self.backend.run(self.transpiled_qc, shots=nshots, memory=True)
+            samples = job.result().get_counts()
+            post_res_list = samples.keys()
+            post_res_list = [list(i) for i in post_res_list]
+            post_res = np.array(post_res_list)
+
+        elif self.compute_mode == 'statevector':
+            results = self.backend.run(self.transpiled_qc, shots=1).result()
+            sv = results.data()[f"statevector"]
+            post_res = None
+            
+        # workaround for memory allocation failure for cusvaer 22.11/23.03
+        if self.identifier == 'cusvaer' and self._need_sync():
+            self._synchronize()
+
+        return {'results': None, 'post_results': post_res, 'run_data': {}}
 
 
 CusvAer = functools.partial(Qiskit, identifier="cusvaer")

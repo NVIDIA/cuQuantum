@@ -1,10 +1,9 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import sys
 from cmath import pi, exp
-
 try:
     import pennylane
 except ImportError:
@@ -70,6 +69,4 @@ class Pennylane(Frontend):
                 else:
                     raise NotImplementedError(f"The gate type {g.id} is not defined")
             
-            return pennylane.sample(wires=measured_qs) 
-    
         return circuit

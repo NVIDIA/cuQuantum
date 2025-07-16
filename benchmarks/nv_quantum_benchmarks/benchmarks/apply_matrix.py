@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -7,17 +7,33 @@ import logging
 import numpy as np
 import cupy as cp
 from cupyx.profiler import benchmark
+try:
+    import cuquantum
+except ImportError:
+    cuquantum = None
 
-from cuquantum import custatevec as cusv
-
+from ..constants import LOGGER_NAME
 from .._utils import (benchmark_with_prerun, check_targets_controls, dtype_to_cuda_type,
                       dtype_to_compute_type, L2flush, precision_str_to_dtype,
                       random_unitary, wrap_with_nvtx)
 
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
+
+
+if cuquantum is not None:
+    bindings = getattr(cuquantum, 'bindings', None)
+    if bindings is not None:
+       # cuquantum >= 25.03
+       cusv = bindings.custatevec
+    else:
+       # cuquantum < 25.03
+       cusv = cuquantum.custatevec
+       logger.warning("Warning:support of cuquantum-python<25.3 is deprecated and will be removed in future release")
+
+else:
+    cusv = None
 
 
 def test_apply_matrix(

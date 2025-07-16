@@ -1,8 +1,9 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 from .backend_cirq import Cirq
+from .backend_cudaq import CudaqCusv, CudaqMgpu, CudaqCpu
 from .backend_cutn import cuTensorNet
 from .backend_pny import Pny, PnyLightningGpu, PnyLightningCpu, PnyLightningKokkos
 from .backend_qsim import Qsim, QsimCuda, QsimCusv, QsimMgpu
@@ -16,6 +17,9 @@ backends = {
     'aer-cusv': AerCusv,
     'cusvaer': CusvAer,
     'cirq': Cirq,
+    'cudaq-cusv': CudaqCusv,
+    'cudaq-mgpu': CudaqMgpu,
+    'cudaq-cpu': CudaqCpu,
     'cutn': cuTensorNet,
     'qsim': Qsim,
     'qsim-cuda': QsimCuda,

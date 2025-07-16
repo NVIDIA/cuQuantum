@@ -1,19 +1,42 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import logging
 import os
 import sys
-
 import cupy as cp
 import numpy as np
 from cupyx.profiler import benchmark
-
-import cuquantum.cutensornet as cutn
-from cuquantum.cutensornet import tensor
+try:
+    import cuquantum
+except ImportError:
+    cuquantum = None
 
 from .._utils import precision_str_to_dtype, wrap_with_nvtx
+from ..constants import LOGGER_NAME
+
+
+# set up a logger
+logger = logging.getLogger(LOGGER_NAME)
+
+
+if cuquantum is not None:
+    bindings = getattr(cuquantum, 'bindings', None)
+    if bindings is not None:
+       # cuquantum >= 25.03
+       cutn = bindings.cutensornet
+       tensornet = cuquantum.tensornet
+    else:
+       # cuquantum < 25.03
+       cutn = cuquantum.cutensornet
+       tensornet = cutn
+       logger.warning("Warning:support of cuquantum-python<25.3 is deprecated and will be removed in future release")
+else:
+    cutn = None
+    tensornet = None
+
+
 try:
     path = os.environ.get('CUTENSORNET_APPROX_TN_UTILS_PATH', '')
     if path and os.path.isfile(path):
@@ -21,11 +44,6 @@ try:
     from approxTN_utils import tensor_decompose
 except ImportError:
     tensor_decompose = None
-
-
-# set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
 
 
 def benchmark_tensor_decompose(
@@ -69,19 +87,19 @@ def benchmark_tensor_decompose(
             options_ref = {'method':'qr'}
     elif method == "SVD":
         try:
-            kwargs = {'options': options, 'method': tensor.SVDMethod(algorithm=algorithm)}
+            kwargs = {'options': options, 'method': tensornet.tensor.SVDMethod(algorithm=algorithm)}
         except TypeError as e:
             if algorithm != "gesvd":
                 raise ValueError(f"{algorithm} requires cuQuantum v23.06+") from e
             else:
-                kwargs = {'options': options, 'method': tensor.SVDMethod()}
+                kwargs = {'options': options, 'method': tensornet.tensor.SVDMethod()}
         if check_ref:
             options_ref = {'method':'svd'}
     else:
         assert False
     cp.cuda.Device().synchronize()  # ensure data prep is done
 
-    decompose = wrap_with_nvtx(tensor.decompose, "decompose")
+    decompose = wrap_with_nvtx(tensornet.tensor.decompose, "decompose")
 
     results = benchmark(decompose,
                         (decomp_subscripts, t_in), kwargs=kwargs,

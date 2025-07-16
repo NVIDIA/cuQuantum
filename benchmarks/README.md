@@ -1,4 +1,4 @@
-# cuquantum-benchmarks
+# nv-quantum-benchmarks
 
 ## Installing
 
@@ -24,12 +24,12 @@ and `pip` would not install any extra package for you.
 
 ## Running
 
-After installation, a new command `cuquantum-benchmarks` is installed to your Python environment. You can see the help message via `cuquantum-benchmarks --help`:
+After installation, a new command `nv-quantum-benchmarks` is installed to your Python environment. You can see the help message via `nv-quantum-benchmarks --help`:
 
 ```
-usage: cuquantum-benchmarks [-h] {circuit,api} ...
+usage: nv-quantum-benchmarks [-h] {circuit,api} ...
 
-=============== NVIDIA cuQuantum Performance Benchmark Suite ===============
+=============== NVIDIA Quantum Performance Benchmark Suite ===============
 
 positional arguments:
   {circuit,api}
@@ -40,23 +40,23 @@ optional arguments:
   -h, --help     show this help message and exit
 ```
 
-Starting v0.2.0, we offer subcommands for performing benchmarks at different levels, as shown above. For details, please refer to the help message of each subcommand, ex: `cuquantum-benchmarks circuit --help`.
+Starting v0.2.0, we offer subcommands for performing benchmarks at different levels, as shown above. For details, please refer to the help message of each subcommand, ex: `nv-quantum-benchmarks circuit --help`.
 
-Alternatively, you can launch the benchmark program via `python -m cuquantum_benchmarks`. This is equivalent to the standalone command, and is useful when, say, `pip` installs this package to the user site-package (so that the `cuquantum-benchmarks` command may not be available without modifying `$PATH`).
+Alternatively, you can launch the benchmark program via `python -m nv_quantum_benchmarks`. This is equivalent to the standalone command, and is useful when, say, `pip` installs this package to the user site-package (so that the `nv-quantum-benchmarks` command may not be available without modifying `$PATH`).
 
 For GPU backends, it is preferred that `--ngpus N` is explicitly set. On a multi-GPU system, the first `N` GPUs would be used. To limit which GPUs can be accessed by the CUDA runtime, use the environment variable `CUDA_VISIBLE_DEVICES` following the CUDA documentation.
 
-For backends that support MPI parallelism, it is assumed that `MPI_COMM_WORLD` is the communicator, and that `mpi4py` is installed. You can run the benchmarks as you would normally do to launch MPI processes: `mpiexec -n N cuquantum-benchmarks ...`. It is preferred if you fully specify the problem (explicitly set `--benchmark` & `--nqubits`).
+For backends that support MPI parallelism, it is assumed that `MPI_COMM_WORLD` is the communicator, and that `mpi4py` is installed. You can run the benchmarks as you would normally do to launch MPI processes: `mpiexec -n N nv-quantum-benchmarks ...`. It is preferred if you fully specify the problem (explicitly set `--benchmark` & `--nqubits`).
 
 Examples:
-- `cuquantum-benchmarks api --benchmark apply_matrix --targets 4,5 --controls 2,3 --nqubits 16`: Apply a random gate matrix controlled by qubits 2 & 3 to qubits 4 & 5 of a 16-qubit statevector using cuStateVec's `apply_matrix()` API
-- `cuquantum-benchmarks circuit --frontend qiskit --backend cutn --compute-mode statevector --benchmark qft --nqubits 8 --ngpus 1`: Construct a 8-qubit QFT circuit in Qiskit and compute the statevector with cuTensorNet on GPU. Note that the `--compute-mode` can be specified only for `cutn` backend and supports `amplitude` (default), `statevector`, and `expectation`. 
-- `cuquantum-benchmarks circuit --frontend cirq --backend qsim-mgpu --benchmark qaoa --nqubits 16 --ngpus 2`: Construct a 16-qubit QAOA circuit in Cirq and run it with the (multi-GPU) `qsim-mgpu` backend on 2 GPUs (requires cuQuantum Appliance)
-- `mpiexec -n 4 cuquantum-benchmarks circuit --frontend qiskit --backend cusvaer --benchmark quantum_volume --nqubits 32 --ngpus 1 --cusvaer-global-index-bits 1,1 --cusvaer-p2p-device-bits 1`: Construct a 32-qubit Quantum Volume circuit in Qiskit and run it with the (multi-GPU-multi-node) `cusvaer` backend on 2 nodes. Each node runs 2 MPI processes, each of which controls 1 GPU (requires cuQuantum Appliance)
+- `nv-quantum-benchmarks api --benchmark apply_matrix --targets 4,5 --controls 2,3 --nqubits 16`: Apply a random gate matrix controlled by qubits 2 & 3 to qubits 4 & 5 of a 16-qubit statevector using cuStateVec's `apply_matrix()` API.
+- `nv-quantum-benchmarks circuit --frontend qiskit --backend cutn --compute-mode statevector --benchmark qft --nqubits 8 --ngpus 1`: Construct a 8-qubit QFT circuit using Qiskit and compute the statevector with cuTensorNet on GPU. The `--compute-mode` option determines the type of computation performed, and can be set to `amplitude`, `statevector`, `sampling`, or `expectation`, depending on the backend used. However, not all backends support all compute modes, and each backend has its own default mode.<br>  When the `compute-mode` is set to `expectation`, it is allowed to specify the following options to define the Pauli operators for which the expectation value is computed: `--pauli-string`, `--pauli-seed`, or `--pauli-identity-fraction`.
+- `mpirun -np 2 nv-quantum-benchmarks circuit --frontend cudaq --backend cudaq-mgpu --compute-mode expectation --benchmark qaoa --nqubits 16 --ngpus 2`: Construct a 16-qubit QAOA circuit in NVIDIA CUDA-Q and compute the expectation with the (multi-GPU) `cudaq-mgpu` backend on 2 GPUs.
+- `mpiexec -n 4 nv-quantum-benchmarks circuit --frontend qiskit --backend cusvaer --benchmark quantum_volume --nqubits 32 --ngpus 1 --cusvaer-global-index-bits 1,1 --cusvaer-p2p-device-bits 1`: Construct a 32-qubit Quantum Volume circuit in Qiskit and run it with the (multi-GPU-multi-node) `cusvaer` backend on 2 nodes. Each node runs 2 MPI processes, each of which controls 1 GPU (requires cuQuantum Appliance).
 
 ## Known issues
 
-- Due to Qiskit Aer's design, it'd initialize the CUDA contexts for all GPUs installed on the system at import time. While we can defer the import, it might have an impact to the (multi-GPU) system performance when any `aer*` backend is in use. For the time being, we recommend to work around it by limiting the visible devices. For example, `CUDA_VISIBLE_DEVICES=0,1 cuquantum-benchmarks ...` would only use GPU 0 & 1.
+- Due to Qiskit Aer's design, it'd initialize the CUDA contexts for all GPUs installed on the system at import time. While we can defer the import, it might have an impact to the (multi-GPU) system performance when any `aer*` backend is in use. For the time being, we recommend to work around it by limiting the visible devices. For example, `CUDA_VISIBLE_DEVICES=0,1 nv-quantum-benchmarks ...` would only use GPU 0 & 1.
 
 ## Output data
 

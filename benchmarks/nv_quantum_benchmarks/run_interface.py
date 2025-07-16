@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -13,6 +13,7 @@ import random
 import time
 import cupy as cp
 
+from .constants import LOGGER_NAME
 from .backends import createBackend
 from .frontends import createFrontend
 from ._utils import (
@@ -23,8 +24,7 @@ from ._utils import (
 
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class BenchCircuitRunner:
@@ -36,16 +36,15 @@ class BenchCircuitRunner:
         # use default backend config unless users want to overwrite it
         self.backend_config = backend_config = kwargs.pop("backend_config")
         for k in (# generic backend options
-                  "ngpus", "ncputhreads", "nshots", "nfused", "precision",
+                  "ngpus", "ncputhreads", "nshots", "nfused", "precision", 'compute_mode',
                   # cusvaer options
                   'cusvaer_global_index_bits', 'cusvaer_p2p_device_bits',
                   'cusvaer_data_transfer_buffer_bits', 'cusvaer_comm_plugin_type',
                   'cusvaer_comm_plugin_soname',
                   # cutn options
-                  'nhypersamples',
-                  'compute_mode'):
+                  'nhypersamples'):
             v = kwargs.pop(k)
-            if k.startswith('cusvaer') or k == 'compute_mode' or v is not None:
+            if k.startswith('cusvaer') or v is not None:
                 setattr(self, k, v)
             else:
                 setattr(self, k, backend_config['config'][k])
@@ -61,6 +60,44 @@ class BenchCircuitRunner:
         self.nwarmups = kwargs.pop("nwarmups")
         self.nrepeats = kwargs.pop("nrepeats")
         self.new_circ = kwargs.pop("new")
+
+        # Parse pauli string options
+        try:
+            # Priority 1: Use pauli_string if available
+            self.pauli = list(''.join(kwargs.pop("pauli_string").upper().split()))
+            if len(set(self.pauli) - set(['I', 'X', 'Y', 'Z'])) > 0:
+                raise ValueError('Invalid Pauli string')
+            # Warn that these should not have been specified
+            if kwargs.pop("pauli_seed") is not None:
+                logger.warning('Warning: pauli_seed should not be specified with pauli_string; ignoring seed')
+            if kwargs.pop("pauli_identity_fraction") is not None:
+                logger.warning('Warning: pauli_identity_fraction should not be specified with pauli_string; ignoring identity fraction')
+        except Exception as e:
+            # Pauli string is invalid is an actual error
+            if isinstance(e, ValueError):
+                raise(e) from None
+            try:
+                # Priority 2: Use pauli_seed and pauli_identity_fraction if pauli_string is not available
+                pauli_seed = kwargs.pop("pauli_seed")
+                pauli_identity_fraction = kwargs.pop("pauli_identity_fraction", None)
+                random.seed(pauli_seed)
+                if pauli_identity_fraction is not None:
+                    id_num = math.ceil(self._nqubits * pauli_identity_fraction)
+                    if id_num < 0 or id_num > self._nqubits:
+                        raise ValueError('Error: pauli_identity_fraction must be in the range [0,1]')
+                    self.pauli = ['I'] * id_num
+                    self.pauli.extend(random.choices(('X', 'Y', 'Z'), k=self._nqubits - id_num))
+                else:
+                    self.pauli = random.choices(('I', 'X', 'Y', 'Z'), k=self._nqubits)
+                random.shuffle(self.pauli)
+            except Exception as e:
+                # Pauli identity fraction is invalid is an actual error
+                if isinstance(e, ValueError):
+                    raise(e) from None
+                # Priority 3: Default behavior if pauli_seed or pauli_identity_fraction is missing
+                self.pauli = random.choices(('I', 'X', 'Y', 'Z'), k=self._nqubits)
+                random.shuffle(self.pauli)
+
         self.save = True
         assert len(kwargs) == 0, f"unhandled cmdline args: {kwargs}"
 
@@ -103,7 +140,7 @@ class BenchCircuitRunner:
 
         circuit_filename += f"_v{gate_seq_ver}.pickle"
         frontend = createFrontend(self.frontend, self.nqubits, self.benchmark_config)
-
+        
         dump_only = bool(os.environ.get('CUQUANTUM_BENCHMARKS_DUMP_GATES', False))
         if dump_only:
             # hijack & discard user input
@@ -139,6 +176,12 @@ class BenchCircuitRunner:
     def get_circuit(self, circuit_filename):
         # This method ensures only the root process is responsible to generate/broadcast the circuit
         # so that all processes see the same circuit.
+
+        # NOTE: CUDA-Q feature missing, see: https://github.com/NVIDIA/cuda-quantum/issues/2156
+        # Hence, generate circuit on each rank. We expect same circuit since it is deterministic.
+        if self.frontend == 'cudaq':
+            return functools.partial(self._load_or_generate_circuit, circuit_filename)()
+
         MPI = is_running_mpi()
         circuit = call_by_root(functools.partial(self._load_or_generate_circuit, circuit_filename))
         if MPI:
@@ -195,16 +238,10 @@ class BenchCircuitRunner:
 
         return perf_time / self.nrepeats, cuda_time / self.nrepeats, post_time / self.nrepeats, post_process
 
-    def _fix_filename_for_cutn(self, circuit_filename, nqubits):
-        pauli = None
-        if self.backend == 'cutn':
-            if self.compute_mode is None:
-                self.compute_mode = 'amplitude' # default value
-            circuit_filename += f'_{self.compute_mode}'
-            if self.compute_mode == 'expectation':
-                pauli = random.choices(('I', 'X', 'Y', 'Z'), k=nqubits)
-                circuit_filename += f"_{''.join(pauli)}"
-        return circuit_filename, pauli
+    def _fix_filename_for_expectation(self, circuit_filename):
+        if self.compute_mode == 'expectation':
+            circuit_filename += f"_{''.join(self.pauli)}"
+        return circuit_filename
 
     def extract_frontend_version(self):
         if self.frontend == 'qiskit':
@@ -225,6 +262,9 @@ class BenchCircuitRunner:
         elif self.frontend == 'qulacs':
             import qulacs
             version = qulacs.__version__
+        elif self.frontend == 'cudaq':
+            import cudaq
+            version = cudaq.__version__
         else:
             assert False
         return version
@@ -259,8 +299,8 @@ class BenchCircuitRunner:
             circuit_filename += f'_p{p}'
         if measure:
             circuit_filename += '_measure'
-        
-        circuit_filename, pauli = self._fix_filename_for_cutn(circuit_filename, self.nqubits)
+        circuit_filename += f'_{self.compute_mode}'
+        circuit_filename = self._fix_filename_for_expectation(circuit_filename)
 
         # get circuit
         circuit = self.get_circuit(circuit_filename)
@@ -306,7 +346,7 @@ class BenchCircuitRunner:
             # only TN-based backends need these, TODO: backend config
             circuit_filename=os.path.join(self.cache_dir, circuit_filename),
             compute_mode=self.compute_mode,
-            pauli=pauli
+            pauli=self.pauli
         )
 
         for k in preprocess_data.keys():
@@ -346,6 +386,7 @@ class BenchCircuitRunner:
                          |_ nshots
                          |_ nfused
                          |_ precision
+                         |_ compute_mode
                          |_ ... (all backend-specific options go here)
                      |_ glue_layer (part of sim_config)
                          |_ name
@@ -361,7 +402,7 @@ class BenchCircuitRunner:
                      |_ gpu_time
                      |_ ... (other timings, env info, ...)
         """
-        # TODO: consider recording cuquantum-benchmarks version?
+        # TODO: consider recording nv-quantum-benchmarks version?
         # TODO: alternatively, version each individual benchmark and record it?
 
         num_qubits = str(self.nqubits)
@@ -379,6 +420,7 @@ class BenchCircuitRunner:
                 "nshots": self.nshots,
                 "nfused": self.nfused,
                 "precision": self.precision,
+                "compute_mode": self.compute_mode,
                 "with_mpi": is_running_mpiexec(),
             }),
             'glue_layer': HashableDict({
@@ -391,12 +433,14 @@ class BenchCircuitRunner:
         # frontend-specific options
         # TODO: record "measure"?
 
+        if self.compute_mode == 'expectation':
+            sim_config["backend"]["pauli_string"] = self.pauli
+
         # backend-specific options
         if self.backend == "cusvaer":
             sim_config["backend"]["cusvaer_global_index_bits"] = self.cusvaer_global_index_bits
             sim_config["backend"]["cusvaer_p2p_device_bits"] = self.cusvaer_p2p_device_bits
         elif self.backend == "cutn":
-            sim_config["backend"]["compute_mode"] = self.compute_mode
             sim_config["backend"]["nhypersamples"] = self.nhypersamples
 
         sim_config_hash = sim_config.get_hash()
@@ -613,7 +657,7 @@ class BenchApiRunner:
                      |_ gpu_time
                      |_ ... (other timings, env info, ...)
         """
-        # TODO: consider recording cuquantum-benchmarks version?
+        # TODO: consider recording nv-quantum-benchmarks version?
         from cuquantum import __version__ as cuqnt_py_ver
         num_qubits = str(self.num_qubits)
         benchmark = self.benchmark
@@ -635,10 +679,6 @@ class BenchApiRunner:
             }, **self.args}),
             'run_env': run_env,
         })
-
-        # TODO: remember to record cutn_target once we support it
-        #elif self.args.backend == "cutn":
-        #    sim_config["backend"]["target"] = self.args.cutn_target
 
         sim_config_hash = sim_config.get_hash()
         benchmark_data = {**benchmark_data, **sim_config}

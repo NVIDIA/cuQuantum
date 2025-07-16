@@ -1,4 +1,4 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -6,16 +6,15 @@ import cmath
 import logging
 import os
 from math import pi
-
 import numpy as np
 
 from .frontend import Frontend
 from .._utils import call_by_root
+from ..constants import LOGGER_NAME
 
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class Dumper(Frontend):
@@ -34,7 +33,7 @@ class Dumper(Frontend):
     
     Regarding item 3, there are two available options specified using the CUQUANTUM_BENCHMARKS_TCS_FULL_TENSOR environment variable. 
     When set to 0 (which is the default), only the target matrix is included in the output.
-    Conversely, when set to 1, the output includes the full matrix, including control qubits, and when set to 1, both formats generate separately. 
+    Conversely, when set to 1, the output includes the full matrix, including control qubits, and when set to 2, both formats generate separately. 
 
     Note that the qubit IDs are zero-based. The matrix data is flattened to a 1D contiguous
     array of length 2**(2*n_targets). The contiguity is a single character "C" (for C-major,
@@ -56,7 +55,7 @@ class Dumper(Frontend):
     An empty line can be used to separate different gates/operations and improve readability,
     but it is not required.
 
-    Run command example: CUQUANTUM_BENCHMARKS_DUMP_GATES=1 CUQUANTUM_BENCHMARKS_TCS_FULL_TENSOR=2 cuquantum-benchmarks circuit 
+    Run command example: CUQUANTUM_BENCHMARKS_DUMP_GATES=1 CUQUANTUM_BENCHMARKS_TCS_FULL_TENSOR=2 quantum-benchmarks circuit 
     --frontend cirq --backend cirq --benchmark qaoa --nqubits 8
     """
 
