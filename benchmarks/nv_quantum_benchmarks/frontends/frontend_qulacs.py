@@ -1,9 +1,8 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 from cmath import pi, exp
-
 try:
     import qulacs
 except ImportError:
@@ -68,7 +67,7 @@ class Qulacs(Frontend):
             elif g.id == 'measure':
                 for i in g.targets:
                     circuit.add_gate(qulacs.gate.Measurement(i, i))
-
+            
             else:
                 raise NotImplementedError(f"The gate type {g.id} is not defined")
         

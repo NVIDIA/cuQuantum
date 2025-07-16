@@ -1,16 +1,25 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import functools
-
+import logging
 import cupy as cp
 try:
     import qsimcirq
 except ImportError:
     qsimcirq = None
+try:
+    import cirq
+except ImportError:
+    cirq = None
 
 from .backend import Backend
+from ..constants import LOGGER_NAME
+
+
+# set up a logger
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class QsimCirq(Backend):
@@ -24,24 +33,25 @@ class QsimCirq(Backend):
         qsim_options = self.create_qsim_options(identifier, ngpus, ncpu_threads, **kwargs)
         self.version = qsimcirq.__version__
         self.backend = qsimcirq.QSimSimulator(qsim_options=qsim_options)
+        self.meta = {}
+        self.meta['ncputhreads'] = ncpu_threads
 
-    def run(self, circuit, nshots=1024):
-        run_data = {}
+    def preprocess_circuit(self, circuit, *args, **kwargs):
+        self.compute_mode = kwargs.pop('compute_mode')
+        valid_choices = ['statevector', 'sampling']
+        if self.compute_mode not in valid_choices:
+            raise ValueError(f"The '{self.compute_mode}' computation mode is not supported for this backend. Supported modes are: {valid_choices}")
+        
+        self.updated_circuit = circuit
+        if self.compute_mode == 'statevector':
+            self.updated_circuit = cirq.drop_terminal_measurements(circuit)
 
-        if self.identifier == "qsim-mgpu":
-            dev = cp.cuda.Device()
-        if nshots > 0:
-            results = self.backend.run(circuit, repetitions=nshots)
-        else:
-            results = self.backend.simulate(circuit)
-        if self.identifier == "qsim-mgpu":
-            # work around a bug
-            if dev != cp.cuda.Device():
-                dev.use()
+        self.meta['compute-mode'] = f'{self.compute_mode}()'
+        logger.info(f'data: {self.meta}')
 
-        post_res = None # TODO
-        return {'results': results, 'post_results': post_res, 'run_data': run_data}
-
+        pre_data = self.meta
+        return pre_data
+    
     @staticmethod
     def create_qsim_options(identifier, ngpus, ncpu_threads, **kwargs):
         nfused = kwargs.pop('nfused')
@@ -85,6 +95,24 @@ class QsimCirq(Backend):
             raise ValueError(f"the backend {identifier} is not recognized")
 
         return ops
+
+    def run(self, circuit, nshots=1024):
+        if self.identifier == "qsim-mgpu":
+            dev = cp.cuda.Device()
+
+        if self.compute_mode == 'sampling':
+            results = self.backend.run(self.updated_circuit, repetitions=nshots)
+            samples = results.data
+        elif self.compute_mode == 'statevector':
+            results = self.backend.simulate(self.updated_circuit)
+            sv = results.state_vector()
+            
+        if self.identifier == "qsim-mgpu":
+            # work around a bug
+            if dev != cp.cuda.Device():
+                dev.use()
+
+        return {'results': None, 'post_results': None, 'run_data': {}}
 
 
 QsimMgpu = functools.partial(QsimCirq, identifier='qsim-mgpu')

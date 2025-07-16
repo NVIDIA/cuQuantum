@@ -1,22 +1,36 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import logging
-
 import cupy as cp
 import numpy as np
 from cupyx.profiler import benchmark
+try:
+    import cuquantum
+except ImportError:
+    cuquantum = None
 
-from cuquantum import custatevec as cusv
-
+from ..constants import LOGGER_NAME
 from .._utils import (check_sequence, check_targets_controls, dtype_to_cuda_type,
                       precision_str_to_dtype, wrap_with_nvtx)
 
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
+
+
+if cuquantum is not None:
+    bindings = getattr(cuquantum, 'bindings', None)
+    if bindings is not None:
+       # cuquantum >= 25.03
+       cusv = bindings.custatevec
+    else:
+       # cuquantum < 25.03
+       cusv = cuquantum.custatevec
+       logger.warning("Warning:support of cuquantum-python<25.3 is deprecated and will be removed in future release")
+else:
+    cusv = None
 
 
 def test_apply_generalized_permutation_matrix(

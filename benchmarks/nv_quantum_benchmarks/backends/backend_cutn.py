@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -7,24 +7,36 @@ import os
 import time
 import warnings
 from math import log10, log2
-
 import numpy as np
 import cupy as cp
+try:
+    import cuquantum
+except ImportError:
+    cuquantum = None
 
 from .backend import Backend
-
-try:
-    from cuquantum import contract, contract_path, CircuitToEinsum
-    from cuquantum import cutensornet as cutn
-except ImportError:
-    cutn = None
-
 from .._utils import convert_einsum_to_txt, generate_size_dict_from_operands, is_running_mpiexec
+from ..constants import LOGGER_NAME
 
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
+
+
+if cuquantum is not None:
+    bindings = getattr(cuquantum, 'bindings', None)
+    if bindings is not None:
+       # cuquantum >= 25.03
+       cutn = bindings.cutensornet
+       tensornet = cuquantum.tensornet
+    else:
+       # cuquantum < 25.03
+       cutn = cuquantum.cutensornet
+       tensornet = cutn
+       logger.warning("Warning:support of cuquantum-python<25.3 is deprecated and will be removed in future release")
+else:
+    cutn = None
+    tensornet = None
 
 
 class cuTensorNet(Backend):
@@ -43,7 +55,7 @@ class cuTensorNet(Backend):
         self.meta = {}
         try:
             # cuQuantum Python 22.11+ supports nonblocking & auto-MPI
-            opts = cutn.NetworkOptions(handle=self.handle, blocking="auto")
+            opts = tensornet.NetworkOptions(handle=self.handle, blocking="auto")
             if is_running_mpiexec():
                 from mpi4py import MPI  # init should be already done earlier
                 comm = MPI.COMM_WORLD
@@ -57,14 +69,13 @@ class cuTensorNet(Backend):
                 self.rank = rank
         except (TypeError, AttributeError):
             # cuQuantum Python 22.07 or below
-            opts = cutn.NetworkOptions(handle=self.handle)
+            opts = tensornet.NetworkOptions(handle=self.handle)
         self.network_opts = opts
         self.n_hyper_samples = kwargs.pop('nhypersamples')
         self.version = cutn.get_version()
 
-        self.meta["backend"] = f"cutn-v{self.version} precision={self.precision}"
+        self.meta['ncputhreads'] = self.ncpu_threads
         self.meta['nhypersamples'] = self.n_hyper_samples
-        self.meta['cpu_threads'] = self.ncpu_threads
 
     def __del__(self):
         cutn.destroy(self.handle)
@@ -75,13 +86,13 @@ class cuTensorNet(Backend):
         self.pauli = kwargs.pop('pauli')
         valid_choices = ['amplitude', 'expectation', 'statevector']
         if self.compute_mode not in valid_choices:
-            raise ValueError(f"The string '{self.compute_mode}' is not a valid option for --compute-mode argument. Valid options are: {valid_choices}")
-
+            raise ValueError(f"The '{self.compute_mode}' computation mode is not supported for this backend. Supported modes are: {valid_choices}")
+        
         t1 = time.perf_counter()
         if self.precision == 'single':
-            circuit_converter = CircuitToEinsum(circuit, dtype='complex64', backend=cp)
+            circuit_converter = tensornet.CircuitToEinsum(circuit, dtype='complex64', backend=cp)
         else:
-            circuit_converter = CircuitToEinsum(circuit, dtype='complex128', backend=cp)
+            circuit_converter = tensornet.CircuitToEinsum(circuit, dtype='complex128', backend=cp)
         t2 = time.perf_counter()
         time_circ2einsum = t2 - t1
         
@@ -111,7 +122,7 @@ class cuTensorNet(Backend):
         elif tn_format is not None:
             # TODO: dump expression & size_dict as plain unicode?
             raise NotImplementedError(f"the TN format {tn_format} is not supported")
-        self.network = cutn.Network(
+        self.network = tensornet.Network(
             self.expression, *self.operands, options=self.network_opts)
 
         t1 = time.perf_counter()
@@ -122,20 +133,17 @@ class cuTensorNet(Backend):
         time_path = t2 - t1
 
         self.opt_info = opt_info # cuTensorNet returns "real-number" Flops. To get the true FLOP count, multiply it by 4
-
-        self.meta['compute-mode'] = f'{self.compute_mode}()'
-        self.meta[f'circuit to einsum'] = f"{time_circ2einsum + time_tn} s"
         
+        self.meta['compute-mode'] = f'{self.compute_mode}()'
+        self.meta['circuitToEinsum time'] = f'{time_circ2einsum + time_tn} s'
+        self.meta['contract-path time'] = f'{time_path} s'
+        self.meta['FLOPs'] = f"{self.opt_info.opt_cost * 4:.2e}"
+        self.meta['largest-intermediate size'] = f"{opt_info.largest_intermediate:.2e}"
         logger.info(f'data: {self.meta}')
-        logger.info(f'log10[FLOPS]: {log10(self.opt_info.opt_cost * 4)}  log2[SIZE]: {log2(opt_info.largest_intermediate)}  contract_path(): {time_path} s')
-        pre_data = {'circuit to einsum time': time_circ2einsum + time_tn, 'contract path time': time_path, 
-                    'log2[LargestInter]': log2(opt_info.largest_intermediate), 'log10[FLOPS]': log10(self.opt_info.opt_cost * 4) }
+
+        pre_data = self.meta
         return pre_data
+    
     def run(self, circuit, nshots=0):
-        if self.rank == 0 and nshots > 0:
-            warnings.warn("the cutn backend does not support sampling")
-
-        self.network.contract()
-
-        # TODO: support these return values?
+        results = self.network.contract()
         return {'results': None, 'post_results': None, 'run_data': {}}

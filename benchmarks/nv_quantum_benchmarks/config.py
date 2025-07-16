@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -101,6 +101,7 @@ backends = {
             # TODO: even this may not be a good default
             'ncputhreads': multiprocessing.cpu_count() // 2,
             'precision': 'single',
+            'compute_mode': 'amplitude',
             'nhypersamples': 32,
         },
     },
@@ -112,6 +113,7 @@ backends = {
             'ngpus': 0,
             'ncputhreads': multiprocessing.cpu_count(),
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -122,6 +124,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': multiprocessing.cpu_count(),
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -132,6 +135,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': multiprocessing.cpu_count(),
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -142,6 +146,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': multiprocessing.cpu_count(),
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -152,6 +157,7 @@ backends = {
             'ngpus': 0,
             'ncputhreads': 1,
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -162,6 +168,7 @@ backends = {
             'ngpus': 0,
             'ncputhreads': multiprocessing.cpu_count(),
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -172,6 +179,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': 1,
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -182,6 +190,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': 1,
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -192,6 +201,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': 1,
             'precision':'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -202,6 +212,7 @@ backends = {
             'ngpus': 0,
             'ncputhreads': 1,
             'precision': 'double',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -212,6 +223,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': 0,
             'precision': 'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -222,6 +234,7 @@ backends = {
             'ngpus': 0,
             'ncputhreads': 1,
             'precision': 'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -232,6 +245,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': 0,
             'precision': 'single',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -242,6 +256,7 @@ backends = {
             'ngpus': 1,
             'ncputhreads': 0,
             'precision': 'double',
+            'compute_mode': 'sampling',
         },
     },
 
@@ -252,6 +267,41 @@ backends = {
             'ngpus': 0,
             'ncputhreads': 1,
             'precision': 'double',
+            'compute_mode': 'sampling',
         },
     },
+
+    'cudaq-cusv': {
+        'config': {
+            'nshots': 1024,
+            'nfused': 4,
+            'ngpus': 1,
+            'ncputhreads': 8,
+            'precision': 'double',
+            'compute_mode': 'sampling',
+        },
+    },
+
+    'cudaq-mgpu': {
+        'config': {
+            'nshots': 1024,
+            'nfused': 4,
+            'ngpus': 1,
+            'ncputhreads': 8,
+            'precision': 'double',
+            'compute_mode': 'sampling',
+        },
+    },
+
+    'cudaq-cpu': {
+        'config': {
+            'nshots': 1024,
+            'nfused': None,
+            'ngpus': 0,
+            'ncputhreads': multiprocessing.cpu_count(),
+            'precision': 'double',
+            'compute_mode': 'sampling',
+        },
+    },
+
 }

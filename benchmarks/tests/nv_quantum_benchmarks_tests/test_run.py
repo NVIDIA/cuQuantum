@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -11,7 +11,7 @@ import subprocess
 
 import pytest
 
-from cuquantum_benchmarks.config import benchmarks
+from nv_quantum_benchmarks.config import benchmarks
 
 
 @pytest.fixture()
@@ -60,7 +60,11 @@ def visible_device(worker_id):
         ("pennylane", "pennylane-lightning-kokkos", False),
         ("qulacs", "qulacs-cpu", False),
         ("qulacs", "qulacs-gpu", False),
-    )
+        ("cudaq", "cudaq-cusv", False),
+        ("cudaq", "cudaq-mgpu", True),
+        ("cudaq", "cudaq-cpu", False),
+    ),
+    ids = lambda combo: f"{combo[0]}_{combo[1]}_{combo[2]}"
 )
 @pytest.mark.parametrize(
     "nqubits", (4,)
@@ -89,7 +93,7 @@ class TestCmdCircuit:
             except ImportError:
                 pytest.skip("qiskit not available")
         elif frontend == "naive":
-            from cuquantum_benchmarks.frontends import frontends
+            from nv_quantum_benchmarks.frontends import frontends
             if "naive" not in frontends:
                 pytest.skip("naive not available")
         elif frontend == "pennylane":
@@ -102,18 +106,27 @@ class TestCmdCircuit:
                 import qulacs
             except ImportError:
                 pytest.skip("qulacs not available")
+        elif frontend == "cudaq":
+            try:
+                import cudaq
+            except ImportError:
+                pytest.skip("cudaq not available")
+
 
         # check backend exists
         if backend == "aer-cuda":
             skip = False
             try:
-                from qiskit.providers.aer import AerSimulator
+                if hasattr(qiskit, "__version__") and qiskit.__version__ >= "1.0.0":
+                    from qiskit_aer import AerSimulator
+                else:
+                    from qiskit.providers.aer import AerSimulator
             except ImportError:
                 skip = True
             else:
                 # there is no other way :(
-                s = AerSimulator()
-                if 'GPU' not in s.available_devices():
+                sim = AerSimulator()
+                if 'GPU' not in sim.available_devices():
                     skip = True
             if skip:
                 pytest.skip("aer-cuda not available")
@@ -126,7 +139,10 @@ class TestCmdCircuit:
                 pytest.skip(f"{backend} not available")
         elif backend == "aer":
             try:
-                from qiskit.providers.aer import AerSimulator
+                if hasattr(qiskit, "__version__") and qiskit.__version__ >= "1.0.0":
+                    from qiskit_aer import AerSimulator
+                else:
+                    from qiskit.providers.aer import AerSimulator
             except ImportError:
                 pytest.skip("aer not available")
         elif backend == "qsim-cuda":
@@ -151,7 +167,10 @@ class TestCmdCircuit:
             try:
                 from pennylane_lightning_gpu import LightningGPU
             except ImportError:
-                pytest.skip("pennylane-lightning-gpu not available")
+                try:
+                    from pennylane_lightning.lightning_gpu import LightningGPU
+                except ImportError:
+                    pytest.skip("pennylane-lightning-gpu not available")
         elif backend == "pennylane-lightning-qubit":
             try:
                 from pennylane_lightning.lightning_qubit import LightningQubit
@@ -161,7 +180,10 @@ class TestCmdCircuit:
             try:
                 import pennylane_lightning_kokkos
             except ImportError:
-                pytest.skip("pennylane-lightning-kokkos not available")
+                try:
+                    from pennylane_lightning.lightning_kokkos import LightningKokkos
+                except ImportError:
+                    pytest.skip("pennylane-lightning-kokkos not available")
         elif backend == "qulacs-cpu":
             try:
                 import qulacs
@@ -172,6 +194,11 @@ class TestCmdCircuit:
                 import qulacs.QuantumStateGpu
             except ImportError:
                 pytest.skip(f"{backend} not available")
+
+        if (backend == 'pennylane' and precision == 'single'):
+            pytest.skip("As of version 0.33.0, Pennylane's default.qubit device only supports double precision.")
+        if (backend.startswith('qulacs') and precision == 'single'):
+            pytest.skip("qulacs backends only support double precision.")
 
         # check MPI exists
         if support_mpi:
@@ -185,7 +212,6 @@ class TestCmdCircuit:
             return pytest.raises(subprocess.CalledProcessError), True
         if backend.startswith('qulacs') and precision == 'single':
             return pytest.raises(subprocess.CalledProcessError), True
-
         return contextlib.nullcontext(), False
 
     def test_benchmark(self, combo, nqubits, benchmark, precision, tmp_path, visible_device):
@@ -204,7 +230,7 @@ class TestCmdCircuit:
             tests = ([], )
 
         # use default value from config.py for --ngpus
-        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'circuit',
+        cmd = [sys.executable, '-m', 'nv_quantum_benchmarks', 'circuit',
                 '--frontend', frontend,
                 '--backend', backend,
                 '--ncputhreads', '1',
@@ -220,7 +246,6 @@ class TestCmdCircuit:
             cmd += ['--cusvaer-global-index-bits', '--cusvaer-p2p-device-bits']
         if backend == 'cutn':
             cmd += ['--nhypersamples', '2']
-            cmd += ['--compute-target', 'amplitude']
 
         for cmd_prefix in tests:
             result = subprocess.run(cmd_prefix+cmd, env=env, capture_output=True)
@@ -270,7 +295,7 @@ class TestCmdApi:
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
 
-        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
+        cmd = [sys.executable, '-m', 'nv_quantum_benchmarks', 'api',
                 '--benchmark', benchmark,
                 '--precision', precision,
                 '--cachedir', str(tmp_path),
@@ -332,7 +357,7 @@ class TestCmdApi:
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
 
-        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
+        cmd = [sys.executable, '-m', 'nv_quantum_benchmarks', 'api',
                '--benchmark', benchmark,
                '--cachedir', str(tmp_path),
                # speed up the tests...
@@ -371,7 +396,7 @@ class TestCmdApi:
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
 
-        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
+        cmd = [sys.executable, '-m', 'nv_quantum_benchmarks', 'api',
                 '--benchmark', benchmark,
                 '--precision', precision,
                 '--cachedir', str(tmp_path),
@@ -421,7 +446,7 @@ class TestCmdApi:
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(visible_device)
 
-        cmd = [sys.executable, '-m', 'cuquantum_benchmarks', 'api',
+        cmd = [sys.executable, '-m', 'nv_quantum_benchmarks', 'api',
                 '--benchmark', benchmark,
                 '--precision', precision,
                 '--cachedir', str(tmp_path),

@@ -1,15 +1,14 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
 import logging
 import sys
-import multiprocessing
 
 from .backends import backends
-from .config import benchmarks
-from .config import backends as backend_config
+from .constants import LOGGER_NAME
+from .config import benchmarks, backends as backend_config
 from .frontends import frontends
 from .run_interface import BenchApiRunner, BenchCircuitRunner
 from ._utils import (EarlyReturnError, MPHandler, RawTextAndDefaultArgFormatter,
@@ -30,7 +29,7 @@ benchmark_names = [b for b in benchmarks.keys()]
 
 
 main_description = api_description = circuit_description = r"""
-=============== NVIDIA cuQuantum Performance Benchmark Suite ===============
+=============== NVIDIA Quantum Performance Benchmark Suite ===============
 """
 
 
@@ -43,6 +42,7 @@ Supported Frontends:
   - qiskit
   - pennylane
   - qulacs
+  - cudaq
 
 Supported Backends:
 
@@ -65,6 +65,9 @@ Supported Backends:
   - pennylane-lightning-kokkos: runs the PennyLane-Lightning Kokkos backend
   - qulacs-gpu: runs the Qulacs GPU backend
   - qulacs-cpu: runs the Qulacs CPU backend
+  - cudaq-cusv: runs cusv GPU backend
+  - cudaq-mgpu: runs mgpu GPU backend
+  - cudaq-cpu: runs cudaq CPU backend
 
 ============================================================================
 """
@@ -77,7 +80,7 @@ parser = argparse.ArgumentParser(
 subparsers = parser.add_subparsers(dest="cmd", required=True)
 
 
-# "cuquantum-benchmarks circuit" subcommand
+# "nv-quantum-benchmarks circuit" subcommand
 parser_circuit = subparsers.add_parser(
     'circuit',
     description=circuit_description,
@@ -99,13 +102,19 @@ parser_circuit.add_argument('--nrepeats', type=int, default=10, help='set the nu
 parser_circuit.add_argument('-v', '--verbose', help='output extra information during benchmarking', action='store_true')
 
 backend = parser_circuit.add_argument_group(
-    'backend-specific options', 'each backend has its own default config, see cuquantum_benchmarks/config.py for detail')
+    'backend-specific options', 'each backend has its own default config, see nv_quantum_benchmarks/config.py for detail')
 backend.add_argument('--ngpus', type=int, help='set the number of GPUs to use')
 backend.add_argument('--ncputhreads', type=int, help='set the number of CPU threads to use')
 backend.add_argument('--nshots', type=int, help='set the number of shots for quantum state measurement')
 backend.add_argument('--nfused', type=int, help='set the maximum number of fused qubits for gate matrix fusion')
 backend.add_argument('--precision', type=str, choices=('single', 'double'),
                      help='set the floating-point precision')
+backend.add_argument('--compute-mode', type=str, choices=['sampling', 'statevector', 'amplitude', 'expectation'], help='set the mode for computation. Note that not all backends support all modes.')
+backend.add_argument('--pauli-string', type=str, required=False, help='specify a Pauli operator for expectation')
+backend.add_argument('--pauli-seed', type=int, required=False, help='use this seed to produce a random Pauli operator for expectation')
+backend.add_argument('--pauli-identity-fraction', type=float, required=False,
+                          help='when using random Pauli operators, make this fraction identity (I). '
+                               'By default gives equal weights to all four X, Y, Z, and I.')
 
 backend_cusvaer = parser_circuit.add_argument_group('cusvaer-specific options')
 backend_cusvaer.add_argument('--cusvaer-global-index-bits', type=str_to_seq, nargs='?', const='', default=-1,
@@ -132,9 +141,8 @@ backend_cusvaer.add_argument('--cusvaer-comm-plugin-soname', type=str, nargs='?'
 
 backend_cutn = parser_circuit.add_argument_group('cutn-specific options')
 backend_cutn.add_argument('--nhypersamples', type=int, default=32, help='set the number of hypersamples for the pathfinder to explore')
-backend_cutn.add_argument('--compute-mode', type=str, required=False, help='set the mode for computation')
 
-# "cuquantum-benchmarks api" subcommand
+# "nv-quantum-benchmarks api" subcommand
 parser_api = subparsers.add_parser(
     'api',
     description=api_description,
@@ -265,8 +273,7 @@ def add_api_benchmark_options(parser_api, args=None):
 
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
 
 # WAR: PennyLane mistakenly sets a stream handler to the root logger, so if PennyLane is
 # installed, all of our logging is messed up. Let's just clean up the root logger. It's
@@ -312,7 +319,8 @@ def run(args=None):
                 or (args.frontend == 'qiskit' and args.backend not in ('cutn', *[k for k in backends.keys() if k.startswith('qiskit')], *[k for k in backends.keys() if 'aer' in k]))
                 or (args.frontend == 'naive' and args.backend != 'naive')
                 or (args.frontend == 'pennylane' and not args.backend.startswith('pennylane'))
-                or (args.frontend == 'qulacs' and not args.backend.startswith('qulacs'))):
+                or (args.frontend == 'qulacs' and not args.backend.startswith('qulacs'))
+                or (args.frontend == 'cudaq' and not args.backend.startswith('cudaq'))):
             raise ValueError(f'frontend {args.frontend} does not work with backend {args.backend}')
         if args.backend == 'cusvaer':
             if args.cusvaer_global_index_bits == -1:

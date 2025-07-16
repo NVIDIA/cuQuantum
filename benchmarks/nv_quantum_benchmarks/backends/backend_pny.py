@@ -1,4 +1,4 @@
-# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2023-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -7,7 +7,6 @@ import logging
 import os
 import time
 import warnings
-
 import numpy as np
 try:
     import pennylane
@@ -19,11 +18,11 @@ try:
 except ImportError:
     _internal_utils = None
 from .backend import Backend
+from ..constants import LOGGER_NAME
 
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class Pennylane(Backend):
@@ -36,8 +35,35 @@ class Pennylane(Backend):
         self.ngpus = ngpus
         self.ncpu_threads = ncpu_threads
         self.nqubits = kwargs.pop('nqubits')
-        self.circuit = None
         self.version = self.find_version(identifier) 
+        self.meta = {}
+        self.meta['ncputhreads'] = ncpu_threads
+
+    def preprocess_circuit(self, circuit, *args, **kwargs):
+        if _internal_utils is not None:
+            _internal_utils.preprocess_circuit(self.identifier, circuit, *args, **kwargs)
+        
+        self.circuit = circuit
+        self.compute_mode = kwargs.pop('compute_mode')
+        valid_choices = ['statevector', 'sampling']
+        if self.compute_mode not in valid_choices:
+            raise ValueError(f"The '{self.compute_mode}' computation mode is not supported for this backend. Supported modes are: {valid_choices}")
+        
+        nshots = kwargs.get('nshots', 1024)
+        t1 = time.perf_counter()
+        if self.compute_mode == 'statevector':
+            self.device = self._make_device(nshots=None, **kwargs)
+        elif self.compute_mode == 'sampling':
+            self.device = self._make_device(nshots=nshots, **kwargs)
+        t2 = time.perf_counter()
+        time_make_device = t2 - t1
+        
+        self.meta['compute-mode'] = f'{self.compute_mode}()'
+        self.meta['make-device time:'] = f'{time_make_device} s'
+        logger.info(f'data: {self.meta}')
+
+        pre_data = self.meta
+        return pre_data
 
     def find_version(self, identifier):
         if identifier == "pennylane-lightning-gpu":
@@ -72,7 +98,7 @@ class Pennylane(Backend):
         else: # identifier == "pennylane"
             return pennylane.__version__
         
-    def _make_qnode(self, circuit, nshots=1024, **kwargs):
+    def _make_device(self, nshots=None, **kwargs):
         if self.identifier == "pennylane-lightning-gpu":
             dev = pennylane.device("lightning.gpu", wires=self.nqubits, shots=nshots, c_dtype=self.dtype)
         elif self.identifier == "pennylane-lightning-kokkos":
@@ -119,27 +145,29 @@ class Pennylane(Backend):
         else:
             raise ValueError(f"the backend {self.identifier} is not recognized")
         
-        qnode = pennylane.QNode(circuit, device=dev)
-        return qnode
+        return dev
 
-    def preprocess_circuit(self, circuit, *args, **kwargs):
-        if _internal_utils is not None:
-            _internal_utils.preprocess_circuit(self.identifier, circuit, *args, **kwargs)
-        
-        nshots = kwargs.get('nshots', 1024)
-        t1 = time.perf_counter()
-        self.circuit = self._make_qnode(circuit, nshots, **kwargs)
-        t2 = time.perf_counter()
-        time_make_qnode = t2 - t1
-        logger.info(f'make qnode took {time_make_qnode} s')
-        return {'make_qnode': time_make_qnode}
+    def state_vector_qnode(self):
+        @pennylane.qnode(self.device)
+        def circuit():
+            self.circuit()
+            return pennylane.state()
+        return circuit()
+
+    def sampling_qnode(self):
+        @pennylane.qnode(self.device)
+        def circuit():
+            self.circuit()
+            return pennylane.counts(wires=range(self.nqubits))
+        return circuit()
 
     def run(self, circuit, nshots=1024):
-        # both circuit & nshots are set in preprocess_circuit()
-        results = self.circuit()
-        post_res = None # TODO
-        run_data = {}
-        return {'results': results, 'post_results': post_res, 'run_data': run_data}
+        if self.compute_mode == 'sampling':
+            samples = self.sampling_qnode() 
+        elif self.compute_mode == 'statevector':
+            sv = self.state_vector_qnode() 
+
+        return {'results': None, 'post_results': None, 'run_data': {}}
 
 
 PnyLightningGpu = functools.partial(Pennylane, identifier='pennylane-lightning-gpu')

@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -20,7 +20,7 @@ with open(os.path.join(source_root, "README.md")) as f:
     long_description = f.read()
 
 # Get project version
-with open(os.path.join(source_root, "cuquantum_benchmarks", "__init__.py")) as f:
+with open(os.path.join(source_root, "nv_quantum_benchmarks", "__init__.py")) as f:
     exec(f.read())
     version = __version__
     del __version__
@@ -35,13 +35,13 @@ install_requires = [
     "nvtx",
 ]
 if importlib.util.find_spec('cuquantum') is None:
-    install_requires.append("cuquantum-python>=23.3")
+    install_requires.append("cuquantum-python>=25.06")
 
 
 setup(
-    name="cuquantum-benchmarks",
+    name="nv-quantum-benchmarks",
     version=version,
-    description="NVIDIA cuQuantum Performance Benchmark Suite",
+    description="NVIDIA Quantum Performance Benchmark Suite",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NVIDIA/cuQuantum",
@@ -51,11 +51,11 @@ setup(
     license_files = ('LICENSE',),
     keywords=["cuda", "nvidia", "state vector", "tensor network", "high-performance computing", "quantum computing",
               "quantum circuit simulation"],
-    packages=find_packages(include=['cuquantum_benchmarks', 'cuquantum_benchmarks.*']),
+    packages=find_packages(include=['nv_quantum_benchmarks', 'nv_quantum_benchmarks.*']),
     package_data={"": ["*.py"],},
     entry_points = {
         'console_scripts': [
-            'cuquantum-benchmarks = cuquantum_benchmarks.run:run',
+            'nv-quantum-benchmarks = nv_quantum_benchmarks.run:run',
         ]
     },
     zip_safe=False,

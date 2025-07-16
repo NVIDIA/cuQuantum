@@ -1,9 +1,8 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 from math import pi
-
 try:
     import qiskit
     if hasattr(qiskit, "__version__") and qiskit.__version__ >= "1.0.0":

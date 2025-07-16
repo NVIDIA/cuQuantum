@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -17,16 +17,16 @@ import re
 import time
 from typing import Iterable, Optional, Union
 import warnings
-
 import cupy as cp
 import numpy as np
 import nvtx
 import psutil
 
+from .constants import LOGGER_NAME
+
 
 # set up a logger
-logger_name = "cuquantum-benchmarks"
-logger = logging.getLogger(logger_name)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 def wrap_with_nvtx(func, msg):

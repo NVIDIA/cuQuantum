@@ -1,9 +1,10 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 import networkx as nx
 import numpy as np
+import random
 
 from .benchmark import Benchmark
 from .._utils import Gate
@@ -16,8 +17,9 @@ class QAOA(Benchmark):
     def generateGatesSequence(nqubits, config):
         p = config['p']
         graph = nx.complete_graph(nqubits)
-        gammas = [np.pi for _ in range(p)]
-        betas = [np.pi for _ in range(p)]
+        random.seed(123)
+        gammas = [random.uniform(-np.pi, np.pi) for _ in range(p)]
+        betas = [random.uniform(-np.pi, np.pi) for _ in range(p)]
         circuit = QAOA._make_qaoa_maxcut_circuit(nqubits, graph, gammas, betas)
         measure = config['measure']
         if measure:
