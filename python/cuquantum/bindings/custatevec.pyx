@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.03.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
 
 cimport cython  # NOQA
 cimport cpython
@@ -61,6 +61,7 @@ class CollapseOp(_IntEnum):
     """See `custatevecCollapseOp_t`."""
     NONE = CUSTATEVEC_COLLAPSE_NONE
     NORMALIZE_AND_ZERO = CUSTATEVEC_COLLAPSE_NORMALIZE_AND_ZERO
+    RESET = CUSTATEVEC_COLLAPSE_RESET
 
 class ComputeType(_IntEnum):
     """See `custatevecComputeType_t`."""

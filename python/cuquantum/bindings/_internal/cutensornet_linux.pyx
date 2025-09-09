@@ -1,10 +1,12 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
+
+import threading
 
 from .._utils import FunctionNotFoundError, NotSupportedError
 
@@ -32,6 +34,7 @@ cdef extern from "<dlfcn.h>" nogil:
 # Wrapper init
 ###############################################################################
 
+cdef object __symbol_lock = threading.Lock()
 cdef bint __py_cutensornet_init = False
 
 cdef void* __cutensornetCreate = NULL
@@ -104,7 +107,6 @@ cdef void* __cutensornetDistributedSynchronize = NULL
 cdef void* __cutensornetNetworkGetAttribute = NULL
 cdef void* __cutensornetNetworkSetAttribute = NULL
 cdef void* __cutensornetWorkspacePurgeCache = NULL
-cdef void* __cutensornetComputeGradientsBackward = NULL
 cdef void* __cutensornetCreateState = NULL
 cdef void* __cutensornetStateApplyTensor = NULL
 cdef void* __cutensornetStateUpdateTensor = NULL
@@ -159,6 +161,24 @@ cdef void* __cutensornetStateProjectionMPSGetTensorInfo = NULL
 cdef void* __cutensornetStateProjectionMPSExtractTensor = NULL
 cdef void* __cutensornetStateProjectionMPSInsertTensor = NULL
 cdef void* __cutensornetDestroyStateProjectionMPS = NULL
+cdef void* __cutensornetCreateNetwork = NULL
+cdef void* __cutensornetDestroyNetwork = NULL
+cdef void* __cutensornetNetworkAppendTensor = NULL
+cdef void* __cutensornetNetworkSetOutputTensor = NULL
+cdef void* __cutensornetNetworkSetOptimizerInfo = NULL
+cdef void* __cutensornetNetworkPrepareContraction = NULL
+cdef void* __cutensornetNetworkAutotuneContraction = NULL
+cdef void* __cutensornetCreateNetworkAutotunePreference = NULL
+cdef void* __cutensornetNetworkAutotunePreferenceGetAttribute = NULL
+cdef void* __cutensornetNetworkAutotunePreferenceSetAttribute = NULL
+cdef void* __cutensornetDestroyNetworkAutotunePreference = NULL
+cdef void* __cutensornetNetworkSetInputTensorMemory = NULL
+cdef void* __cutensornetNetworkSetOutputTensorMemory = NULL
+cdef void* __cutensornetNetworkSetGradientTensorMemory = NULL
+cdef void* __cutensornetNetworkSetAdjointTensorMemory = NULL
+cdef void* __cutensornetNetworkContract = NULL
+cdef void* __cutensornetNetworkPrepareGradientsBackward = NULL
+cdef void* __cutensornetNetworkComputeGradientsBackward = NULL
 
 
 cdef void* load_library() except* nogil:
@@ -176,885 +196,1004 @@ cdef int _check_or_init_cutensornet() except -1 nogil:
     if __py_cutensornet_init:
         return 0
 
-    # Load function
     cdef void* handle = NULL
-    global __cutensornetCreate
-    __cutensornetCreate = dlsym(RTLD_DEFAULT, 'cutensornetCreate')
-    if __cutensornetCreate == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreate = dlsym(handle, 'cutensornetCreate')
-
-    global __cutensornetDestroy
-    __cutensornetDestroy = dlsym(RTLD_DEFAULT, 'cutensornetDestroy')
-    if __cutensornetDestroy == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroy = dlsym(handle, 'cutensornetDestroy')
-
-    global __cutensornetCreateNetworkDescriptor
-    __cutensornetCreateNetworkDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetCreateNetworkDescriptor')
-    if __cutensornetCreateNetworkDescriptor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateNetworkDescriptor = dlsym(handle, 'cutensornetCreateNetworkDescriptor')
-
-    global __cutensornetDestroyNetworkDescriptor
-    __cutensornetDestroyNetworkDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetDestroyNetworkDescriptor')
-    if __cutensornetDestroyNetworkDescriptor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyNetworkDescriptor = dlsym(handle, 'cutensornetDestroyNetworkDescriptor')
-
-    global __cutensornetGetOutputTensorDescriptor
-    __cutensornetGetOutputTensorDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetGetOutputTensorDescriptor')
-    if __cutensornetGetOutputTensorDescriptor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetGetOutputTensorDescriptor = dlsym(handle, 'cutensornetGetOutputTensorDescriptor')
-
-    global __cutensornetGetTensorDetails
-    __cutensornetGetTensorDetails = dlsym(RTLD_DEFAULT, 'cutensornetGetTensorDetails')
-    if __cutensornetGetTensorDetails == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetGetTensorDetails = dlsym(handle, 'cutensornetGetTensorDetails')
-
-    global __cutensornetCreateWorkspaceDescriptor
-    __cutensornetCreateWorkspaceDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetCreateWorkspaceDescriptor')
-    if __cutensornetCreateWorkspaceDescriptor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateWorkspaceDescriptor = dlsym(handle, 'cutensornetCreateWorkspaceDescriptor')
-
-    global __cutensornetWorkspaceComputeContractionSizes
-    __cutensornetWorkspaceComputeContractionSizes = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceComputeContractionSizes')
-    if __cutensornetWorkspaceComputeContractionSizes == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetWorkspaceComputeContractionSizes = dlsym(handle, 'cutensornetWorkspaceComputeContractionSizes')
-
-    global __cutensornetWorkspaceGetMemorySize
-    __cutensornetWorkspaceGetMemorySize = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceGetMemorySize')
-    if __cutensornetWorkspaceGetMemorySize == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetWorkspaceGetMemorySize = dlsym(handle, 'cutensornetWorkspaceGetMemorySize')
-
-    global __cutensornetWorkspaceSetMemory
-    __cutensornetWorkspaceSetMemory = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceSetMemory')
-    if __cutensornetWorkspaceSetMemory == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetWorkspaceSetMemory = dlsym(handle, 'cutensornetWorkspaceSetMemory')
-
-    global __cutensornetWorkspaceGetMemory
-    __cutensornetWorkspaceGetMemory = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceGetMemory')
-    if __cutensornetWorkspaceGetMemory == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetWorkspaceGetMemory = dlsym(handle, 'cutensornetWorkspaceGetMemory')
-
-    global __cutensornetDestroyWorkspaceDescriptor
-    __cutensornetDestroyWorkspaceDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetDestroyWorkspaceDescriptor')
-    if __cutensornetDestroyWorkspaceDescriptor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyWorkspaceDescriptor = dlsym(handle, 'cutensornetDestroyWorkspaceDescriptor')
-
-    global __cutensornetCreateContractionOptimizerConfig
-    __cutensornetCreateContractionOptimizerConfig = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionOptimizerConfig')
-    if __cutensornetCreateContractionOptimizerConfig == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateContractionOptimizerConfig = dlsym(handle, 'cutensornetCreateContractionOptimizerConfig')
-
-    global __cutensornetDestroyContractionOptimizerConfig
-    __cutensornetDestroyContractionOptimizerConfig = dlsym(RTLD_DEFAULT, 'cutensornetDestroyContractionOptimizerConfig')
-    if __cutensornetDestroyContractionOptimizerConfig == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyContractionOptimizerConfig = dlsym(handle, 'cutensornetDestroyContractionOptimizerConfig')
-
-    global __cutensornetContractionOptimizerConfigGetAttribute
-    __cutensornetContractionOptimizerConfigGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerConfigGetAttribute')
-    if __cutensornetContractionOptimizerConfigGetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionOptimizerConfigGetAttribute = dlsym(handle, 'cutensornetContractionOptimizerConfigGetAttribute')
-
-    global __cutensornetContractionOptimizerConfigSetAttribute
-    __cutensornetContractionOptimizerConfigSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerConfigSetAttribute')
-    if __cutensornetContractionOptimizerConfigSetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionOptimizerConfigSetAttribute = dlsym(handle, 'cutensornetContractionOptimizerConfigSetAttribute')
-
-    global __cutensornetDestroyContractionOptimizerInfo
-    __cutensornetDestroyContractionOptimizerInfo = dlsym(RTLD_DEFAULT, 'cutensornetDestroyContractionOptimizerInfo')
-    if __cutensornetDestroyContractionOptimizerInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyContractionOptimizerInfo = dlsym(handle, 'cutensornetDestroyContractionOptimizerInfo')
-
-    global __cutensornetCreateContractionOptimizerInfo
-    __cutensornetCreateContractionOptimizerInfo = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionOptimizerInfo')
-    if __cutensornetCreateContractionOptimizerInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateContractionOptimizerInfo = dlsym(handle, 'cutensornetCreateContractionOptimizerInfo')
-
-    global __cutensornetContractionOptimize
-    __cutensornetContractionOptimize = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimize')
-    if __cutensornetContractionOptimize == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionOptimize = dlsym(handle, 'cutensornetContractionOptimize')
-
-    global __cutensornetContractionOptimizerInfoGetAttribute
-    __cutensornetContractionOptimizerInfoGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerInfoGetAttribute')
-    if __cutensornetContractionOptimizerInfoGetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionOptimizerInfoGetAttribute = dlsym(handle, 'cutensornetContractionOptimizerInfoGetAttribute')
-
-    global __cutensornetContractionOptimizerInfoSetAttribute
-    __cutensornetContractionOptimizerInfoSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerInfoSetAttribute')
-    if __cutensornetContractionOptimizerInfoSetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionOptimizerInfoSetAttribute = dlsym(handle, 'cutensornetContractionOptimizerInfoSetAttribute')
-
-    global __cutensornetContractionOptimizerInfoGetPackedSize
-    __cutensornetContractionOptimizerInfoGetPackedSize = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerInfoGetPackedSize')
-    if __cutensornetContractionOptimizerInfoGetPackedSize == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionOptimizerInfoGetPackedSize = dlsym(handle, 'cutensornetContractionOptimizerInfoGetPackedSize')
-
-    global __cutensornetContractionOptimizerInfoPackData
-    __cutensornetContractionOptimizerInfoPackData = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerInfoPackData')
-    if __cutensornetContractionOptimizerInfoPackData == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionOptimizerInfoPackData = dlsym(handle, 'cutensornetContractionOptimizerInfoPackData')
-
-    global __cutensornetCreateContractionOptimizerInfoFromPackedData
-    __cutensornetCreateContractionOptimizerInfoFromPackedData = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionOptimizerInfoFromPackedData')
-    if __cutensornetCreateContractionOptimizerInfoFromPackedData == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateContractionOptimizerInfoFromPackedData = dlsym(handle, 'cutensornetCreateContractionOptimizerInfoFromPackedData')
-
-    global __cutensornetUpdateContractionOptimizerInfoFromPackedData
-    __cutensornetUpdateContractionOptimizerInfoFromPackedData = dlsym(RTLD_DEFAULT, 'cutensornetUpdateContractionOptimizerInfoFromPackedData')
-    if __cutensornetUpdateContractionOptimizerInfoFromPackedData == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetUpdateContractionOptimizerInfoFromPackedData = dlsym(handle, 'cutensornetUpdateContractionOptimizerInfoFromPackedData')
-
-    global __cutensornetCreateContractionPlan
-    __cutensornetCreateContractionPlan = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionPlan')
-    if __cutensornetCreateContractionPlan == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateContractionPlan = dlsym(handle, 'cutensornetCreateContractionPlan')
-
-    global __cutensornetDestroyContractionPlan
-    __cutensornetDestroyContractionPlan = dlsym(RTLD_DEFAULT, 'cutensornetDestroyContractionPlan')
-    if __cutensornetDestroyContractionPlan == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyContractionPlan = dlsym(handle, 'cutensornetDestroyContractionPlan')
-
-    global __cutensornetContractionAutotune
-    __cutensornetContractionAutotune = dlsym(RTLD_DEFAULT, 'cutensornetContractionAutotune')
-    if __cutensornetContractionAutotune == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionAutotune = dlsym(handle, 'cutensornetContractionAutotune')
-
-    global __cutensornetCreateContractionAutotunePreference
-    __cutensornetCreateContractionAutotunePreference = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionAutotunePreference')
-    if __cutensornetCreateContractionAutotunePreference == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateContractionAutotunePreference = dlsym(handle, 'cutensornetCreateContractionAutotunePreference')
-
-    global __cutensornetContractionAutotunePreferenceGetAttribute
-    __cutensornetContractionAutotunePreferenceGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionAutotunePreferenceGetAttribute')
-    if __cutensornetContractionAutotunePreferenceGetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionAutotunePreferenceGetAttribute = dlsym(handle, 'cutensornetContractionAutotunePreferenceGetAttribute')
-
-    global __cutensornetContractionAutotunePreferenceSetAttribute
-    __cutensornetContractionAutotunePreferenceSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionAutotunePreferenceSetAttribute')
-    if __cutensornetContractionAutotunePreferenceSetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractionAutotunePreferenceSetAttribute = dlsym(handle, 'cutensornetContractionAutotunePreferenceSetAttribute')
-
-    global __cutensornetDestroyContractionAutotunePreference
-    __cutensornetDestroyContractionAutotunePreference = dlsym(RTLD_DEFAULT, 'cutensornetDestroyContractionAutotunePreference')
-    if __cutensornetDestroyContractionAutotunePreference == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyContractionAutotunePreference = dlsym(handle, 'cutensornetDestroyContractionAutotunePreference')
-
-    global __cutensornetCreateSliceGroupFromIDRange
-    __cutensornetCreateSliceGroupFromIDRange = dlsym(RTLD_DEFAULT, 'cutensornetCreateSliceGroupFromIDRange')
-    if __cutensornetCreateSliceGroupFromIDRange == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateSliceGroupFromIDRange = dlsym(handle, 'cutensornetCreateSliceGroupFromIDRange')
-
-    global __cutensornetCreateSliceGroupFromIDs
-    __cutensornetCreateSliceGroupFromIDs = dlsym(RTLD_DEFAULT, 'cutensornetCreateSliceGroupFromIDs')
-    if __cutensornetCreateSliceGroupFromIDs == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateSliceGroupFromIDs = dlsym(handle, 'cutensornetCreateSliceGroupFromIDs')
-
-    global __cutensornetDestroySliceGroup
-    __cutensornetDestroySliceGroup = dlsym(RTLD_DEFAULT, 'cutensornetDestroySliceGroup')
-    if __cutensornetDestroySliceGroup == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroySliceGroup = dlsym(handle, 'cutensornetDestroySliceGroup')
-
-    global __cutensornetContractSlices
-    __cutensornetContractSlices = dlsym(RTLD_DEFAULT, 'cutensornetContractSlices')
-    if __cutensornetContractSlices == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetContractSlices = dlsym(handle, 'cutensornetContractSlices')
-
-    global __cutensornetCreateTensorDescriptor
-    __cutensornetCreateTensorDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetCreateTensorDescriptor')
-    if __cutensornetCreateTensorDescriptor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateTensorDescriptor = dlsym(handle, 'cutensornetCreateTensorDescriptor')
-
-    global __cutensornetDestroyTensorDescriptor
-    __cutensornetDestroyTensorDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetDestroyTensorDescriptor')
-    if __cutensornetDestroyTensorDescriptor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyTensorDescriptor = dlsym(handle, 'cutensornetDestroyTensorDescriptor')
-
-    global __cutensornetCreateTensorSVDConfig
-    __cutensornetCreateTensorSVDConfig = dlsym(RTLD_DEFAULT, 'cutensornetCreateTensorSVDConfig')
-    if __cutensornetCreateTensorSVDConfig == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateTensorSVDConfig = dlsym(handle, 'cutensornetCreateTensorSVDConfig')
-
-    global __cutensornetDestroyTensorSVDConfig
-    __cutensornetDestroyTensorSVDConfig = dlsym(RTLD_DEFAULT, 'cutensornetDestroyTensorSVDConfig')
-    if __cutensornetDestroyTensorSVDConfig == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyTensorSVDConfig = dlsym(handle, 'cutensornetDestroyTensorSVDConfig')
-
-    global __cutensornetTensorSVDConfigGetAttribute
-    __cutensornetTensorSVDConfigGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetTensorSVDConfigGetAttribute')
-    if __cutensornetTensorSVDConfigGetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetTensorSVDConfigGetAttribute = dlsym(handle, 'cutensornetTensorSVDConfigGetAttribute')
-
-    global __cutensornetTensorSVDConfigSetAttribute
-    __cutensornetTensorSVDConfigSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetTensorSVDConfigSetAttribute')
-    if __cutensornetTensorSVDConfigSetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetTensorSVDConfigSetAttribute = dlsym(handle, 'cutensornetTensorSVDConfigSetAttribute')
-
-    global __cutensornetWorkspaceComputeSVDSizes
-    __cutensornetWorkspaceComputeSVDSizes = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceComputeSVDSizes')
-    if __cutensornetWorkspaceComputeSVDSizes == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetWorkspaceComputeSVDSizes = dlsym(handle, 'cutensornetWorkspaceComputeSVDSizes')
-
-    global __cutensornetWorkspaceComputeQRSizes
-    __cutensornetWorkspaceComputeQRSizes = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceComputeQRSizes')
-    if __cutensornetWorkspaceComputeQRSizes == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetWorkspaceComputeQRSizes = dlsym(handle, 'cutensornetWorkspaceComputeQRSizes')
-
-    global __cutensornetCreateTensorSVDInfo
-    __cutensornetCreateTensorSVDInfo = dlsym(RTLD_DEFAULT, 'cutensornetCreateTensorSVDInfo')
-    if __cutensornetCreateTensorSVDInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateTensorSVDInfo = dlsym(handle, 'cutensornetCreateTensorSVDInfo')
-
-    global __cutensornetTensorSVDInfoGetAttribute
-    __cutensornetTensorSVDInfoGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetTensorSVDInfoGetAttribute')
-    if __cutensornetTensorSVDInfoGetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetTensorSVDInfoGetAttribute = dlsym(handle, 'cutensornetTensorSVDInfoGetAttribute')
-
-    global __cutensornetDestroyTensorSVDInfo
-    __cutensornetDestroyTensorSVDInfo = dlsym(RTLD_DEFAULT, 'cutensornetDestroyTensorSVDInfo')
-    if __cutensornetDestroyTensorSVDInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyTensorSVDInfo = dlsym(handle, 'cutensornetDestroyTensorSVDInfo')
-
-    global __cutensornetTensorSVD
-    __cutensornetTensorSVD = dlsym(RTLD_DEFAULT, 'cutensornetTensorSVD')
-    if __cutensornetTensorSVD == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetTensorSVD = dlsym(handle, 'cutensornetTensorSVD')
-
-    global __cutensornetTensorQR
-    __cutensornetTensorQR = dlsym(RTLD_DEFAULT, 'cutensornetTensorQR')
-    if __cutensornetTensorQR == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetTensorQR = dlsym(handle, 'cutensornetTensorQR')
-
-    global __cutensornetWorkspaceComputeGateSplitSizes
-    __cutensornetWorkspaceComputeGateSplitSizes = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceComputeGateSplitSizes')
-    if __cutensornetWorkspaceComputeGateSplitSizes == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetWorkspaceComputeGateSplitSizes = dlsym(handle, 'cutensornetWorkspaceComputeGateSplitSizes')
-
-    global __cutensornetGateSplit
-    __cutensornetGateSplit = dlsym(RTLD_DEFAULT, 'cutensornetGateSplit')
-    if __cutensornetGateSplit == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetGateSplit = dlsym(handle, 'cutensornetGateSplit')
-
-    global __cutensornetGetDeviceMemHandler
-    __cutensornetGetDeviceMemHandler = dlsym(RTLD_DEFAULT, 'cutensornetGetDeviceMemHandler')
-    if __cutensornetGetDeviceMemHandler == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetGetDeviceMemHandler = dlsym(handle, 'cutensornetGetDeviceMemHandler')
-
-    global __cutensornetSetDeviceMemHandler
-    __cutensornetSetDeviceMemHandler = dlsym(RTLD_DEFAULT, 'cutensornetSetDeviceMemHandler')
-    if __cutensornetSetDeviceMemHandler == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetSetDeviceMemHandler = dlsym(handle, 'cutensornetSetDeviceMemHandler')
-
-    global __cutensornetLoggerSetCallback
-    __cutensornetLoggerSetCallback = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetCallback')
-    if __cutensornetLoggerSetCallback == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetLoggerSetCallback = dlsym(handle, 'cutensornetLoggerSetCallback')
-
-    global __cutensornetLoggerSetCallbackData
-    __cutensornetLoggerSetCallbackData = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetCallbackData')
-    if __cutensornetLoggerSetCallbackData == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetLoggerSetCallbackData = dlsym(handle, 'cutensornetLoggerSetCallbackData')
-
-    global __cutensornetLoggerSetFile
-    __cutensornetLoggerSetFile = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetFile')
-    if __cutensornetLoggerSetFile == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetLoggerSetFile = dlsym(handle, 'cutensornetLoggerSetFile')
-
-    global __cutensornetLoggerOpenFile
-    __cutensornetLoggerOpenFile = dlsym(RTLD_DEFAULT, 'cutensornetLoggerOpenFile')
-    if __cutensornetLoggerOpenFile == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetLoggerOpenFile = dlsym(handle, 'cutensornetLoggerOpenFile')
-
-    global __cutensornetLoggerSetLevel
-    __cutensornetLoggerSetLevel = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetLevel')
-    if __cutensornetLoggerSetLevel == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetLoggerSetLevel = dlsym(handle, 'cutensornetLoggerSetLevel')
-
-    global __cutensornetLoggerSetMask
-    __cutensornetLoggerSetMask = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetMask')
-    if __cutensornetLoggerSetMask == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetLoggerSetMask = dlsym(handle, 'cutensornetLoggerSetMask')
-
-    global __cutensornetLoggerForceDisable
-    __cutensornetLoggerForceDisable = dlsym(RTLD_DEFAULT, 'cutensornetLoggerForceDisable')
-    if __cutensornetLoggerForceDisable == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetLoggerForceDisable = dlsym(handle, 'cutensornetLoggerForceDisable')
-
-    global __cutensornetGetVersion
-    __cutensornetGetVersion = dlsym(RTLD_DEFAULT, 'cutensornetGetVersion')
-    if __cutensornetGetVersion == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetGetVersion = dlsym(handle, 'cutensornetGetVersion')
-
-    global __cutensornetGetCudartVersion
-    __cutensornetGetCudartVersion = dlsym(RTLD_DEFAULT, 'cutensornetGetCudartVersion')
-    if __cutensornetGetCudartVersion == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetGetCudartVersion = dlsym(handle, 'cutensornetGetCudartVersion')
-
-    global __cutensornetGetErrorString
-    __cutensornetGetErrorString = dlsym(RTLD_DEFAULT, 'cutensornetGetErrorString')
-    if __cutensornetGetErrorString == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetGetErrorString = dlsym(handle, 'cutensornetGetErrorString')
-
-    global __cutensornetDistributedResetConfiguration
-    __cutensornetDistributedResetConfiguration = dlsym(RTLD_DEFAULT, 'cutensornetDistributedResetConfiguration')
-    if __cutensornetDistributedResetConfiguration == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDistributedResetConfiguration = dlsym(handle, 'cutensornetDistributedResetConfiguration')
-
-    global __cutensornetDistributedGetNumRanks
-    __cutensornetDistributedGetNumRanks = dlsym(RTLD_DEFAULT, 'cutensornetDistributedGetNumRanks')
-    if __cutensornetDistributedGetNumRanks == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDistributedGetNumRanks = dlsym(handle, 'cutensornetDistributedGetNumRanks')
-
-    global __cutensornetDistributedGetProcRank
-    __cutensornetDistributedGetProcRank = dlsym(RTLD_DEFAULT, 'cutensornetDistributedGetProcRank')
-    if __cutensornetDistributedGetProcRank == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDistributedGetProcRank = dlsym(handle, 'cutensornetDistributedGetProcRank')
-
-    global __cutensornetDistributedSynchronize
-    __cutensornetDistributedSynchronize = dlsym(RTLD_DEFAULT, 'cutensornetDistributedSynchronize')
-    if __cutensornetDistributedSynchronize == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDistributedSynchronize = dlsym(handle, 'cutensornetDistributedSynchronize')
-
-    global __cutensornetNetworkGetAttribute
-    __cutensornetNetworkGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetNetworkGetAttribute')
-    if __cutensornetNetworkGetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetNetworkGetAttribute = dlsym(handle, 'cutensornetNetworkGetAttribute')
-
-    global __cutensornetNetworkSetAttribute
-    __cutensornetNetworkSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetNetworkSetAttribute')
-    if __cutensornetNetworkSetAttribute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetNetworkSetAttribute = dlsym(handle, 'cutensornetNetworkSetAttribute')
-
-    global __cutensornetWorkspacePurgeCache
-    __cutensornetWorkspacePurgeCache = dlsym(RTLD_DEFAULT, 'cutensornetWorkspacePurgeCache')
-    if __cutensornetWorkspacePurgeCache == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetWorkspacePurgeCache = dlsym(handle, 'cutensornetWorkspacePurgeCache')
-
-    global __cutensornetComputeGradientsBackward
-    __cutensornetComputeGradientsBackward = dlsym(RTLD_DEFAULT, 'cutensornetComputeGradientsBackward')
-    if __cutensornetComputeGradientsBackward == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetComputeGradientsBackward = dlsym(handle, 'cutensornetComputeGradientsBackward')
-
-    global __cutensornetCreateState
-    __cutensornetCreateState = dlsym(RTLD_DEFAULT, 'cutensornetCreateState')
-    if __cutensornetCreateState == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateState = dlsym(handle, 'cutensornetCreateState')
-
-    global __cutensornetStateApplyTensor
-    __cutensornetStateApplyTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyTensor')
-    if __cutensornetStateApplyTensor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateApplyTensor = dlsym(handle, 'cutensornetStateApplyTensor')
-
-    global __cutensornetStateUpdateTensor
-    __cutensornetStateUpdateTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateUpdateTensor')
-    if __cutensornetStateUpdateTensor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateUpdateTensor = dlsym(handle, 'cutensornetStateUpdateTensor')
-
-    global __cutensornetDestroyState
-    __cutensornetDestroyState = dlsym(RTLD_DEFAULT, 'cutensornetDestroyState')
-    if __cutensornetDestroyState == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyState = dlsym(handle, 'cutensornetDestroyState')
-
-    global __cutensornetCreateMarginal
-    __cutensornetCreateMarginal = dlsym(RTLD_DEFAULT, 'cutensornetCreateMarginal')
-    if __cutensornetCreateMarginal == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateMarginal = dlsym(handle, 'cutensornetCreateMarginal')
-
-    global __cutensornetMarginalConfigure
-    __cutensornetMarginalConfigure = dlsym(RTLD_DEFAULT, 'cutensornetMarginalConfigure')
-    if __cutensornetMarginalConfigure == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetMarginalConfigure = dlsym(handle, 'cutensornetMarginalConfigure')
-
-    global __cutensornetMarginalPrepare
-    __cutensornetMarginalPrepare = dlsym(RTLD_DEFAULT, 'cutensornetMarginalPrepare')
-    if __cutensornetMarginalPrepare == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetMarginalPrepare = dlsym(handle, 'cutensornetMarginalPrepare')
-
-    global __cutensornetMarginalCompute
-    __cutensornetMarginalCompute = dlsym(RTLD_DEFAULT, 'cutensornetMarginalCompute')
-    if __cutensornetMarginalCompute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetMarginalCompute = dlsym(handle, 'cutensornetMarginalCompute')
-
-    global __cutensornetDestroyMarginal
-    __cutensornetDestroyMarginal = dlsym(RTLD_DEFAULT, 'cutensornetDestroyMarginal')
-    if __cutensornetDestroyMarginal == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyMarginal = dlsym(handle, 'cutensornetDestroyMarginal')
-
-    global __cutensornetCreateSampler
-    __cutensornetCreateSampler = dlsym(RTLD_DEFAULT, 'cutensornetCreateSampler')
-    if __cutensornetCreateSampler == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateSampler = dlsym(handle, 'cutensornetCreateSampler')
-
-    global __cutensornetSamplerConfigure
-    __cutensornetSamplerConfigure = dlsym(RTLD_DEFAULT, 'cutensornetSamplerConfigure')
-    if __cutensornetSamplerConfigure == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetSamplerConfigure = dlsym(handle, 'cutensornetSamplerConfigure')
-
-    global __cutensornetSamplerPrepare
-    __cutensornetSamplerPrepare = dlsym(RTLD_DEFAULT, 'cutensornetSamplerPrepare')
-    if __cutensornetSamplerPrepare == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetSamplerPrepare = dlsym(handle, 'cutensornetSamplerPrepare')
-
-    global __cutensornetSamplerSample
-    __cutensornetSamplerSample = dlsym(RTLD_DEFAULT, 'cutensornetSamplerSample')
-    if __cutensornetSamplerSample == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetSamplerSample = dlsym(handle, 'cutensornetSamplerSample')
-
-    global __cutensornetDestroySampler
-    __cutensornetDestroySampler = dlsym(RTLD_DEFAULT, 'cutensornetDestroySampler')
-    if __cutensornetDestroySampler == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroySampler = dlsym(handle, 'cutensornetDestroySampler')
-
-    global __cutensornetStateFinalizeMPS
-    __cutensornetStateFinalizeMPS = dlsym(RTLD_DEFAULT, 'cutensornetStateFinalizeMPS')
-    if __cutensornetStateFinalizeMPS == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateFinalizeMPS = dlsym(handle, 'cutensornetStateFinalizeMPS')
-
-    global __cutensornetStateConfigure
-    __cutensornetStateConfigure = dlsym(RTLD_DEFAULT, 'cutensornetStateConfigure')
-    if __cutensornetStateConfigure == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateConfigure = dlsym(handle, 'cutensornetStateConfigure')
-
-    global __cutensornetStatePrepare
-    __cutensornetStatePrepare = dlsym(RTLD_DEFAULT, 'cutensornetStatePrepare')
-    if __cutensornetStatePrepare == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStatePrepare = dlsym(handle, 'cutensornetStatePrepare')
-
-    global __cutensornetStateCompute
-    __cutensornetStateCompute = dlsym(RTLD_DEFAULT, 'cutensornetStateCompute')
-    if __cutensornetStateCompute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateCompute = dlsym(handle, 'cutensornetStateCompute')
-
-    global __cutensornetGetOutputStateDetails
-    __cutensornetGetOutputStateDetails = dlsym(RTLD_DEFAULT, 'cutensornetGetOutputStateDetails')
-    if __cutensornetGetOutputStateDetails == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetGetOutputStateDetails = dlsym(handle, 'cutensornetGetOutputStateDetails')
-
-    global __cutensornetCreateNetworkOperator
-    __cutensornetCreateNetworkOperator = dlsym(RTLD_DEFAULT, 'cutensornetCreateNetworkOperator')
-    if __cutensornetCreateNetworkOperator == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateNetworkOperator = dlsym(handle, 'cutensornetCreateNetworkOperator')
-
-    global __cutensornetNetworkOperatorAppendProduct
-    __cutensornetNetworkOperatorAppendProduct = dlsym(RTLD_DEFAULT, 'cutensornetNetworkOperatorAppendProduct')
-    if __cutensornetNetworkOperatorAppendProduct == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetNetworkOperatorAppendProduct = dlsym(handle, 'cutensornetNetworkOperatorAppendProduct')
-
-    global __cutensornetDestroyNetworkOperator
-    __cutensornetDestroyNetworkOperator = dlsym(RTLD_DEFAULT, 'cutensornetDestroyNetworkOperator')
-    if __cutensornetDestroyNetworkOperator == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyNetworkOperator = dlsym(handle, 'cutensornetDestroyNetworkOperator')
-
-    global __cutensornetCreateAccessor
-    __cutensornetCreateAccessor = dlsym(RTLD_DEFAULT, 'cutensornetCreateAccessor')
-    if __cutensornetCreateAccessor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateAccessor = dlsym(handle, 'cutensornetCreateAccessor')
-
-    global __cutensornetAccessorConfigure
-    __cutensornetAccessorConfigure = dlsym(RTLD_DEFAULT, 'cutensornetAccessorConfigure')
-    if __cutensornetAccessorConfigure == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetAccessorConfigure = dlsym(handle, 'cutensornetAccessorConfigure')
-
-    global __cutensornetAccessorPrepare
-    __cutensornetAccessorPrepare = dlsym(RTLD_DEFAULT, 'cutensornetAccessorPrepare')
-    if __cutensornetAccessorPrepare == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetAccessorPrepare = dlsym(handle, 'cutensornetAccessorPrepare')
-
-    global __cutensornetAccessorCompute
-    __cutensornetAccessorCompute = dlsym(RTLD_DEFAULT, 'cutensornetAccessorCompute')
-    if __cutensornetAccessorCompute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetAccessorCompute = dlsym(handle, 'cutensornetAccessorCompute')
-
-    global __cutensornetDestroyAccessor
-    __cutensornetDestroyAccessor = dlsym(RTLD_DEFAULT, 'cutensornetDestroyAccessor')
-    if __cutensornetDestroyAccessor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyAccessor = dlsym(handle, 'cutensornetDestroyAccessor')
-
-    global __cutensornetCreateExpectation
-    __cutensornetCreateExpectation = dlsym(RTLD_DEFAULT, 'cutensornetCreateExpectation')
-    if __cutensornetCreateExpectation == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateExpectation = dlsym(handle, 'cutensornetCreateExpectation')
-
-    global __cutensornetExpectationConfigure
-    __cutensornetExpectationConfigure = dlsym(RTLD_DEFAULT, 'cutensornetExpectationConfigure')
-    if __cutensornetExpectationConfigure == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetExpectationConfigure = dlsym(handle, 'cutensornetExpectationConfigure')
-
-    global __cutensornetExpectationPrepare
-    __cutensornetExpectationPrepare = dlsym(RTLD_DEFAULT, 'cutensornetExpectationPrepare')
-    if __cutensornetExpectationPrepare == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetExpectationPrepare = dlsym(handle, 'cutensornetExpectationPrepare')
-
-    global __cutensornetExpectationCompute
-    __cutensornetExpectationCompute = dlsym(RTLD_DEFAULT, 'cutensornetExpectationCompute')
-    if __cutensornetExpectationCompute == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetExpectationCompute = dlsym(handle, 'cutensornetExpectationCompute')
-
-    global __cutensornetDestroyExpectation
-    __cutensornetDestroyExpectation = dlsym(RTLD_DEFAULT, 'cutensornetDestroyExpectation')
-    if __cutensornetDestroyExpectation == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyExpectation = dlsym(handle, 'cutensornetDestroyExpectation')
-
-    global __cutensornetStateApplyTensorOperator
-    __cutensornetStateApplyTensorOperator = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyTensorOperator')
-    if __cutensornetStateApplyTensorOperator == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateApplyTensorOperator = dlsym(handle, 'cutensornetStateApplyTensorOperator')
-
-    global __cutensornetStateApplyControlledTensorOperator
-    __cutensornetStateApplyControlledTensorOperator = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyControlledTensorOperator')
-    if __cutensornetStateApplyControlledTensorOperator == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateApplyControlledTensorOperator = dlsym(handle, 'cutensornetStateApplyControlledTensorOperator')
-
-    global __cutensornetStateUpdateTensorOperator
-    __cutensornetStateUpdateTensorOperator = dlsym(RTLD_DEFAULT, 'cutensornetStateUpdateTensorOperator')
-    if __cutensornetStateUpdateTensorOperator == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateUpdateTensorOperator = dlsym(handle, 'cutensornetStateUpdateTensorOperator')
-
-    global __cutensornetStateApplyNetworkOperator
-    __cutensornetStateApplyNetworkOperator = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyNetworkOperator')
-    if __cutensornetStateApplyNetworkOperator == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateApplyNetworkOperator = dlsym(handle, 'cutensornetStateApplyNetworkOperator')
-
-    global __cutensornetStateInitializeMPS
-    __cutensornetStateInitializeMPS = dlsym(RTLD_DEFAULT, 'cutensornetStateInitializeMPS')
-    if __cutensornetStateInitializeMPS == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateInitializeMPS = dlsym(handle, 'cutensornetStateInitializeMPS')
-
-    global __cutensornetStateGetInfo
-    __cutensornetStateGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetStateGetInfo')
-    if __cutensornetStateGetInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateGetInfo = dlsym(handle, 'cutensornetStateGetInfo')
-
-    global __cutensornetNetworkOperatorAppendMPO
-    __cutensornetNetworkOperatorAppendMPO = dlsym(RTLD_DEFAULT, 'cutensornetNetworkOperatorAppendMPO')
-    if __cutensornetNetworkOperatorAppendMPO == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetNetworkOperatorAppendMPO = dlsym(handle, 'cutensornetNetworkOperatorAppendMPO')
-
-    global __cutensornetAccessorGetInfo
-    __cutensornetAccessorGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetAccessorGetInfo')
-    if __cutensornetAccessorGetInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetAccessorGetInfo = dlsym(handle, 'cutensornetAccessorGetInfo')
-
-    global __cutensornetExpectationGetInfo
-    __cutensornetExpectationGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetExpectationGetInfo')
-    if __cutensornetExpectationGetInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetExpectationGetInfo = dlsym(handle, 'cutensornetExpectationGetInfo')
-
-    global __cutensornetMarginalGetInfo
-    __cutensornetMarginalGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetMarginalGetInfo')
-    if __cutensornetMarginalGetInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetMarginalGetInfo = dlsym(handle, 'cutensornetMarginalGetInfo')
-
-    global __cutensornetSamplerGetInfo
-    __cutensornetSamplerGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetSamplerGetInfo')
-    if __cutensornetSamplerGetInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetSamplerGetInfo = dlsym(handle, 'cutensornetSamplerGetInfo')
-
-    global __cutensornetStateApplyUnitaryChannel
-    __cutensornetStateApplyUnitaryChannel = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyUnitaryChannel')
-    if __cutensornetStateApplyUnitaryChannel == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateApplyUnitaryChannel = dlsym(handle, 'cutensornetStateApplyUnitaryChannel')
-
-    global __cutensornetStateCaptureMPS
-    __cutensornetStateCaptureMPS = dlsym(RTLD_DEFAULT, 'cutensornetStateCaptureMPS')
-    if __cutensornetStateCaptureMPS == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateCaptureMPS = dlsym(handle, 'cutensornetStateCaptureMPS')
-
-    global __cutensornetStateApplyGeneralChannel
-    __cutensornetStateApplyGeneralChannel = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyGeneralChannel')
-    if __cutensornetStateApplyGeneralChannel == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateApplyGeneralChannel = dlsym(handle, 'cutensornetStateApplyGeneralChannel')
-
-    global __cutensornetCreateStateProjectionMPS
-    __cutensornetCreateStateProjectionMPS = dlsym(RTLD_DEFAULT, 'cutensornetCreateStateProjectionMPS')
-    if __cutensornetCreateStateProjectionMPS == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetCreateStateProjectionMPS = dlsym(handle, 'cutensornetCreateStateProjectionMPS')
-
-    global __cutensornetStateProjectionMPSConfigure
-    __cutensornetStateProjectionMPSConfigure = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSConfigure')
-    if __cutensornetStateProjectionMPSConfigure == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateProjectionMPSConfigure = dlsym(handle, 'cutensornetStateProjectionMPSConfigure')
-
-    global __cutensornetStateProjectionMPSPrepare
-    __cutensornetStateProjectionMPSPrepare = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSPrepare')
-    if __cutensornetStateProjectionMPSPrepare == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateProjectionMPSPrepare = dlsym(handle, 'cutensornetStateProjectionMPSPrepare')
-
-    global __cutensornetStateProjectionMPSComputeTensorEnv
-    __cutensornetStateProjectionMPSComputeTensorEnv = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSComputeTensorEnv')
-    if __cutensornetStateProjectionMPSComputeTensorEnv == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateProjectionMPSComputeTensorEnv = dlsym(handle, 'cutensornetStateProjectionMPSComputeTensorEnv')
-
-    global __cutensornetStateProjectionMPSGetTensorInfo
-    __cutensornetStateProjectionMPSGetTensorInfo = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSGetTensorInfo')
-    if __cutensornetStateProjectionMPSGetTensorInfo == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateProjectionMPSGetTensorInfo = dlsym(handle, 'cutensornetStateProjectionMPSGetTensorInfo')
-
-    global __cutensornetStateProjectionMPSExtractTensor
-    __cutensornetStateProjectionMPSExtractTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSExtractTensor')
-    if __cutensornetStateProjectionMPSExtractTensor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateProjectionMPSExtractTensor = dlsym(handle, 'cutensornetStateProjectionMPSExtractTensor')
-
-    global __cutensornetStateProjectionMPSInsertTensor
-    __cutensornetStateProjectionMPSInsertTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSInsertTensor')
-    if __cutensornetStateProjectionMPSInsertTensor == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetStateProjectionMPSInsertTensor = dlsym(handle, 'cutensornetStateProjectionMPSInsertTensor')
-
-    global __cutensornetDestroyStateProjectionMPS
-    __cutensornetDestroyStateProjectionMPS = dlsym(RTLD_DEFAULT, 'cutensornetDestroyStateProjectionMPS')
-    if __cutensornetDestroyStateProjectionMPS == NULL:
-        if handle == NULL:
-            handle = load_library()
-        __cutensornetDestroyStateProjectionMPS = dlsym(handle, 'cutensornetDestroyStateProjectionMPS')
-
-    __py_cutensornet_init = True
-    return 0
+    with gil, __symbol_lock:
+        # Load function
+        global __cutensornetCreate
+        __cutensornetCreate = dlsym(RTLD_DEFAULT, 'cutensornetCreate')
+        if __cutensornetCreate == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreate = dlsym(handle, 'cutensornetCreate')
+
+        global __cutensornetDestroy
+        __cutensornetDestroy = dlsym(RTLD_DEFAULT, 'cutensornetDestroy')
+        if __cutensornetDestroy == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroy = dlsym(handle, 'cutensornetDestroy')
+
+        global __cutensornetCreateNetworkDescriptor
+        __cutensornetCreateNetworkDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetCreateNetworkDescriptor')
+        if __cutensornetCreateNetworkDescriptor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateNetworkDescriptor = dlsym(handle, 'cutensornetCreateNetworkDescriptor')
+
+        global __cutensornetDestroyNetworkDescriptor
+        __cutensornetDestroyNetworkDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetDestroyNetworkDescriptor')
+        if __cutensornetDestroyNetworkDescriptor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyNetworkDescriptor = dlsym(handle, 'cutensornetDestroyNetworkDescriptor')
+
+        global __cutensornetGetOutputTensorDescriptor
+        __cutensornetGetOutputTensorDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetGetOutputTensorDescriptor')
+        if __cutensornetGetOutputTensorDescriptor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetGetOutputTensorDescriptor = dlsym(handle, 'cutensornetGetOutputTensorDescriptor')
+
+        global __cutensornetGetTensorDetails
+        __cutensornetGetTensorDetails = dlsym(RTLD_DEFAULT, 'cutensornetGetTensorDetails')
+        if __cutensornetGetTensorDetails == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetGetTensorDetails = dlsym(handle, 'cutensornetGetTensorDetails')
+
+        global __cutensornetCreateWorkspaceDescriptor
+        __cutensornetCreateWorkspaceDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetCreateWorkspaceDescriptor')
+        if __cutensornetCreateWorkspaceDescriptor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateWorkspaceDescriptor = dlsym(handle, 'cutensornetCreateWorkspaceDescriptor')
+
+        global __cutensornetWorkspaceComputeContractionSizes
+        __cutensornetWorkspaceComputeContractionSizes = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceComputeContractionSizes')
+        if __cutensornetWorkspaceComputeContractionSizes == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetWorkspaceComputeContractionSizes = dlsym(handle, 'cutensornetWorkspaceComputeContractionSizes')
+
+        global __cutensornetWorkspaceGetMemorySize
+        __cutensornetWorkspaceGetMemorySize = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceGetMemorySize')
+        if __cutensornetWorkspaceGetMemorySize == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetWorkspaceGetMemorySize = dlsym(handle, 'cutensornetWorkspaceGetMemorySize')
+
+        global __cutensornetWorkspaceSetMemory
+        __cutensornetWorkspaceSetMemory = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceSetMemory')
+        if __cutensornetWorkspaceSetMemory == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetWorkspaceSetMemory = dlsym(handle, 'cutensornetWorkspaceSetMemory')
+
+        global __cutensornetWorkspaceGetMemory
+        __cutensornetWorkspaceGetMemory = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceGetMemory')
+        if __cutensornetWorkspaceGetMemory == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetWorkspaceGetMemory = dlsym(handle, 'cutensornetWorkspaceGetMemory')
+
+        global __cutensornetDestroyWorkspaceDescriptor
+        __cutensornetDestroyWorkspaceDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetDestroyWorkspaceDescriptor')
+        if __cutensornetDestroyWorkspaceDescriptor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyWorkspaceDescriptor = dlsym(handle, 'cutensornetDestroyWorkspaceDescriptor')
+
+        global __cutensornetCreateContractionOptimizerConfig
+        __cutensornetCreateContractionOptimizerConfig = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionOptimizerConfig')
+        if __cutensornetCreateContractionOptimizerConfig == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateContractionOptimizerConfig = dlsym(handle, 'cutensornetCreateContractionOptimizerConfig')
+
+        global __cutensornetDestroyContractionOptimizerConfig
+        __cutensornetDestroyContractionOptimizerConfig = dlsym(RTLD_DEFAULT, 'cutensornetDestroyContractionOptimizerConfig')
+        if __cutensornetDestroyContractionOptimizerConfig == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyContractionOptimizerConfig = dlsym(handle, 'cutensornetDestroyContractionOptimizerConfig')
+
+        global __cutensornetContractionOptimizerConfigGetAttribute
+        __cutensornetContractionOptimizerConfigGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerConfigGetAttribute')
+        if __cutensornetContractionOptimizerConfigGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionOptimizerConfigGetAttribute = dlsym(handle, 'cutensornetContractionOptimizerConfigGetAttribute')
+
+        global __cutensornetContractionOptimizerConfigSetAttribute
+        __cutensornetContractionOptimizerConfigSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerConfigSetAttribute')
+        if __cutensornetContractionOptimizerConfigSetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionOptimizerConfigSetAttribute = dlsym(handle, 'cutensornetContractionOptimizerConfigSetAttribute')
+
+        global __cutensornetDestroyContractionOptimizerInfo
+        __cutensornetDestroyContractionOptimizerInfo = dlsym(RTLD_DEFAULT, 'cutensornetDestroyContractionOptimizerInfo')
+        if __cutensornetDestroyContractionOptimizerInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyContractionOptimizerInfo = dlsym(handle, 'cutensornetDestroyContractionOptimizerInfo')
+
+        global __cutensornetCreateContractionOptimizerInfo
+        __cutensornetCreateContractionOptimizerInfo = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionOptimizerInfo')
+        if __cutensornetCreateContractionOptimizerInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateContractionOptimizerInfo = dlsym(handle, 'cutensornetCreateContractionOptimizerInfo')
+
+        global __cutensornetContractionOptimize
+        __cutensornetContractionOptimize = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimize')
+        if __cutensornetContractionOptimize == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionOptimize = dlsym(handle, 'cutensornetContractionOptimize')
+
+        global __cutensornetContractionOptimizerInfoGetAttribute
+        __cutensornetContractionOptimizerInfoGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerInfoGetAttribute')
+        if __cutensornetContractionOptimizerInfoGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionOptimizerInfoGetAttribute = dlsym(handle, 'cutensornetContractionOptimizerInfoGetAttribute')
+
+        global __cutensornetContractionOptimizerInfoSetAttribute
+        __cutensornetContractionOptimizerInfoSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerInfoSetAttribute')
+        if __cutensornetContractionOptimizerInfoSetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionOptimizerInfoSetAttribute = dlsym(handle, 'cutensornetContractionOptimizerInfoSetAttribute')
+
+        global __cutensornetContractionOptimizerInfoGetPackedSize
+        __cutensornetContractionOptimizerInfoGetPackedSize = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerInfoGetPackedSize')
+        if __cutensornetContractionOptimizerInfoGetPackedSize == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionOptimizerInfoGetPackedSize = dlsym(handle, 'cutensornetContractionOptimizerInfoGetPackedSize')
+
+        global __cutensornetContractionOptimizerInfoPackData
+        __cutensornetContractionOptimizerInfoPackData = dlsym(RTLD_DEFAULT, 'cutensornetContractionOptimizerInfoPackData')
+        if __cutensornetContractionOptimizerInfoPackData == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionOptimizerInfoPackData = dlsym(handle, 'cutensornetContractionOptimizerInfoPackData')
+
+        global __cutensornetCreateContractionOptimizerInfoFromPackedData
+        __cutensornetCreateContractionOptimizerInfoFromPackedData = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionOptimizerInfoFromPackedData')
+        if __cutensornetCreateContractionOptimizerInfoFromPackedData == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateContractionOptimizerInfoFromPackedData = dlsym(handle, 'cutensornetCreateContractionOptimizerInfoFromPackedData')
+
+        global __cutensornetUpdateContractionOptimizerInfoFromPackedData
+        __cutensornetUpdateContractionOptimizerInfoFromPackedData = dlsym(RTLD_DEFAULT, 'cutensornetUpdateContractionOptimizerInfoFromPackedData')
+        if __cutensornetUpdateContractionOptimizerInfoFromPackedData == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetUpdateContractionOptimizerInfoFromPackedData = dlsym(handle, 'cutensornetUpdateContractionOptimizerInfoFromPackedData')
+
+        global __cutensornetCreateContractionPlan
+        __cutensornetCreateContractionPlan = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionPlan')
+        if __cutensornetCreateContractionPlan == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateContractionPlan = dlsym(handle, 'cutensornetCreateContractionPlan')
+
+        global __cutensornetDestroyContractionPlan
+        __cutensornetDestroyContractionPlan = dlsym(RTLD_DEFAULT, 'cutensornetDestroyContractionPlan')
+        if __cutensornetDestroyContractionPlan == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyContractionPlan = dlsym(handle, 'cutensornetDestroyContractionPlan')
+
+        global __cutensornetContractionAutotune
+        __cutensornetContractionAutotune = dlsym(RTLD_DEFAULT, 'cutensornetContractionAutotune')
+        if __cutensornetContractionAutotune == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionAutotune = dlsym(handle, 'cutensornetContractionAutotune')
+
+        global __cutensornetCreateContractionAutotunePreference
+        __cutensornetCreateContractionAutotunePreference = dlsym(RTLD_DEFAULT, 'cutensornetCreateContractionAutotunePreference')
+        if __cutensornetCreateContractionAutotunePreference == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateContractionAutotunePreference = dlsym(handle, 'cutensornetCreateContractionAutotunePreference')
+
+        global __cutensornetContractionAutotunePreferenceGetAttribute
+        __cutensornetContractionAutotunePreferenceGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionAutotunePreferenceGetAttribute')
+        if __cutensornetContractionAutotunePreferenceGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionAutotunePreferenceGetAttribute = dlsym(handle, 'cutensornetContractionAutotunePreferenceGetAttribute')
+
+        global __cutensornetContractionAutotunePreferenceSetAttribute
+        __cutensornetContractionAutotunePreferenceSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetContractionAutotunePreferenceSetAttribute')
+        if __cutensornetContractionAutotunePreferenceSetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractionAutotunePreferenceSetAttribute = dlsym(handle, 'cutensornetContractionAutotunePreferenceSetAttribute')
+
+        global __cutensornetDestroyContractionAutotunePreference
+        __cutensornetDestroyContractionAutotunePreference = dlsym(RTLD_DEFAULT, 'cutensornetDestroyContractionAutotunePreference')
+        if __cutensornetDestroyContractionAutotunePreference == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyContractionAutotunePreference = dlsym(handle, 'cutensornetDestroyContractionAutotunePreference')
+
+        global __cutensornetCreateSliceGroupFromIDRange
+        __cutensornetCreateSliceGroupFromIDRange = dlsym(RTLD_DEFAULT, 'cutensornetCreateSliceGroupFromIDRange')
+        if __cutensornetCreateSliceGroupFromIDRange == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateSliceGroupFromIDRange = dlsym(handle, 'cutensornetCreateSliceGroupFromIDRange')
+
+        global __cutensornetCreateSliceGroupFromIDs
+        __cutensornetCreateSliceGroupFromIDs = dlsym(RTLD_DEFAULT, 'cutensornetCreateSliceGroupFromIDs')
+        if __cutensornetCreateSliceGroupFromIDs == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateSliceGroupFromIDs = dlsym(handle, 'cutensornetCreateSliceGroupFromIDs')
+
+        global __cutensornetDestroySliceGroup
+        __cutensornetDestroySliceGroup = dlsym(RTLD_DEFAULT, 'cutensornetDestroySliceGroup')
+        if __cutensornetDestroySliceGroup == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroySliceGroup = dlsym(handle, 'cutensornetDestroySliceGroup')
+
+        global __cutensornetContractSlices
+        __cutensornetContractSlices = dlsym(RTLD_DEFAULT, 'cutensornetContractSlices')
+        if __cutensornetContractSlices == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetContractSlices = dlsym(handle, 'cutensornetContractSlices')
+
+        global __cutensornetCreateTensorDescriptor
+        __cutensornetCreateTensorDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetCreateTensorDescriptor')
+        if __cutensornetCreateTensorDescriptor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateTensorDescriptor = dlsym(handle, 'cutensornetCreateTensorDescriptor')
+
+        global __cutensornetDestroyTensorDescriptor
+        __cutensornetDestroyTensorDescriptor = dlsym(RTLD_DEFAULT, 'cutensornetDestroyTensorDescriptor')
+        if __cutensornetDestroyTensorDescriptor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyTensorDescriptor = dlsym(handle, 'cutensornetDestroyTensorDescriptor')
+
+        global __cutensornetCreateTensorSVDConfig
+        __cutensornetCreateTensorSVDConfig = dlsym(RTLD_DEFAULT, 'cutensornetCreateTensorSVDConfig')
+        if __cutensornetCreateTensorSVDConfig == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateTensorSVDConfig = dlsym(handle, 'cutensornetCreateTensorSVDConfig')
+
+        global __cutensornetDestroyTensorSVDConfig
+        __cutensornetDestroyTensorSVDConfig = dlsym(RTLD_DEFAULT, 'cutensornetDestroyTensorSVDConfig')
+        if __cutensornetDestroyTensorSVDConfig == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyTensorSVDConfig = dlsym(handle, 'cutensornetDestroyTensorSVDConfig')
+
+        global __cutensornetTensorSVDConfigGetAttribute
+        __cutensornetTensorSVDConfigGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetTensorSVDConfigGetAttribute')
+        if __cutensornetTensorSVDConfigGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetTensorSVDConfigGetAttribute = dlsym(handle, 'cutensornetTensorSVDConfigGetAttribute')
+
+        global __cutensornetTensorSVDConfigSetAttribute
+        __cutensornetTensorSVDConfigSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetTensorSVDConfigSetAttribute')
+        if __cutensornetTensorSVDConfigSetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetTensorSVDConfigSetAttribute = dlsym(handle, 'cutensornetTensorSVDConfigSetAttribute')
+
+        global __cutensornetWorkspaceComputeSVDSizes
+        __cutensornetWorkspaceComputeSVDSizes = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceComputeSVDSizes')
+        if __cutensornetWorkspaceComputeSVDSizes == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetWorkspaceComputeSVDSizes = dlsym(handle, 'cutensornetWorkspaceComputeSVDSizes')
+
+        global __cutensornetWorkspaceComputeQRSizes
+        __cutensornetWorkspaceComputeQRSizes = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceComputeQRSizes')
+        if __cutensornetWorkspaceComputeQRSizes == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetWorkspaceComputeQRSizes = dlsym(handle, 'cutensornetWorkspaceComputeQRSizes')
+
+        global __cutensornetCreateTensorSVDInfo
+        __cutensornetCreateTensorSVDInfo = dlsym(RTLD_DEFAULT, 'cutensornetCreateTensorSVDInfo')
+        if __cutensornetCreateTensorSVDInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateTensorSVDInfo = dlsym(handle, 'cutensornetCreateTensorSVDInfo')
+
+        global __cutensornetTensorSVDInfoGetAttribute
+        __cutensornetTensorSVDInfoGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetTensorSVDInfoGetAttribute')
+        if __cutensornetTensorSVDInfoGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetTensorSVDInfoGetAttribute = dlsym(handle, 'cutensornetTensorSVDInfoGetAttribute')
+
+        global __cutensornetDestroyTensorSVDInfo
+        __cutensornetDestroyTensorSVDInfo = dlsym(RTLD_DEFAULT, 'cutensornetDestroyTensorSVDInfo')
+        if __cutensornetDestroyTensorSVDInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyTensorSVDInfo = dlsym(handle, 'cutensornetDestroyTensorSVDInfo')
+
+        global __cutensornetTensorSVD
+        __cutensornetTensorSVD = dlsym(RTLD_DEFAULT, 'cutensornetTensorSVD')
+        if __cutensornetTensorSVD == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetTensorSVD = dlsym(handle, 'cutensornetTensorSVD')
+
+        global __cutensornetTensorQR
+        __cutensornetTensorQR = dlsym(RTLD_DEFAULT, 'cutensornetTensorQR')
+        if __cutensornetTensorQR == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetTensorQR = dlsym(handle, 'cutensornetTensorQR')
+
+        global __cutensornetWorkspaceComputeGateSplitSizes
+        __cutensornetWorkspaceComputeGateSplitSizes = dlsym(RTLD_DEFAULT, 'cutensornetWorkspaceComputeGateSplitSizes')
+        if __cutensornetWorkspaceComputeGateSplitSizes == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetWorkspaceComputeGateSplitSizes = dlsym(handle, 'cutensornetWorkspaceComputeGateSplitSizes')
+
+        global __cutensornetGateSplit
+        __cutensornetGateSplit = dlsym(RTLD_DEFAULT, 'cutensornetGateSplit')
+        if __cutensornetGateSplit == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetGateSplit = dlsym(handle, 'cutensornetGateSplit')
+
+        global __cutensornetGetDeviceMemHandler
+        __cutensornetGetDeviceMemHandler = dlsym(RTLD_DEFAULT, 'cutensornetGetDeviceMemHandler')
+        if __cutensornetGetDeviceMemHandler == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetGetDeviceMemHandler = dlsym(handle, 'cutensornetGetDeviceMemHandler')
+
+        global __cutensornetSetDeviceMemHandler
+        __cutensornetSetDeviceMemHandler = dlsym(RTLD_DEFAULT, 'cutensornetSetDeviceMemHandler')
+        if __cutensornetSetDeviceMemHandler == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetSetDeviceMemHandler = dlsym(handle, 'cutensornetSetDeviceMemHandler')
+
+        global __cutensornetLoggerSetCallback
+        __cutensornetLoggerSetCallback = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetCallback')
+        if __cutensornetLoggerSetCallback == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetLoggerSetCallback = dlsym(handle, 'cutensornetLoggerSetCallback')
+
+        global __cutensornetLoggerSetCallbackData
+        __cutensornetLoggerSetCallbackData = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetCallbackData')
+        if __cutensornetLoggerSetCallbackData == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetLoggerSetCallbackData = dlsym(handle, 'cutensornetLoggerSetCallbackData')
+
+        global __cutensornetLoggerSetFile
+        __cutensornetLoggerSetFile = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetFile')
+        if __cutensornetLoggerSetFile == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetLoggerSetFile = dlsym(handle, 'cutensornetLoggerSetFile')
+
+        global __cutensornetLoggerOpenFile
+        __cutensornetLoggerOpenFile = dlsym(RTLD_DEFAULT, 'cutensornetLoggerOpenFile')
+        if __cutensornetLoggerOpenFile == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetLoggerOpenFile = dlsym(handle, 'cutensornetLoggerOpenFile')
+
+        global __cutensornetLoggerSetLevel
+        __cutensornetLoggerSetLevel = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetLevel')
+        if __cutensornetLoggerSetLevel == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetLoggerSetLevel = dlsym(handle, 'cutensornetLoggerSetLevel')
+
+        global __cutensornetLoggerSetMask
+        __cutensornetLoggerSetMask = dlsym(RTLD_DEFAULT, 'cutensornetLoggerSetMask')
+        if __cutensornetLoggerSetMask == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetLoggerSetMask = dlsym(handle, 'cutensornetLoggerSetMask')
+
+        global __cutensornetLoggerForceDisable
+        __cutensornetLoggerForceDisable = dlsym(RTLD_DEFAULT, 'cutensornetLoggerForceDisable')
+        if __cutensornetLoggerForceDisable == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetLoggerForceDisable = dlsym(handle, 'cutensornetLoggerForceDisable')
+
+        global __cutensornetGetVersion
+        __cutensornetGetVersion = dlsym(RTLD_DEFAULT, 'cutensornetGetVersion')
+        if __cutensornetGetVersion == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetGetVersion = dlsym(handle, 'cutensornetGetVersion')
+
+        global __cutensornetGetCudartVersion
+        __cutensornetGetCudartVersion = dlsym(RTLD_DEFAULT, 'cutensornetGetCudartVersion')
+        if __cutensornetGetCudartVersion == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetGetCudartVersion = dlsym(handle, 'cutensornetGetCudartVersion')
+
+        global __cutensornetGetErrorString
+        __cutensornetGetErrorString = dlsym(RTLD_DEFAULT, 'cutensornetGetErrorString')
+        if __cutensornetGetErrorString == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetGetErrorString = dlsym(handle, 'cutensornetGetErrorString')
+
+        global __cutensornetDistributedResetConfiguration
+        __cutensornetDistributedResetConfiguration = dlsym(RTLD_DEFAULT, 'cutensornetDistributedResetConfiguration')
+        if __cutensornetDistributedResetConfiguration == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDistributedResetConfiguration = dlsym(handle, 'cutensornetDistributedResetConfiguration')
+
+        global __cutensornetDistributedGetNumRanks
+        __cutensornetDistributedGetNumRanks = dlsym(RTLD_DEFAULT, 'cutensornetDistributedGetNumRanks')
+        if __cutensornetDistributedGetNumRanks == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDistributedGetNumRanks = dlsym(handle, 'cutensornetDistributedGetNumRanks')
+
+        global __cutensornetDistributedGetProcRank
+        __cutensornetDistributedGetProcRank = dlsym(RTLD_DEFAULT, 'cutensornetDistributedGetProcRank')
+        if __cutensornetDistributedGetProcRank == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDistributedGetProcRank = dlsym(handle, 'cutensornetDistributedGetProcRank')
+
+        global __cutensornetDistributedSynchronize
+        __cutensornetDistributedSynchronize = dlsym(RTLD_DEFAULT, 'cutensornetDistributedSynchronize')
+        if __cutensornetDistributedSynchronize == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDistributedSynchronize = dlsym(handle, 'cutensornetDistributedSynchronize')
+
+        global __cutensornetNetworkGetAttribute
+        __cutensornetNetworkGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetNetworkGetAttribute')
+        if __cutensornetNetworkGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkGetAttribute = dlsym(handle, 'cutensornetNetworkGetAttribute')
+
+        global __cutensornetNetworkSetAttribute
+        __cutensornetNetworkSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetNetworkSetAttribute')
+        if __cutensornetNetworkSetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkSetAttribute = dlsym(handle, 'cutensornetNetworkSetAttribute')
+
+        global __cutensornetWorkspacePurgeCache
+        __cutensornetWorkspacePurgeCache = dlsym(RTLD_DEFAULT, 'cutensornetWorkspacePurgeCache')
+        if __cutensornetWorkspacePurgeCache == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetWorkspacePurgeCache = dlsym(handle, 'cutensornetWorkspacePurgeCache')
+
+        global __cutensornetCreateState
+        __cutensornetCreateState = dlsym(RTLD_DEFAULT, 'cutensornetCreateState')
+        if __cutensornetCreateState == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateState = dlsym(handle, 'cutensornetCreateState')
+
+        global __cutensornetStateApplyTensor
+        __cutensornetStateApplyTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyTensor')
+        if __cutensornetStateApplyTensor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateApplyTensor = dlsym(handle, 'cutensornetStateApplyTensor')
+
+        global __cutensornetStateUpdateTensor
+        __cutensornetStateUpdateTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateUpdateTensor')
+        if __cutensornetStateUpdateTensor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateUpdateTensor = dlsym(handle, 'cutensornetStateUpdateTensor')
+
+        global __cutensornetDestroyState
+        __cutensornetDestroyState = dlsym(RTLD_DEFAULT, 'cutensornetDestroyState')
+        if __cutensornetDestroyState == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyState = dlsym(handle, 'cutensornetDestroyState')
+
+        global __cutensornetCreateMarginal
+        __cutensornetCreateMarginal = dlsym(RTLD_DEFAULT, 'cutensornetCreateMarginal')
+        if __cutensornetCreateMarginal == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateMarginal = dlsym(handle, 'cutensornetCreateMarginal')
+
+        global __cutensornetMarginalConfigure
+        __cutensornetMarginalConfigure = dlsym(RTLD_DEFAULT, 'cutensornetMarginalConfigure')
+        if __cutensornetMarginalConfigure == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetMarginalConfigure = dlsym(handle, 'cutensornetMarginalConfigure')
+
+        global __cutensornetMarginalPrepare
+        __cutensornetMarginalPrepare = dlsym(RTLD_DEFAULT, 'cutensornetMarginalPrepare')
+        if __cutensornetMarginalPrepare == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetMarginalPrepare = dlsym(handle, 'cutensornetMarginalPrepare')
+
+        global __cutensornetMarginalCompute
+        __cutensornetMarginalCompute = dlsym(RTLD_DEFAULT, 'cutensornetMarginalCompute')
+        if __cutensornetMarginalCompute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetMarginalCompute = dlsym(handle, 'cutensornetMarginalCompute')
+
+        global __cutensornetDestroyMarginal
+        __cutensornetDestroyMarginal = dlsym(RTLD_DEFAULT, 'cutensornetDestroyMarginal')
+        if __cutensornetDestroyMarginal == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyMarginal = dlsym(handle, 'cutensornetDestroyMarginal')
+
+        global __cutensornetCreateSampler
+        __cutensornetCreateSampler = dlsym(RTLD_DEFAULT, 'cutensornetCreateSampler')
+        if __cutensornetCreateSampler == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateSampler = dlsym(handle, 'cutensornetCreateSampler')
+
+        global __cutensornetSamplerConfigure
+        __cutensornetSamplerConfigure = dlsym(RTLD_DEFAULT, 'cutensornetSamplerConfigure')
+        if __cutensornetSamplerConfigure == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetSamplerConfigure = dlsym(handle, 'cutensornetSamplerConfigure')
+
+        global __cutensornetSamplerPrepare
+        __cutensornetSamplerPrepare = dlsym(RTLD_DEFAULT, 'cutensornetSamplerPrepare')
+        if __cutensornetSamplerPrepare == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetSamplerPrepare = dlsym(handle, 'cutensornetSamplerPrepare')
+
+        global __cutensornetSamplerSample
+        __cutensornetSamplerSample = dlsym(RTLD_DEFAULT, 'cutensornetSamplerSample')
+        if __cutensornetSamplerSample == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetSamplerSample = dlsym(handle, 'cutensornetSamplerSample')
+
+        global __cutensornetDestroySampler
+        __cutensornetDestroySampler = dlsym(RTLD_DEFAULT, 'cutensornetDestroySampler')
+        if __cutensornetDestroySampler == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroySampler = dlsym(handle, 'cutensornetDestroySampler')
+
+        global __cutensornetStateFinalizeMPS
+        __cutensornetStateFinalizeMPS = dlsym(RTLD_DEFAULT, 'cutensornetStateFinalizeMPS')
+        if __cutensornetStateFinalizeMPS == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateFinalizeMPS = dlsym(handle, 'cutensornetStateFinalizeMPS')
+
+        global __cutensornetStateConfigure
+        __cutensornetStateConfigure = dlsym(RTLD_DEFAULT, 'cutensornetStateConfigure')
+        if __cutensornetStateConfigure == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateConfigure = dlsym(handle, 'cutensornetStateConfigure')
+
+        global __cutensornetStatePrepare
+        __cutensornetStatePrepare = dlsym(RTLD_DEFAULT, 'cutensornetStatePrepare')
+        if __cutensornetStatePrepare == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStatePrepare = dlsym(handle, 'cutensornetStatePrepare')
+
+        global __cutensornetStateCompute
+        __cutensornetStateCompute = dlsym(RTLD_DEFAULT, 'cutensornetStateCompute')
+        if __cutensornetStateCompute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateCompute = dlsym(handle, 'cutensornetStateCompute')
+
+        global __cutensornetGetOutputStateDetails
+        __cutensornetGetOutputStateDetails = dlsym(RTLD_DEFAULT, 'cutensornetGetOutputStateDetails')
+        if __cutensornetGetOutputStateDetails == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetGetOutputStateDetails = dlsym(handle, 'cutensornetGetOutputStateDetails')
+
+        global __cutensornetCreateNetworkOperator
+        __cutensornetCreateNetworkOperator = dlsym(RTLD_DEFAULT, 'cutensornetCreateNetworkOperator')
+        if __cutensornetCreateNetworkOperator == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateNetworkOperator = dlsym(handle, 'cutensornetCreateNetworkOperator')
+
+        global __cutensornetNetworkOperatorAppendProduct
+        __cutensornetNetworkOperatorAppendProduct = dlsym(RTLD_DEFAULT, 'cutensornetNetworkOperatorAppendProduct')
+        if __cutensornetNetworkOperatorAppendProduct == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkOperatorAppendProduct = dlsym(handle, 'cutensornetNetworkOperatorAppendProduct')
+
+        global __cutensornetDestroyNetworkOperator
+        __cutensornetDestroyNetworkOperator = dlsym(RTLD_DEFAULT, 'cutensornetDestroyNetworkOperator')
+        if __cutensornetDestroyNetworkOperator == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyNetworkOperator = dlsym(handle, 'cutensornetDestroyNetworkOperator')
+
+        global __cutensornetCreateAccessor
+        __cutensornetCreateAccessor = dlsym(RTLD_DEFAULT, 'cutensornetCreateAccessor')
+        if __cutensornetCreateAccessor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateAccessor = dlsym(handle, 'cutensornetCreateAccessor')
+
+        global __cutensornetAccessorConfigure
+        __cutensornetAccessorConfigure = dlsym(RTLD_DEFAULT, 'cutensornetAccessorConfigure')
+        if __cutensornetAccessorConfigure == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetAccessorConfigure = dlsym(handle, 'cutensornetAccessorConfigure')
+
+        global __cutensornetAccessorPrepare
+        __cutensornetAccessorPrepare = dlsym(RTLD_DEFAULT, 'cutensornetAccessorPrepare')
+        if __cutensornetAccessorPrepare == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetAccessorPrepare = dlsym(handle, 'cutensornetAccessorPrepare')
+
+        global __cutensornetAccessorCompute
+        __cutensornetAccessorCompute = dlsym(RTLD_DEFAULT, 'cutensornetAccessorCompute')
+        if __cutensornetAccessorCompute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetAccessorCompute = dlsym(handle, 'cutensornetAccessorCompute')
+
+        global __cutensornetDestroyAccessor
+        __cutensornetDestroyAccessor = dlsym(RTLD_DEFAULT, 'cutensornetDestroyAccessor')
+        if __cutensornetDestroyAccessor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyAccessor = dlsym(handle, 'cutensornetDestroyAccessor')
+
+        global __cutensornetCreateExpectation
+        __cutensornetCreateExpectation = dlsym(RTLD_DEFAULT, 'cutensornetCreateExpectation')
+        if __cutensornetCreateExpectation == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateExpectation = dlsym(handle, 'cutensornetCreateExpectation')
+
+        global __cutensornetExpectationConfigure
+        __cutensornetExpectationConfigure = dlsym(RTLD_DEFAULT, 'cutensornetExpectationConfigure')
+        if __cutensornetExpectationConfigure == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetExpectationConfigure = dlsym(handle, 'cutensornetExpectationConfigure')
+
+        global __cutensornetExpectationPrepare
+        __cutensornetExpectationPrepare = dlsym(RTLD_DEFAULT, 'cutensornetExpectationPrepare')
+        if __cutensornetExpectationPrepare == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetExpectationPrepare = dlsym(handle, 'cutensornetExpectationPrepare')
+
+        global __cutensornetExpectationCompute
+        __cutensornetExpectationCompute = dlsym(RTLD_DEFAULT, 'cutensornetExpectationCompute')
+        if __cutensornetExpectationCompute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetExpectationCompute = dlsym(handle, 'cutensornetExpectationCompute')
+
+        global __cutensornetDestroyExpectation
+        __cutensornetDestroyExpectation = dlsym(RTLD_DEFAULT, 'cutensornetDestroyExpectation')
+        if __cutensornetDestroyExpectation == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyExpectation = dlsym(handle, 'cutensornetDestroyExpectation')
+
+        global __cutensornetStateApplyTensorOperator
+        __cutensornetStateApplyTensorOperator = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyTensorOperator')
+        if __cutensornetStateApplyTensorOperator == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateApplyTensorOperator = dlsym(handle, 'cutensornetStateApplyTensorOperator')
+
+        global __cutensornetStateApplyControlledTensorOperator
+        __cutensornetStateApplyControlledTensorOperator = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyControlledTensorOperator')
+        if __cutensornetStateApplyControlledTensorOperator == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateApplyControlledTensorOperator = dlsym(handle, 'cutensornetStateApplyControlledTensorOperator')
+
+        global __cutensornetStateUpdateTensorOperator
+        __cutensornetStateUpdateTensorOperator = dlsym(RTLD_DEFAULT, 'cutensornetStateUpdateTensorOperator')
+        if __cutensornetStateUpdateTensorOperator == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateUpdateTensorOperator = dlsym(handle, 'cutensornetStateUpdateTensorOperator')
+
+        global __cutensornetStateApplyNetworkOperator
+        __cutensornetStateApplyNetworkOperator = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyNetworkOperator')
+        if __cutensornetStateApplyNetworkOperator == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateApplyNetworkOperator = dlsym(handle, 'cutensornetStateApplyNetworkOperator')
+
+        global __cutensornetStateInitializeMPS
+        __cutensornetStateInitializeMPS = dlsym(RTLD_DEFAULT, 'cutensornetStateInitializeMPS')
+        if __cutensornetStateInitializeMPS == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateInitializeMPS = dlsym(handle, 'cutensornetStateInitializeMPS')
+
+        global __cutensornetStateGetInfo
+        __cutensornetStateGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetStateGetInfo')
+        if __cutensornetStateGetInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateGetInfo = dlsym(handle, 'cutensornetStateGetInfo')
+
+        global __cutensornetNetworkOperatorAppendMPO
+        __cutensornetNetworkOperatorAppendMPO = dlsym(RTLD_DEFAULT, 'cutensornetNetworkOperatorAppendMPO')
+        if __cutensornetNetworkOperatorAppendMPO == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkOperatorAppendMPO = dlsym(handle, 'cutensornetNetworkOperatorAppendMPO')
+
+        global __cutensornetAccessorGetInfo
+        __cutensornetAccessorGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetAccessorGetInfo')
+        if __cutensornetAccessorGetInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetAccessorGetInfo = dlsym(handle, 'cutensornetAccessorGetInfo')
+
+        global __cutensornetExpectationGetInfo
+        __cutensornetExpectationGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetExpectationGetInfo')
+        if __cutensornetExpectationGetInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetExpectationGetInfo = dlsym(handle, 'cutensornetExpectationGetInfo')
+
+        global __cutensornetMarginalGetInfo
+        __cutensornetMarginalGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetMarginalGetInfo')
+        if __cutensornetMarginalGetInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetMarginalGetInfo = dlsym(handle, 'cutensornetMarginalGetInfo')
+
+        global __cutensornetSamplerGetInfo
+        __cutensornetSamplerGetInfo = dlsym(RTLD_DEFAULT, 'cutensornetSamplerGetInfo')
+        if __cutensornetSamplerGetInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetSamplerGetInfo = dlsym(handle, 'cutensornetSamplerGetInfo')
+
+        global __cutensornetStateApplyUnitaryChannel
+        __cutensornetStateApplyUnitaryChannel = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyUnitaryChannel')
+        if __cutensornetStateApplyUnitaryChannel == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateApplyUnitaryChannel = dlsym(handle, 'cutensornetStateApplyUnitaryChannel')
+
+        global __cutensornetStateCaptureMPS
+        __cutensornetStateCaptureMPS = dlsym(RTLD_DEFAULT, 'cutensornetStateCaptureMPS')
+        if __cutensornetStateCaptureMPS == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateCaptureMPS = dlsym(handle, 'cutensornetStateCaptureMPS')
+
+        global __cutensornetStateApplyGeneralChannel
+        __cutensornetStateApplyGeneralChannel = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyGeneralChannel')
+        if __cutensornetStateApplyGeneralChannel == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateApplyGeneralChannel = dlsym(handle, 'cutensornetStateApplyGeneralChannel')
+
+        global __cutensornetCreateStateProjectionMPS
+        __cutensornetCreateStateProjectionMPS = dlsym(RTLD_DEFAULT, 'cutensornetCreateStateProjectionMPS')
+        if __cutensornetCreateStateProjectionMPS == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateStateProjectionMPS = dlsym(handle, 'cutensornetCreateStateProjectionMPS')
+
+        global __cutensornetStateProjectionMPSConfigure
+        __cutensornetStateProjectionMPSConfigure = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSConfigure')
+        if __cutensornetStateProjectionMPSConfigure == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateProjectionMPSConfigure = dlsym(handle, 'cutensornetStateProjectionMPSConfigure')
+
+        global __cutensornetStateProjectionMPSPrepare
+        __cutensornetStateProjectionMPSPrepare = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSPrepare')
+        if __cutensornetStateProjectionMPSPrepare == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateProjectionMPSPrepare = dlsym(handle, 'cutensornetStateProjectionMPSPrepare')
+
+        global __cutensornetStateProjectionMPSComputeTensorEnv
+        __cutensornetStateProjectionMPSComputeTensorEnv = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSComputeTensorEnv')
+        if __cutensornetStateProjectionMPSComputeTensorEnv == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateProjectionMPSComputeTensorEnv = dlsym(handle, 'cutensornetStateProjectionMPSComputeTensorEnv')
+
+        global __cutensornetStateProjectionMPSGetTensorInfo
+        __cutensornetStateProjectionMPSGetTensorInfo = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSGetTensorInfo')
+        if __cutensornetStateProjectionMPSGetTensorInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateProjectionMPSGetTensorInfo = dlsym(handle, 'cutensornetStateProjectionMPSGetTensorInfo')
+
+        global __cutensornetStateProjectionMPSExtractTensor
+        __cutensornetStateProjectionMPSExtractTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSExtractTensor')
+        if __cutensornetStateProjectionMPSExtractTensor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateProjectionMPSExtractTensor = dlsym(handle, 'cutensornetStateProjectionMPSExtractTensor')
+
+        global __cutensornetStateProjectionMPSInsertTensor
+        __cutensornetStateProjectionMPSInsertTensor = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSInsertTensor')
+        if __cutensornetStateProjectionMPSInsertTensor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateProjectionMPSInsertTensor = dlsym(handle, 'cutensornetStateProjectionMPSInsertTensor')
+
+        global __cutensornetDestroyStateProjectionMPS
+        __cutensornetDestroyStateProjectionMPS = dlsym(RTLD_DEFAULT, 'cutensornetDestroyStateProjectionMPS')
+        if __cutensornetDestroyStateProjectionMPS == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyStateProjectionMPS = dlsym(handle, 'cutensornetDestroyStateProjectionMPS')
+
+        global __cutensornetCreateNetwork
+        __cutensornetCreateNetwork = dlsym(RTLD_DEFAULT, 'cutensornetCreateNetwork')
+        if __cutensornetCreateNetwork == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateNetwork = dlsym(handle, 'cutensornetCreateNetwork')
+
+        global __cutensornetDestroyNetwork
+        __cutensornetDestroyNetwork = dlsym(RTLD_DEFAULT, 'cutensornetDestroyNetwork')
+        if __cutensornetDestroyNetwork == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyNetwork = dlsym(handle, 'cutensornetDestroyNetwork')
+
+        global __cutensornetNetworkAppendTensor
+        __cutensornetNetworkAppendTensor = dlsym(RTLD_DEFAULT, 'cutensornetNetworkAppendTensor')
+        if __cutensornetNetworkAppendTensor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkAppendTensor = dlsym(handle, 'cutensornetNetworkAppendTensor')
+
+        global __cutensornetNetworkSetOutputTensor
+        __cutensornetNetworkSetOutputTensor = dlsym(RTLD_DEFAULT, 'cutensornetNetworkSetOutputTensor')
+        if __cutensornetNetworkSetOutputTensor == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkSetOutputTensor = dlsym(handle, 'cutensornetNetworkSetOutputTensor')
+
+        global __cutensornetNetworkSetOptimizerInfo
+        __cutensornetNetworkSetOptimizerInfo = dlsym(RTLD_DEFAULT, 'cutensornetNetworkSetOptimizerInfo')
+        if __cutensornetNetworkSetOptimizerInfo == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkSetOptimizerInfo = dlsym(handle, 'cutensornetNetworkSetOptimizerInfo')
+
+        global __cutensornetNetworkPrepareContraction
+        __cutensornetNetworkPrepareContraction = dlsym(RTLD_DEFAULT, 'cutensornetNetworkPrepareContraction')
+        if __cutensornetNetworkPrepareContraction == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkPrepareContraction = dlsym(handle, 'cutensornetNetworkPrepareContraction')
+
+        global __cutensornetNetworkAutotuneContraction
+        __cutensornetNetworkAutotuneContraction = dlsym(RTLD_DEFAULT, 'cutensornetNetworkAutotuneContraction')
+        if __cutensornetNetworkAutotuneContraction == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkAutotuneContraction = dlsym(handle, 'cutensornetNetworkAutotuneContraction')
+
+        global __cutensornetCreateNetworkAutotunePreference
+        __cutensornetCreateNetworkAutotunePreference = dlsym(RTLD_DEFAULT, 'cutensornetCreateNetworkAutotunePreference')
+        if __cutensornetCreateNetworkAutotunePreference == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetCreateNetworkAutotunePreference = dlsym(handle, 'cutensornetCreateNetworkAutotunePreference')
+
+        global __cutensornetNetworkAutotunePreferenceGetAttribute
+        __cutensornetNetworkAutotunePreferenceGetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetNetworkAutotunePreferenceGetAttribute')
+        if __cutensornetNetworkAutotunePreferenceGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkAutotunePreferenceGetAttribute = dlsym(handle, 'cutensornetNetworkAutotunePreferenceGetAttribute')
+
+        global __cutensornetNetworkAutotunePreferenceSetAttribute
+        __cutensornetNetworkAutotunePreferenceSetAttribute = dlsym(RTLD_DEFAULT, 'cutensornetNetworkAutotunePreferenceSetAttribute')
+        if __cutensornetNetworkAutotunePreferenceSetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkAutotunePreferenceSetAttribute = dlsym(handle, 'cutensornetNetworkAutotunePreferenceSetAttribute')
+
+        global __cutensornetDestroyNetworkAutotunePreference
+        __cutensornetDestroyNetworkAutotunePreference = dlsym(RTLD_DEFAULT, 'cutensornetDestroyNetworkAutotunePreference')
+        if __cutensornetDestroyNetworkAutotunePreference == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetDestroyNetworkAutotunePreference = dlsym(handle, 'cutensornetDestroyNetworkAutotunePreference')
+
+        global __cutensornetNetworkSetInputTensorMemory
+        __cutensornetNetworkSetInputTensorMemory = dlsym(RTLD_DEFAULT, 'cutensornetNetworkSetInputTensorMemory')
+        if __cutensornetNetworkSetInputTensorMemory == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkSetInputTensorMemory = dlsym(handle, 'cutensornetNetworkSetInputTensorMemory')
+
+        global __cutensornetNetworkSetOutputTensorMemory
+        __cutensornetNetworkSetOutputTensorMemory = dlsym(RTLD_DEFAULT, 'cutensornetNetworkSetOutputTensorMemory')
+        if __cutensornetNetworkSetOutputTensorMemory == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkSetOutputTensorMemory = dlsym(handle, 'cutensornetNetworkSetOutputTensorMemory')
+
+        global __cutensornetNetworkSetGradientTensorMemory
+        __cutensornetNetworkSetGradientTensorMemory = dlsym(RTLD_DEFAULT, 'cutensornetNetworkSetGradientTensorMemory')
+        if __cutensornetNetworkSetGradientTensorMemory == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkSetGradientTensorMemory = dlsym(handle, 'cutensornetNetworkSetGradientTensorMemory')
+
+        global __cutensornetNetworkSetAdjointTensorMemory
+        __cutensornetNetworkSetAdjointTensorMemory = dlsym(RTLD_DEFAULT, 'cutensornetNetworkSetAdjointTensorMemory')
+        if __cutensornetNetworkSetAdjointTensorMemory == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkSetAdjointTensorMemory = dlsym(handle, 'cutensornetNetworkSetAdjointTensorMemory')
+
+        global __cutensornetNetworkContract
+        __cutensornetNetworkContract = dlsym(RTLD_DEFAULT, 'cutensornetNetworkContract')
+        if __cutensornetNetworkContract == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkContract = dlsym(handle, 'cutensornetNetworkContract')
+
+        global __cutensornetNetworkPrepareGradientsBackward
+        __cutensornetNetworkPrepareGradientsBackward = dlsym(RTLD_DEFAULT, 'cutensornetNetworkPrepareGradientsBackward')
+        if __cutensornetNetworkPrepareGradientsBackward == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkPrepareGradientsBackward = dlsym(handle, 'cutensornetNetworkPrepareGradientsBackward')
+
+        global __cutensornetNetworkComputeGradientsBackward
+        __cutensornetNetworkComputeGradientsBackward = dlsym(RTLD_DEFAULT, 'cutensornetNetworkComputeGradientsBackward')
+        if __cutensornetNetworkComputeGradientsBackward == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetNetworkComputeGradientsBackward = dlsym(handle, 'cutensornetNetworkComputeGradientsBackward')
+        __py_cutensornet_init = True
+        return 0
 
 
 cpdef dict _inspect_function_pointers():
@@ -1271,9 +1410,6 @@ cpdef dict _inspect_function_pointers():
     global __cutensornetWorkspacePurgeCache
     data["__cutensornetWorkspacePurgeCache"] = <intptr_t>__cutensornetWorkspacePurgeCache
 
-    global __cutensornetComputeGradientsBackward
-    data["__cutensornetComputeGradientsBackward"] = <intptr_t>__cutensornetComputeGradientsBackward
-
     global __cutensornetCreateState
     data["__cutensornetCreateState"] = <intptr_t>__cutensornetCreateState
 
@@ -1435,6 +1571,60 @@ cpdef dict _inspect_function_pointers():
 
     global __cutensornetDestroyStateProjectionMPS
     data["__cutensornetDestroyStateProjectionMPS"] = <intptr_t>__cutensornetDestroyStateProjectionMPS
+
+    global __cutensornetCreateNetwork
+    data["__cutensornetCreateNetwork"] = <intptr_t>__cutensornetCreateNetwork
+
+    global __cutensornetDestroyNetwork
+    data["__cutensornetDestroyNetwork"] = <intptr_t>__cutensornetDestroyNetwork
+
+    global __cutensornetNetworkAppendTensor
+    data["__cutensornetNetworkAppendTensor"] = <intptr_t>__cutensornetNetworkAppendTensor
+
+    global __cutensornetNetworkSetOutputTensor
+    data["__cutensornetNetworkSetOutputTensor"] = <intptr_t>__cutensornetNetworkSetOutputTensor
+
+    global __cutensornetNetworkSetOptimizerInfo
+    data["__cutensornetNetworkSetOptimizerInfo"] = <intptr_t>__cutensornetNetworkSetOptimizerInfo
+
+    global __cutensornetNetworkPrepareContraction
+    data["__cutensornetNetworkPrepareContraction"] = <intptr_t>__cutensornetNetworkPrepareContraction
+
+    global __cutensornetNetworkAutotuneContraction
+    data["__cutensornetNetworkAutotuneContraction"] = <intptr_t>__cutensornetNetworkAutotuneContraction
+
+    global __cutensornetCreateNetworkAutotunePreference
+    data["__cutensornetCreateNetworkAutotunePreference"] = <intptr_t>__cutensornetCreateNetworkAutotunePreference
+
+    global __cutensornetNetworkAutotunePreferenceGetAttribute
+    data["__cutensornetNetworkAutotunePreferenceGetAttribute"] = <intptr_t>__cutensornetNetworkAutotunePreferenceGetAttribute
+
+    global __cutensornetNetworkAutotunePreferenceSetAttribute
+    data["__cutensornetNetworkAutotunePreferenceSetAttribute"] = <intptr_t>__cutensornetNetworkAutotunePreferenceSetAttribute
+
+    global __cutensornetDestroyNetworkAutotunePreference
+    data["__cutensornetDestroyNetworkAutotunePreference"] = <intptr_t>__cutensornetDestroyNetworkAutotunePreference
+
+    global __cutensornetNetworkSetInputTensorMemory
+    data["__cutensornetNetworkSetInputTensorMemory"] = <intptr_t>__cutensornetNetworkSetInputTensorMemory
+
+    global __cutensornetNetworkSetOutputTensorMemory
+    data["__cutensornetNetworkSetOutputTensorMemory"] = <intptr_t>__cutensornetNetworkSetOutputTensorMemory
+
+    global __cutensornetNetworkSetGradientTensorMemory
+    data["__cutensornetNetworkSetGradientTensorMemory"] = <intptr_t>__cutensornetNetworkSetGradientTensorMemory
+
+    global __cutensornetNetworkSetAdjointTensorMemory
+    data["__cutensornetNetworkSetAdjointTensorMemory"] = <intptr_t>__cutensornetNetworkSetAdjointTensorMemory
+
+    global __cutensornetNetworkContract
+    data["__cutensornetNetworkContract"] = <intptr_t>__cutensornetNetworkContract
+
+    global __cutensornetNetworkPrepareGradientsBackward
+    data["__cutensornetNetworkPrepareGradientsBackward"] = <intptr_t>__cutensornetNetworkPrepareGradientsBackward
+
+    global __cutensornetNetworkComputeGradientsBackward
+    data["__cutensornetNetworkComputeGradientsBackward"] = <intptr_t>__cutensornetNetworkComputeGradientsBackward
 
     return data
 
@@ -2123,13 +2313,13 @@ cdef cutensornetStatus_t _cutensornetNetworkGetAttribute(const cutensornetHandle
         handle, networkDesc, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t _cutensornetNetworkSetAttribute(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, cutensornetNetworkAttributes_t attr, const void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+cdef cutensornetStatus_t _cutensornetNetworkSetAttribute(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, cutensornetNetworkAttributes_t attr, const void* const buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cutensornetNetworkSetAttribute
     _check_or_init_cutensornet()
     if __cutensornetNetworkSetAttribute == NULL:
         with gil:
             raise FunctionNotFoundError("function cutensornetNetworkSetAttribute is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, cutensornetNetworkAttributes_t, const void*, size_t) noexcept nogil>__cutensornetNetworkSetAttribute)(
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, cutensornetNetworkAttributes_t, const void* const, size_t) noexcept nogil>__cutensornetNetworkSetAttribute)(
         handle, networkDesc, attr, buffer, sizeInBytes)
 
 
@@ -2141,16 +2331,6 @@ cdef cutensornetStatus_t _cutensornetWorkspacePurgeCache(const cutensornetHandle
             raise FunctionNotFoundError("function cutensornetWorkspacePurgeCache is not found")
     return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetWorkspaceDescriptor_t, cutensornetMemspace_t) noexcept nogil>__cutensornetWorkspacePurgeCache)(
         handle, workDesc, memSpace)
-
-
-cdef cutensornetStatus_t _cutensornetComputeGradientsBackward(const cutensornetHandle_t handle, cutensornetContractionPlan_t plan, const void* const rawDataIn[], const void* outputGradient, void* const gradients[], int32_t accumulateOutput, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
-    global __cutensornetComputeGradientsBackward
-    _check_or_init_cutensornet()
-    if __cutensornetComputeGradientsBackward == NULL:
-        with gil:
-            raise FunctionNotFoundError("function cutensornetComputeGradientsBackward is not found")
-    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetContractionPlan_t, const void* const*, const void*, void* const*, int32_t, cutensornetWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cutensornetComputeGradientsBackward)(
-        handle, plan, rawDataIn, outputGradient, gradients, accumulateOutput, workDesc, stream)
 
 
 cdef cutensornetStatus_t _cutensornetCreateState(const cutensornetHandle_t handle, cutensornetStatePurity_t purity, int32_t numStateModes, const int64_t* stateModeExtents, cudaDataType_t dataType, cutensornetState_t* tensorNetworkState) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
@@ -2691,3 +2871,183 @@ cdef cutensornetStatus_t _cutensornetDestroyStateProjectionMPS(cutensornetStateP
             raise FunctionNotFoundError("function cutensornetDestroyStateProjectionMPS is not found")
     return (<cutensornetStatus_t (*)(cutensornetStateProjectionMPS_t) noexcept nogil>__cutensornetDestroyStateProjectionMPS)(
         tensorNetworkProjection)
+
+
+cdef cutensornetStatus_t _cutensornetCreateNetwork(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t* networkDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetCreateNetwork
+    _check_or_init_cutensornet()
+    if __cutensornetCreateNetwork == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetCreateNetwork is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t*) noexcept nogil>__cutensornetCreateNetwork)(
+        handle, networkDesc)
+
+
+cdef cutensornetStatus_t _cutensornetDestroyNetwork(cutensornetNetworkDescriptor_t networkDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetDestroyNetwork
+    _check_or_init_cutensornet()
+    if __cutensornetDestroyNetwork == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetDestroyNetwork is not found")
+    return (<cutensornetStatus_t (*)(cutensornetNetworkDescriptor_t) noexcept nogil>__cutensornetDestroyNetwork)(
+        networkDesc)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkAppendTensor(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int32_t numModes, const int64_t extents[], const int32_t modeLabels[], const cutensornetTensorQualifiers_t* const qualifiers, cudaDataType_t dataType, int64_t* tensorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkAppendTensor
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkAppendTensor == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkAppendTensor is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, int32_t, const int64_t*, const int32_t*, const cutensornetTensorQualifiers_t* const, cudaDataType_t, int64_t*) noexcept nogil>__cutensornetNetworkAppendTensor)(
+        handle, networkDesc, numModes, extents, modeLabels, qualifiers, dataType, tensorId)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkSetOutputTensor(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int32_t numModes, const int32_t modeLabels[], cudaDataType_t dataType) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkSetOutputTensor
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkSetOutputTensor == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkSetOutputTensor is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, int32_t, const int32_t*, cudaDataType_t) noexcept nogil>__cutensornetNetworkSetOutputTensor)(
+        handle, networkDesc, numModes, modeLabels, dataType)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkSetOptimizerInfo(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const cutensornetContractionOptimizerInfo_t optimizerInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkSetOptimizerInfo
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkSetOptimizerInfo == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkSetOptimizerInfo is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, const cutensornetContractionOptimizerInfo_t) noexcept nogil>__cutensornetNetworkSetOptimizerInfo)(
+        handle, networkDesc, optimizerInfo)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkPrepareContraction(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkPrepareContraction
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkPrepareContraction == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkPrepareContraction is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, const cutensornetWorkspaceDescriptor_t) noexcept nogil>__cutensornetNetworkPrepareContraction)(
+        handle, networkDesc, workDesc)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkAutotuneContraction(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const cutensornetWorkspaceDescriptor_t workDesc, const cutensornetNetworkAutotunePreference_t pref, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkAutotuneContraction
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkAutotuneContraction == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkAutotuneContraction is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, const cutensornetWorkspaceDescriptor_t, const cutensornetNetworkAutotunePreference_t, cudaStream_t) noexcept nogil>__cutensornetNetworkAutotuneContraction)(
+        handle, networkDesc, workDesc, pref, stream)
+
+
+cdef cutensornetStatus_t _cutensornetCreateNetworkAutotunePreference(const cutensornetHandle_t handle, cutensornetNetworkAutotunePreference_t* autotunePreference) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetCreateNetworkAutotunePreference
+    _check_or_init_cutensornet()
+    if __cutensornetCreateNetworkAutotunePreference == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetCreateNetworkAutotunePreference is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkAutotunePreference_t*) noexcept nogil>__cutensornetCreateNetworkAutotunePreference)(
+        handle, autotunePreference)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkAutotunePreferenceGetAttribute(const cutensornetHandle_t handle, const cutensornetNetworkAutotunePreference_t autotunePreference, cutensornetNetworkAutotunePreferenceAttributes_t attr, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkAutotunePreferenceGetAttribute
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkAutotunePreferenceGetAttribute == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkAutotunePreferenceGetAttribute is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, const cutensornetNetworkAutotunePreference_t, cutensornetNetworkAutotunePreferenceAttributes_t, void*, size_t) noexcept nogil>__cutensornetNetworkAutotunePreferenceGetAttribute)(
+        handle, autotunePreference, attr, buffer, sizeInBytes)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkAutotunePreferenceSetAttribute(const cutensornetHandle_t handle, cutensornetNetworkAutotunePreference_t autotunePreference, cutensornetNetworkAutotunePreferenceAttributes_t attr, const void* buf, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkAutotunePreferenceSetAttribute
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkAutotunePreferenceSetAttribute == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkAutotunePreferenceSetAttribute is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkAutotunePreference_t, cutensornetNetworkAutotunePreferenceAttributes_t, const void*, size_t) noexcept nogil>__cutensornetNetworkAutotunePreferenceSetAttribute)(
+        handle, autotunePreference, attr, buf, sizeInBytes)
+
+
+cdef cutensornetStatus_t _cutensornetDestroyNetworkAutotunePreference(cutensornetNetworkAutotunePreference_t autotunePreference) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetDestroyNetworkAutotunePreference
+    _check_or_init_cutensornet()
+    if __cutensornetDestroyNetworkAutotunePreference == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetDestroyNetworkAutotunePreference is not found")
+    return (<cutensornetStatus_t (*)(cutensornetNetworkAutotunePreference_t) noexcept nogil>__cutensornetDestroyNetworkAutotunePreference)(
+        autotunePreference)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkSetInputTensorMemory(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int64_t tensorId, const void* const buffer, const int64_t strides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkSetInputTensorMemory
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkSetInputTensorMemory == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkSetInputTensorMemory is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, int64_t, const void* const, const int64_t*) noexcept nogil>__cutensornetNetworkSetInputTensorMemory)(
+        handle, networkDesc, tensorId, buffer, strides)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkSetOutputTensorMemory(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, void* const buffer, const int64_t strides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkSetOutputTensorMemory
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkSetOutputTensorMemory == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkSetOutputTensorMemory is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, void* const, const int64_t*) noexcept nogil>__cutensornetNetworkSetOutputTensorMemory)(
+        handle, networkDesc, buffer, strides)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkSetGradientTensorMemory(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int64_t correspondingTensorId, void* const buffer, const int64_t strides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkSetGradientTensorMemory
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkSetGradientTensorMemory == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkSetGradientTensorMemory is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, int64_t, void* const, const int64_t*) noexcept nogil>__cutensornetNetworkSetGradientTensorMemory)(
+        handle, networkDesc, correspondingTensorId, buffer, strides)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkSetAdjointTensorMemory(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const void* const buffer, const int64_t strides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkSetAdjointTensorMemory
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkSetAdjointTensorMemory == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkSetAdjointTensorMemory is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, const void* const, const int64_t*) noexcept nogil>__cutensornetNetworkSetAdjointTensorMemory)(
+        handle, networkDesc, buffer, strides)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkContract(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int32_t accumulateOutput, const cutensornetWorkspaceDescriptor_t workDesc, const cutensornetSliceGroup_t sliceGroup, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkContract
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkContract == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkContract is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, int32_t, const cutensornetWorkspaceDescriptor_t, const cutensornetSliceGroup_t, cudaStream_t) noexcept nogil>__cutensornetNetworkContract)(
+        handle, networkDesc, accumulateOutput, workDesc, sliceGroup, stream)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkPrepareGradientsBackward(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkPrepareGradientsBackward
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkPrepareGradientsBackward == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkPrepareGradientsBackward is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, const cutensornetWorkspaceDescriptor_t) noexcept nogil>__cutensornetNetworkPrepareGradientsBackward)(
+        handle, networkDesc, workDesc)
+
+
+cdef cutensornetStatus_t _cutensornetNetworkComputeGradientsBackward(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int32_t accumulateOutput, const cutensornetWorkspaceDescriptor_t workDesc, const cutensornetSliceGroup_t sliceGroup, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetNetworkComputeGradientsBackward
+    _check_or_init_cutensornet()
+    if __cutensornetNetworkComputeGradientsBackward == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetNetworkComputeGradientsBackward is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetNetworkDescriptor_t, int32_t, const cutensornetWorkspaceDescriptor_t, const cutensornetSliceGroup_t, cudaStream_t) noexcept nogil>__cutensornetNetworkComputeGradientsBackward)(
+        handle, networkDesc, accumulateOutput, workDesc, sliceGroup, stream)

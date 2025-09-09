@@ -11,7 +11,7 @@ __all__ = ['NumpyTensor']
 import cupy
 import numpy
 
-from . import utils
+from nvmath.internal import utils
 from .package_ifc import StreamHolder
 from .tensor_ifc import Tensor
 
@@ -103,7 +103,3 @@ class NumpyTensor(Tensor):
         Check if the object is ndarray-like.
         """
         return isinstance(self.tensor, numpy.ndarray)
-    
-    def update_extents_strides(self, extents, strides):
-        #NOTE: this method is only called for CupyTensor and TorchTensor
-        raise NotImplementedError

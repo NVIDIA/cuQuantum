@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
 
 cimport cython
 cimport cpython
@@ -323,6 +323,7 @@ class NetworkAttribute(_IntEnum):
     INPUT_TENSORS_CONJUGATED = CUTENSORNET_NETWORK_INPUT_TENSORS_CONJUGATED
     INPUT_TENSORS_NUM_REQUIRE_GRAD = CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_REQUIRE_GRAD
     INPUT_TENSORS_REQUIRE_GRAD = CUTENSORNET_NETWORK_INPUT_TENSORS_REQUIRE_GRAD
+    COMPUTE_TYPE = CUTENSORNET_NETWORK_COMPUTE_TYPE
 
 class SmartOption(_IntEnum):
     """See `cutensornetSmartOption_t`."""
@@ -409,6 +410,11 @@ class StateProjectionMPSAttribute(_IntEnum):
     """See `cutensornetStateProjectionMPSAttributes_t`."""
     CONFIG_ORTHO_OPTION = CUTENSORNET_STATE_PROJECTION_MPS_CONFIG_ORTHO_OPTION
     CONFIG_NUM_HYPER_SAMPLES = CUTENSORNET_STATE_PROJECTION_MPS_CONFIG_NUM_HYPER_SAMPLES
+
+class NetworkAutotunePreferenceAttribute(_IntEnum):
+    """See `cutensornetNetworkAutotunePreferenceAttributes_t`."""
+    NETWORK_AUTOTUNE_MAX_ITERATIONS = CUTENSORNET_NETWORK_AUTOTUNE_MAX_ITERATIONS
+    NETWORK_AUTOTUNE_INTERMEDIATE_MODES = CUTENSORNET_NETWORK_AUTOTUNE_INTERMEDIATE_MODES
 
 
 ###############################################################################
@@ -535,7 +541,7 @@ cpdef destroy(intptr_t handle):
 
 
 cpdef intptr_t create_network_descriptor(intptr_t handle, int32_t num_inputs, num_modes_in, extents_in, strides_in, modes_in, qualifiers_in, int32_t num_modes_out, extents_out, strides_out, modes_out, int data_type, int compute_type) except? 0:
-    """Initializes a ``cutensornetNetworkDescriptor_t``, describing the connectivity (i.e., network topology) between the tensors.
+    """DEPRECATED: Initializes a ``cutensornetNetworkDescriptor_t``, describing the connectivity (i.e., network topology) between the tensors.
 
     Args:
         handle (intptr_t): Opaque handle holding cuTensorNet's library context.
@@ -619,7 +625,7 @@ cpdef intptr_t create_network_descriptor(intptr_t handle, int32_t num_inputs, nu
 
 
 cpdef destroy_network_descriptor(intptr_t network_desc):
-    """Frees all the memory associated with the network descriptor.
+    """DEPRECATED: Frees all the memory associated with the network descriptor.
 
     Args:
         network_desc (intptr_t): Opaque handle to a tensor network descriptor.
@@ -912,7 +918,7 @@ cpdef contraction_optimize(intptr_t handle, intptr_t network_desc, intptr_t opti
 
     Args:
         handle (intptr_t): Opaque handle holding cuTensorNet's library context.
-        network_desc (intptr_t): Describes the topology of the tensor network (i.e., all tensors, their connectivity and modes).
+        network_desc (intptr_t): Describes the topology of the tensor network (i.e., all tensors, their connectivity and modes). Will be updated with ``optimizer_info`` data.
         optimizer_config (intptr_t): Holds all hyper-optimization parameters that govern the search for an "optimal" contraction order.
         workspace_size_constraint (uint64_t): Maximal device memory that will be provided by the user (i.e., cuTensorNet has to find a viable path/slicing solution within this user-defined constraint).
         optimizer_info (intptr_t): On return, this object will hold all necessary information about the optimized path and the related slicing information. ``optimizer_info`` will hold information including (see ``cutensornetContractionOptimizerInfoAttributes_t``):.
@@ -1076,7 +1082,7 @@ cpdef update_contraction_optimizer_info_from_packed_data(intptr_t handle, buffer
 
 
 cpdef intptr_t create_contraction_plan(intptr_t handle, intptr_t network_desc, intptr_t optimizer_info, intptr_t work_desc) except? 0:
-    """Initializes a ``cutensornetContractionPlan_t``.
+    """DEPRECATED: Initializes a ``cutensornetContractionPlan_t``.
 
     Args:
         handle (intptr_t): Opaque handle holding cuTensorNet's library context.
@@ -1097,7 +1103,7 @@ cpdef intptr_t create_contraction_plan(intptr_t handle, intptr_t network_desc, i
 
 
 cpdef destroy_contraction_plan(intptr_t plan):
-    """Frees all resources owned by ``plan``.
+    """DEPRECATED: Frees all resources owned by ``plan``.
 
     Args:
         plan (intptr_t): Opaque structure.
@@ -1110,7 +1116,7 @@ cpdef destroy_contraction_plan(intptr_t plan):
 
 
 cpdef contraction_autotune(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_data_out, intptr_t work_desc, intptr_t pref, intptr_t stream):
-    """Auto-tunes the contraction plan to find the best ``cutensorContractionPlan_t`` for each pair-wise contraction.
+    """DEPRECATED: Auto-tunes the contraction plan to find the best ``cutensorContractionPlan_t`` for each pair-wise contraction.
 
     Args:
         handle (intptr_t): Opaque handle holding cuTensorNet's library context.
@@ -1135,7 +1141,7 @@ cpdef contraction_autotune(intptr_t handle, intptr_t plan, raw_data_in, intptr_t
 
 
 cpdef intptr_t create_contraction_autotune_preference(intptr_t handle) except? 0:
-    """Sets up the required auto-tune parameters for the contraction plan.
+    """DEPRECATED: Sets up the required auto-tune parameters for the contraction plan.
 
     Args:
         handle (intptr_t): Opaque handle holding cuTensorNet's library context.
@@ -1177,7 +1183,7 @@ cpdef get_contraction_autotune_preference_attribute_dtype(int attr):
 
 
 cpdef contraction_autotune_preference_get_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buffer, size_t size_in_bytes):
-    """Gets attributes of ``autotune_preference``.
+    """DEPRECATED: Gets attributes of ``autotune_preference``.
 
     Args:
         handle (intptr_t): Opaque handle holding cuTensorNet's library context.
@@ -1197,7 +1203,7 @@ cpdef contraction_autotune_preference_get_attribute(intptr_t handle, intptr_t au
 
 
 cpdef contraction_autotune_preference_set_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buffer, size_t size_in_bytes):
-    """Sets attributes of ``autotune_preference``.
+    """DEPRECATED: Sets attributes of ``autotune_preference``.
 
     Args:
         handle (intptr_t): Opaque handle holding cuTensorNet's library context.
@@ -1217,7 +1223,7 @@ cpdef contraction_autotune_preference_set_attribute(intptr_t handle, intptr_t au
 
 
 cpdef destroy_contraction_autotune_preference(intptr_t autotune_preference):
-    """Frees all the memory associated with ``autotune_preference``.
+    """DEPRECATED: Frees all the memory associated with ``autotune_preference``.
 
     Args:
         autotune_preference (intptr_t): Opaque structure.
@@ -1264,12 +1270,12 @@ cpdef destroy_slice_group(intptr_t slice_group):
 
 
 cpdef contract_slices(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_data_out, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream):
-    """Performs the actual contraction of the tensor network.
+    """DEPRECATED: Performs the actual contraction of the tensor network.
 
     Args:
         handle (intptr_t): Opaque handle holding cuTensorNet's library context.
         plan (intptr_t): Encodes the execution of a tensor network contraction (see :func:`create_contraction_plan` and :func:`contraction_autotune`). Some internal meta-data may be updated upon contraction.
-        raw_data_in (object): Array of N pointers (N being the number of input tensors specified in :func:`create_network_descriptor`): ``raw_data_in[i]`` points to the data associated with the i-th input tensor (in device memory). It can be:
+        raw_data_in (object): Array of N pointers (N being the number of input tensors specified in :func:`create_network_descriptor`): ``raw_data_in[i]`` points to the data associated with the i-th input tensor (in device memory). The order of the provided memory pointers for the input tensors should match the order at which the input tensors have been appended to the network. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
@@ -1823,6 +1829,7 @@ cdef dict network_attribute_sizes = {
     CUTENSORNET_NETWORK_INPUT_TENSORS_CONJUGATED: tensor_id_list_dtype,
     CUTENSORNET_NETWORK_INPUT_TENSORS_NUM_REQUIRE_GRAD: _numpy.int32,
     CUTENSORNET_NETWORK_INPUT_TENSORS_REQUIRE_GRAD: tensor_id_list_dtype,
+    CUTENSORNET_NETWORK_COMPUTE_TYPE: _numpy.int32,
 }
 
 cpdef get_network_attribute_dtype(int attr):
@@ -1878,7 +1885,7 @@ cpdef network_set_attribute(intptr_t handle, intptr_t network_desc, int attr, in
     .. seealso:: `cutensornetNetworkSetAttribute`
     """
     with nogil:
-        status = cutensornetNetworkSetAttribute(<const Handle>handle, <NetworkDescriptor>network_desc, <_NetworkAttribute>attr, <const void*>buffer, size_in_bytes)
+        status = cutensornetNetworkSetAttribute(<const Handle>handle, <NetworkDescriptor>network_desc, <_NetworkAttribute>attr, <const void* const>buffer, size_in_bytes)
     check_status(status)
 
 
@@ -1894,38 +1901,6 @@ cpdef workspace_purge_cache(intptr_t handle, intptr_t work_desc, int mem_space):
     """
     with nogil:
         status = cutensornetWorkspacePurgeCache(<const Handle>handle, <WorkspaceDescriptor>work_desc, <_Memspace>mem_space)
-    check_status(status)
-
-
-cpdef compute_gradients_backward(intptr_t handle, intptr_t plan, raw_data_in, intptr_t output_gradient, gradients, int32_t accumulate_output, intptr_t work_desc, intptr_t stream):
-    """Computes the gradients of the network w.r.t. the input tensors whose gradients are required. The network must have been contracted and loaded in the ``work_desc`` CACHE. Operates only on networks with single slice and no singleton modes.
-
-    Args:
-        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
-        plan (intptr_t): Encodes the execution of a tensor network contraction (see :func:`create_contraction_plan` and :func:`contraction_autotune`). Some internal meta-data may be updated upon contraction.
-        raw_data_in (object): Array of N pointers (N being the number of input tensors specified in :func:`create_network_descriptor`): ``raw_data_in[i]`` points to the data associated with the i-th input tensor (in device memory). It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        output_gradient (intptr_t): Gradient of the output tensor (in device memory). Must have the same memory layout (strides) as the output tensor of the tensor network.
-        gradients (object): Array of N pointers: ``gradients[i]`` points to the gradient data associated with the i-th input tensor in device memory. Setting ``gradients[i]`` to null would skip computing the gradient of the i-th input tensor. Generated gradient data has the same memory layout (strides) as their corresponding input tensors. It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        accumulate_output (int32_t): If 0, write the gradient results into ``gradients``; otherwise accumulates the results into ``gradients``.
-        work_desc (intptr_t): Opaque structure describing the workspace. The provided ``CUTENSORNET_WORKSPACE_SCRATCH`` workspace must be ``valid`` (the workspace pointer must be device accessible, see ``cutensornetMemspace_t``, and the workspace size must be the same as or larger than the minimum needed). See :func:`workspace_compute_contraction_sizes`, :func:`workspace_get_memory_size` & :func:`workspace_set_memory`. The provided ``CUTENSORNET_WORKSPACE_CACHE`` workspace must be ``valid`` (the workspace pointer must be device accessible, see ``cutensornetMemspace_t``), and contains the cached intermediate tensors from the corresponding :func:`contract_slices` call. If a device memory handler is set, and ``work_desc`` is set to null, or the memory pointer in ``work_desc`` of either the workspace kinds is set to null, for both calls to :func:`contract_slices` and :func:`compute_gradients_backward`, memory will be drawn from the memory pool. See :func:`contract_slices` for details.
-        stream (intptr_t): The CUDA stream on which the computation is performed.
-
-    .. seealso:: `cutensornetComputeGradientsBackward`
-    """
-    cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_
-    get_resource_ptrs[void](_raw_data_in_, raw_data_in, <void*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _gradients_
-    get_resource_ptrs[void](_gradients_, gradients, <void*>NULL)
-    with nogil:
-        status = cutensornetComputeGradientsBackward(<const Handle>handle, <ContractionPlan>plan, <const void* const*>(_raw_data_in_.data()), <const void*>output_gradient, <void* const*>(_gradients_.data()), accumulate_output, <WorkspaceDescriptor>work_desc, <Stream>stream)
     check_status(status)
 
 
@@ -3184,7 +3159,7 @@ cpdef intptr_t create_state_projection_mps(intptr_t handle, int32_t num_states, 
             - a Python sequence of :class:`int`\s (as pointer addresses).
 
         coeffs (intptr_t): CPU accessible pointer to scalar coefficients for each tensor network state. If the tensor network states are of real datatype, the complex component of the coefficients will be ignored. A nullptr for this argument will be interpreted as unit coefficient for all network states.
-        symmetric (int32_t): Whether or not the initial state of all tensor network states is defined by the values of the dual MPS tensors (in case of a symmetric MPS functional). Note that currently only non-symmetric MPS are supported.
+        symmetric (int32_t): Whether or not the initial state of all tensor network states is defined by the values of the dual MPS tensors (in case of a symmetric MPS functional).
         num_envs (int32_t): Number of requested environments.
         spec_envs (intptr_t): Specification of each requested environment. Environments are specified by providing the qudit indices to the left and right of the excluded MPS tensors. Note that currently only 1-site environments are supported.
         boundary_condition (BoundaryCondition): Boundary condition of the MPS. Currently only open boundary condition MPS are supported.
@@ -3411,6 +3386,379 @@ cpdef destroy_state_projection_mps(intptr_t tensor_network_projection):
     """
     with nogil:
         status = cutensornetDestroyStateProjectionMPS(<StateProjectionMPS>tensor_network_projection)
+    check_status(status)
+
+
+cpdef intptr_t create_network(intptr_t handle) except? 0:
+    """Initializes an empty ``cutensornetNetworkDescriptor_t``.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+
+    Returns:
+        intptr_t: Pointer to a ``cutensornetNetworkDescriptor_t``.
+
+    .. seealso:: `cutensornetCreateNetwork`
+    """
+    cdef NetworkDescriptor network_desc
+    with nogil:
+        status = cutensornetCreateNetwork(<const Handle>handle, &network_desc)
+    check_status(status)
+    return <intptr_t>network_desc
+
+
+cpdef destroy_network(intptr_t network_desc):
+    """Frees all the memory associated with the network.
+
+    Args:
+        network_desc (intptr_t): Opaque handle to a tensor network descriptor.
+
+    .. seealso:: `cutensornetDestroyNetwork`
+    """
+    with nogil:
+        status = cutensornetDestroyNetwork(<NetworkDescriptor>network_desc)
+    check_status(status)
+
+
+cpdef int64_t network_append_tensor(intptr_t handle, intptr_t network_desc, int32_t num_modes, extents, mode_labels, intptr_t qualifiers, int data_type) except? -1:
+    """Appends an input tensor to the network.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): Opaque handle to a tensor network descriptor, created using :func:`create_network`.
+        num_modes (int32_t): The number of modes of the tensor.
+        extents (object): Array of size ``num_modes``; ``extents[j]`` corresponding to the extent of the j-th mode of the tensor. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+        mode_labels (object): Array of size ``num_modes``; ``mode_labels[j]`` denotes the label of j-th mode of the tensor. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
+
+        qualifiers (intptr_t): Denotes the qualifiers of the input tensor in relation to ``network_desc``. Refer to ``cutensornetTensorQualifiers_t``.
+        data_type (int): Denotes the data type of the tensor.
+
+    Returns:
+        int64_t: On return, if not NULL, will hold the tensor identifier within the ``network_desc`` (may be not sequential, but is unique).
+
+    .. seealso:: `cutensornetNetworkAppendTensor`
+    """
+    cdef nullable_unique_ptr[ vector[int64_t] ] _extents_
+    get_resource_ptr[int64_t](_extents_, extents, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mode_labels_
+    get_resource_ptr[int32_t](_mode_labels_, mode_labels, <int32_t*>NULL)
+    cdef int64_t tensor_id
+    with nogil:
+        status = cutensornetNetworkAppendTensor(<const Handle>handle, <NetworkDescriptor>network_desc, num_modes, <const int64_t*>(_extents_.data()), <const int32_t*>(_mode_labels_.data()), <const cutensornetTensorQualifiers_t* const>qualifiers, <DataType>data_type, &tensor_id)
+    check_status(status)
+    return tensor_id
+
+
+cpdef network_set_output_tensor(intptr_t handle, intptr_t network_desc, int32_t num_modes, mode_labels, int data_type):
+    """Sets the output tensor of the network If this function is not called on the network, the network output tensor metadata will be inferred (using default values where needed).
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): Opaque handle to a tensor network descriptor, created using :func:`create_network`.
+        num_modes (int32_t): The number of modes of the tensor. If this value is ``0``, the network is force reduced.
+        mode_labels (object): Array of size ``num_modes``; ``mode_labels[j]`` denotes the label of j-th mode of the tensor. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
+
+        data_type (int): Denotes the data type of the output tensor.
+
+    .. seealso:: `cutensornetNetworkSetOutputTensor`
+    """
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mode_labels_
+    get_resource_ptr[int32_t](_mode_labels_, mode_labels, <int32_t*>NULL)
+    with nogil:
+        status = cutensornetNetworkSetOutputTensor(<const Handle>handle, <NetworkDescriptor>network_desc, num_modes, <const int32_t*>(_mode_labels_.data()), <DataType>data_type)
+    check_status(status)
+
+
+cpdef network_set_optimizer_info(intptr_t handle, intptr_t network_desc, intptr_t optimizer_info):
+    """Provides an optimized contraction path as well as slicing info to the tensor network.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): Describes the topology of the tensor network (i.e., all tensors, their connectivity, and modes).
+        optimizer_info (intptr_t): Pointer to ``cutensornetContractionOptimizerInfo_t`` holding path and slicing configs.
+
+    .. seealso:: `cutensornetNetworkSetOptimizerInfo`
+    """
+    with nogil:
+        status = cutensornetNetworkSetOptimizerInfo(<const Handle>handle, <NetworkDescriptor>network_desc, <const ContractionOptimizerInfo>optimizer_info)
+    check_status(status)
+
+
+cpdef network_prepare_contraction(intptr_t handle, intptr_t network_desc, intptr_t work_desc):
+    """Prepares the network for contraction.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor whose internal contraction plan will be built.
+        work_desc (intptr_t): Opaque structure describing the workspace sizes that are available. At the preparation of the network contraction, only the workspace size is needed; the pointer to the workspace memory may be left null.
+
+    .. seealso:: `cutensornetNetworkPrepareContraction`
+    """
+    with nogil:
+        status = cutensornetNetworkPrepareContraction(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc)
+    check_status(status)
+
+
+cpdef network_autotune_contraction(intptr_t handle, intptr_t network_desc, intptr_t work_desc, intptr_t pref, intptr_t stream):
+    """Auto-tunes the internal contraction plan to find the best ``cutensorContractionPlan_t`` for each pair-wise contraction of the network contraction phase.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor whose internal contraction plan will be fine-tuned.
+        work_desc (intptr_t): Opaque structure describing the workspace. The provided workspace must be ``valid`` (the workspace size must be the same as or larger than both the minimum needed and the value provided at contraction preparation). See :func:`network_prepare_contraction`, :func:`workspace_get_memory_size` & :func:`workspace_set_memory`. If a device memory handler is set, the ``work_desc`` can be set to null, or the workspace pointer in ``work_desc`` can be set to null, and the workspace size can be set either to 0 (in which case the "recommended" size is used, see ``CUTENSORNET_WORKSIZE_PREF_RECOMMENDED``) or to a ``valid`` size. A workspace of the specified size will be drawn from the user's mempool and released back once done.
+        pref (intptr_t): Controls the auto-tuning process and gives the user control over how much time is spent in this routine.
+        stream (intptr_t): The CUDA stream on which the computation is performed.
+
+    .. seealso:: `cutensornetNetworkAutotuneContraction`
+    """
+    with nogil:
+        status = cutensornetNetworkAutotuneContraction(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc, <const NetworkAutotunePreference>pref, <Stream>stream)
+    check_status(status)
+
+
+cpdef intptr_t create_network_autotune_preference(intptr_t handle) except? 0:
+    """Sets up the required auto-tune parameters for the network.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+
+    Returns:
+        intptr_t: This data structure holds all information about the user-requested auto-tune parameters.
+
+    .. seealso:: `cutensornetCreateNetworkAutotunePreference`
+    """
+    cdef NetworkAutotunePreference autotune_preference
+    with nogil:
+        status = cutensornetCreateNetworkAutotunePreference(<const Handle>handle, &autotune_preference)
+    check_status(status)
+    return <intptr_t>autotune_preference
+
+
+######################### Python specific utility #########################
+
+cdef dict network_autotune_preference_attribute_sizes = {
+    CUTENSORNET_NETWORK_AUTOTUNE_MAX_ITERATIONS: _numpy.int32,
+    CUTENSORNET_NETWORK_AUTOTUNE_INTERMEDIATE_MODES: _numpy.int32,
+}
+
+cpdef get_network_autotune_preference_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding NetworkAutotunePreferenceAttribute attribute.
+
+    Args:
+        attr (NetworkAutotunePreferenceAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`network_autotune_preference_get_attribute`, :func:`network_autotune_preference_set_attribute`.
+    """
+    return network_autotune_preference_attribute_sizes[attr]
+
+###########################################################################
+
+
+cpdef network_autotune_preference_get_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buffer, size_t size_in_bytes):
+    """Gets attributes of network ``autotune_preference``.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        autotune_preference (intptr_t): Opaque structure that is accessed.
+        attr (NetworkAutotunePreferenceAttribute): Specifies the attribute that is requested.
+        buffer (intptr_t): On return, this buffer (of size ``size_in_bytes``) holds the value that corresponds to ``attr`` within ``autotune_preference``.
+        size_in_bytes (size_t): Size of ``buffer`` (in bytes).
+
+    .. note:: To compute the attribute size, use the itemsize of the corresponding data
+        type, which can be queried using :func:`get_network_autotune_preference_attribute_dtype`.
+
+    .. seealso:: `cutensornetNetworkAutotunePreferenceGetAttribute`
+    """
+    with nogil:
+        status = cutensornetNetworkAutotunePreferenceGetAttribute(<const Handle>handle, <const NetworkAutotunePreference>autotune_preference, <_NetworkAutotunePreferenceAttribute>attr, <void*>buffer, size_in_bytes)
+    check_status(status)
+
+
+cpdef network_autotune_preference_set_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buf, size_t size_in_bytes):
+    """Sets attributes of network ``autotune_preference``.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        autotune_preference (intptr_t): Opaque structure that is accessed.
+        attr (NetworkAutotunePreferenceAttribute): Specifies the attribute that is requested.
+        buf (intptr_t): This buffer (of size ``size_in_bytes``) determines the value to which ``attr`` will be set.
+        size_in_bytes (size_t): Size of ``buf`` (in bytes).
+
+    .. note:: To compute the attribute size, use the itemsize of the corresponding data
+        type, which can be queried using :func:`get_network_autotune_preference_attribute_dtype`.
+
+    .. seealso:: `cutensornetNetworkAutotunePreferenceSetAttribute`
+    """
+    with nogil:
+        status = cutensornetNetworkAutotunePreferenceSetAttribute(<const Handle>handle, <NetworkAutotunePreference>autotune_preference, <_NetworkAutotunePreferenceAttribute>attr, <const void*>buf, size_in_bytes)
+    check_status(status)
+
+
+cpdef destroy_network_autotune_preference(intptr_t autotune_preference):
+    """Frees all the memory associated with ``autotune_preference``.
+
+    Args:
+        autotune_preference (intptr_t): Opaque structure.
+
+    .. seealso:: `cutensornetDestroyNetworkAutotunePreference`
+    """
+    with nogil:
+        status = cutensornetDestroyNetworkAutotunePreference(<NetworkAutotunePreference>autotune_preference)
+    check_status(status)
+
+
+cpdef network_set_input_tensor_memory(intptr_t handle, intptr_t network_desc, int64_t tensor_id, intptr_t buffer, strides):
+    """Provide memory buffer and strides corresponding to an input tensor for the network to be used for data reading.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor.
+        tensor_id (int64_t): The tensor_id as returned by :func:`network_append_tensor`.
+        buffer (intptr_t): Pointer to memory buffer in device memory.
+        strides (object): Array of size the number of modes of the corresponding tensor; ``strides[j]`` corresponding to the linearized offset -- in physical memory -- between two logically-neighboring elements w.r.t the j-th mode of the tensor. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+
+    .. seealso:: `cutensornetNetworkSetInputTensorMemory`
+    """
+    cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
+    get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
+    with nogil:
+        status = cutensornetNetworkSetInputTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, tensor_id, <const void* const>buffer, <const int64_t*>(_strides_.data()))
+    check_status(status)
+
+
+cpdef network_set_output_tensor_memory(intptr_t handle, intptr_t network_desc, intptr_t buffer, strides):
+    """Provide memory buffer and strides corresponding to the output tensor of the network to be used for data writing.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor.
+        buffer (intptr_t): Pointer to memory buffer in device memory.
+        strides (object): Array of size the number of modes of the corresponding tensor; ``strides[j]`` corresponding to the linearized offset -- in physical memory -- between two logically-neighboring elements w.r.t the j-th mode of the tensor. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+
+    .. seealso:: `cutensornetNetworkSetOutputTensorMemory`
+    """
+    cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
+    get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
+    with nogil:
+        status = cutensornetNetworkSetOutputTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, <void* const>buffer, <const int64_t*>(_strides_.data()))
+    check_status(status)
+
+
+cpdef network_set_gradient_tensor_memory(intptr_t handle, intptr_t network_desc, int64_t corresponding_tensor_id, intptr_t buffer, strides):
+    """Provide memory buffer and strides of the gradient corresponding to tensorId of the network to be used for data writing.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor.
+        corresponding_tensor_id (int64_t): The tensorId as returned by :func:`network_append_tensor` for the tensor whose gradient is to be computed.
+        buffer (intptr_t): Pointer to memory bugger in device memory.
+        strides (object): Array of size the number of modes of the corresponding tensor; ``strides[j]`` corresponding to the linearized offset -- in physical memory -- between two logically-neighboring elements w.r.t the j-th mode of the tensor. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+
+    .. seealso:: `cutensornetNetworkSetGradientTensorMemory`
+    """
+    cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
+    get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
+    with nogil:
+        status = cutensornetNetworkSetGradientTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, corresponding_tensor_id, <void* const>buffer, <const int64_t*>(_strides_.data()))
+    check_status(status)
+
+
+cpdef network_set_adjoint_tensor_memory(intptr_t handle, intptr_t network_desc, intptr_t buffer, strides):
+    """Provide memory buffer and strides for the adjoint/activation tensor of the network to be used for data reading.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor.
+        buffer (intptr_t): Pointer to memory bugger in device memory.
+        strides (object): Array of size the number of modes of the corresponding tensor; ``strides[j]`` corresponding to the linearized offset -- in physical memory -- between two logically-neighboring elements w.r.t the j-th mode of the tensor. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+
+    .. seealso:: `cutensornetNetworkSetAdjointTensorMemory`
+    """
+    cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
+    get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
+    with nogil:
+        status = cutensornetNetworkSetAdjointTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, <const void* const>buffer, <const int64_t*>(_strides_.data()))
+    check_status(status)
+
+
+cpdef network_contract(intptr_t handle, intptr_t network_desc, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream):
+    """Performs the actual contraction of the tensor network.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor whose specifed slices (``slice_group``) will be contracted (see :func:`network_prepare_contraction` and :func:`network_autotune_contraction`). Some internal meta-data may be updated upon contraction.
+        accumulate_output (int32_t): If 0, write the contraction result into output data buffer as provided by :func:`network_set_output_tensor_memory`; otherwise, accumulate the results.
+        work_desc (intptr_t): Opaque structure describing the workspace. The provided ``CUTENSORNET_WORKSPACE_SCRATCH`` workspace must be ``valid`` (the workspace pointer must be device accessible, see ``cutensornetMemspace_t``, and the workspace size must be the same as or larger than both the minimum needed and the value provided at contraction preparation). See :func:`network_prepare_contraction`, :func:`workspace_get_memory_size` & :func:`workspace_set_memory`. The provided ``CUTENSORNET_WORKSPACE_CACHE`` workspace must be device accessible, see ``cutensornetMemspace_t``; it can be of any size, the larger the better, up to the size that can be queried with :func:`workspace_get_memory_size`. If a device memory handler is set (see ``cutensornetSetDeviceMemHandler()``), then ``work_desc`` can be set to null, or the memory pointer in ``work_desc`` of either the workspace kinds can be set to null, and the workspace size can be set either to a negative value (in which case the "recommended" size is used, see ``CUTENSORNET_WORKSIZE_PREF_RECOMMENDED``) or to a ``valid`` size. For a workspace of kind ``CUTENSORNET_WORKSPACE_SCRATCH``, a memory buffer with the specified size will be drawn from the user's mempool and released back once done. For a workspace of kind ``CUTENSORNET_WORKSPACE_CACHE``, a memory buffer with the specified size will be drawn from the user's mempool and released back once the ``work_desc`` is destroyed, if ``work_desc`` != NULL, otherwise, once the ``network_desc`` is destroyed, :func:`workspace_purge_cache` is called, or an alternative ``work_desc`` with a different memory address/size is provided in a subsequent :func:`network_contract` call.
+        slice_group (intptr_t): Opaque object specifying the slices to be contracted (see :func:`create_slice_group_from_id_range` and ``cutensornetCreateSliceGroupFromIDs()``). ``If set to null, all slices will be contracted.``.
+        stream (intptr_t): The CUDA stream on which the computation is performed.
+
+    .. seealso:: `cutensornetNetworkContract`
+    """
+    with nogil:
+        status = cutensornetNetworkContract(<const Handle>handle, <NetworkDescriptor>network_desc, accumulate_output, <const WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
+    check_status(status)
+
+
+cpdef network_prepare_gradients_backward(intptr_t handle, intptr_t network_desc, intptr_t work_desc):
+    """Prepares the network for gradient computation.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor whose internal contraction plan will be built.
+        work_desc (intptr_t): Opaque structure describing the workspace. At the preparation of the network contraction, only the workspace size is needed; the pointer to the workspace memory may be left null.
+
+    .. seealso:: `cutensornetNetworkPrepareGradientsBackward`
+    """
+    with nogil:
+        status = cutensornetNetworkPrepareGradientsBackward(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc)
+    check_status(status)
+
+
+cpdef network_compute_gradients_backward(intptr_t handle, intptr_t network_desc, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream):
+    """Computes the gradients of the network w.r.t. the input tensors whose gradients are required. The network must have been contracted and loaded in the ``work_desc`` CACHE. Operates only on networks with single slice and no singleton modes.
+
+    Args:
+        handle (intptr_t): Opaque handle holding cuTensorNet's library context.
+        network_desc (intptr_t): The network descriptor whose specifed slices (``slice_group``) gradients will be computed (see :func:`network_prepare_gradients_backward`). Some internal meta-data may be updated upon contraction.
+        accumulate_output (int32_t): If 0, write the gradient results into gradients memory buffers; otherwise accumulates the results into gradients memory buffers.
+        work_desc (intptr_t): Opaque structure describing the workspace. The provided ``CUTENSORNET_WORKSPACE_SCRATCH`` workspace must be ``valid`` (the workspace pointer must be device accessible, see ``cutensornetMemspace_t``, and the workspace size must be the same as or larger than the minimum needed). See :func:`workspace_compute_contraction_sizes`, :func:`workspace_get_memory_size` & :func:`workspace_set_memory`. The provided ``CUTENSORNET_WORKSPACE_CACHE`` workspace must be ``valid`` (the workspace pointer must be device accessible, see ``cutensornetMemspace_t``), and contains the cached intermediate tensors from the corresponding :func:`network_contract` call. If a device memory handler is set, and ``work_desc`` is set to null, or the memory pointer in ``work_desc`` of either the workspace kinds is set to null, for both calls to :func:`network_contract` and :func:`network_compute_gradients_backward`, memory will be drawn from the memory pool. See :func:`network_contract` for details.
+        slice_group (intptr_t): Opaque object specifying the slices of the gradients to be computed (see :func:`create_slice_group_from_id_range` and ``cutensornetCreateSliceGroupFromIDs()``). ``If set to null, all slices will be computed.``.
+        stream (intptr_t): The CUDA stream on which the computation is performed.
+
+    .. seealso:: `cutensornetNetworkComputeGradientsBackward`
+    """
+    with nogil:
+        status = cutensornetNetworkComputeGradientsBackward(<const Handle>handle, <NetworkDescriptor>network_desc, accumulate_output, <const WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
     check_status(status)
 
 

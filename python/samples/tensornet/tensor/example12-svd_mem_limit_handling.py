@@ -9,7 +9,8 @@ The decomposition results are also CuPy ndarrays.
 """
 import cupy as cp
 
-from cuquantum.tensornet import tensor, MemoryLimitExceeded
+from cuquantum import MemoryLimitExceeded
+from cuquantum.tensornet import tensor
 
 # create a random rank-4 tensor
 cp.random.seed(2024)

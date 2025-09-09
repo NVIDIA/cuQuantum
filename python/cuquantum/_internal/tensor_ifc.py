@@ -8,8 +8,7 @@ Interface to seamlessly use tensors (or ndarray-like objects) from different lib
 
 from abc import ABC, abstractmethod
 
-from . import typemaps
-from ..bindings import cutensornet as cutn
+from nvmath.internal import typemaps
 
 class Tensor(ABC):
     """
@@ -87,16 +86,3 @@ class Tensor(ABC):
             except exception_type:
                 pass
         return name_to_dtype
-    
-    def reshape_to_match_tensor_descriptor(self, handle, desc_tensor):
-        _, _, extents, strides = cutn.get_tensor_details(handle, desc_tensor)
-        if tuple(extents) != self.shape:
-            self.update_extents_strides(extents, strides)
-    
-    def create_tensor_descriptor(self, handle, modes):
-        return cutn.create_tensor_descriptor(handle, self.tensor.ndim, self.shape, self.strides, modes, typemaps.NAME_TO_DATA_TYPE[self.dtype])
-    
-    @abstractmethod
-    def update_extents_strides(self, extents, strides):
-        raise NotImplementedError
-

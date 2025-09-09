@@ -191,7 +191,7 @@ class Callback(ABC):
         """
         return self._gradient_callback is not None
 
-    def _get_internal_wrapper(self, which: str):
+    def _get_internal_wrapper(self, which: str) -> cudm.WrappedScalarCallback | cudm.WrappedTensorCallback:
         """
         Wrap the callback function to WrappedScalarCallback or WrappedTensorCallback.
         """
@@ -212,21 +212,20 @@ class Callback(ABC):
         # keeps a wrapper reference to be independent of cython binding implementation's own reference counting
         return self._wrapper
     
-    def _get_internal_gradient_wrapper(self, which: str):
+    def _get_internal_gradient_wrapper(self, which: str) -> cudm.WrappedScalarGradientCallback | cudm.WrappedTensorGradientCallback | None:
         """
         Wrap the gradient callback function to WrappedScalarGradientCallback or WrappedTensorGradientCallback.
         """
         if which == "scalar":
             if self._gradient_wrapper is None:
-                self._gradient_wrapper = cudm.WrappedScalarGradientCallback(self._inplace_gradient_callback, self.is_gpu_callback, self._gradient_dir)
+                if self.has_gradient:
+                    self._gradient_wrapper = cudm.WrappedScalarGradientCallback(self._inplace_gradient_callback, self.is_gpu_callback, self._gradient_dir)
             else:
                 assert isinstance(self._gradient_wrapper, cudm.WrappedScalarGradientCallback)
         elif which == "tensor":
             if self._gradient_wrapper is None:
-                if self._gradient_dir is not None:
+                if self.has_gradient:
                     self._gradient_wrapper = cudm.WrappedTensorGradientCallback(self._inplace_gradient_callback, self.is_gpu_callback, self._gradient_dir)
-                else:
-                    self._gradient_wrapper = cudm.WrappedTensorGradientCallback(self._inplace_gradient_callback, self.is_gpu_callback)
             else:
                 assert isinstance(self._gradient_wrapper, cudm.WrappedTensorGradientCallback)
         else:

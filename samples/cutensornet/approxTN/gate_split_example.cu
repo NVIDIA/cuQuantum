@@ -27,6 +27,12 @@ if( err != CUTENSORNET_STATUS_SUCCESS )                           \
    { printf("Error: %s in line %d\n", cudaGetErrorString(err), __LINE__); return err; } \
 };
 
+// Usage: DEV_ATTR(cudaDevAttrClockRate, deviceId)
+#define DEV_ATTR(ENUMCONST, DID)                                                   \
+    ({ int v;                                                                       \
+       HANDLE_CUDA_ERROR(cudaDeviceGetAttribute(&v, ENUMCONST, DID));               \
+       v; })
+
 struct GPUTimer
 {
    GPUTimer(cudaStream_t stream): stream_(stream)
@@ -73,8 +79,8 @@ int main()
    printf("===== device info ======\n");
    printf("GPU-local-id:%d\n", deviceId);
    printf("GPU-name:%s\n", prop.name);
-   printf("GPU-clock:%d\n", prop.clockRate);
-   printf("GPU-memoryClock:%d\n", prop.memoryClockRate);
+           printf("GPU-clock:%d\n", DEV_ATTR(cudaDevAttrClockRate, deviceId));
+        printf("GPU-memoryClock:%d\n", DEV_ATTR(cudaDevAttrMemoryClockRate, deviceId));
    printf("GPU-nSM:%d\n", prop.multiProcessorCount);
    printf("GPU-major:%d\n", prop.major);
    printf("GPU-minor:%d\n", prop.minor);

@@ -10,10 +10,9 @@ from contextlib import nullcontext
 import numpy as np
 import cupy as cp
 
-from cuquantum._internal.tensor_ifc import Tensor
-from cuquantum._internal.tensor_ifc_numpy import NumpyTensor
-from cuquantum._internal.tensor_wrapper import wrap_operand, wrap_operands
-from cuquantum._internal.utils import device_ctx, StreamHolder
+from nvmath.internal.utils import device_ctx
+from cuquantum._internal.tensor_wrapper import wrap_operand
+from cuquantum._internal.utils import StreamHolder
 from cuquantum._internal import utils as cutn_utils
 
 

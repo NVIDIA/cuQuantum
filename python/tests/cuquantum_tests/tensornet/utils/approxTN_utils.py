@@ -7,10 +7,6 @@
 import importlib
 import logging
 
-try:
-    import cupy as cp
-except ImportError:
-    cp = None
 import numpy as np
 
 
@@ -28,16 +24,20 @@ def get_stream_pointer(backend):
     if backend == "numpy":
         return 0
     elif backend == "cupy":
-        return cp.cuda.get_current_stream().ptr
+        module = importlib.import_module("cupy")
+        return module.cuda.get_current_stream().ptr
     elif backend == "torch":
         import torch
         return torch.cuda.current_stream().cuda_stream
     else:
         raise NotImplementedError(f"{backend} not supported")
 
+def get_package_name(obj):
+    module = obj.__class__.__module__.split(".")[0]
+    return module
 
 def infer_backend(obj):
-    module = obj.__class__.__module__.split(".")[0]
+    module = get_package_name(obj)
     return importlib.import_module(module)
 
 
@@ -140,7 +140,8 @@ def get_tensordot_axes(modes, shared_mode):
 
 def reverse_einsum(split_expression, array_left, array_mid, array_right):
     backend = infer_backend(array_left)
-    einsum_kwargs = get_einsum_kwargs(backend)
+    package = get_package_name(array_left)
+    einsum_kwargs = get_einsum_kwargs(package)
     modes_in, left_modes, right_modes, shared_mode = parse_split_expression(split_expression)
     if modes_in.count(",") == 0:
         modes_out = modes_in
@@ -186,22 +187,22 @@ def split_contract_decompose(subscripts):
     return contract_subscripts, decompose_subscripts
 
 # NOTE: torch does not have native support on F order
-# We here get around this by converting to CuPy/NumPy ndarrays as a workaround
-# the overhead for torch tensors on GPU should be minimal as torch tensors support __cuda_array_interface__
+# We here get around this by converting to NumPy ndarrays as a workaround
 def torch_support_wrapper(func):
     def new_func(T, *args, **kwargs):
         backend = infer_backend(T)
-        if backend not in (cp, np):  # torch
+        package = get_package_name(T)
+        if package == 'torch':
             if T.device.type == 'cpu':
                 out = func(T.numpy(), *args, **kwargs)
             else:
-                out = func(cp.asarray(T), *args, **kwargs)
+                out = func(T.cpu().numpy(), *args, **kwargs)
             return backend.as_tensor(out, device=T.device)
         return func(T, *args, **kwargs)
     return new_func
 
-def get_einsum_kwargs(backend):
-    if backend in (cp, np):
+def get_einsum_kwargs(package):
+    if package in {'numpy', 'cupy'}:
         return {'optimize': True}
     else:
         return {} # optimize not supported in torch.einsum
@@ -240,7 +241,8 @@ def matrix_svd(
 ):
     info = dict()
     backend = infer_backend(T)
-    if backend not in (cp, np) and T.device.type != 'cpu':
+    package = get_package_name(T)
+    if package == 'torch' and T.device.type != 'cpu':
         u, s, v = backend.linalg.svd(T, full_matrices=False, driver='gesvd')
         if v.is_conj(): # VH from torch.linalg.svd is a view, we need to materialize it
             v = v.resolve_conj()
@@ -257,7 +259,7 @@ def matrix_svd(
     
     if discarded_weight_cutoff != 0:
         s_square_sum = backend.cumsum(s**2, 0)
-        if backend not in (cp, np): # torch
+        if package == 'torch':
             s_square_sum /= s_square_sum[-1].clone()
         else:
             s_square_sum /= s_square_sum[-1]
@@ -358,7 +360,8 @@ def gate_decompose(
 ):
     modes_in, left_modes_out, right_modes_out, shared_mode_out = parse_split_expression(split_expression)
     backend = infer_backend(array_a)
-    einsum_kwargs = get_einsum_kwargs(backend)
+    package = get_package_name(array_a)
+    einsum_kwargs = get_einsum_kwargs(package)
     left_modes_in, right_modes_in, modes_g = modes_in.split(",")
     
     if gate_algo == "direct":
@@ -473,9 +476,10 @@ def verify_unitary(
     tensor_name="Tensor"
 ):
     backend = infer_backend(T)
+    package = get_package_name(T)
     axes = get_tensordot_axes(modes, shared_mode)
     out = backend.tensordot(T, T.conj(), axes)
-    if backend not in (cp, np): # torch
+    if package == 'torch':
         identity = backend.eye(out.shape[0], device=T.device)
     else:
         identity = backend.eye(out.shape[0])

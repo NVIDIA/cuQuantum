@@ -49,18 +49,21 @@ def check_cuda_version():
     except:
         raise
     else:
-        # 11020 -> "11.2"
+        # 12020 -> "12.2"
         return str(ver // 1000) + '.' + str((ver % 100) // 10)
 
 
-# We support CUDA 11/12 starting 23.03
+# We support CUDA 12/13 starting 25.09
 cuda_ver = check_cuda_version()
-if cuda_ver == '11.0':
-    cuda_major_ver = '11'
-elif '11.0' < cuda_ver < '12.0':
-    cuda_major_ver = '11'
-elif '12.0' <= cuda_ver < '13.0':
+print("\n"+"*"*80)
+print("CUDA version:", cuda_ver)
+print("CUDA path:", cuda_path)
+print("*"*80+"\n")
+
+if '12.0' <= cuda_ver < '13.0':
     cuda_major_ver = '12'
+elif '13.0' <= cuda_ver < '14.0':
+    cuda_major_ver = '13'
 else:
     raise RuntimeError(f"Unsupported CUDA version: {cuda_ver}")
 
@@ -78,67 +81,13 @@ class bdist_wheel(_bdist_wheel):
 
 class build_ext(_build_ext):
 
-    def _set_library_roots(self):
-        custatevec_root = cutensornet_root = cudensitymat_root = cuquantum_root = None
-        # Note that we need sys.path because of build isolation (since PEP 517)
-        py_paths = sys.path + [site.getusersitepackages()] + site.getsitepackages()
-
-        # search order:
-        # 1. installed "cuquantum" package
-        # 2. env var
-        for path in py_paths:
-            path = os.path.join(path, 'cuquantum')
-            if os.path.isdir(os.path.join(path, 'include')):
-                custatevec_root = cutensornet_root = cudensitymat_root = path
-                break
-        else:
-            # We allow setting CUSTATEVEC_ROOT, CUTENSORNET_ROOT & CUDENSITYMAT_ROOT separately for the ease
-            # of development, but users are encouraged to either install cuquantum from PyPI
-            # or conda, or set CUQUANTUM_ROOT to the existing installation.
-            cuquantum_root = os.environ.get('CUQUANTUM_ROOT')
-            try:
-                custatevec_root = os.environ['CUSTATEVEC_ROOT']
-            except KeyError as e:
-                if cuquantum_root is None:
-                    raise RuntimeError('cuStateVec is not found, please set $CUQUANTUM_ROOT '
-                                       'or $CUSTATEVEC_ROOT') from e
-            try:
-                cutensornet_root = os.environ['CUTENSORNET_ROOT']
-            except KeyError as e:
-                if cuquantum_root is None:
-                    raise RuntimeError('cuTensorNet is not found, please set $CUQUANTUM_ROOT '
-                                       'or $CUTENSORNET_ROOT') from e
-            
-            try:
-                cudensitymat_root = os.environ['CUDENSITYMAT_ROOT']
-            except KeyError as e:
-                if cuquantum_root is None:
-                    raise RuntimeError('cuDensityMat is not found, please set $CUQUANTUM_ROOT '
-                                       'or $CUDENSITYMAT_ROOT') from e
-
-        return custatevec_root, cutensornet_root, cudensitymat_root, cuquantum_root
-
-    def _prep_includes_libs_rpaths(self):
+    def _prep_includes_libs_rpaths(self, ext_name):
         """
-        Set global vars cusv_incl_dir, cutn_incl_dir, cudm_incl_dir, and extra_linker_flags.
+        Set global vars extra_linker_flags.
 
         With the new bindings, we no longer need to link to cuQuantum DSOs.
         """
-        custatevec_root, cutensornet_root, cudensitymat_root, cuquantum_root = self._set_library_roots()
 
-        global cusv_incl_dir, cutn_incl_dir, cudm_incl_dir, cuqnt_incl_dir
-        cusv_incl_dir = cutn_incl_dir = cudm_incl_dir = cuqnt_incl_dir = None
-        base_incl_dir = (os.path.join(cuda_path, 'include'),)
-        if cuquantum_root is not None:
-            cuqnt_incl_dir = base_incl_dir + (os.path.join(cuquantum_root, 'include'),)
-        if custatevec_root is not None:
-            cusv_incl_dir = base_incl_dir + (os.path.join(custatevec_root, 'include'),)
-        if cutensornet_root is not None:
-            cutn_incl_dir = base_incl_dir + (os.path.join(cutensornet_root, 'include'),)
-        if cudensitymat_root is not None:
-            cudm_incl_dir = base_incl_dir + (os.path.join(cudensitymat_root, 'include'),)
-
-        global extra_linker_flags
         if not building_wheel:
             # Note: with PEP-517 the editable mode would not build a wheel for installation
             # (and we purposely do not support PEP-660).
@@ -147,43 +96,29 @@ class build_ext(_build_ext):
             # Note: soname = library major version
             # We don't need to link to cuBLAS/cuSOLVER/cuTensor at build time
             # The rpaths must be adjusted given the following full-wheel installation:
-            # - cuquantum-python: site-packages/cuquantum/{custatevec, cutensornet, cudensitymat}/_internal/  [=$ORIGIN]
+            # - cuquantum-python: site-packages/cuquantum/bindings/_internal/  [=$ORIGIN]
             # - cusv, cutn & cudm:      site-packages/cuquantum/lib/
             # - cutensor:         site-packages/cutensor/lib/
             # - cublas:           site-packages/nvidia/cublas/lib/
             # - cusolver:         site-packages/nvidia/cusolver/lib/
             # (Note that starting v22.11 we use the new wheel format, so all lib wheels have suffix -cuXX,
             #  and cuBLAS/cuSOLVER additionally have prefix nvidia-.)
-            ldflag = "-Wl,--disable-new-dtags,"
-            ldflag += "-rpath,$ORIGIN/../../lib,"
-            ldflag += "-rpath,$ORIGIN/../../../cutensor/lib,"
-            ldflag += "-rpath,$ORIGIN/../../../nvidia/cublas/lib,"
-            ldflag += "-rpath,$ORIGIN/../../../nvidia/cusolver/lib"
+            ldflag = "-Wl,--disable-new-dtags"
+            ldflag += ",-rpath,$ORIGIN/../../lib"
+            ldflag += ",-rpath,$ORIGIN/../../../nvidia/cublas/lib"
+            if "cutensornet" in ext_name or "cudensitymat" in ext_name:
+                ldflag += ",-rpath,$ORIGIN/../../../cutensor/lib"
+                ldflag += ",-rpath,$ORIGIN/../../../nvidia/cusolver/lib"
+                ldflag += ",-rpath,$ORIGIN/../../../nvidia/curand/lib"
             extra_linker_flags = [ldflag]
 
-        print("\n"+"*"*80)
-        print("CUDA version:", cuda_ver)
-        print("CUDA path:", cuda_path)
-        print("cuStateVec path:", custatevec_root if custatevec_root else cuquantum_root)
-        print("cuTensorNet path:", cutensornet_root if cutensornet_root else cuquantum_root)
-        print("cuDensityMat path:", cudensitymat_root if cudensitymat_root else cuquantum_root)
-        print("*"*80+"\n")
+        return extra_linker_flags
 
     def build_extension(self, ext):
-        ext.include_dirs = ()
-        for include_dir in (cusv_incl_dir, cutn_incl_dir, cudm_incl_dir, cuqnt_incl_dir):
-            if include_dir is not None:
-                ext.include_dirs += include_dir
-        if ext.name.endswith("custatevec"):
-            ext.extra_link_args = extra_linker_flags
-        elif ext.name.endswith("cutensornet"):
-            ext.extra_link_args = extra_linker_flags
-        elif ext.name.endswith("cudensitymat"):
-            ext.extra_link_args = extra_linker_flags
-
+        ext.include_dirs = (os.path.join(cuda_path, 'include'),)
+        ext.extra_link_args = self._prep_includes_libs_rpaths(ext.name)
         super().build_extension(ext)
 
     def build_extensions(self):
-        self._prep_includes_libs_rpaths()
         self.parallel = 4  # use 4 threads
         super().build_extensions()

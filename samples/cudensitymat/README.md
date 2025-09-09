@@ -58,5 +58,5 @@ page for further detail.
 
 * [CUDA Toolkit 11.x](https://developer.nvidia.com/cuda-downloads) or higher and compatible driver
 (see [CUDA Driver Release Notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#cuda-major-component-versions)).
-* cuTENSOR 2.2.0+.
+* cuTENSOR 2.3.1+.
 * CMake 3.22+ if using `cmake`.

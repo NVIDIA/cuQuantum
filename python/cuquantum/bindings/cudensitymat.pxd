@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 25.06.0. Do not modify it directly.
+# This code was automatically generated with version 25.09.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -21,6 +21,7 @@ ctypedef cudensitymatOperatorTerm_t OperatorTerm
 ctypedef cudensitymatOperator_t Operator
 ctypedef cudensitymatOperatorAction_t OperatorAction
 ctypedef cudensitymatExpectation_t Expectation
+ctypedef cudensitymatOperatorSpectrum_t OperatorSpectrum
 ctypedef cudensitymatWorkspaceDescriptor_t WorkspaceDescriptor
 ctypedef cudensitymatDistributedRequest_t DistributedRequest
 ctypedef cudensitymatTimeRange_t TimeRange
@@ -42,22 +43,22 @@ ctypedef cudaDataType DataType
 ctypedef libraryPropertyType_t LibraryPropertyType
 
 cdef class WrappedScalarCallback:
-    cdef object callback
+    cdef public object callback
     cdef cudensitymatCallbackDevice_t device
     cdef cudensitymatWrappedScalarCallback_t _struct
 
 cdef class WrappedTensorCallback:
-    cdef object callback
+    cdef public object callback
     cdef cudensitymatCallbackDevice_t device
     cdef cudensitymatWrappedTensorCallback_t _struct
 
 cdef class WrappedScalarGradientCallback:
-    cdef object callback
+    cdef public object callback
     cdef cudensitymatCallbackDevice_t device
     cdef cudensitymatWrappedScalarGradientCallback_t _struct
 
 cdef class WrappedTensorGradientCallback:
-    cdef object callback
+    cdef public object callback
     cdef cudensitymatCallbackDevice_t device
     cdef cudensitymatWrappedTensorGradientCallback_t _struct
 
@@ -73,6 +74,8 @@ ctypedef cudensitymatCallbackDevice_t _CallbackDevice
 ctypedef cudensitymatDifferentiationDir_t _DifferentiationDir
 ctypedef cudensitymatStatePurity_t _StatePurity
 ctypedef cudensitymatElementaryOperatorSparsity_t _ElementaryOperatorSparsity
+ctypedef cudensitymatOperatorSpectrumKind_t _OperatorSpectrumKind
+ctypedef cudensitymatOperatorSpectrumConfig_t _OperatorSpectrumConfig
 ctypedef cudensitymatMemspace_t _Memspace
 ctypedef cudensitymatWorkspaceKind_t _WorkspaceKind
 
@@ -128,6 +131,12 @@ cpdef intptr_t create_expectation(intptr_t handle, intptr_t superoperator) excep
 cpdef destroy_expectation(intptr_t expectation)
 cpdef expectation_prepare(intptr_t handle, intptr_t expectation, intptr_t state, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
 cpdef expectation_compute(intptr_t handle, intptr_t expectation, double time, int64_t batch_size, int32_t num_params, intptr_t params, intptr_t state, intptr_t expectation_value, intptr_t workspace, intptr_t stream)
+cpdef intptr_t create_operator_spectrum(intptr_t handle, intptr_t superoperator, int32_t is_hermitian, int spectrum_kind) except? 0
+cpdef destroy_operator_spectrum(intptr_t spectrum)
+cpdef get_operator_spectrum_config_dtype(int attr)
+cpdef operator_spectrum_configure(intptr_t handle, intptr_t spectrum, int attribute, intptr_t attribute_value, size_t attribute_value_size)
+cpdef operator_spectrum_prepare(intptr_t handle, intptr_t spectrum, int32_t max_eigen_states, intptr_t state, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
+cpdef operator_spectrum_compute(intptr_t handle, intptr_t spectrum, double time, int64_t batch_size, int32_t num_params, intptr_t params, int32_t num_eigen_states, eigenstates, intptr_t eigenvalues, intptr_t tolerances, intptr_t workspace, intptr_t stream)
 cpdef intptr_t create_workspace(intptr_t handle) except? 0
 cpdef destroy_workspace(intptr_t workspace_descr)
 cpdef size_t workspace_get_memory_size(intptr_t handle, intptr_t workspace_descr, int mem_space, int workspace_kind) except? -1

@@ -11,7 +11,7 @@ import numpy as np
 import cupy as cp
 
 from cuquantum.bindings.cudensitymat import WrappedScalarCallback, WrappedScalarGradientCallback
-from cuquantum._internal.utils import precondition
+from nvmath.internal.utils import precondition
 from cuquantum._internal.tensor_wrapper import wrap_operand
 from .utils import check_and_get_batchsize, maybe_move_arrays, NDArrayType, device_ctx_from_array
 from ..callbacks import Callback, GPUCallback, CPUCallback

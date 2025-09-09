@@ -80,9 +80,9 @@ if(NOT CMAKE_CUDA_ARCHITECTURES_DEFINED)
     (${CUDAToolkit_VERSION_MAJOR} LESS 12) OR
     (${CUDAToolkit_VERSION_MAJOR} EQUAL 12 AND ${CUDAToolkit_VERSION_MINOR} LESS 8)
   )
-    set(CMAKE_CUDA_ARCHITECTURES 70-real;75-real;80-real;86-real;90)
+    set(CMAKE_CUDA_ARCHITECTURES 75-real;80-real;86-real;90)
   else()
-    set(CMAKE_CUDA_ARCHITECTURES 70-real;75-real;80-real;86-real;90-real;100-real;120-real;100-virtual)
+    set(CMAKE_CUDA_ARCHITECTURES 75-real;80-real;86-real;90-real;100-real;120-real;100-virtual)
   endif()
 endif()
 message(STATUS "Target CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
@@ -132,6 +132,10 @@ add_custom_target(cutensornet_examples)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet" tensornet_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.reuse" tensornet_example_reuse.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gradients" tensornet_example_gradients.cu)
+
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.legacy" legacy/tensornet_example_legacy.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.reuse_legacy" legacy/tensornet_example_reuse_legacy.cu)
+
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.amplitudes" high_level/amplitudes_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.amplitudes" high_level/amplitudes_mcg_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.expectation" high_level/expectation_example.cu)
@@ -144,6 +148,10 @@ add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_sampler_mpo" high_level/mpo_mps_sampling_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_sampler_qft" high_level/qft_mps_sampling_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_sampler_circuit_dmrg" high_level/proj_mps_circuit_dmrg_example.cu)
+target_link_libraries(proj_mps_circuit_dmrg_example 
+  PUBLIC CUDA::cublas
+)
+
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.svd" approxTN/tensor_svd_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.qr" approxTN/tensor_qr_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.gate" approxTN/gate_split_example.cu)
@@ -153,6 +161,10 @@ find_package(MPI)
 if (MPI_FOUND)
   add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi" tensornet_example_mpi.cu)
   add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi.auto" tensornet_example_mpi_auto.cu)
+
+  add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi_legacy" legacy/tensornet_example_mpi_legacy.cu)
+  add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi.auto_legacy" legacy/tensornet_example_mpi_auto_legacy.cu)
+
   add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mpi.sampling" high_level/sampling_mpi_example.cu)
 else ()
   message(WARNING "An MPI installation was not detected. Please install CUDA-aware MPI if you would like to build the distributed example(s).")

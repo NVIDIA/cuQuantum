@@ -12,7 +12,7 @@ import functools
 
 import numpy as np
 
-from . import formatters
+from nvmath.internal import formatters
 from .tensor_ifc_cupy import CupyTensor
 from .tensor_ifc_numpy import NumpyTensor
 
@@ -27,10 +27,8 @@ try:
     import torch
     from .tensor_ifc_torch import TorchTensor
     _TENSOR_TYPES['torch']  = TorchTensor
-    torch_asarray = functools.partial(torch.tensor, device='cuda')
 except ImportError as e:
     torch = None
-    torch_asarray = None
 
 _SUPPORTED_PACKAGES = tuple(_TENSOR_TYPES.keys())
 
@@ -42,15 +40,6 @@ def infer_tensor_package(tensor):
         return 'numpy'
     module = tensor.__class__.__module__
     return module.split('.')[0]
-
-def _get_backend_asarray_func(backend):
-    """
-    Infer the package that defines this tensor.
-    """
-    if backend is torch:
-        return torch_asarray
-    else:
-        return backend.asarray
 
 def wrap_operand(native_operand):
     """

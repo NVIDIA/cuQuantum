@@ -114,7 +114,7 @@ void printArrayGPU(void * gpuArray,
   std::vector<RealComplexType> cpuArray(arrayLen);
   const std::size_t arraySize = arrayLen * sizeof(RealComplexType);
   HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
-  HANDLE_CUDA_ERROR(cudaMemcpy(cpuArray.data(), gpuArray, arraySize, cudaMemcpyDeviceToHost));
+  HANDLE_CUDA_ERROR(cudaMemcpy(static_cast<void*>(cpuArray.data()), gpuArray, arraySize, cudaMemcpyDeviceToHost));
   std::cout << "Printing array " << gpuArray << "[" << arrayLen << "]:\n";
   for (std::size_t i = 0; i < arrayLen; ++i) {
     std::cout << " " << i << "   " << cpuArray[i] << std::endl;
@@ -122,3 +122,17 @@ void printArrayGPU(void * gpuArray,
   std::cout << std::flush;
   return;
 }
+
+/** Helper function for printing a CPU array
+ *   RealComplexType = {float, double, complex<float>, complex<double>} */
+ template <typename RealComplexType>
+ void printArrayCPU(void * cpuArray,
+                    std::size_t arrayLen)
+ {
+   RealComplexType * realComplexCpuArray = static_cast<RealComplexType*>(cpuArray);
+   for (std::size_t i = 0; i < arrayLen; ++i) {
+     std::cout << " " << i << "   " << realComplexCpuArray[i] << std::endl;
+   }
+   std::cout << std::flush;
+   return;
+ }

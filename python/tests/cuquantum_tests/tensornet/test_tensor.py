@@ -4,48 +4,58 @@
 
 import copy
 import dataclasses
+import itertools
 import sys
 
 import pytest
+import numpy as np
 
+from nvmath.internal.utils import infer_object_package
+
+from cuquantum import MemoryLimitExceeded
 from cuquantum.tensornet import tensor
 from cuquantum.tensornet._internal.decomposition_utils import DECOMPOSITION_DTYPE_NAMES
-from cuquantum._internal.utils import infer_object_package
-from cuquantum.tensornet.configuration import MemoryLimitExceeded
 
 from .test_options import _OptionsBase, TestNetworkOptions
 from .utils.approxTN_utils import tensor_decompose, verify_split_QR, verify_split_SVD, SingularValueDegeneracyError
-from .utils.data import backend_names, tensor_decomp_expressions
-from .utils.test_utils import DecomposeFactory
-from .utils.test_utils import deselect_decompose_tests, get_svd_methods_for_test
-from .utils.test_utils import get_stream_for_backend
+from .utils.data import BACKEND_MEMSPACE, tensor_decomp_expressions
+from .utils.helpers import DecomposeFactory
+from .utils.helpers import get_svd_methods_for_test
+from .utils.helpers import get_stream_for_backend
+from .utils.helpers import _BaseTester
 
 
-@pytest.mark.uncollect_if(func=deselect_decompose_tests)
-@pytest.mark.parametrize(
-    "stream", (None, True)
-)
-@pytest.mark.parametrize(
-    "order", ("C", "F")
-)
-@pytest.mark.parametrize(
-    "dtype", DECOMPOSITION_DTYPE_NAMES
-)
-@pytest.mark.parametrize(
-    "xp", backend_names
-)
-@pytest.mark.parametrize(
-    "decompose_expr", tensor_decomp_expressions
-)
-@pytest.mark.parametrize(
-    "blocking", (True, "auto")
-)
-class TestDecompose:
+NUM_TESTS_PER_CASE = 3
+
+
+class BaseDecomposeTester(_BaseTester):
+    
+    def _test_config_iterator(self, decompose_expr, xp, dtype, test_type):
+        assert test_type in ("QR", "SVD")
+
+        rng = self._get_rng(decompose_expr, xp, dtype, test_type)
+
+        if test_type == "QR":
+            TEST_CONFIGS = list(itertools.product(
+                [None, True], # stream
+                ['C', 'F'], # order
+                [True, 'auto'], # blocking
+            ))
+        else:
+            TEST_CONFIGS = list(itertools.product(
+                [None, True], # stream
+                ['C', 'F'], # order
+                [True, 'auto'], # blocking
+                [False, True], # return_info
+                get_svd_methods_for_test(NUM_TESTS_PER_CASE, dtype, rng), # method
+            ))
+        rng.shuffle(TEST_CONFIGS)
+        yield from TEST_CONFIGS
     
     def _run_decompose(
-            self, decompose_expr, xp, dtype, order, stream, method, **kwargs):
+            self, decompose_expr, xp, dtype, order, stream, method, rng, **kwargs):
         decompose_expr, shapes = copy.deepcopy(decompose_expr)
-        factory = DecomposeFactory(decompose_expr, shapes=shapes)
+        factory = DecomposeFactory(decompose_expr, rng, shapes=shapes)
         operand = factory.generate_operands(factory.input_shapes, xp, dtype, order)[0]
         backend = sys.modules[infer_object_package(operand)]
 
@@ -98,29 +108,83 @@ class TestDecompose:
                                     info=info,
                                     info_ref=info_ref,
                                     **svd_kwargs)
-    
-    def test_qr(self, decompose_expr, xp, dtype, order, stream, blocking):
+
+
+@pytest.mark.parametrize("xp", BACKEND_MEMSPACE)
+@pytest.mark.parametrize("method", [tensor.QRMethod(), tensor.SVDMethod(),tensor.SVDMethod(max_extent=4)])
+class TestDecomposeFunctionality(BaseDecomposeTester):
+
+    @pytest.mark.parametrize("stream", [None, True])
+    def test_stream(self, xp, method, stream):
+        decompose_expr = ('ab->ax,xb', [(8, 8)])
+        rng = self._get_rng(decompose_expr, xp, method, stream, "stream")
         self._run_decompose(
-            decompose_expr, xp, dtype, order, stream, tensor.QRMethod(),
-            blocking=blocking)
-    
-    @pytest.mark.parametrize(
-        "return_info", (False, True)
-    )
-    def test_svd(
-            self, decompose_expr, xp, dtype, order, stream, blocking, return_info):
-        methods = get_svd_methods_for_test(3, dtype)
-        for method in methods:
+            decompose_expr, xp, "float32", "C", stream, method,
+            rng, blocking=True)
+
+
+    @pytest.mark.parametrize("order", ["C", "F"])
+    def test_order(self, xp, method, order):
+        decompose_expr = ('abcd->bxd,cxa', [(4, 4, 6, 6)])
+        rng = self._get_rng(decompose_expr, xp, method, order, "order")
+        self._run_decompose(
+            decompose_expr, xp, "float64", order, None, method,
+            rng, blocking="auto")
+
+
+    @pytest.mark.parametrize("blocking", [True, "auto"])
+    def test_blocking(self, xp, method, blocking):
+        decompose_expr = ('ab->ax,xb', [(8, 8)])
+        rng = self._get_rng(decompose_expr, xp, method, blocking, "blocking")
+        self._run_decompose(
+            decompose_expr, xp, "complex64", "F", True, method,
+            rng, blocking=blocking)
+
+
+    @pytest.mark.parametrize("return_info", [False, True])
+    def test_return_info(self, xp, method, return_info):
+        if isinstance(method, tensor.QRMethod):
+            pytest.skip("QRMethod does not support return_info")
+        decompose_expr = ('abcd->bxd,cxa', [(4, 4, 6, 6)])
+        rng = self._get_rng(decompose_expr, xp, method, return_info, "return_info")
+        self._run_decompose(
+            decompose_expr, xp, "complex128", "C", None, method,
+            rng, blocking="auto", return_info=return_info)
+
+
+@pytest.mark.parametrize("decompose_expr", tensor_decomp_expressions)
+@pytest.mark.parametrize("xp", BACKEND_MEMSPACE)
+@pytest.mark.parametrize("dtype", DECOMPOSITION_DTYPE_NAMES)
+class TestDecomposeCorrectness(BaseDecomposeTester):
+
+    def test_qr(self, decompose_expr, xp, dtype):
+        rng = self._get_rng(decompose_expr, xp, dtype, "QR")
+        test_config_iterator = self._test_config_iterator(decompose_expr, xp, dtype, "QR")
+        for _ in range(NUM_TESTS_PER_CASE):
+            stream, order, blocking = next(test_config_iterator)
+            self._run_decompose(
+                decompose_expr, xp, dtype, order, stream, tensor.QRMethod(),
+                rng, blocking=blocking)
+        return
+
+
+    def test_svd(self, decompose_expr, xp, dtype):
+        rng = self._get_rng(decompose_expr, xp, dtype, "SVD")
+        test_config_iterator = self._test_config_iterator(decompose_expr, xp, dtype, "SVD")
+        for _ in range(NUM_TESTS_PER_CASE):
+            stream, order, blocking, return_info, method = next(test_config_iterator)
             self._run_decompose(
                 decompose_expr, xp, dtype, order, stream, method,
-                blocking=blocking, return_info=return_info)
+                rng, blocking=blocking, return_info=return_info)
+        return
+    
 
 def test_memory_limit():
     decompose_expr, shapes = ('ab->ax,xb', [(8, 8)])
-    factory = DecomposeFactory(decompose_expr, shapes=shapes)
+    factory = DecomposeFactory(decompose_expr, np.random.default_rng(100), shapes=shapes)
     operand = factory.generate_operands(factory.input_shapes, "numpy", "float64", "C")[0]
     with pytest.raises(MemoryLimitExceeded):
-        outputs = tensor.decompose(decompose_expr, operand, options={'memory_limit': 1})
+        tensor.decompose(decompose_expr, operand, options={'memory_limit': 1})
                 
     
 class TestDecompositionOptions(TestNetworkOptions):

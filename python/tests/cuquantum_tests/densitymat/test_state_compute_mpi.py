@@ -61,16 +61,6 @@ def get_state(ctx, hilbert_space_dims, batch_size, package, dtype, mixed, init="
 
 class TestStateAPI:
 
-    def setup_method(self):
-        self.device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
-        self.ctx = WorkStream(device_id = self.device_id)
-        # self.ctx._comm = MPI.COMM_WORLD.Dup()
-        self.ctx.set_communicator(comm=MPI.COMM_WORLD, provider="MPI")
-        cp.cuda.Device(self.device_id).use()
-
-    def teardown_method(self):
-        self.ctx=None
-
     @pytest.mark.parametrize("hilbert_space", [(10,), (4, 6), (2, 3), (4,), (7,), (3, 3, 3)])
     @pytest.mark.parametrize("package", [cp])
     @pytest.mark.parametrize(
@@ -126,37 +116,49 @@ class TestStateAPI:
     )
     @pytest.mark.parametrize("purity", ["PURE", "MIXED"])
     def test_state_inplace_scale(self, hilbert_space, package, dtype, batch_size, factors, purity):
-        psi, global_state = get_state(
-            self.ctx,
-            hilbert_space,
-            batch_size,
-            package,
-            dtype,
-            init="random",
-            mixed=(purity == "MIXED"),
-        )
-        shape, offsets = psi.local_info
-        psi_arr = psi.view().get()
-        assert not np.any(np.isnan(psi_arr))
-        psi.inplace_scale(factors)
-        scaled_psi_arr = psi.view().get()
+        try:
+            device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
+            ctx = WorkStream(device_id = device_id)
+            # self.ctx._comm = MPI.COMM_WORLD.Dup()
+            ctx.set_communicator(comm=MPI.COMM_WORLD, provider="MPI")
+            cp.cuda.Device(device_id).use()
 
-        assert not np.any(np.isnan(scaled_psi_arr))
+            psi, _ = get_state(
+                ctx,
+                hilbert_space,
+                batch_size,
+                package,
+                dtype,
+                init="random",
+                mixed=(purity == "MIXED"),
+            )
+            shape, offsets = psi.local_info
+            psi_arr = psi.view().get()
+            assert not np.any(np.isnan(psi_arr))
+            psi.inplace_scale(factors)
+            scaled_psi_arr = psi.view().get()
 
-        if isinstance(factors, Sequence):
-            factors_np = np.array(factors, dtype=psi.dtype)
-        elif isinstance(factors, cp.ndarray):
-            factors_np = factors.get()
-        elif isinstance(factors, Number):  # single number or numpy array
-            factors_np = np.ones(batch_size) * factors
-        else:
-            factors_np = factors
-        ref = np.einsum(
-            "...i,i->...i",
-            psi_arr,
-            factors_np[np.array(range(offsets[-1], offsets[-1] + shape[-1]))],
-        )
-        np.testing.assert_allclose(scaled_psi_arr, ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+            assert not np.any(np.isnan(scaled_psi_arr))
+
+            if isinstance(factors, Sequence):
+                factors_np = np.array(factors, dtype=psi.dtype)
+            elif isinstance(factors, cp.ndarray):
+                factors_np = factors.get()
+            elif isinstance(factors, Number):  # single number or numpy array
+                factors_np = np.ones(batch_size) * factors
+            else:
+                factors_np = factors
+            ref = np.einsum(
+                "...i,i->...i",
+                psi_arr,
+                factors_np[np.array(range(offsets[-1], offsets[-1] + shape[-1]))],
+            )
+            np.testing.assert_allclose(scaled_psi_arr, ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+        finally:
+            psi = None
+            ctx = None
+
+
 
     @pytest.mark.parametrize("hilbert_space", [(10,), (4, 6), (3, 7)])
     @pytest.mark.parametrize("package", [cp])
@@ -214,51 +216,61 @@ class TestStateAPI:
     def test_state_inplace_accumulate(
         self, hilbert_space, package, dtype, batch_size, factors, purity
     ):
-        psi1, _ = get_state(
-            self.ctx,
-            hilbert_space,
-            batch_size,
-            package,
-            dtype,
-            init="random",
-            mixed=(purity == "MIXED"),
-        )
-        shape, offsets = psi1.local_info
-        psi2, _ = get_state(
-            self.ctx,
-            hilbert_space,
-            batch_size,
-            package,
-            dtype,
-            init="random",
-            mixed=(purity == "MIXED"),
-        )
-        psi1_arr = psi1.view().get()
-        psi2_arr = psi2.view().get()
-        assert not np.any(np.isnan(psi1_arr))
-        assert not np.any(np.isnan(psi2_arr))
-        psi1.inplace_accumulate(psi2, factors)
-        accumulated_psi_arr = psi1.view().get()
-
-        if isinstance(factors, Sequence):
-            factors_np = np.array(factors, dtype=psi1.dtype)
-        elif isinstance(factors, cp.ndarray):
-            factors_np = factors.get()
-        elif isinstance(factors, Number):  # single number or numpy array
-            factors_np = np.ones(batch_size) * factors
-        else:
-            factors_np = factors
-        ref = (
-            np.einsum(
-                "...i,i->...i",
-                psi2_arr,
-                factors_np[np.array(range(offsets[-1], offsets[-1] + shape[-1]))],
+        try:
+            device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
+            ctx = WorkStream(device_id = device_id)
+            # self.ctx._comm = MPI.COMM_WORLD.Dup()
+            ctx.set_communicator(comm=MPI.COMM_WORLD, provider="MPI")
+            cp.cuda.Device(device_id).use()
+            psi1, _ = get_state(
+                ctx,
+                hilbert_space,
+                batch_size,
+                package,
+                dtype,
+                init="random",
+                mixed=(purity == "MIXED"),
             )
-            + psi1_arr
-        )
-        # np.testing.assert_allclose(np.unique(accumulated_psi_arr), np.unique(ref), rtol=1e-5, atol=1e-8)
-        # print(accumulated_psi_arr / ref)
-        np.testing.assert_allclose(accumulated_psi_arr, ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+            shape, offsets = psi1.local_info
+            psi2, _ = get_state(
+                ctx,
+                hilbert_space,
+                batch_size,
+                package,
+                dtype,
+                init="random",
+                mixed=(purity == "MIXED"),
+            )
+            psi1_arr = psi1.view().get()
+            psi2_arr = psi2.view().get()
+            assert not np.any(np.isnan(psi1_arr))
+            assert not np.any(np.isnan(psi2_arr))
+            psi1.inplace_accumulate(psi2, factors)
+            accumulated_psi_arr = psi1.view().get()
+
+            if isinstance(factors, Sequence):
+                factors_np = np.array(factors, dtype=psi1.dtype)
+            elif isinstance(factors, cp.ndarray):
+                factors_np = factors.get()
+            elif isinstance(factors, Number):  # single number or numpy array
+                factors_np = np.ones(batch_size) * factors
+            else:
+                factors_np = factors
+            ref = (
+                np.einsum(
+                    "...i,i->...i",
+                    psi2_arr,
+                    factors_np[np.array(range(offsets[-1], offsets[-1] + shape[-1]))],
+                )
+                + psi1_arr
+            )
+            # np.testing.assert_allclose(np.unique(accumulated_psi_arr), np.unique(ref), rtol=1e-5, atol=1e-8)
+            # print(accumulated_psi_arr / ref)
+            np.testing.assert_allclose(accumulated_psi_arr, ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+        finally:
+            psi1 = None
+            psi2 = None
+            ctx = None
         
 
     @pytest.mark.parametrize("hilbert_space", ((10,), (10, 2, 4), (3, 3, 3)))
@@ -267,41 +279,51 @@ class TestStateAPI:
     @pytest.mark.parametrize("batch_size", [1, 2])
     @pytest.mark.parametrize("purity", ["PURE", "MIXED"])
     def test_state_inner_product(self, hilbert_space, package, dtype, batch_size, purity):
-        psi1, _ = get_state(
-            self.ctx,
-            hilbert_space,
-            batch_size,
-            package,
-            dtype,
-            init="random",
-            mixed=(purity == "MIXED"),
-        )
-        psi2, _ = get_state(
-            self.ctx,
-            hilbert_space,
-            batch_size,
-            package,
-            dtype,
-            init="random",
-            mixed=(purity == "MIXED"),
-        )
-        psi1_arr = psi1.view().get()
-        psi2_arr = psi2.view().get()
-        slice_shape, offsets = psi1.local_info
+        try:
+            device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
+            ctx = WorkStream(device_id = device_id)
+            # self.ctx._comm = MPI.COMM_WORLD.Dup()
+            ctx.set_communicator(comm=MPI.COMM_WORLD, provider="MPI")
+            cp.cuda.Device(device_id).use()
+            psi1, _ = get_state(
+                ctx,
+                hilbert_space,
+                batch_size,
+                package,
+                dtype,
+                init="random",
+                mixed=(purity == "MIXED"),
+            )
+            psi2, _ = get_state(
+                ctx,
+                hilbert_space,
+                batch_size,
+                package,
+                dtype,
+                init="random",
+                mixed=(purity == "MIXED"),
+            )
+            psi1_arr = psi1.view().get()
+            psi2_arr = psi2.view().get()
+            slice_shape, offsets = psi1.local_info
 
-        inner_prod = psi1.inner_product(psi2)
-        inner_prod_arr = inner_prod.get()
+            inner_prod = psi1.inner_product(psi2)
+            inner_prod_arr = inner_prod.get()
 
-        psi1_arr = psi1_arr.reshape((-1, psi1_arr.shape[-1]), order="F")
-        psi2_arr = psi2_arr.reshape((-1, psi2_arr.shape[-1]), order="F")
-        ref = np.zeros((batch_size,), dtype=inner_prod.dtype)
-        reduced_ref = np.zeros((batch_size,), dtype=inner_prod.dtype)
-        local_batch_size = psi1.view().shape[-1]
-        for i in range(local_batch_size):
-            ref[offsets[-1] + i] = np.vdot(psi1_arr[:, i], psi2_arr[:, i])
-        comm = self.ctx.get_communicator()
-        comm.Allreduce(ref, reduced_ref)
-        np.testing.assert_allclose(inner_prod_arr, reduced_ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+            psi1_arr = psi1_arr.reshape((-1, psi1_arr.shape[-1]), order="F")
+            psi2_arr = psi2_arr.reshape((-1, psi2_arr.shape[-1]), order="F")
+            ref = np.zeros((batch_size,), dtype=inner_prod.dtype)
+            reduced_ref = np.zeros((batch_size,), dtype=inner_prod.dtype)
+            local_batch_size = psi1.view().shape[-1]
+            for i in range(local_batch_size):
+                ref[offsets[-1] + i] = np.vdot(psi1_arr[:, i], psi2_arr[:, i])
+            comm = ctx.get_communicator()
+            comm.Allreduce(ref, reduced_ref)
+            np.testing.assert_allclose(inner_prod_arr, reduced_ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+        finally:
+            psi1 = None
+            psi2 = None
+            ctx = None
 
     @pytest.mark.parametrize(
         "hilbert_space",
@@ -316,33 +338,41 @@ class TestStateAPI:
     @pytest.mark.parametrize("batch_size", [1, 2])
     @pytest.mark.parametrize("purity", ("PURE", "MIXED"))
     def test_state_norm(self, hilbert_space, package, dtype, batch_size, purity):
-        psi, global_state = get_state(
-            self.ctx,
-            hilbert_space,
-            batch_size,
-            package,
-            dtype,
-            mixed=(purity == "MIXED"),
-            init="random",
-        )
-        psi_arr = psi.view().get()
-        norm = psi.norm().get()
-        shape, offsets = psi.local_info
-        # psi_arr = psi_arr.reshape((-1, psi_arr.shape[-1]), order="F")
-        ref = np.zeros((batch_size,), dtype=psi.storage.real.dtype)
-        reduced_ref = np.zeros((batch_size,), dtype=norm.dtype)
-        local_batch_size = psi.view().shape[-1]
-        for i in range(local_batch_size):
-            ref[offsets[-1] + i] = np.vdot(psi_arr[..., i], psi_arr[..., i]).real
-        global_ref = np.zeros((batch_size,), dtype=norm.dtype)
-        for i in range(batch_size):
-            global_ref[i] = np.vdot(global_state[..., i], global_state[..., i]).real
-        global_state = None
-        comm = self.ctx.get_communicator()
-        comm.Allreduce(ref, reduced_ref)
-        print(global_ref, ref, reduced_ref, norm)
-
-        np.testing.assert_allclose(norm, global_ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+        try:
+            device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
+            ctx = WorkStream(device_id = device_id)
+            # self.ctx._comm = MPI.COMM_WORLD.Dup()
+            ctx.set_communicator(comm=MPI.COMM_WORLD, provider="MPI")
+            cp.cuda.Device(device_id).use()
+            psi, global_state = get_state(
+                ctx,
+                hilbert_space,
+                batch_size,
+                package,
+                dtype,
+                mixed=(purity == "MIXED"),
+                init="random",
+            )
+            psi_arr = psi.view().get()
+            norm = psi.norm().get()
+            shape, offsets = psi.local_info
+            # psi_arr = psi_arr.reshape((-1, psi_arr.shape[-1]), order="F")
+            ref = np.zeros((batch_size,), dtype=psi.storage.real.dtype)
+            reduced_ref = np.zeros((batch_size,), dtype=norm.dtype)
+            local_batch_size = psi.view().shape[-1]
+            for i in range(local_batch_size):
+                ref[offsets[-1] + i] = np.vdot(psi_arr[..., i], psi_arr[..., i]).real
+            global_ref = np.zeros((batch_size,), dtype=norm.dtype)
+            for i in range(batch_size):
+                global_ref[i] = np.vdot(global_state[..., i], global_state[..., i]).real
+            global_state = None
+            comm = ctx.get_communicator()
+            comm.Allreduce(ref, reduced_ref)
+            
+            np.testing.assert_allclose(norm, global_ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+        finally:
+            psi = None
+            ctx = None
         
     @pytest.mark.parametrize(
         "hilbert_space",
@@ -357,32 +387,41 @@ class TestStateAPI:
     @pytest.mark.parametrize("purity", ("PURE","MIXED"))
     def test_state_trace(self, hilbert_space, package, dtype, batch_size, purity):
         #hilbert_space = tuple(hilbert_space[i] + int(purity == "MIXED") for i in range(len(hilbert_space)))
-        psi, global_state = get_state(
-            self.ctx,
-            hilbert_space,
-            batch_size,
-            package,
-            dtype,
-            mixed=(purity == "MIXED"),
-            init="random",
-        )
-        psi_arr = psi.view().get()
-        gpu_trace = psi.trace()
-        cp.cuda.Device().synchronize()
-        cpu_trace = gpu_trace.get()
-        trace = cpu_trace
-        shape, offsets = psi.local_info
-        # psi_arr = psi_arr.reshape((-1, psi_arr.shape[-1]), order="F")
-        local_batch_size = psi.view().shape[-1]
-        global_ref = np.zeros((batch_size,), dtype=trace.dtype)
-        matdim=np.prod(hilbert_space)
-        if purity=="MIXED":
-            for i in range(batch_size):
-                global_ref[i] = np.trace(global_state[..., i].reshape(matdim,matdim))
-        else:
-            for i in range(batch_size):
-                global_ref[i] = np.vdot(global_state[..., i], global_state[..., i]).real
-        global_state = None
-        if self.ctx.get_communicator().rank == 0:
-            print(trace.dtype, trace, global_ref)
-        np.testing.assert_allclose(trace, global_ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+        try:
+            device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
+            ctx = WorkStream(device_id = device_id)
+            # self.ctx._comm = MPI.COMM_WORLD.Dup()
+            ctx.set_communicator(comm=MPI.COMM_WORLD, provider="MPI")
+            cp.cuda.Device(device_id).use()
+            psi, global_state = get_state(
+                ctx,
+                hilbert_space,
+                batch_size,
+                package,
+                dtype,
+                mixed=(purity == "MIXED"),
+                init="random",
+            )
+            psi_arr = psi.view().get()
+            gpu_trace = psi.trace()
+            cp.cuda.Device().synchronize()
+            cpu_trace = gpu_trace.get()
+            trace = cpu_trace
+            shape, offsets = psi.local_info
+            # psi_arr = psi_arr.reshape((-1, psi_arr.shape[-1]), order="F")
+            local_batch_size = psi.view().shape[-1]
+            global_ref = np.zeros((batch_size,), dtype=trace.dtype)
+            matdim=np.prod(hilbert_space)
+            if purity=="MIXED":
+                for i in range(batch_size):
+                    global_ref[i] = np.trace(global_state[..., i].reshape(matdim,matdim))
+            else:
+                for i in range(batch_size):
+                    global_ref[i] = np.vdot(global_state[..., i], global_state[..., i]).real
+            global_state = None
+            if ctx.get_communicator().rank == 0:
+                print(trace.dtype, trace, global_ref)
+            np.testing.assert_allclose(trace, global_ref, rtol=1e-4, atol=ATOLERANCES[dtype])
+        finally:
+            psi = None
+            ctx = None

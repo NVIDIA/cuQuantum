@@ -6,6 +6,8 @@ import weakref
 import collections
 from typing import Sequence, Tuple
 
+from nvmath.internal import utils as nvmath_utils
+
 from cuquantum._internal import utils as cutn_utils
 
 from cuquantum.bindings import cudensitymat as cudm
@@ -40,7 +42,7 @@ class LibraryHandle:
         self._finalizer.detach()
 
         self._device_id = device_id
-        with cutn_utils.device_ctx(self._device_id):
+        with nvmath_utils.device_ctx(self._device_id):
             self._ptr = cudm.create()
         self.logger = logger
         self._comm = None
@@ -69,7 +71,7 @@ class LibraryHandle:
         return self._finalizer.alive
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _validated_ptr(self):
         return self._ptr
 
@@ -114,28 +116,28 @@ class LibraryHandle:
         """
         return self._comm
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def get_num_ranks(self) -> int:
         """
         Returns the total number of distributed processes associated with the given library context.
         """
         return cudm.get_num_ranks(self._validated_ptr)
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def get_proc_rank(self) -> int:
         """
         Returns the rank of the current process in the distributed configuration associated with the given library context.
         """
         return cudm.get_proc_rank(self._validated_ptr)
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def set_random_seed(self, seed: int) -> None:
         """
         Sets the random seed used by the random number generator inside the library context.
         """
         cudm.reset_random_seed(self._validated_ptr, seed)
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _register_user(self, user):
         assert self != user
         self._upstream_finalizers[user._finalizer] = weakref.ref(

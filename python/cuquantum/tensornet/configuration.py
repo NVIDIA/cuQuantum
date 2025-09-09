@@ -7,7 +7,7 @@ A collection of types for defining options to cutensornet.
 """
 
 __all__ = ['NetworkOptions', 'OptimizerInfo', 'OptimizerOptions', 'PathFinderOptions', 
-    'ReconfigOptions', 'SlicerOptions', 'MemoryLimitExceeded']
+    'ReconfigOptions', 'SlicerOptions']
 
 import collections
 from dataclasses import dataclass
@@ -17,10 +17,9 @@ from typing import Dict, Hashable, Iterable, Literal, Optional, Tuple, Union
 
 import cuquantum
 from cuquantum.bindings import cutensornet as cutn
-from .._internal import enum_utils
-from .._internal import formatters
-from .._internal.mem_limit import check_memory_str
-from .memory import BaseCUDAMemoryManager
+from nvmath.internal import enum_utils, formatters
+from nvmath.internal.mem_limit import check_memory_str
+from nvmath.memory import BaseCUDAMemoryManager
 
 @dataclass
 class NetworkOptions(object):
@@ -171,9 +170,9 @@ class OptimizerOptions(object):
         self.reconfiguration = self._check_option(self.reconfiguration, ReconfigOptions, None)
         self._check_int(self.seed, "seed")
         if self.cost_function is not None:
-            self.cost_function = cuquantum.cutensornet.OptimizerCost(self.cost_function)
+            self.cost_function = cutn.OptimizerCost(self.cost_function)
         if self.smart is not None:
-            self.smart = cuquantum.cutensornet.SmartOption(self.smart)
+            self.smart = cutn.SmartOption(self.smart)
 
 
 @dataclass
@@ -214,38 +213,3 @@ class OptimizerInfo(object):
     Intermediate tensor mode labels = {formatters.array2string(intermediate_modes)}"""
 
         return s
-
-
-class MemoryLimitExceeded(MemoryError):
-    """
-    This exception is raised when the operation requires more device memory than what was specified in operation options.
-
-    Attributes:
-        - limit: int
-            The memory limit in bytes.
-        - requirement: int
-            Memory required to perform the operation.
-        - device_id: int
-            The device selected to run the operation.
-
-    If the options was set to str, this value is the calculated limit.
-    """
-    limit: int
-    device_id: int
-    requirement: int
-
-    def __init__(self,
-                 limit:int,
-                 requirement:int,
-                 device_id:int,
-                 specified: Optional[Union[str, int]]=None):
-        message = f"""GPU memory limit exceeded. Device id: {device_id}.
-The memory limit is {limit}, while the minimum workspace size needed is {requirement}.
-"""
-        if specified is not None:
-            message += f"Memory limit specified by options: {specified}."
-
-        super().__init__(message)
-        self.limit = limit
-        self.requirement = requirement
-        self.device_id = device_id

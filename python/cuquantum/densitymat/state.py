@@ -8,10 +8,12 @@ from typing import Sequence, Any, Tuple, Union, List
 import weakref
 import collections
 
+from nvmath.internal import utils as nvmath_utils
+from nvmath.internal import typemaps, tensor_wrapper
+from nvmath.internal.tensor_ifc import TensorHolder
+
 import cupy as cp
 import numpy as np
-from cuquantum._internal import utils as cutn_utils, tensor_wrapper, typemaps
-from cuquantum._internal.tensor_ifc import Tensor
 
 from cuquantum.bindings import cudensitymat as cudm
 from .work_stream import WorkStream
@@ -91,7 +93,7 @@ class State(ABC):
         return self._finalizer.alive
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _validated_ptr(self):
         """
         Pointer to C-API counterpart.
@@ -154,7 +156,7 @@ class State(ABC):
             raise TypeError("factors must be of type Number, Sequence, np.ndarray or cp.ndarray.")
 
         # Put factors onto GPU
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(
             self._ctx, blocking=True
         ):
             if not cp.can_cast(factors, self.dtype, casting="same_kind"):
@@ -166,7 +168,7 @@ class State(ABC):
 
         return factors_arr
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def inplace_scale(self, factors: Union[Number, Sequence, np.ndarray, cp.ndarray]) -> None:
         """
         Scale the state by scalar factor(s).
@@ -177,7 +179,7 @@ class State(ABC):
         """
         factors_arr = self._check_and_return_factors(factors)
 
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -188,7 +190,7 @@ class State(ABC):
                 self._ctx._stream_holder.ptr,
             )
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def norm(self) -> cp.ndarray:
         """
         Compute the squared Frobenius norm(s) of the state.
@@ -202,7 +204,7 @@ class State(ABC):
         else:
             dtype = self.dtype
 
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -215,7 +217,7 @@ class State(ABC):
             )
         return res
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def trace(self) -> cp.ndarray:
         """
         Compute the trace(s) of the state.
@@ -223,7 +225,7 @@ class State(ABC):
         Returns:
             An array of trace(s) of length ``batch_size``.
         """
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -236,7 +238,7 @@ class State(ABC):
             )
         return res
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def inplace_accumulate(
         self, other, factors: Union[Number, Sequence, np.ndarray, cp.ndarray] = 1
     ) -> None:
@@ -251,7 +253,7 @@ class State(ABC):
         self._check_state_compatibility(other)
         factors_arr = self._check_and_return_factors(factors)
 
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -265,7 +267,7 @@ class State(ABC):
                 self._ctx._stream_holder.ptr,
             )
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def inner_product(self, other) -> cp.ndarray:
         """
         Compute the inner product(s) between two states.
@@ -277,7 +279,7 @@ class State(ABC):
             An array of inner product(s) of length ``batch_size``.
         """
         self._check_state_compatibility(other)
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -294,7 +296,7 @@ class State(ABC):
             )
         return res
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _attach_component_storage(self, data: Sequence) -> None:
         """
         Attaches GPU buffers to this instance. This instance doesn't own the buffers.
@@ -344,7 +346,7 @@ class State(ABC):
         self._bufs = bufs
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _num_components(self):
         """
         Number of components in the state storage.
@@ -352,7 +354,7 @@ class State(ABC):
         return cudm.state_get_num_components(self._ctx._handle._validated_ptr, self._ptr)
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _component_storage_size(self):
         """
         Size of each of the components in the state storage in bytes.
@@ -363,15 +365,15 @@ class State(ABC):
         return sizes
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
-    def _component_storage(self) -> Sequence[Tensor]:
+    @nvmath_utils.precondition(_check_valid_state)
+    def _component_storage(self) -> Sequence[TensorHolder]:
         """
         Non-blocking return of reference to buffers.
         """
         return self._bufs
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _local_info(self) -> List[Tuple[Tuple[int], Tuple[int]]]:
         infos = []
         for local_component_index in range(self._num_components):

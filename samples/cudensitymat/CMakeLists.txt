@@ -52,17 +52,14 @@ enable_language(CUDA)
 find_package(CUDAToolkit REQUIRED)
 
 if(NOT CMAKE_CUDA_ARCHITECTURES_DEFINED)
-  if(
-    (${CUDAToolkit_VERSION_MAJOR} LESS 12) OR 
-    (${CUDAToolkit_VERSION_MAJOR} EQUAL 12 AND ${CUDAToolkit_VERSION_MINOR} LESS 8)
-  )
-    set(CMAKE_CUDA_ARCHITECTURES 70-real;75-real;80-real;86-real;90)
+  if((${CUDAToolkit_VERSION_MAJOR} LESS 12) OR
+     (${CUDAToolkit_VERSION_MAJOR} EQUAL 12 AND ${CUDAToolkit_VERSION_MINOR} LESS 8))
+    set(CMAKE_CUDA_ARCHITECTURES 75-real;80-real;86-real;90)
   else()
-    set(CMAKE_CUDA_ARCHITECTURES 70-real;75-real;80-real;86-real;90-real;100-real;120-real;100-virtual)
+    set(CMAKE_CUDA_ARCHITECTURES 75-real;80-real;86-real;90-real;100-real;120-real;100-virtual)
   endif()
 endif()
 message(STATUS "Target CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
-
 
 # Find MPI
 if(ENABLE_MPI)
@@ -76,7 +73,7 @@ else()
   message(STATUS "Building a single-GPU version of the examples!")
 endif()
 
-# Find cuTensor
+# cuTensor
 if(NOT DEFINED ENV{CUTENSOR_ROOT} AND NOT DEFINED CUTENSOR_ROOT)
   message(FATAL_ERROR "CUTENSOR_ROOT is not set!")
 else()
@@ -89,7 +86,14 @@ else()
   endif()
 endif()
 set(CUTENSOR_INC_DIR ${CUTENSOR_ROOT}/include)
-set(CUTENSOR_LIB_DIR ${CUTENSOR_ROOT}/lib/${CUDAToolkit_VERSION_MAJOR})
+if(EXISTS ${CUTENSOR_ROOT}/lib/x86_64-linux-gnu)
+  set(CUTENSOR_LIB_DIR ${CUTENSOR_ROOT}/lib/x86_64-linux-gnu)
+elseif(EXISTS ${CUTENSOR_ROOT}/lib/aarch64-linux-gnu)
+  set(CUTENSOR_LIB_DIR ${CUTENSOR_ROOT}/lib/aarch64-linux-gnu)
+else()
+  set(CUTENSOR_LIB_DIR ${CUTENSOR_ROOT}/lib)
+endif()
+
 
 # cuTensorNet
 if(NOT DEFINED ENV{CUTENSORNET_ROOT} AND NOT DEFINED CUTENSORNET_ROOT)
@@ -104,7 +108,15 @@ else()
   endif()
 endif()
 set(CUTENSORNET_INC_DIR ${CUTENSORNET_ROOT}/include)
-set(CUTENSORNET_LIB_DIR "${CUTENSORNET_ROOT}/lib")
+# Auto-detect lib or lib64 directory for cuTensorNet
+if(EXISTS "${CUTENSORNET_ROOT}/lib64")
+  set(CUTENSORNET_LIB_DIR "${CUTENSORNET_ROOT}/lib64")
+elseif(EXISTS "${CUTENSORNET_ROOT}/lib")
+  set(CUTENSORNET_LIB_DIR "${CUTENSORNET_ROOT}/lib")
+else()
+  message(FATAL_ERROR "Could not find 'lib' or 'lib64' in CUTENSORNET_ROOT: ${CUTENSORNET_ROOT}")
+endif()
+message(STATUS "Found cuTensorNet library directory: ${CUTENSORNET_LIB_DIR}")
 
 # Find cuDensityMat
 if(NOT DEFINED ENV{CUDENSITYMAT_ROOT} AND NOT DEFINED CUDENSITYMAT_ROOT)
@@ -119,7 +131,15 @@ else()
   endif()
 endif()
 set(CUDENSITYMAT_INC_DIR ${CUDENSITYMAT_ROOT}/include)
-set(CUDENSITYMAT_LIB_DIR ${CUDENSITYMAT_ROOT}/lib)
+# Auto-detect lib or lib64 directory for cuDensityMat
+if(EXISTS "${CUDENSITYMAT_ROOT}/lib64")
+  set(CUDENSITYMAT_LIB_DIR "${CUDENSITYMAT_ROOT}/lib64")
+elseif(EXISTS "${CUDENSITYMAT_ROOT}/lib")
+  set(CUDENSITYMAT_LIB_DIR "${CUDENSITYMAT_ROOT}/lib")
+else()
+  message(FATAL_ERROR "Could not find 'lib' or 'lib64' in CUDENSITYMAT_ROOT: ${CUDENSITYMAT_ROOT}")
+endif()
+message(STATUS "Found cuDensityMat library directory: ${CUDENSITYMAT_LIB_DIR}")
 
 # Single-GPU operator action example
 add_executable(operator_action_example
@@ -151,7 +171,9 @@ target_link_libraries(operator_action_example
     cudensitymat
     cutensornet
     cutensor
+    CUDA::cusolver
     CUDA::cublas
+    CUDA::curand
     CUDA::cudart
 )
 
@@ -193,7 +215,9 @@ if(MPI_FOUND)
       cudensitymat
       cutensornet
       cutensor
+      CUDA::cusolver
       CUDA::cublas
+      CUDA::curand
       CUDA::cudart
       MPI::MPI_CXX
   )
@@ -230,6 +254,44 @@ target_link_libraries(operator_action_gradient_example
     cudensitymat
     cutensornet
     cutensor
+    CUDA::cusolver
     CUDA::cublas
+    CUDA::curand
+    CUDA::cudart
+)
+
+# Single-GPU operator eigen-spectrum example
+add_executable(operator_eigenspectrum_example
+  operator_eigenspectrum_example.cpp
+)
+
+set_target_properties(operator_eigenspectrum_example
+  PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD}
+    CUDA_STANDARD ${CMAKE_CUDA_STANDARD}
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_include_directories(operator_eigenspectrum_example
+  PUBLIC
+    ${CUDENSITYMAT_INC_DIR}
+    ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+
+target_link_directories(operator_eigenspectrum_example
+  PUBLIC
+    ${CUDENSITYMAT_LIB_DIR}
+    ${CUTENSORNET_LIB_DIR}
+    ${CUTENSOR_LIB_DIR}
+)
+
+target_link_libraries(operator_eigenspectrum_example
+  PUBLIC
+    cudensitymat
+    cutensornet
+    cutensor
+    CUDA::cusolver
+    CUDA::cublas
+    CUDA::curand
     CUDA::cudart
 )

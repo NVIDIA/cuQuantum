@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -22,42 +22,55 @@
 
 // Sphinx: MPI #1 [end]
 
-#define HANDLE_ERROR(x)                                           \
-{ const auto err = x;                                             \
-  if( err != CUTENSORNET_STATUS_SUCCESS )                         \
-  { printf("Error: %s in line %d\n", cutensornetGetErrorString(err), __LINE__); \
-    fflush(stdout);                                               \
-    MPI_Abort(MPI_COMM_WORLD, err);                               \
-  }                                                               \
-};
+#define HANDLE_ERROR(x)                                                                 \
+    do {                                                                                \
+        const auto err = x;                                                             \
+        if (err != CUTENSORNET_STATUS_SUCCESS)                                          \
+        {                                                                               \
+            printf("Error: %s in line %d\n", cutensornetGetErrorString(err), __LINE__); \
+            fflush(stdout);                                                             \
+            MPI_Abort(MPI_COMM_WORLD, err);                                             \
+        }                                                                               \
+    } while (0)
 
-#define HANDLE_CUDA_ERROR(x)                                      \
-{ const auto err = x;                                             \
-  if( err != cudaSuccess )                                        \
-  { printf("CUDA Error: %s in line %d\n", cudaGetErrorString(err), __LINE__); \
-    fflush(stdout);                                               \
-    MPI_Abort(MPI_COMM_WORLD, err) ;                              \
-  }                                                               \
-};
+#define HANDLE_CUDA_ERROR(x)                                                          \
+    do {                                                                              \
+        const auto err = x;                                                           \
+        if (err != cudaSuccess)                                                       \
+        {                                                                             \
+            printf("CUDA Error: %s in line %d\n", cudaGetErrorString(err), __LINE__); \
+            fflush(stdout);                                                           \
+            MPI_Abort(MPI_COMM_WORLD, err);                                           \
+        }                                                                             \
+    } while (0)
 
 // Sphinx: MPI #2 [begin]
 
-#define HANDLE_MPI_ERROR(x)                                       \
-{ const auto err = x;                                             \
-  if( err != MPI_SUCCESS )                                        \
-  { char error[MPI_MAX_ERROR_STRING]; int len;                    \
-    MPI_Error_string(err, error, &len);                           \
-    printf("MPI Error: %s in line %d\n", error, __LINE__);        \
-    fflush(stdout);                                               \
-    MPI_Abort(MPI_COMM_WORLD, err);                               \
-  }                                                               \
-};
+#define HANDLE_MPI_ERROR(x)                                        \
+    do {                                                           \
+        const auto err = x;                                        \
+        if (err != MPI_SUCCESS)                                    \
+        {                                                          \
+            char error[MPI_MAX_ERROR_STRING];                      \
+            int len;                                               \
+            MPI_Error_string(err, error, &len);                    \
+            printf("MPI Error: %s in line %d\n", error, __LINE__); \
+            fflush(stdout);                                        \
+            MPI_Abort(MPI_COMM_WORLD, err);                        \
+        }                                                          \
+    } while (0)
 
 // Sphinx: MPI #2 [end]
 
+// Usage: DEV_ATTR(cudaDevAttrClockRate, deviceId)
+#define DEV_ATTR(ENUMCONST, DID)                                                   \
+    ({ int v;                                                                       \
+       HANDLE_CUDA_ERROR(cudaDeviceGetAttribute(&v, ENUMCONST, DID));               \
+       v; })
+
 struct GPUTimer
 {
-    GPUTimer(cudaStream_t stream): stream_(stream)
+    GPUTimer(cudaStream_t stream) : stream_(stream)
     {
         HANDLE_CUDA_ERROR(cudaEventCreate(&start_));
         HANDLE_CUDA_ERROR(cudaEventCreate(&stop_));
@@ -69,10 +82,7 @@ struct GPUTimer
         HANDLE_CUDA_ERROR(cudaEventDestroy(stop_));
     }
 
-    void start()
-    {
-        HANDLE_CUDA_ERROR(cudaEventRecord(start_, stream_));
-    }
+    void start() { HANDLE_CUDA_ERROR(cudaEventRecord(start_, stream_)); }
 
     float seconds()
     {
@@ -83,489 +93,469 @@ struct GPUTimer
         return time * 1e-3;
     }
 
-    private:
+private:
     cudaEvent_t start_, stop_;
     cudaStream_t stream_;
 };
 
-
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
-   static_assert(sizeof(size_t) == sizeof(int64_t), "Please build this sample on a 64-bit architecture!");
+    static_assert(sizeof(size_t) == sizeof(int64_t), "Please build this sample on a 64-bit architecture!");
 
-   // Sphinx: MPI #3 [begin]
+    // Sphinx: MPI #3 [begin]
 
-   // Initialize MPI
-   HANDLE_MPI_ERROR( MPI_Init(&argc, &argv) );
-   int rank {-1};
-   HANDLE_MPI_ERROR( MPI_Comm_rank(MPI_COMM_WORLD, &rank) );
-   int numProcs {0};
-   HANDLE_MPI_ERROR( MPI_Comm_size(MPI_COMM_WORLD, &numProcs) );
+    // Initialize MPI
+    HANDLE_MPI_ERROR(MPI_Init(&argc, &argv));
+    int rank{-1};
+    HANDLE_MPI_ERROR(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+    int numProcs{0};
+    HANDLE_MPI_ERROR(MPI_Comm_size(MPI_COMM_WORLD, &numProcs));
 
-   // Sphinx: MPI #3 [end]
+    // Sphinx: MPI #3 [end]
 
-   bool verbose = (rank == 0) ? true : false;
-   if (verbose)
-   {
-      printf("*** Printing is done only from the root MPI process to prevent jumbled messages ***\n");
-      printf("The number of MPI processes is %d\n", numProcs);
-   }
-   if(verbose)
-      printf("Initialized MPI service\n");
+    bool verbose = (rank == 0) ? true : false;
+    if (verbose)
+    {
+        printf("*** Printing is done only from the root MPI process to prevent jumbled messages ***\n");
+        printf("The number of MPI processes is %d\n", numProcs);
+    }
+    if (verbose) printf("Initialized MPI service\n");
 
-   // Check cuTensorNet version
-   const size_t cuTensornetVersion = cutensornetGetVersion();
-   if(verbose)
-      printf("cuTensorNet version: %ld\n", cuTensornetVersion);
+    // Check cuTensorNet version
+    const size_t cuTensornetVersion = cutensornetGetVersion();
+    if (verbose) printf("cuTensorNet version: %ld\n", cuTensornetVersion);
 
-   // Sphinx: MPI #4 [begin]
+    // Sphinx: MPI #4 [begin]
 
-   // Set GPU device based on ranks and nodes
-   int numDevices {0};
-   HANDLE_CUDA_ERROR( cudaGetDeviceCount(&numDevices) );
-   const int deviceId = rank % numDevices; // we assume that the processes are mapped to nodes in contiguous chunks
-   HANDLE_CUDA_ERROR( cudaSetDevice(deviceId) );
-   cudaDeviceProp prop;
-   HANDLE_CUDA_ERROR( cudaGetDeviceProperties(&prop, deviceId) );
+    // Set GPU device based on ranks and nodes
+    int numDevices{0};
+    HANDLE_CUDA_ERROR(cudaGetDeviceCount(&numDevices));
+    const int deviceId = rank % numDevices; // we assume that the processes are mapped to nodes in contiguous chunks
+    HANDLE_CUDA_ERROR(cudaSetDevice(deviceId));
+    cudaDeviceProp prop;
+    HANDLE_CUDA_ERROR(cudaGetDeviceProperties(&prop, deviceId));
 
-   // Sphinx: MPI #4 [end]
+    // Sphinx: MPI #4 [end]
 
-   if(verbose) {
-      printf("===== rank 0 device info ======\n");
-      printf("GPU-local-id:%d\n", deviceId);
-      printf("GPU-name:%s\n", prop.name);
-      printf("GPU-clock:%d\n", prop.clockRate);
-      printf("GPU-memoryClock:%d\n", prop.memoryClockRate);
-      printf("GPU-nSM:%d\n", prop.multiProcessorCount);
-      printf("GPU-major:%d\n", prop.major);
-      printf("GPU-minor:%d\n", prop.minor);
-      printf("CUDA-available-devices:%d\n",numDevices);
-      printf("CUDA_VISIBLE_DEVICES:%s\n",getenv("CUDA_VISIBLE_DEVICES") != nullptr ? getenv("CUDA_VISIBLE_DEVICES") : "");
-      printf("===============================\n");
-   } else {
-      printf("===== rank %d device info ======\nGPU-local-id:%d\n", rank, deviceId);
-   }
+    if (verbose)
+    {
+        printf("===== rank 0 device info ======\n");
+        printf("GPU-local-id:%d\n", deviceId);
+        printf("GPU-name:%s\n", prop.name);
+        printf("GPU-clock:%d\n", DEV_ATTR(cudaDevAttrClockRate, deviceId));
+        printf("GPU-memoryClock:%d\n", DEV_ATTR(cudaDevAttrMemoryClockRate, deviceId));
+        printf("GPU-nSM:%d\n", prop.multiProcessorCount);
+        printf("GPU-major:%d\n", prop.major);
+        printf("GPU-minor:%d\n", prop.minor);
+        printf("CUDA-available-devices:%d\n", numDevices);
+        printf("CUDA_VISIBLE_DEVICES:%s\n", getenv("CUDA_VISIBLE_DEVICES") != nullptr ? getenv("CUDA_VISIBLE_DEVICES") : "");
+        printf("===============================\n");
+    }
+    else
+    {
+        printf("===== rank %d device info ======\nGPU-local-id:%d\n", rank, deviceId);
+    }
 
-   typedef float floatType;
-   MPI_Datatype floatTypeMPI = MPI_FLOAT;
-   cudaDataType_t typeData = CUDA_R_32F;
-   cutensornetComputeType_t typeCompute = CUTENSORNET_COMPUTE_32F;
+    typedef float floatType;
+    MPI_Datatype floatTypeMPI            = MPI_FLOAT;
+    cudaDataType_t typeData              = CUDA_R_32F;
+    cutensornetComputeType_t typeCompute = CUTENSORNET_COMPUTE_32F;
 
-   if(verbose)
-      printf("Included headers and defined data types\n");
+    if (verbose) printf("Included headers and defined data types\n");
 
-   // Sphinx: #2
-   /**********************
-   * Computing: R_{k,l} = A_{a,b,c,d,e,f} B_{b,g,h,e,i,j} C_{m,a,g,f,i,k} D_{l,c,h,d,j,m}
-   **********************/
+    // Sphinx: #2
+    /**********************
+     * Computing: R_{k,l} = A_{a,b,c,d,e,f} B_{b,g,h,e,i,j} C_{m,a,g,f,i,k} D_{l,c,h,d,j,m}
+     **********************/
 
-   constexpr int32_t numInputs = 4;
+    constexpr int32_t numInputs = 4;
 
-   // Create vectors of tensor modes
-   std::vector<int32_t> modesA{'a','b','c','d','e','f'};
-   std::vector<int32_t> modesB{'b','g','h','e','i','j'};
-   std::vector<int32_t> modesC{'m','a','g','f','i','k'};
-   std::vector<int32_t> modesD{'l','c','h','d','j','m'};
-   std::vector<int32_t> modesR{'k','l'};
+    // Create vectors of tensor modes
+    std::vector<std::vector<int32_t>> tensorModes{ // for input tensors & output tensor
+        // input tensors
+        {'a', 'b', 'c', 'd', 'e', 'f'}, // tensor A
+        {'b', 'g', 'h', 'e', 'i', 'j'}, // tensor B
+        {'m', 'a', 'g', 'f', 'i', 'k'}, // tensor C
+        {'l', 'c', 'h', 'd', 'j', 'm'}, // tensor D
+        // output tensor
+        {'k', 'l'}, // tensor R
+    };
 
-   // Set mode extents
-   std::unordered_map<int32_t, int64_t> extent;
-   extent['a'] = 16;
-   extent['b'] = 16;
-   extent['c'] = 16;
-   extent['d'] = 16;
-   extent['e'] = 16;
-   extent['f'] = 16;
-   extent['g'] = 16;
-   extent['h'] = 16;
-   extent['i'] = 16;
-   extent['j'] = 16;
-   extent['k'] = 16;
-   extent['l'] = 16;
-   extent['m'] = 16;
+    // Set mode extents
+    int64_t sameExtent = 16; // setting same extent for simplicity. In principle extents can differ.
+    std::unordered_map<int32_t, int64_t> extent;
+    for (auto& vec : tensorModes)
+    {
+        for (auto& mode : vec)
+        {
+            extent[mode] = sameExtent;
+        }
+    }
 
-   // Create a vector of extents for each tensor
-   std::vector<int64_t> extentA;
-   for (auto mode : modesA)
-      extentA.push_back(extent[mode]);
-   std::vector<int64_t> extentB;
-   for (auto mode : modesB)
-      extentB.push_back(extent[mode]);
-   std::vector<int64_t> extentC;
-   for (auto mode : modesC)
-      extentC.push_back(extent[mode]);
-   std::vector<int64_t> extentD;
-   for (auto mode : modesD)
-      extentD.push_back(extent[mode]);
-   std::vector<int64_t> extentR;
-   for (auto mode : modesR)
-      extentR.push_back(extent[mode]);
+    // Create a vector of extents for each tensor
+    std::vector<std::vector<int64_t>> tensorExtents; // for input tensors & output tensor
+    tensorExtents.resize(numInputs + 1);             // hold inputs + output tensors
+    for (int32_t t = 0; t < numInputs + 1; ++t)
+    {
+        for (auto& mode : tensorModes[t]) tensorExtents[t].push_back(extent[mode]);
+    }
 
-   if(verbose)
-      printf("Defined tensor network, modes, and extents\n");
+    if (verbose) printf("Defined tensor network, modes, and extents\n");
 
-   // Sphinx: #3
-   /**********************
-   * Allocating data
-   **********************/
+    // Sphinx: #3
+    /**********************
+     * Allocating data
+     **********************/
 
-   size_t elementsA = 1;
-   for (auto mode : modesA)
-      elementsA *= extent[mode];
-   size_t elementsB = 1;
-   for (auto mode : modesB)
-      elementsB *= extent[mode];
-   size_t elementsC = 1;
-   for (auto mode : modesC)
-      elementsC *= extent[mode];
-   size_t elementsD = 1;
-   for (auto mode : modesD)
-      elementsD *= extent[mode];
-   size_t elementsR = 1;
-   for (auto mode : modesR)
-      elementsR *= extent[mode];
+    std::vector<size_t> tensorElements(numInputs + 1); // for input tensors & output tensor
+    std::vector<size_t> tensorSizes(numInputs + 1);    // for input tensors & output tensor
+    size_t totalSize = 0;
+    for (int32_t t = 0; t < numInputs + 1; ++t)
+    {
+        size_t numElements = 1;
+        for (auto& mode : tensorModes[t]) numElements *= extent[mode];
+        tensorElements[t] = numElements;
 
-   size_t sizeA = sizeof(floatType) * elementsA;
-   size_t sizeB = sizeof(floatType) * elementsB;
-   size_t sizeC = sizeof(floatType) * elementsC;
-   size_t sizeD = sizeof(floatType) * elementsD;
-   size_t sizeR = sizeof(floatType) * elementsR;
-   if(verbose)
-      printf("Total GPU memory used for tensor storage: %.2f GiB\n",
-             (sizeA + sizeB + sizeC + sizeD + sizeR) / 1024. /1024. / 1024);
+        tensorSizes[t] = sizeof(floatType) * numElements;
+        totalSize += tensorSizes[t];
+    }
 
-   void* rawDataIn_d[numInputs];
-   void* R_d;
-   HANDLE_CUDA_ERROR( cudaMalloc((void**) &rawDataIn_d[0], sizeA) );
-   HANDLE_CUDA_ERROR( cudaMalloc((void**) &rawDataIn_d[1], sizeB) );
-   HANDLE_CUDA_ERROR( cudaMalloc((void**) &rawDataIn_d[2], sizeC) );
-   HANDLE_CUDA_ERROR( cudaMalloc((void**) &rawDataIn_d[3], sizeD) );
-   HANDLE_CUDA_ERROR( cudaMalloc((void**) &R_d, sizeR));
+    if (verbose) printf("Total GPU memory used for tensor storage: %.2f GiB\n", (totalSize) / 1024. / 1024. / 1024);
 
-   floatType *A = (floatType*) malloc(sizeof(floatType) * elementsA);
-   floatType *B = (floatType*) malloc(sizeof(floatType) * elementsB);
-   floatType *C = (floatType*) malloc(sizeof(floatType) * elementsC);
-   floatType *D = (floatType*) malloc(sizeof(floatType) * elementsD);
-   floatType *R = (floatType*) malloc(sizeof(floatType) * elementsR);
+    void* tensorData_d[numInputs + 1]; // for input tensors & output tensor
+    for (int32_t t = 0; t < numInputs + 1; ++t)
+    {
+        HANDLE_CUDA_ERROR(cudaMalloc((void**)&tensorData_d[t], tensorSizes[t]));
+    }
 
-   if (A == NULL || B == NULL || C == NULL || D == NULL || R == NULL)
-   {
-      printf("Error: Host memory allocation failed!\n");
-      return -1;
-   }
+    floatType* tensorData_h[numInputs + 1]; // for input tensors & output tensor
+    for (int32_t t = 0; t < numInputs + 1; ++t)
+    {
+        tensorData_h[t] = (floatType*)malloc(tensorSizes[t]);
+        if (tensorData_h[t] == NULL)
+        {
+            printf("Error: Host memory allocation failed!\n");
+            return -1;
+        }
+    }
 
-   // Sphinx: MPI #5 [begin]
+    // Sphinx: MPI #5 [begin]
+    /*******************
+     * Initialize data
+     *******************/
 
-   /*******************
-   * Initialize data
-   *******************/
+    // init output tensor to all 0s
+    memset(tensorData_h[numInputs], 0, tensorSizes[numInputs]);
+    if (rank == 0)
+    {
+        // init input tensors to random values
+        for (int32_t t = 0; t < numInputs; ++t)
+        {
+            for (uint64_t i = 0; i < tensorElements[t]; ++i) tensorData_h[t][i] = ((floatType)rand()) / RAND_MAX;
+        }
+    }
 
-   memset(R, 0, sizeof(floatType) * elementsR);
-   if(rank == 0)
-   {
-      for (uint64_t i = 0; i < elementsA; i++)
-         A[i] = ((floatType) rand()) / RAND_MAX;
-      for (uint64_t i = 0; i < elementsB; i++)
-         B[i] = ((floatType) rand()) / RAND_MAX;
-      for (uint64_t i = 0; i < elementsC; i++)
-         C[i] = ((floatType) rand()) / RAND_MAX;
-      for (uint64_t i = 0; i < elementsD; i++)
-         D[i] = ((floatType) rand()) / RAND_MAX;
-   }
+    // Broadcast input data to all ranks
+    for (int32_t t = 0; t < numInputs; ++t)
+    {
+        HANDLE_MPI_ERROR(MPI_Bcast(tensorData_h[t], tensorElements[t], floatTypeMPI, 0, MPI_COMM_WORLD));
+    }
 
-   // Broadcast input data to all ranks
-   HANDLE_MPI_ERROR( MPI_Bcast(A, elementsA, floatTypeMPI, 0, MPI_COMM_WORLD) );
-   HANDLE_MPI_ERROR( MPI_Bcast(B, elementsB, floatTypeMPI, 0, MPI_COMM_WORLD) );
-   HANDLE_MPI_ERROR( MPI_Bcast(C, elementsC, floatTypeMPI, 0, MPI_COMM_WORLD) );
-   HANDLE_MPI_ERROR( MPI_Bcast(D, elementsD, floatTypeMPI, 0, MPI_COMM_WORLD) );
+    // copy input data to device buffers
+    for (int32_t t = 0; t < numInputs; ++t)
+    {
+        HANDLE_CUDA_ERROR(cudaMemcpy(tensorData_d[t], tensorData_h[t], tensorSizes[t], cudaMemcpyHostToDevice));
+    }
 
-   // Copy data to GPU
-   HANDLE_CUDA_ERROR( cudaMemcpy(rawDataIn_d[0], A, sizeA, cudaMemcpyHostToDevice) );
-   HANDLE_CUDA_ERROR( cudaMemcpy(rawDataIn_d[1], B, sizeB, cudaMemcpyHostToDevice) );
-   HANDLE_CUDA_ERROR( cudaMemcpy(rawDataIn_d[2], C, sizeC, cudaMemcpyHostToDevice) );
-   HANDLE_CUDA_ERROR( cudaMemcpy(rawDataIn_d[3], D, sizeD, cudaMemcpyHostToDevice) );
+    // Sphinx: MPI #5 [end]
 
-   if(verbose)
-      printf("Allocated GPU memory for data, and initialize data\n");
+    // Sphinx: #4
+    /*************************
+     * cuTensorNet
+     *************************/
 
-   // Sphinx: MPI #5 [end]
+    cudaStream_t stream;
+    HANDLE_CUDA_ERROR(cudaStreamCreate(&stream));
 
-   // Sphinx: #4
-   /*************************
-   * cuTensorNet
-   *************************/
+    cutensornetHandle_t handle;
+    HANDLE_ERROR(cutensornetCreate(&handle));
 
-   cudaStream_t stream;
-   HANDLE_CUDA_ERROR( cudaStreamCreate(&stream) );
+    if (verbose) printf("Allocated GPU memory for data, initialized data, and created library handle\n");
 
-   cutensornetHandle_t handle;
-   HANDLE_ERROR( cutensornetCreate(&handle) );
+    /*******************************
+     * Create Network
+     *******************************/
 
-   const int32_t nmodeA = modesA.size();
-   const int32_t nmodeB = modesB.size();
-   const int32_t nmodeC = modesC.size();
-   const int32_t nmodeD = modesD.size();
-   const int32_t nmodeR = modesR.size();
+    // Set up tensor network
+    cutensornetNetworkDescriptor_t networkDesc;
+    HANDLE_ERROR(cutensornetCreateNetwork(handle, &networkDesc));
 
-   /*******************************
-   * Create Network Descriptor
-   *******************************/
+    int64_t tensorIDs[numInputs]; // for input tensors
+    // attach the input tensors to the network
+    for (int32_t t = 0; t < numInputs; ++t)
+    {
+        HANDLE_ERROR(cutensornetNetworkAppendTensor(handle,
+                                                    networkDesc,
+                                                    tensorModes[t].size(),
+                                                    tensorExtents[t].data(),
+                                                    tensorModes[t].data(),
+                                                    NULL,
+                                                    typeData,
+                                                    &tensorIDs[t]));
+    }
 
-   const int32_t* modesIn[] = {modesA.data(), modesB.data(), modesC.data(), modesD.data()};
-   int32_t const numModesIn[] = {nmodeA, nmodeB, nmodeC, nmodeD};
-   const int64_t* extentsIn[] = {extentA.data(), extentB.data(), extentC.data(), extentD.data()};
-   const int64_t* stridesIn[] = {NULL, NULL, NULL, NULL}; // strides are optional; if no stride is provided, cuTensorNet assumes a generalized column-major data layout
+    // set the output tensor
+    HANDLE_ERROR(cutensornetNetworkSetOutputTensor(handle,
+                                                   networkDesc,
+                                                   tensorModes[numInputs].size(),
+                                                   tensorModes[numInputs].data(),
+                                                   typeData));
 
-   // Set up tensor network
-   cutensornetNetworkDescriptor_t descNet;
-   HANDLE_ERROR( cutensornetCreateNetworkDescriptor(handle,
-                     numInputs, numModesIn, extentsIn, stridesIn, modesIn, NULL,
-                     nmodeR, extentR.data(), /*stridesOut = */NULL, modesR.data(),
-                     typeData, typeCompute,
-                     &descNet) );
+    // set the network compute type
+    HANDLE_ERROR(cutensornetNetworkSetAttribute(handle,
+                                                networkDesc,
+                                                CUTENSORNET_NETWORK_COMPUTE_TYPE,
+                                                &typeCompute,
+                                                sizeof(typeCompute)));
+    if (verbose) printf("Initialized the cuTensorNet library and created a tensor network\n");
 
-   if(verbose)
-      printf("Initialized the cuTensorNet library and created a tensor network descriptor\n");
+    // Sphinx: #5
+    /*******************************
+     * Choose workspace limit based on available resources.
+     *******************************/
 
-   // Sphinx: #5
-   /*******************************
-   * Choose workspace limit based on available resources.
-   *******************************/
+    size_t freeMem, totalMem;
+    HANDLE_CUDA_ERROR(cudaMemGetInfo(&freeMem, &totalMem));
+    uint64_t workspaceLimit = (uint64_t)((double)freeMem * 0.9);
+    if (verbose) printf("Workspace limit = %lu\n", workspaceLimit);
 
-   size_t freeMem, totalMem;
-   HANDLE_CUDA_ERROR( cudaMemGetInfo(&freeMem, &totalMem) );
-   uint64_t workspaceLimit = (uint64_t)((double)freeMem * 0.9);
-   if(verbose)
-      printf("Workspace limit = %lu\n", workspaceLimit);
+    // Sphinx: MPI #6 [begin]
 
-   // Sphinx: MPI #6 [begin]
+    /*******************************
+     * Activate distributed (parallel) execution prior to
+     * calling contraction path finder and contraction executor
+     *******************************/
+    // HANDLE_ERROR( cutensornetDistributedResetConfiguration(handle, NULL, 0) ); // resets back to serial execution
+    MPI_Comm cutnComm;
+    HANDLE_MPI_ERROR(MPI_Comm_dup(MPI_COMM_WORLD, &cutnComm)); // duplicate MPI communicator
+    HANDLE_ERROR(cutensornetDistributedResetConfiguration(handle, &cutnComm, sizeof(cutnComm)));
+    if (verbose) printf("Reset distributed MPI configuration\n");
 
-   /*******************************
-   * Activate distributed (parallel) execution prior to
-   * calling contraction path finder and contraction executor
-   *******************************/
-   // HANDLE_ERROR( cutensornetDistributedResetConfiguration(handle, NULL, 0) ); // resets back to serial execution
-   MPI_Comm cutnComm;
-   HANDLE_MPI_ERROR( MPI_Comm_dup(MPI_COMM_WORLD, &cutnComm) ); // duplicate MPI communicator
-   HANDLE_ERROR( cutensornetDistributedResetConfiguration(handle, &cutnComm, sizeof(cutnComm)) );
-   if(verbose)
-      printf("Reset distributed MPI configuration\n");
+    // Sphinx: MPI #6 [end]
 
-   // Sphinx: MPI #6 [end]
+    /*******************************
+     * Find "optimal" contraction order and slicing (in parallel)
+     *******************************/
 
-   /*******************************
-   * Find "optimal" contraction order and slicing (in parallel)
-   *******************************/
+    cutensornetContractionOptimizerConfig_t optimizerConfig;
+    HANDLE_ERROR(cutensornetCreateContractionOptimizerConfig(handle, &optimizerConfig));
 
-   cutensornetContractionOptimizerConfig_t optimizerConfig;
-   HANDLE_ERROR( cutensornetCreateContractionOptimizerConfig(handle, &optimizerConfig) );
+    // Set the desired number of hyper-samples (defaults to 0)
+    int32_t num_hypersamples = 8;
+    HANDLE_ERROR(cutensornetContractionOptimizerConfigSetAttribute(handle,
+                                                                   optimizerConfig,
+                                                                   CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES,
+                                                                   &num_hypersamples,
+                                                                   sizeof(num_hypersamples)));
 
-   // Set the desired number of hyper-samples (defaults to 0)
-   int32_t num_hypersamples = 8;
-   HANDLE_ERROR( cutensornetContractionOptimizerConfigSetAttribute(handle,
-                     optimizerConfig,
-                     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_HYPER_NUM_SAMPLES,
-                     &num_hypersamples,
-                     sizeof(num_hypersamples)) );
+    // Create contraction optimizer info and find an optimized contraction path
+    cutensornetContractionOptimizerInfo_t optimizerInfo;
+    HANDLE_ERROR(cutensornetCreateContractionOptimizerInfo(handle, networkDesc, &optimizerInfo));
 
-   // Create contraction optimizer info and find an optimized contraction path
-   cutensornetContractionOptimizerInfo_t optimizerInfo;
-   HANDLE_ERROR( cutensornetCreateContractionOptimizerInfo(handle, descNet, &optimizerInfo) );
+    HANDLE_ERROR(cutensornetContractionOptimize(handle,
+                                                networkDesc,
+                                                optimizerConfig,
+                                                workspaceLimit,
+                                                optimizerInfo));
 
-   HANDLE_ERROR( cutensornetContractionOptimize(handle,
-                                             descNet,
-                                             optimizerConfig,
-                                             workspaceLimit,
-                                             optimizerInfo) );
+    // Query the number of slices the tensor network execution will be split into
+    int64_t numSlices = 0;
+    HANDLE_ERROR(cutensornetContractionOptimizerInfoGetAttribute(handle,
+                                                                 optimizerInfo,
+                                                                 CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_SLICES,
+                                                                 &numSlices,
+                                                                 sizeof(numSlices)));
+    assert(numSlices > 0);
 
-   // Query the number of slices the tensor network execution will be split into
-   int64_t numSlices = 0;
-   HANDLE_ERROR( cutensornetContractionOptimizerInfoGetAttribute(
-                  handle,
-                  optimizerInfo,
-                  CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_NUM_SLICES,
-                  &numSlices,
-                  sizeof(numSlices)) );
-   assert(numSlices > 0);
+    if (verbose) printf("Found an optimized contraction path using cuTensorNet optimizer\n");
 
-   if(verbose)
-      printf("Found an optimized contraction path using cuTensorNet optimizer\n");
+    // Sphinx: #6
+    /*******************************
+     * Create workspace descriptor, allocate workspace, and set it.
+     *******************************/
 
-   // Sphinx: #6
-   /*******************************
-   * Create workspace descriptor, allocate workspace, and set it.
-   *******************************/
+    cutensornetWorkspaceDescriptor_t workDesc;
+    HANDLE_ERROR(cutensornetCreateWorkspaceDescriptor(handle, &workDesc));
 
-   cutensornetWorkspaceDescriptor_t workDesc;
-   HANDLE_ERROR( cutensornetCreateWorkspaceDescriptor(handle, &workDesc) );
+    int64_t requiredWorkspaceSize = 0;
+    HANDLE_ERROR(cutensornetWorkspaceComputeContractionSizes(handle,
+                                                             networkDesc,
+                                                             optimizerInfo,
+                                                             workDesc));
 
-   int64_t requiredWorkspaceSize = 0;
-   HANDLE_ERROR( cutensornetWorkspaceComputeContractionSizes(handle,
-                                                         descNet,
-                                                         optimizerInfo,
-                                                         workDesc) );
-
-   HANDLE_ERROR( cutensornetWorkspaceGetMemorySize(handle,
+    HANDLE_ERROR(cutensornetWorkspaceGetMemorySize(handle,
                                                    workDesc,
                                                    CUTENSORNET_WORKSIZE_PREF_MIN,
                                                    CUTENSORNET_MEMSPACE_DEVICE,
                                                    CUTENSORNET_WORKSPACE_SCRATCH,
-                                                   &requiredWorkspaceSize) );
+                                                   &requiredWorkspaceSize));
 
-   void* work = nullptr;
-   HANDLE_CUDA_ERROR( cudaMalloc(&work, requiredWorkspaceSize) );
+    void* work = nullptr;
+    HANDLE_CUDA_ERROR(cudaMalloc(&work, requiredWorkspaceSize));
 
-   HANDLE_ERROR( cutensornetWorkspaceSetMemory(handle,
+    HANDLE_ERROR(cutensornetWorkspaceSetMemory(handle,
                                                workDesc,
                                                CUTENSORNET_MEMSPACE_DEVICE,
                                                CUTENSORNET_WORKSPACE_SCRATCH,
                                                work,
-                                               requiredWorkspaceSize) );
+                                               requiredWorkspaceSize));
 
-   if(verbose)
-      printf("Allocated and set up the GPU workspace\n");
+    if (verbose) printf("Allocated and set up the GPU workspace\n");
 
-   // Sphinx: #7
-   /*******************************
-   * Initialize the pairwise contraction plan (for cuTENSOR).
-   *******************************/
+    // Sphinx: #7
+    /*******************************
+     * Prepare the contraction.
+     *******************************/
 
-   cutensornetContractionPlan_t plan;
-   HANDLE_ERROR( cutensornetCreateContractionPlan(handle,
-                                                descNet,
-                                                optimizerInfo,
+    HANDLE_ERROR(cutensornetNetworkPrepareContraction(handle,
+                                                      networkDesc,
+                                                      workDesc));
+
+    // set tensor's data buffers and strides
+    for (int32_t t = 0; t < numInputs; ++t)
+    {
+        HANDLE_ERROR(cutensornetNetworkSetInputTensorMemory(handle,
+                                                            networkDesc,
+                                                            tensorIDs[t],
+                                                            tensorData_d[t],
+                                                            NULL));
+    }
+    HANDLE_ERROR(cutensornetNetworkSetOutputTensorMemory(handle,
+                                                         networkDesc,
+                                                         tensorData_d[numInputs],
+                                                         NULL));
+    /*******************************
+     * Optional: Auto-tune the contraction plan to pick the fastest kernel
+     *           for each pairwise tensor contraction.
+     *******************************/
+    cutensornetNetworkAutotunePreference_t autotunePref;
+    HANDLE_ERROR(cutensornetCreateNetworkAutotunePreference(handle,
+                                                            &autotunePref));
+
+    const int numAutotuningIterations = 5; // may be 0
+    HANDLE_ERROR(cutensornetNetworkAutotunePreferenceSetAttribute(handle,
+                                                                  autotunePref,
+                                                                  CUTENSORNET_NETWORK_AUTOTUNE_MAX_ITERATIONS,
+                                                                  &numAutotuningIterations,
+                                                                  sizeof(numAutotuningIterations)));
+
+    // Modify the network again to find the best pair-wise contractions
+    HANDLE_ERROR(cutensornetNetworkAutotuneContraction(handle,
+                                                       networkDesc,
+                                                       workDesc,
+                                                       autotunePref,
+                                                       stream));
+
+    HANDLE_ERROR(cutensornetDestroyNetworkAutotunePreference(autotunePref));
+
+    if (verbose) printf("Prepared the network contraction for cuTensorNet and optionally auto-tuned it\n");
+
+    // Sphinx: #8
+    /**********************
+     * Execute the tensor network contraction (in parallel)
+     **********************/
+
+    // Create a cutensornetSliceGroup_t object from a range of slice IDs
+    cutensornetSliceGroup_t sliceGroup{};
+    HANDLE_ERROR(cutensornetCreateSliceGroupFromIDRange(handle, 0, numSlices, 1, &sliceGroup));
+
+    GPUTimer timer{stream};
+    double minTimeCUTENSORNET = 1e100;
+    const int numRuns         = 3; // number of repeats to get stable performance results
+    for (int i = 0; i < numRuns; ++i)
+    {
+        // restore the output tensor on GPU
+        HANDLE_CUDA_ERROR(cudaMemcpy(tensorData_d[numInputs], tensorData_h[numInputs], tensorSizes[numInputs], cudaMemcpyHostToDevice));
+        HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
+
+        /*
+         * Contract all slices of the tensor network (in parallel)
+         */
+        timer.start();
+
+        int32_t accumulateOutput = 0; // output tensor data will be overwritten
+        HANDLE_ERROR(cutensornetNetworkContract(handle,
+                                                networkDesc,
+                                                accumulateOutput,
                                                 workDesc,
-                                                &plan) );
+                                                sliceGroup,
+                                                stream));
 
-   /*******************************
-   * Optional: Auto-tune cuTENSOR's cutensorContractionPlan to pick the fastest kernel
-   *           for each pairwise tensor contraction.
-   *******************************/
-   cutensornetContractionAutotunePreference_t autotunePref;
-   HANDLE_ERROR( cutensornetCreateContractionAutotunePreference(handle,
-                                                      &autotunePref) );
+        // Synchronize and measure best timing
+        auto time       = timer.seconds();
+        minTimeCUTENSORNET = (time > minTimeCUTENSORNET) ? minTimeCUTENSORNET : time;
+    }
 
-   const int numAutotuningIterations = 5; // may be 0
-   HANDLE_ERROR( cutensornetContractionAutotunePreferenceSetAttribute(
-                           handle,
-                           autotunePref,
-                           CUTENSORNET_CONTRACTION_AUTOTUNE_MAX_ITERATIONS,
-                           &numAutotuningIterations,
-                           sizeof(numAutotuningIterations)) );
+    if (verbose) printf("Contracted the tensor network, each slice used the same contraction plan\n");
 
-   // Modify the plan again to find the best pair-wise contractions
-   HANDLE_ERROR( cutensornetContractionAutotune(handle,
-                                                plan,
-                                                rawDataIn_d,
-                                                R_d,
-                                                workDesc,
-                                                autotunePref,
-                                                stream) );
+    // Print the 1-norm of the output tensor (verification)
+    HANDLE_CUDA_ERROR(cudaStreamSynchronize(stream));
+    // restore the output tensor on Host
+    HANDLE_CUDA_ERROR(cudaMemcpy(tensorData_h[numInputs], tensorData_d[numInputs], tensorSizes[numInputs], cudaMemcpyDeviceToHost));
+    double norm1 = 0.0;
+    for (int64_t i = 0; i < tensorElements[numInputs]; ++i)
+    {
+        norm1 += std::abs(tensorData_h[numInputs][i]);
+    }
+    if (verbose) printf("Computed the 1-norm of the output tensor: %e\n", norm1);
 
-   HANDLE_ERROR( cutensornetDestroyContractionAutotunePreference(autotunePref) );
+    /*************************/
 
-   if(verbose)
-      printf("Created a contraction plan for cuTensorNet and optionally auto-tuned it\n");
+    // Query the total Flop count for the tensor network contraction
+    double flops {0.0};
+    HANDLE_ERROR(cutensornetContractionOptimizerInfoGetAttribute(handle,
+                                                                 optimizerInfo,
+                                                                 CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT,
+                                                                 &flops,
+                                                                 sizeof(flops)));
 
-   // Sphinx: #8
-   /**********************
-   * Execute the tensor network contraction (in parallel)
-   **********************/
+    if (verbose)
+    {
+        printf("Number of tensor network slices = %ld\n", numSlices);
+        printf("Tensor network contraction time (ms) = %.3f\n", minTimeCUTENSORNET * 1000.f);
+    }
 
-   // Create a cutensornetSliceGroup_t object from a range of slice IDs
-   cutensornetSliceGroup_t sliceGroup{};
-   HANDLE_ERROR( cutensornetCreateSliceGroupFromIDRange(handle, 0, numSlices, 1, &sliceGroup) );
+    // Sphinx: #9
+    /***************
+     * Free resources
+     ****************/
 
-   GPUTimer timer {stream};
-   double minTimeCUTENSOR = 1e100;
-   const int numRuns = 3; // number of repeats to get stable performance results
-   for (int i = 0; i < numRuns; ++i)
-   {
-      HANDLE_CUDA_ERROR( cudaMemcpy(R_d, R, sizeR, cudaMemcpyHostToDevice) ); // restore the output tensor on GPU
-      HANDLE_CUDA_ERROR( cudaDeviceSynchronize() );
+    // Free cuTensorNet resources
+    HANDLE_ERROR(cutensornetDestroySliceGroup(sliceGroup));
+    HANDLE_ERROR(cutensornetDestroyWorkspaceDescriptor(workDesc));
+    HANDLE_ERROR(cutensornetDestroyContractionOptimizerInfo(optimizerInfo));
+    HANDLE_ERROR(cutensornetDestroyContractionOptimizerConfig(optimizerConfig));
+    HANDLE_ERROR(cutensornetDestroyNetwork(networkDesc));
+    HANDLE_ERROR(cutensornetDestroy(handle));
 
-      /*
-      * Contract all slices of the tensor network (in parallel)
-      */
-      timer.start();
+    HANDLE_CUDA_ERROR(cudaStreamDestroy(stream));
 
-      int32_t accumulateOutput = 0; // output tensor data will be overwritten
-      HANDLE_ERROR( cutensornetContractSlices(handle,
-                     plan,
-                     rawDataIn_d,
-                     R_d,
-                     accumulateOutput,
-                     workDesc,
-                     sliceGroup, // slternatively, NULL can also be used to contract over all slices instead of specifying a sliceGroup object
-                     stream) );
+    // Free Host and GPU memory resources
+    for (int32_t t = 0; t < numInputs + 1; ++t)
+    {
+        if (tensorData_h[t]) free(tensorData_h[t]);
+        if (tensorData_d[t]) cudaFree(tensorData_d[t]);
+    }
+    if (work) cudaFree(work);
 
-      // Synchronize and measure best timing
-      auto time = timer.seconds();
-      minTimeCUTENSOR = (time > minTimeCUTENSOR) ? minTimeCUTENSOR : time;
-   }
+    // Sphinx: MPI #7 [begin]
 
-   if(verbose)
-      printf("Contracted the tensor network, each slice used the same contraction plan\n");
+    // Shut down MPI service
+    HANDLE_MPI_ERROR(MPI_Finalize());
 
-   // Print the 1-norm of the output tensor (verification)
-   HANDLE_CUDA_ERROR( cudaStreamSynchronize(stream) );
-   HANDLE_CUDA_ERROR( cudaMemcpy(R, R_d, sizeR, cudaMemcpyDeviceToHost) ); // restore the output tensor on Host
-   double norm1 = 0.0;
-   for (int64_t i = 0; i < elementsR; ++i) {
-      norm1 += std::abs(R[i]);
-   }
-   if(verbose)
-      printf("Computed the 1-norm of the output tensor: %e\n", norm1);
+    // Sphinx: MPI #7 [end]
 
-   /*************************/
+    if (verbose) printf("Freed resources and exited\n");
 
-   // Query the total Flop count for the tensor network contraction
-   double flops {0.0};
-   HANDLE_ERROR( cutensornetContractionOptimizerInfoGetAttribute(
-                     handle,
-                     optimizerInfo,
-                     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_FLOP_COUNT,
-                     &flops,
-                     sizeof(flops)) );
-
-   if(verbose) {
-      printf("Number of tensor network slices = %ld\n", numSlices);
-      printf("Tensor network contraction time (ms) = %.3f\n", minTimeCUTENSOR * 1000.f);
-   }
-
-   // Free cuTensorNet resources
-   HANDLE_ERROR( cutensornetDestroySliceGroup(sliceGroup) );
-   HANDLE_ERROR( cutensornetDestroyContractionPlan(plan) );
-   HANDLE_ERROR( cutensornetDestroyWorkspaceDescriptor(workDesc) );
-   HANDLE_ERROR( cutensornetDestroyContractionOptimizerInfo(optimizerInfo) );
-   HANDLE_ERROR( cutensornetDestroyContractionOptimizerConfig(optimizerConfig) );
-   HANDLE_ERROR( cutensornetDestroyNetworkDescriptor(descNet) );
-   HANDLE_ERROR( cutensornetDestroy(handle) );
-
-   // Free Host memory resources
-   if (R) free(R);
-   if (D) free(D);
-   if (C) free(C);
-   if (B) free(B);
-   if (A) free(A);
-
-   // Free GPU memory resources
-   if (work) cudaFree(work);
-   if (R_d) cudaFree(R_d);
-   if (rawDataIn_d[0]) cudaFree(rawDataIn_d[0]);
-   if (rawDataIn_d[1]) cudaFree(rawDataIn_d[1]);
-   if (rawDataIn_d[2]) cudaFree(rawDataIn_d[2]);
-   if (rawDataIn_d[3]) cudaFree(rawDataIn_d[3]);
-
-   // Sphinx: MPI #7 [begin]
-
-   // Shut down MPI service
-   HANDLE_MPI_ERROR( MPI_Finalize() );
-
-   // Sphinx: MPI #7 [end]
-
-   if(verbose)
-      printf("Freed resources and exited\n");
-
-   return 0;
+    return 0;
 }

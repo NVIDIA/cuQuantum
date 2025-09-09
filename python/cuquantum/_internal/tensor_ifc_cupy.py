@@ -9,9 +9,8 @@ Interface to seamlessly use Cupy ndarray objects.
 __all__ = ['CupyTensor']
 
 import cupy
-import numpy
 
-from . import utils
+from nvmath.internal import utils
 from .package_ifc import StreamHolder
 from .tensor_ifc import Tensor
 
@@ -125,7 +124,3 @@ class CupyTensor(Tensor):
         Check if the object is ndarray-like.
         """
         return isinstance(self.tensor, cupy.ndarray)
-    
-    def update_extents_strides(self, extents, strides):
-        strides = [i * self.tensor.itemsize for i in strides]
-        self.tensor = cupy.ndarray(extents, dtype=self.tensor.dtype, memptr=self.tensor.data, strides=strides)

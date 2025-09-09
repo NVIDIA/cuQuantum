@@ -6,10 +6,13 @@ __all__ = ['NetworkState']
 
 import logging
 
-import cupy as cp
 import numpy as np
 
 from cuquantum.bindings import cutensornet as cutn
+from nvmath import memory
+from nvmath.internal import utils as nvmath_utils
+from nvmath.internal import formatters, tensor_wrapper
+from nvmath.internal.typemaps import NAME_TO_DATA_TYPE
 
 from .configuration import MPSConfig, TNConfig
 from .network_operator import NetworkOperator
@@ -22,14 +25,11 @@ from ._internal.network_state_utils import (
     state_result_wrapper, 
     state_labels_wrapper,
 )
-from .. import memory
 from ..tensor_network import Network
 from ..circuit_converter import CircuitToEinsum
 from ..configuration import NetworkOptions
-from ..._internal import formatters, tensor_wrapper, utils
 from .._internal.circuit_converter_utils import EMPTY_DICT
-from ..._internal.typemaps import NAME_TO_DATA_TYPE
-
+from .._internal.decomposition_utils import update_tensor_extents_strides
 
 class NetworkState:
     """
@@ -120,7 +120,7 @@ class NetworkState:
     """
     def __init__(self, state_mode_extents, *, dtype=STATE_DEFAULT_DTYPE, config=None, state_labels=None, options=None):
 
-        options = utils.check_or_create_options(NetworkOptions, options, "network options")
+        options = nvmath_utils.check_or_create_options(NetworkOptions, options, "network options")
         self.options = options
         self.device_id = self.options.device_id
         if state_labels is not None:
@@ -140,8 +140,7 @@ class NetworkState:
         self.logger.info("Beginning network state creation...")
         
         # Set memory limit.
-        self.device = cp.cuda.Device(self.device_id)
-        self.memory_limit = utils.get_memory_limit(self.options.memory_limit, self.device)
+        self.memory_limit = nvmath_utils.get_memory_limit_from_device_id(self.options.memory_limit, self.device_id)
         self.logger.info(f"The memory limit is {formatters.MemoryStr(self.memory_limit)}.")
 
         self.state_mode_extents = list(state_mode_extents)
@@ -162,7 +161,7 @@ class NetworkState:
 
         for config_class in (TNConfig, MPSConfig):
             try:
-                self.config = utils.check_or_create_options(config_class, config, config_class.__name__)
+                self.config = nvmath_utils.check_or_create_options(config_class, config, config_class.__name__)
             except TypeError:
                 continue
             else:
@@ -183,7 +182,7 @@ class NetworkState:
             self.handle = options.handle
         else:
             self.own_handle = True
-            with utils.device_ctx(self.device_id):
+            with nvmath_utils.device_ctx(self.device_id):
                 self.handle = cutn.create()
         
         # Create the state object
@@ -233,8 +232,8 @@ class NetworkState:
         self.output_class = operand.__class__
         self.output_location = operand.device
         if self.backend == 'numpy':
-            self.intermediate_class = tensor_wrapper.CupyTensor
-            self.internal_package = 'cupy'
+            self.internal_package = 'cuda'
+            self.intermediate_class = tensor_wrapper._TENSOR_TYPES[self.internal_package]
         else:
             self.intermediate_class = operand.__class__
             self.internal_package = self.backend
@@ -270,7 +269,8 @@ class NetworkState:
             # The last_compute_event is created by the CUDA execution context (utils.cuda_call_ctx) in an execution method
             # is used to ensure that workspace memory (scratch or cache) is made available for another operation only after the operation that uses it is complete.
             if self.last_compute_event is not None:
-                self.workspace_stream.wait_event(self.last_compute_event)
+                self.workspace_stream.wait(self.last_compute_event)
+                self.last_compute_event = None
             
             self._free_task_object_resources()
             self.owned_network_operators = {}
@@ -373,8 +373,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 setattr(self, f'workspace_{name}_size', workspace_dict[f'{name}_size'])
                 setattr(self, f'workspace_{name}_ptr', None)
 
-    @utils.precondition(_check_valid_network)
-    @utils.atomic(_free_workspace_memory, method=True)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.atomic(_free_workspace_memory, method=True)
     def _allocate_workspace_memory_perhaps(self, stream_holder, kind):
         return Network._allocate_workspace_memory_perhaps.__wrapped__.__wrapped__.__wrapped__(self, stream_holder, kind)
 
@@ -383,7 +383,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     # classmethod for one-step initialization #
     ###########################################
     @classmethod
-    def from_circuit(cls, circuit, *, dtype=STATE_DEFAULT_DTYPE, backend='cupy', config=None, options=None, stream=None):
+    def from_circuit(cls, circuit, *, dtype=STATE_DEFAULT_DTYPE, backend="auto", config=None, options=None, stream=None):
         """
         Create a state object from the given circuit.
 
@@ -394,7 +394,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 - ``'complex64'``
                 - ``'complex128'`` (default)
             
-            backend : The backend for all output tensor operands. If not specified, ``cupy`` is used.
+            backend : The backend for all output tensor operands. If not specified, ``cupy`` is used when it is available, otherwise ``numpy`` is used.
             config : The simulation configuration for the state. It can be:
 
                 - A :class:`TNConfig` object for contraction based tensor network simulation (default).
@@ -405,19 +405,20 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
                 the value will be set to the default-constructed ``NetworkOptions`` object.
             stream : Provide the CUDA stream to use for state initialization, which is needed for stream-ordered operations such as allocating memory. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
         Note:
             - When parsing gates from the circuit object, all gate operands are assumed to be unitary. In the rare case where the target circuit object contains customized non-unitary gates, 
               users are encouraged to use :meth:`apply_tensor_operator` to construct the :class:`NetworkState` object.
         """
-        options = utils.check_or_create_options(NetworkOptions, options, "network options")
-        if utils.infer_object_package(circuit) == 'qiskit':
+        options = nvmath_utils.check_or_create_options(NetworkOptions, options, "network options")
+        if nvmath_utils.infer_object_package(circuit) == 'qiskit':
             parser_options = {'decompose_gates': True}
         else:
             # cirq.Circuit does not support decompose_gates option
             parser_options = None
-        with utils.device_ctx(options.device_id):
+        with nvmath_utils.device_ctx(options.device_id):
             converter = CircuitToEinsum(circuit, dtype=dtype, backend=backend, options=parser_options)
         return cls.from_converter(converter, config=config, options=options, stream=stream)
     
@@ -439,7 +440,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
                 the value will be set to the default-constructed ``NetworkOptions`` object.
             stream : Provide the CUDA stream to use for state initialization, which is needed for stream-ordered operations such as allocating memory. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
         """
         dtype = getattr(converter.dtype, '__name__', str(converter.dtype).split('.')[-1])
@@ -464,14 +466,15 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             #   1. Structural change made to the underlying tensor network, regardless of simulation methods
             #   2. No structural change, but underlying simulation is an MPS simulation with value based truncation.
             if self.last_compute_event is not None:
-                self.workspace_stream.wait_event(self.last_compute_event)
+                self.workspace_stream.wait(self.last_compute_event)
+                self.last_compute_event = None
             self._free_task_object_resources()
     
     ###########################################
     #### APIs for customized initialization ###
     ###########################################    
     @state_operands_wrapper(operands_arg_index=1, is_single_operand=False)
-    @utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_valid_network)
     def set_initial_mps(self, mps_tensors, *, stream=None):
         """
         Set the initial state to a non-vacuum state in the MPS form.
@@ -483,7 +486,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 ``k`` denotes the ket mode and ``n`` denotes the mode connecting to the next MPS tensor.
                 Note that this method currently only support open boundary condition, and ``p`` and ``n`` mode should thus be dropped in the first and last MPS tensor respectively. 
             stream : Provide the CUDA stream to use for setting the initial state to the specified MPS (this is used to copy the operands to the GPU if they are provided on the CPU). 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
         
         Note:
@@ -509,8 +513,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     
     @state_labels_wrapper(marker_index=1, marker_type='seq')
     @state_labels_wrapper(key='control_modes', marker_type='seq')
-    @state_operands_wrapper(operands_arg_index=2, is_single_operand=True)
-    @utils.precondition(_check_valid_network)
+    # operand indices (b, a, B, A) required for modes a, b
+    @state_operands_wrapper(operands_arg_index=2, is_single_operand=True, transpose=True)
+    @nvmath_utils.precondition(_check_valid_network)
     def apply_tensor_operator(self, modes, operand, *, control_modes=None, control_values=None, immutable=False, adjoint=False, unitary=False, stream=None):
         """
         Apply a tensor operator to the network state.
@@ -529,7 +534,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             adjoint : Whether the operator should be applied in its adjoint form (default `False`).
             unitary : Whether the operator is unitary (default `False`).
             stream : Provide the CUDA stream to use for applying the tensor operator (this is used to copy the operands to the GPU if they are provided on the CPU). 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
         
         Returns:
@@ -538,10 +544,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         Notes:
             - For MPS simulation, the size of ``modes`` shall be restricted to no larger than 2 (two-body operator).
         """
-        # operand indices (b, a, B, A) required for modes a, b
-        operand = operand.T
-        if isinstance(self.config, MPSConfig) and operand.ndim > 4:
-            raise ValueError(f"MPS simulation only supports one-body and two-body operators, found operator dimension ({operand.ndim})")
+        if isinstance(self.config, MPSConfig) and len(operand.shape) > 4:
+            raise ValueError(f"MPS simulation only supports one-body and two-body operators, found operator dimension ({len(operand.shape)})")
         if control_modes is None:
             tensor_id = cutn.state_apply_tensor_operator(self.handle, self.state, len(modes), 
                 modes, operand.data_ptr, operand.strides, immutable, adjoint, unitary)
@@ -560,8 +564,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         return tensor_id
     
     @state_labels_wrapper(marker_index=1, marker_type='seq')
-    @state_operands_wrapper(operands_arg_index=2, is_single_operand=False)
-    @utils.precondition(_check_valid_network)
+    # operand indices (b, a, B, A) required for modes a, b
+    @state_operands_wrapper(operands_arg_index=2, is_single_operand=False, transpose=True)
+    @nvmath_utils.precondition(_check_valid_network)
     def apply_unitary_tensor_channel(self, modes, operands, probabilities, *, stream=None):
         """
         Apply a unitary tensor channel to the network state.
@@ -576,7 +581,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 where ``ABC...`` denotes output bra modes and ``abc...`` denotes input ket modes corresponding to ``modes`` 
             probabilities : A sequence of positive floats representing the probabilities of each operand.
             stream : Provide the CUDA stream to use for applying the tensor operator (this is used to copy the operands to the GPU if they are provided on the CPU). 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
         
         Returns:
@@ -587,8 +593,6 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         """
         if len(operands) != len(probabilities):
             raise ValueError(f"The number of operands ({len(operands)}) does not matching the size of probabilities ({len(probabilities)})")
-        # operand indices (b, a, B, A) required for modes a, b
-        operands = [o.T for o in operands]
         tensor_data = [o.data_ptr for o in operands]
         tensor_mode_strides = [o.strides for o in operands]
         if not all(strides == tensor_mode_strides[0] for strides in tensor_mode_strides):
@@ -603,8 +607,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         return channel_id
 
     @state_labels_wrapper(marker_index=1, marker_type='seq')
-    @state_operands_wrapper(operands_arg_index=2, is_single_operand=False)
-    @utils.precondition(_check_valid_network)
+    @state_operands_wrapper(operands_arg_index=2, is_single_operand=False, transpose=True)
+    @nvmath_utils.precondition(_check_valid_network)
     def apply_general_tensor_channel(self, modes, operands, *, stream=None):
         """
         Apply a noise channel to the MPS network state. The noise operators may be non-unitary.
@@ -618,7 +622,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 The modes of the operand is expected to be ordered as ``ABC...abc...``, 
                 where ``ABC...`` denotes output bra modes and ``abc...`` denotes input ket modes corresponding to ``modes`` 
             stream : Provide the CUDA stream to use for applying the tensor operator (this is used to copy the operands to the GPU if they are provided on the CPU). 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
         
         Returns:
@@ -636,7 +641,6 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         # operand indices (b, a, B, A) required for modes a, b
         if isinstance(self.config, TNConfig):
             raise ValueError(f"Noise simulation using general channel is only supported for MPS simulation. Set NetworkState config to MPSConfig to enable MPS simulatino")
-        operands = [o.T for o in operands]
         tensor_data = [o.data_ptr for o in operands]
         tensor_mode_strides = [o.strides for o in operands]
         if not all(strides == tensor_mode_strides[0] for strides in tensor_mode_strides):
@@ -650,8 +654,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         self.contains_stochastic_channels = True
         return channel_id
     
-    @state_operands_wrapper(operands_arg_index=2, is_single_operand=True)
-    @utils.precondition(_check_valid_network)
+    # operand indices (b, a, B, A) required for modes a, b
+    @state_operands_wrapper(operands_arg_index=2, is_single_operand=True, transpose=True)
+    @nvmath_utils.precondition(_check_valid_network)
     def update_tensor_operator(self, tensor_id, operand, *, unitary=False, stream=None):
         """
         Update a tensor operator in the state.
@@ -662,18 +667,17 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 The operand is expected to follow the same mode ordering, data type and strides as the original operand. 
             unitary : Whether the operator is unitary (default `False`).
             stream : Provide the CUDA stream to use for updating tensor operand (this is used to copy the operands to the GPU if they are provided on the CPU). 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
         """
-        # operand indices (b, a, B, A) required for modes a, b
-        operand = operand.T
         if tensor_id not in self.operands:
             raise RuntimeError(f"operator with ID ({tensor_id}) has not been applied to the network state.")
         prev_operand, immutable = self.operands[tensor_id]
         if immutable:
             raise RuntimeError(f"tensor id ({tensor_id}) has been marked immutable.")
         if operand.strides != prev_operand.strides:
-            raise ValueError(f'The new operand must share the same strides as the original operand ({prev_operand.T.strides}), found ({operand.T.strides})')
+            raise ValueError(f'The new operand must share the same strides as the original operand ({prev_operand.strides[::-1]}), found ({operand.strides[::-1]})')
         cutn.state_update_tensor_operator(self.handle, self.state, tensor_id, operand.data_ptr, unitary)
         self.operands[tensor_id] = operand, immutable
         self.logger.info(f"Tensor operand with ID ({tensor_id}) has been updated.")
@@ -681,7 +685,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         return
 
 
-    @utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_valid_network)
     def apply_network_operator(self, network_operator, *, immutable=False, adjoint=False, unitary=False):
         """
         Apply a network operator to the network state.
@@ -717,7 +721,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
 
     @state_labels_wrapper(marker_index=1, marker_type='seq')
-    @utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_valid_network)
     def apply_mpo(self, modes, mpo_tensors, *, immutable=False, adjoint=False, unitary=False, stream=None):
         """
         Apply an MPO operator specified by `mpo_tensors` and `modes` to the network state.
@@ -737,7 +741,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             adjoint : Whether the full MPO should be applied in its adjoint form (default `False`).
             unitary : Whether the full MPO is unitary (default `False`).
             stream : Provide the CUDA stream to use for appending MPO (this is used to copy the operands to the GPU if they are provided on the CPU). 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
         Returns:
             An integer `network_id` specifying the location of the MPO.
@@ -790,7 +795,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                     max_extents[i] = min(max_extents[i], max_extent)
             if max_extents.max() > EXACT_MPS_EXTENT_LIMIT:
                 raise ValueError
-            stream_holder = utils.get_or_create_stream(self.device_id, stream, self.internal_package)
+            stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
             for i in range(self.n):
                 if i == 0:
                     extents = (self.state_mode_extents[i], max_extents[i])
@@ -799,7 +804,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 else:
                     extents = (max_extents[i-1], self.state_mode_extents[i], max_extents[i])
 
-                tensor = utils.create_empty_tensor(self.intermediate_class, extents, self.dtype, self.device_id, stream_holder)
+                tensor = nvmath_utils.create_empty_tensor(self.intermediate_class, extents, self.dtype, self.device_id, stream_holder, False)
                 self.mps_tensors.append(tensor)
                 output_mps_extents.append(extents)
                 output_mps_strides.append(tensor.strides) 
@@ -826,12 +831,12 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                     extent_in = self.mps_tensors[i].shape
                     extent_out = extents[i]
                     if extent_in != tuple(extent_out):
-                        self.mps_tensors[i].update_extents_strides(extent_out, strides[i])
+                        update_tensor_extents_strides(self.mps_tensors[i], extent_out, strides[i])
         # mark state as computed
         self.state_computed = True
         return self.state_computed
     
-    @utils.atomic(_free_task_object_resources, method=True)
+    @nvmath_utils.atomic(_free_task_object_resources, method=True)
     def _compute_target(self, task, create_args, execute_args, stream, release_workspace, *, config_args=None, caller_name=None, task_key=None):
         if caller_name is None:
             caller_name = task
@@ -846,7 +851,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 raise ValueError
             create_func = getattr(cutn, f'create_{task}')
         # Allocate device memory (in stream context) if needed.
-        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.internal_package)
+        stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
         prepare_func = getattr(cutn, f'{task}_prepare')
 
         if task == 'sampler':
@@ -874,7 +879,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             else:
                 # make sure when the current stream waits until the last compute event is done and we only cache one compute task object
                 if self.cached_task_obj:
-                    stream_holder.obj.wait_event(self.last_compute_event)
+                    stream_holder.obj.wait(self.last_compute_event)
+                    self.last_compute_event = None
                 self._free_task_object_resources()
                 self.cached_task_obj[task_key] = task_obj = create_func(self.handle, self.state, *create_args)
                 self.logger.info(f"A new {task} object has been created")
@@ -888,7 +894,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         timing =  bool(self.logger and self.logger.handlers)
         if prepare_needed:
             self.logger.info(f"Starting preparing {caller_name} computation with blocking set to {self.blocking}...")
-            with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream_holder, self.blocking, timing) as (self.last_compute_event, elapsed):
+            with nvmath_utils.cuda_call_ctx(stream_holder, self.blocking, timing) as (self.last_compute_event, elapsed):
                 prepare_func(self.handle, task_obj, self.memory_limit, self.workspace_desc, stream_holder.ptr) # similar args for marginal and sampler
             if elapsed.data is not None:
                 self.logger.info(f"The preparation of {caller_name} computation took {elapsed.data:.3f} ms to complete.")
@@ -935,7 +941,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             self.logger.info(f"Total flop count for {caller_name} computation = {flops.item()/1e9} GFlop")
 
         self.logger.info(f"Starting {caller_name} computation with blocking set to {self.blocking}...")
-        with utils.device_ctx(self.device_id), utils.cuda_call_ctx(stream_holder, self.blocking, timing) as (self.last_compute_event, elapsed):
+        with nvmath_utils.cuda_call_ctx(stream_holder, self.blocking, timing) as (self.last_compute_event, elapsed):
             output = execute_func(self.handle, task_obj, *execute_args, stream_holder.ptr)
         if elapsed.data is not None:
             self.logger.info(f"Computation for {caller_name} took {elapsed.data:.3f} ms to complete.")
@@ -964,8 +970,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             shape = self.state_mode_extents
             num_fixed_modes = fixed_modes = fixed_values = 0
         
-        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.internal_package)
-        amplitudes = utils.create_empty_tensor(self.intermediate_class, shape, self.dtype, self.device_id, stream_holder)
+        stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
+        amplitudes = nvmath_utils.create_empty_tensor(self.intermediate_class, shape, self.dtype, self.device_id, stream_holder, False)
 
         norm = np.empty(1, dtype=self.dtype)
 
@@ -982,9 +988,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
     
     @state_result_wrapper(is_scalar=True)
-    @utils.precondition(_maybe_setup_recompute)
-    @utils.precondition(_check_valid_network)
-    @utils.precondition(_check_backend_setup, "Amplitude computation")
+    @nvmath_utils.precondition(_maybe_setup_recompute)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_backend_setup, "Amplitude computation")
     def compute_amplitude(self, bitstring, *, return_norm=False, stream=None, release_workspace=False):
         """
         Compute the probability amplitude of a bitstring.
@@ -993,7 +999,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             bitstring : A sequence of integers specifying the desired measured state dimension. 
             return_norm : If true, the squared norm of the state will also be returned.
             stream : Provide the CUDA stream to use for the computation. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
             release_workspace : A value of `True` specifies that the state object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the state object
@@ -1016,9 +1023,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     
     @state_labels_wrapper(marker_index=1, marker_type='dict')
     @state_result_wrapper(is_scalar=False)
-    @utils.precondition(_maybe_setup_recompute)
-    @utils.precondition(_check_valid_network)
-    @utils.precondition(_check_backend_setup, "Batched amplitude computation")
+    @nvmath_utils.precondition(_maybe_setup_recompute)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_backend_setup, "Batched amplitude computation")
     def compute_batched_amplitudes(self, fixed, *, return_norm=False, stream=None, release_workspace=False):
         """
         Compute the batched amplitudes for a given slice.
@@ -1028,7 +1035,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 If ``state_labels`` has been provided during initialization, ``fixed`` can also be provided as a dictionary mapping a subset of labels to corresponding fixed states. 
             return_norm : If true, the squared norm of the state will also be returned.
             stream : Provide the CUDA stream to use for the computation. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
             release_workspace : A value of `True` specifies that the state object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the state object
@@ -1047,9 +1055,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     
 
     @state_result_wrapper(is_scalar=False)
-    @utils.precondition(_maybe_setup_recompute)
-    @utils.precondition(_check_valid_network)
-    @utils.precondition(_check_backend_setup, "State vector computation")
+    @nvmath_utils.precondition(_maybe_setup_recompute)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_backend_setup, "State vector computation")
     def compute_state_vector(self, *, return_norm=False, stream=None, release_workspace=False):
         """
         Compute the state vector.
@@ -1057,7 +1065,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         Args:
             return_norm : If true, the squared norm of the state will also be returned.
             stream : Provide the CUDA stream to use for the computation. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
             release_workspace : A value of `True` specifies that the state object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the state object
@@ -1077,9 +1086,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     @state_labels_wrapper(marker_index=1, marker_type='seq')
     @state_labels_wrapper(key='fixed', marker_type='dict')
     @state_result_wrapper(is_scalar=False)
-    @utils.precondition(_maybe_setup_recompute)
-    @utils.precondition(_check_valid_network)
-    @utils.precondition(_check_backend_setup, "Reduced density matrix computation")
+    @nvmath_utils.precondition(_maybe_setup_recompute)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_backend_setup, "Reduced density matrix computation")
     def compute_reduced_density_matrix(self, where, *, fixed=EMPTY_DICT, stream=None, release_workspace=False):
         """
         Compute the reduced density matrix for the given marginal and fixed modes.
@@ -1090,7 +1099,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             fixed : A dictionary mapping a subset of fixed modes to the fixed value. 
                 If ``state_labels`` has been provided during initialization, ``fixed`` can also be provided as a dictionary mapping labels to the corresponding fixed values. 
             stream : Provide the CUDA stream to use for the computation. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
             release_workspace : A value of `True` specifies that the state object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the state object
@@ -1114,23 +1124,24 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             n_projected_modes = projected_modes = projected_mode_values = 0
         rdm_shape = [self.state_mode_extents[q] for q in where] * 2
 
-        stream_holder = utils.get_or_create_stream(self.device_id, stream, self.internal_package)
-        rdm = utils.create_empty_tensor(self.intermediate_class, rdm_shape, self.dtype, self.device_id, stream_holder)
+        stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
+        rdm = nvmath_utils.create_empty_tensor(self.intermediate_class, rdm_shape, self.dtype, self.device_id, stream_holder, False)
         create_args = (n_marginal_modes, tuple(where), n_projected_modes, projected_modes, tuple(rdm.strides))
         execute_args = (projected_mode_values, self.workspace_desc, rdm.data_ptr)
         self._compute_target('marginal', create_args, execute_args, stream, release_workspace)
         return rdm
     
-    @utils.precondition(_maybe_setup_recompute)
-    @utils.precondition(_check_valid_network)
-    @utils.precondition(_check_backend_setup, "Output state")
+    @nvmath_utils.precondition(_maybe_setup_recompute)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_backend_setup, "Output state")
     def compute_output_state(self, *, stream=None, release_workspace=False, release_operators=False):
         """
         Compute the final output state for the underlying network state object. This method currently is only valid for MPS based simulation.
 
         Args:
             stream : Provide the CUDA stream to use for the computation. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
             release_workspace : A value of `True` specifies that the state object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the state object
@@ -1154,16 +1165,17 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         elif isinstance(self.config, MPSConfig):
             self._maybe_compute_state(stream, release_workspace)
             if self.output_location == 'cpu':
-                stream_holder = utils.get_or_create_stream(self.device_id, stream, self.internal_package)
-                result = [o.to('cpu', stream_holder=stream_holder) for o in self.mps_tensors]
+                stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
+                result = [o.to('cpu', stream_holder=stream_holder).tensor for o in self.mps_tensors]
             else:
                 result = [o.tensor for o in self.mps_tensors]
             if release_operators:
                 # event synchronization
                 if self.last_compute_event is not None:
                     if stream is None: 
-                        stream = utils.get_or_create_stream(self.device_id, stream, self.internal_package).obj
-                    stream.wait_event(self.last_compute_event)
+                        stream = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package).obj
+                    stream.wait(self.last_compute_event)
+                    self.last_compute_event = None
                 # release reference to underlying operators and NetworkOperator
                 cutn.state_capture_mps(self.handle, self.state)
                 self.operands = {}
@@ -1178,9 +1190,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             raise NotImplementedError()
     
     @state_labels_wrapper(key='modes', marker_type='seq')
-    @utils.precondition(_maybe_setup_recompute)
-    @utils.precondition(_check_valid_network)
-    @utils.precondition(_check_backend_setup, "Sampling")
+    @nvmath_utils.precondition(_maybe_setup_recompute)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_backend_setup, "Sampling")
     def compute_sampling(self, nshots, *, modes=None, seed=None, stream=None, release_workspace=False):
         """
         Perform sampling on the given modes.
@@ -1192,7 +1204,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             seed: A positive integer denoting the random seed to use for generating the samples. If not provided, 
                 the generator will continue from the previous seed state or from an unseeded state if no seed was previously set. 
             stream : Provide the CUDA stream to use for the computation. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
             release_workspace : A value of `True` specifies that the state object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the state object
@@ -1229,9 +1242,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             sampling[bitstring] = n_sampling
         return sampling
     
-    @utils.precondition(_maybe_setup_recompute)
-    @utils.precondition(_check_valid_network)
-    @utils.precondition(_check_backend_setup, "Expectation computation")
+    @nvmath_utils.precondition(_maybe_setup_recompute)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_backend_setup, "Expectation computation")
     def compute_expectation(self, operators, *, return_norm=False, stream=None, release_workspace=False):
         """
         Compute the expectation value (not normalized) for the given tensor network operator.
@@ -1245,7 +1258,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
 
             return_norm : If true, the squared norm of the state will also be returned.
             stream : Provide the CUDA stream to use for the computation. 
-                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. 
+                Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
+                :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
                 If a stream is not provided, the current stream will be used.
             release_workspace : A value of `True` specifies that the state object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the state object
@@ -1276,7 +1290,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         own_network_operators = isinstance(operators, dict)
         if own_network_operators:
             # a pauli string dictionary
-            operators = NetworkOperator.from_pauli_strings(operators, dtype=self.dtype, options=self.options, stream=stream)
+            operators = NetworkOperator.from_pauli_strings(operators, backend=self.backend, dtype=self.dtype, options=self.options, stream=stream)
             self.owned_network_operators[None] = operators
         assert isinstance(operators, NetworkOperator)
         if tuple(self.state_mode_extents) != tuple(operators.state_mode_extents):

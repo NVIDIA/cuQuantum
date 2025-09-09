@@ -8,3 +8,4 @@ from .matrix_operator import *
 from .operators import *
 from .state import *
 from .callbacks import *
+from .spectrum import *

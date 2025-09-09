@@ -9,8 +9,7 @@ import cupy as cp
 import numpy as np
 import pytest
 from cuquantum.densitymat import WorkStream, DensePureState, DenseMixedState
-from cuquantum._internal import utils
-
+from nvmath.internal.utils import device_ctx
 
 def get_state(ctx, hilbert_space_dims, batch_size, package, dtype, init="random", mixed=False):
     ctor_args = (ctx, hilbert_space_dims, batch_size, dtype)
@@ -260,7 +259,7 @@ class TestState:
     def test_attach_storage(self, state, batch_size, dtype):
         psi = state(batch_size, dtype)
         shape, _ = psi.local_info
-        with utils.device_ctx(psi._ctx.device_id):
+        with device_ctx(psi._ctx.device_id):
             psi_arr = cp.zeros(shape, dtype=dtype, order="F")
             psi_arr_wrong_shape = cp.zeros([x + 1 for x in shape], dtype=dtype, order="F")
             psi_arr_c_order = cp.zeros(shape, dtype=dtype, order="C")

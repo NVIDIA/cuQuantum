@@ -11,10 +11,12 @@
 #include <complex>
 #include <cmath>
 #include <vector>
+#include <limits>
 #include <iostream>
 
 #include <cuda_runtime.h>
 #include <cutensornet.h>
+#include <cublas_v2.h>
 
 #define HANDLE_CUDA_ERROR(x)                                                         \
     {                                                                                \
@@ -33,6 +35,17 @@
         if (err != CUTENSORNET_STATUS_SUCCESS)                                                     \
         {                                                                                          \
             printf("cuTensorNet error %s in line %d\n", cutensornetGetErrorString(err), __LINE__); \
+            fflush(stdout);                                                                        \
+            std::abort();                                                                          \
+        }                                                                                          \
+    };
+
+#define HANDLE_CUBLAS_ERROR(x)                                                                     \
+    {                                                                                              \
+        const auto err = x;                                                                        \
+        if (err != CUBLAS_STATUS_SUCCESS)                                                          \
+        {                                                                                          \
+            printf("cuBLAS error (status code %d) in line %d\n", static_cast<int>(err), __LINE__); \
             fflush(stdout);                                                                        \
             std::abort();                                                                          \
         }                                                                                          \
@@ -88,6 +101,9 @@ int main()
     HANDLE_CUTN_ERROR(cutensornetCreate(&cutnHandle));
     std::cout << "Initialized cuTensorNet library on GPU 0\n";
 
+    cublasHandle_t cublasHandle;
+    HANDLE_CUBLAS_ERROR(cublasCreate(&cublasHandle));
+    
     // Sphinx: Projection MPS Circuit DMRG #4
 
     // Define necessary quantum gate tensors in Host memory
@@ -328,6 +344,24 @@ int main()
                                                                             0, d_envTensorsInsert[i], 0,
                                                                             0, workDesc, 0x0));
 
+            // Apply partial-fidelity scaling factor to the environment tensor
+            double f_tau_sqrt;
+            HANDLE_CUBLAS_ERROR(cublasDznrm2(cublasHandle, numElements[i], 
+                        static_cast<const cuDoubleComplex*>(d_envTensorsInsert[i]), 1,
+                        &f_tau_sqrt));
+            HANDLE_CUDA_ERROR(cudaStreamSynchronize(0));
+
+            if (f_tau_sqrt < std::sqrt(std::numeric_limits<double>::epsilon()))
+            {
+                std::cout << "ERROR: Scaling factor is zero!\n";
+                std::abort();
+            }
+            cuDoubleComplex scaling_factor = {1.0 / f_tau_sqrt, 0.0};
+
+            HANDLE_CUBLAS_ERROR(cublasZscal(cublasHandle, numElements[i], 
+                        &scaling_factor,
+                        static_cast<cuDoubleComplex*>(d_envTensorsInsert[i]), 1));
+
             // Insert updated tensor
             cutensornetMPSEnvBounds_t orthoSpec = envBounds;
             HANDLE_CUTN_ERROR(cutensornetStateProjectionMPSInsertTensor(cutnHandle, projectionMps, &envBounds,
@@ -351,6 +385,24 @@ int main()
             HANDLE_CUTN_ERROR(cutensornetStateProjectionMPSComputeTensorEnv(cutnHandle, projectionMps, &envBounds, 0, 0,
                                                                             0, d_envTensorsInsert[i], 0,
                                                                             0, workDesc, 0x0));
+            
+            // Apply partial-fidelity scaling factor to the environment tensor
+            double f_tau_sqrt;
+            HANDLE_CUBLAS_ERROR(cublasDznrm2(cublasHandle, numElements[i], 
+                        static_cast<const cuDoubleComplex*>(d_envTensorsInsert[i]), 1,
+                        &f_tau_sqrt));
+            HANDLE_CUDA_ERROR(cudaStreamSynchronize(0));
+
+            if (f_tau_sqrt < std::sqrt(std::numeric_limits<double>::epsilon()))
+            {
+                std::cout << "ERROR: Scaling factor is zero!\n";
+                std::abort();
+            }
+            cuDoubleComplex scaling_factor = {1.0 / f_tau_sqrt, 0.0};
+
+            HANDLE_CUBLAS_ERROR(cublasZscal(cublasHandle, numElements[i], 
+                        &scaling_factor,
+                        static_cast<cuDoubleComplex*>(d_envTensorsInsert[i]), 1));
 
             // Insert updated tensor
             cutensornetMPSEnvBounds_t orthoSpec = envBounds;
@@ -382,6 +434,8 @@ int main()
     for (auto ptr : d_gateCR) HANDLE_CUDA_ERROR(cudaFree(ptr));
     HANDLE_CUDA_ERROR(cudaFree(d_gateH));
     std::cout << "Freed memory on GPU\n";
+
+    HANDLE_CUBLAS_ERROR(cublasDestroy(cublasHandle));
 
     // Finalize the cuTensorNet library
     HANDLE_CUTN_ERROR(cutensornetDestroy(cutnHandle));

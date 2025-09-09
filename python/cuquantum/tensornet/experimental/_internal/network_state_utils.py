@@ -4,8 +4,9 @@
 import functools
 import importlib
 
+from nvmath.internal import tensor_wrapper, utils
 from cuquantum.bindings import cutensornet as cutn
-from ...._internal import tensor_wrapper, utils
+from ..._internal.helpers import transpose_tensor
 
 # constant parameters for MPS and tensor network simulation
 STATE_DEFAULT_DTYPE = 'complex128'
@@ -73,7 +74,7 @@ def state_labels_wrapper(*, marker_index=None, key=None, marker_type='seq'):
         return wrapper
     return decorator
 
-def state_operands_wrapper(operands_arg_index=1, is_single_operand=True):
+def state_operands_wrapper(operands_arg_index=1, is_single_operand=True, transpose=False):
     assert operands_arg_index >= 1
     def decorator(func):
         @functools.wraps(func)
@@ -86,6 +87,8 @@ def state_operands_wrapper(operands_arg_index=1, is_single_operand=True):
             if is_single_operand:
                 operands = (operands, )
             operands = tensor_wrapper.wrap_operands(operands)
+            if transpose:
+                operands = [transpose_tensor(o) for o in operands]
             if not obj.backend_setup:
                 obj._setup_backend(operands[0])
 
@@ -98,7 +101,7 @@ def state_operands_wrapper(operands_arg_index=1, is_single_operand=True):
                 if o.device == 'cpu':
                     if stream_holder is None:
                         stream_holder = utils.get_or_create_stream(device_id, stream, obj.internal_package)
-                    o = tensor_wrapper.wrap_operand(o.to(device_id, stream_holder=stream_holder))
+                    o = o.to(device_id, stream_holder=stream_holder)
                 elif o.device_id != obj.device_id:
                     raise RuntimeError(f"input operand resides on a different device ({o.device_id}) than specified in options ({obj.device_id})")
                 new_operands.append(o)
@@ -115,18 +118,25 @@ def state_result_wrapper(is_scalar=False):
             result = func(*args, **kwargs)
             norm = None
             if result is not None:
+                obj = args[0]
+                if obj.backend == "numpy":
+                    stream = kwargs.get('stream')
+                    stream_holder = utils.get_or_create_stream(obj.device_id, stream, 'cuda' if obj.backend == 'numpy' else obj.backend)
+                else:
+                    stream_holder = None
                 if isinstance(result, tuple):
                     result, norm = result
                 if is_scalar:
+                    if obj.backend == "numpy":
+                        result = result.to('cpu', stream_holder=stream_holder).tensor.item()
+                    else:
+                        result = result.tensor.item()
                     if norm is None:
-                        return result.tensor.item()
+                        return result
                     else: 
-                        return result.tensor.item(), norm
-                obj = args[0]
+                        return result, norm
                 if obj.output_location == 'cpu':
-                    stream = kwargs.get('stream')
-                    stream_holder = utils.get_or_create_stream(obj.device_id, stream, 'cupy' if obj.backend == 'numpy' else obj.backend)
-                    result = result.to('cpu', stream_holder=stream_holder)
+                    result = result.to('cpu', stream_holder=stream_holder).tensor
                 else:
                     result = result.tensor
             if norm is None:
@@ -139,12 +149,15 @@ def state_result_wrapper(is_scalar=False):
 def _get_asarray_function(backend, device_id, stream):
     if backend not in {'numpy', 'cupy', 'torch'}:
         raise ValueError(f"only support numpy, cupy and torch")
+    tensor_wrapper.maybe_register_package(backend)
     package = importlib.import_module(backend)
     if backend == 'numpy':
         return package.asarray
     if device_id == 'cpu':
         stream_holder = None
     else:
+        if device_id is None:
+            device_id = 0
         stream_holder = utils.get_or_create_stream(device_id, stream, backend)
     if backend == 'cupy':
         def asarray(*args, **kwargs):
@@ -168,24 +181,24 @@ def _get_asarray_function(backend, device_id, stream):
         return asarray
 
 
-def get_pauli_map(dtype, backend='cupy', device_id=None, stream=None):
+def get_pauli_map(backend, dtype, device_id=None, stream=None):
     asarray = _get_asarray_function(backend, device_id, stream)
     if backend == 'torch':
         module = importlib.import_module(backend)
+        dtype_name = dtype
         dtype = getattr(module, dtype)
-    pauli_i = asarray([[1,0], [0,1]], dtype=dtype)
-    pauli_x = asarray([[0,1], [1,0]], dtype=dtype)
-    pauli_y = asarray([[0,-1j], [1j,0]], dtype=dtype)
-    pauli_z = asarray([[1,0], [0,-1]], dtype=dtype)
+    else:
+        dtype_name = dtype
     
-    pauli_map = {'I': pauli_i,
-                 'X': pauli_x,
-                 'Y': pauli_y,
-                 'Z': pauli_z}
+    pauli_map = {'I': asarray([[1,0], [0,1]], dtype=dtype),
+                 'X': asarray([[0,1], [1,0]], dtype=dtype),
+                 'Z': asarray([[1,0], [0,-1]], dtype=dtype)}
+    if not dtype_name.startswith('float'):
+        pauli_map['Y'] = asarray([[0,-1j], [1j,0]], dtype=dtype)
     return pauli_map
 
-def create_pauli_operands(pauli_strings, dtype, backend='cupy', device_id=None, stream=None):
-    pauli_map = get_pauli_map(dtype, backend=backend, device_id=device_id, stream=stream)
+def create_pauli_operands(pauli_strings, backend, dtype, device_id=None, stream=None):
+    pauli_map = get_pauli_map(backend, dtype, device_id=device_id, stream=stream)
     operands_data = []
     n_qubits = None
     for pauli_string, coefficient in pauli_strings.items():

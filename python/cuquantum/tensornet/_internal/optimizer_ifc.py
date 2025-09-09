@@ -166,7 +166,7 @@ class OptimizerInfoInterface:
 
         # Set the attribute.
         OptimizerInfoInterface._set_scalar_attribute(self.network, InfoEnum.PATH, self._path, path)
-
+        
     @property
     def num_sliced_modes(self):
         """

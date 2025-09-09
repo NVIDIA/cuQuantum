@@ -7,11 +7,11 @@ import os
 
 import pytest
 
-from ..test_utils import run_sample
+from ..helpers import run_sample
 
 samples_path = os.path.abspath(os.path.join(
     os.path.dirname(__file__), '..', '..', '..', 'samples', 'densitymat'))
-sample_files = glob.glob(samples_path+'/**/*.py', recursive=True)
+sample_files = glob.glob(samples_path+'*/*.py', recursive=True)
 
 
 @pytest.mark.parametrize("sample", sample_files)

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -31,6 +31,7 @@ ctypedef cutensornetStateAccessor_t StateAccessor
 ctypedef cutensornetStateExpectation_t StateExpectation
 ctypedef cutensornetNetworkOperator_t NetworkOperator
 ctypedef cutensornetStateProjectionMPS_t StateProjectionMPS
+ctypedef cutensornetNetworkAutotunePreference_t NetworkAutotunePreference
 ctypedef cutensornetNodePair_t NodePair
 ctypedef cutensornetSliceInfoPair_t SliceInfoPair
 ctypedef cutensornetTensorQualifiers_t TensorQualifiers
@@ -86,6 +87,7 @@ ctypedef cutensornetStateMPOApplication_t _StateMPOApplication
 ctypedef cutensornetStateMPSGaugeOption_t _StateMPSGaugeOption
 ctypedef cutensornetStateProjectionMPSOrthoOption_t _StateProjectionMPSOrthoOption
 ctypedef cutensornetStateProjectionMPSAttributes_t _StateProjectionMPSAttribute
+ctypedef cutensornetNetworkAutotunePreferenceAttributes_t _NetworkAutotunePreferenceAttribute
 
 
 ###############################################################################
@@ -162,7 +164,6 @@ cpdef get_network_attribute_dtype(int attr)
 cpdef network_get_attribute(intptr_t handle, intptr_t network_desc, int attr, intptr_t buffer, size_t size_in_bytes)
 cpdef network_set_attribute(intptr_t handle, intptr_t network_desc, int attr, intptr_t buffer, size_t size_in_bytes)
 cpdef workspace_purge_cache(intptr_t handle, intptr_t work_desc, int mem_space)
-cpdef compute_gradients_backward(intptr_t handle, intptr_t plan, raw_data_in, intptr_t output_gradient, gradients, int32_t accumulate_output, intptr_t work_desc, intptr_t stream)
 cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_state_modes, state_mode_extents, int data_type) except? 0
 cpdef int64_t state_apply_tensor(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, intptr_t tensor_data, tensor_mode_strides, int32_t immutable, int32_t adjoint, int32_t unitary) except? -1
 cpdef state_update_tensor(intptr_t handle, intptr_t tensor_network_state, int64_t tensor_id, intptr_t tensor_data, int32_t unitary)
@@ -221,3 +222,22 @@ cpdef state_projection_mps_get_tensor_info(intptr_t handle, intptr_t tensor_netw
 cpdef state_projection_mps_extract_tensor(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream)
 cpdef state_projection_mps_insert_tensor(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, intptr_t ortho_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream)
 cpdef destroy_state_projection_mps(intptr_t tensor_network_projection)
+cpdef intptr_t create_network(intptr_t handle) except? 0
+cpdef destroy_network(intptr_t network_desc)
+cpdef int64_t network_append_tensor(intptr_t handle, intptr_t network_desc, int32_t num_modes, extents, mode_labels, intptr_t qualifiers, int data_type) except? -1
+cpdef network_set_output_tensor(intptr_t handle, intptr_t network_desc, int32_t num_modes, mode_labels, int data_type)
+cpdef network_set_optimizer_info(intptr_t handle, intptr_t network_desc, intptr_t optimizer_info)
+cpdef network_prepare_contraction(intptr_t handle, intptr_t network_desc, intptr_t work_desc)
+cpdef network_autotune_contraction(intptr_t handle, intptr_t network_desc, intptr_t work_desc, intptr_t pref, intptr_t stream)
+cpdef intptr_t create_network_autotune_preference(intptr_t handle) except? 0
+cpdef get_network_autotune_preference_attribute_dtype(int attr)
+cpdef network_autotune_preference_get_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buffer, size_t size_in_bytes)
+cpdef network_autotune_preference_set_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buf, size_t size_in_bytes)
+cpdef destroy_network_autotune_preference(intptr_t autotune_preference)
+cpdef network_set_input_tensor_memory(intptr_t handle, intptr_t network_desc, int64_t tensor_id, intptr_t buffer, strides)
+cpdef network_set_output_tensor_memory(intptr_t handle, intptr_t network_desc, intptr_t buffer, strides)
+cpdef network_set_gradient_tensor_memory(intptr_t handle, intptr_t network_desc, int64_t corresponding_tensor_id, intptr_t buffer, strides)
+cpdef network_set_adjoint_tensor_memory(intptr_t handle, intptr_t network_desc, intptr_t buffer, strides)
+cpdef network_contract(intptr_t handle, intptr_t network_desc, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream)
+cpdef network_prepare_gradients_backward(intptr_t handle, intptr_t network_desc, intptr_t work_desc)
+cpdef network_compute_gradients_backward(intptr_t handle, intptr_t network_desc, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream)
