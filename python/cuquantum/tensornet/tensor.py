@@ -15,10 +15,12 @@ from typing import Optional
 
 import numpy
 
+from nvmath import memory
+from nvmath.internal import utils as nvmath_utils
+
 from ..bindings import cutensornet as cutn
 from .configuration import NetworkOptions
 from ._internal import decomposition_utils
-from .._internal import utils 
 
 
 @dataclass
@@ -63,8 +65,8 @@ def decompose(
             Alternatively, a `dict` containing the parameters for the ``DecompositionOptions`` constructor can also be provided.
             If not specified, the value will be set to the default-constructed ``DecompositionOptions``.
         stream: Provide the CUDA stream to use for the decomposition. Acceptable inputs include ``cudaStream_t``
-            (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
-            the current stream will be used.
+            (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, 
+            and :class:`torch.cuda.Stream` for PyTorch operands. If a stream is not provided, the current stream will be used.
         return_info : If true, information about the decomposition will be returned via a :class:`cuquantum.cutensornet.tensor.SVDInfo` object.
             Currently this option is only supported for SVD decomposition (which is specified via ``method``).
 
@@ -211,7 +213,7 @@ def decompose(
         >>> T = torch.rand(4,4,6,6, device=f'cuda:{dev}')
         >>> q, r = decompose('ijab->ika,kjb', T)
     """
-    options = utils.check_or_create_options(DecompositionOptions, options, "decomposition options")
+    options = nvmath_utils.check_or_create_options(DecompositionOptions, options, "decomposition options")
 
     logger = logging.getLogger() if options.logger is None else options.logger
     logger.info(f"CUDA runtime version = {cutn.get_cudart_version()}")
@@ -226,7 +228,7 @@ def decompose(
     # Infer the correct decomposition method, QRMethod by default
     for method_class in (QRMethod, SVDMethod):
         try:
-            method = utils.check_or_create_options(method_class, method, method_class.__name__)
+            method = nvmath_utils.check_or_create_options(method_class, method, method_class.__name__)
         except TypeError:
             continue
         else:
@@ -250,6 +252,12 @@ def decompose(
         # options is a new instance of DecompositionOptions with all entries initialized
         wrapped_operands, options, own_handle, operands_location, stream_holder = decomposition_utils.parse_decompose_operands_options(
                 options, wrapped_operands, stream, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
+        
+        if options.allocator is None:
+            # options is now a new instance of DecompositionOptions and we can modify it
+            package = wrapped_operands[0].name
+            options.allocator = memory._MEMORY_MANAGER[package](options.device_id, logger)
+
         handle = options.handle
         stream_ptr = stream_holder.ptr  # this exists as we always use the ExternalStream from CuPy internally...
 
@@ -300,7 +308,7 @@ def decompose(
             logger.info("This call is non-blocking and will return immediately after the operation is launched on the device.")
         timing =  bool(logger and logger.handlers)
         if isinstance(method, QRMethod):
-            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
+            with nvmath_utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
                 cutn.tensor_qr(handle, 
                     *input_descriptors, wrapped_operands[0].data_ptr,
                     output_descriptors[0], output_operands[0].data_ptr,
@@ -311,7 +319,7 @@ def decompose(
                 logger.info(f"The QR decomposition took {elapsed.data:.3f} ms to complete.")
         elif isinstance(method, SVDMethod):
             svd_info = cutn.create_tensor_svd_info(handle)
-            with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
+            with nvmath_utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
                 cutn.tensor_svd(handle, 
                     *input_descriptors, wrapped_operands[0].data_ptr, 
                     output_descriptors[0], output_operands[0].data_ptr, 
@@ -325,14 +333,26 @@ def decompose(
 
             # update the operand to reduced_extent if needed
             for (wrapped_tensor, tensor_desc) in zip(output_operands, output_descriptors):
-                wrapped_tensor.reshape_to_match_tensor_descriptor(handle, tensor_desc)
+                decomposition_utils.reshape_tensor_to_tensor_descriptor(wrapped_tensor, handle, tensor_desc)
             reduced_extent = svd_info_obj.reduced_extent
             if s is not None and reduced_extent != mid_extent:
-                s.tensor = s.tensor[:reduced_extent]
+                if s.name != "cuda":
+                    s.tensor = s.tensor[:reduced_extent]
+                else:
+                    s.tensor = s.module.wrap_external(
+                        s.tensor, 
+                        s.data_ptr, 
+                        s.dtype, 
+                        (reduced_extent, ),  # 1D
+                        (1, ),  # 1D
+                        s.device_id, 
+                        s.itemsize, 
+                        strides_in_bytes=False
+                    )
     finally:
         # when host workspace is allocated, synchronize stream before return
         if workspaces.get(cutn.Memspace.HOST) is not None:
-            stream_holder.obj.synchronize()
+            stream_holder.obj.sync()
         # Free resources
         if svd_config is not None:
             cutn.destroy_tensor_svd_config(svd_config)

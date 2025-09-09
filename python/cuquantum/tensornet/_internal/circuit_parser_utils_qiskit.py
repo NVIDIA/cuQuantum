@@ -2,7 +2,8 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import cupy as cp
+import importlib
+
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit import Barrier, ControlledGate, Delay, Gate, Measure
@@ -28,7 +29,7 @@ DIAGONAL_GATE_CLASSES = (
     DiagonalGate, IGate, U1Gate,
 )
 
-from ..._internal.tensor_wrapper import _get_backend_asarray_func
+from .helpers import _get_backend_asarray_func, get_dtype_name
 
 # https://docs.quantum.ibm.com/api/qiskit/quantum_info#channels
 NOISY_CHANNEL_TYPES = (
@@ -117,6 +118,11 @@ def parse_gate_sequence(
             continue
         if should_parse_operation_operand(operation, gate_qubits, decompose_gates):
             tensor = Operator(operation).data.reshape((2,2)*len(gate_qubits))
+            if get_dtype_name(dtype).startswith("float"):
+                if not np.isreal(tensor).all():
+                    imag_max = abs(tensor.imag).max()
+                    raise RuntimeError(f"gate operand found to have imaginary part {imag_max=} while real dtype {dtype} is specified")
+                tensor = tensor.real
             tensor = asarray(tensor, dtype=dtype)
             # in qiskit notation, qubits are labelled in the inverse order
             gates.append((tensor, gate_qubits[::-1]))
@@ -140,7 +146,7 @@ def parse_gate_sequence(
         )
     return gates, global_phase, gates_are_diagonal
 
-def unfold_circuit(circuit, *, dtype='complex128', backend=cp, decompose_gates=True, check_diagonal=True):
+def unfold_circuit(circuit, backend, dtype, *, decompose_gates=True, check_diagonal=True):
     """
     Unfold the circuit to obtain the qubits and all gate tensors. 
 
@@ -155,7 +161,8 @@ def unfold_circuit(circuit, *, dtype='complex128', backend=cp, decompose_gates=T
     """
     if circuit.parameters:
         raise ValueError(f"Input circuit contains following parameters: {circuit.parameters}. Must be fully parameterized")
-    asarray = _get_backend_asarray_func(backend)
+    package = importlib.import_module(backend)
+    asarray = _get_backend_asarray_func(package)
     qubits = circuit.qubits
 
     gates, global_phase, gates_are_diagonal = parse_gate_sequence(
@@ -168,6 +175,10 @@ def unfold_circuit(circuit, *, dtype='complex128', backend=cp, decompose_gates=T
     )
     if global_phase != 0:
         phase = np.exp(1j*global_phase)
+        if get_dtype_name(dtype).startswith("float"):
+            if not np.isreal(phase).all():
+                raise RuntimeError(f"global phase {global_phase} has imaginary part {abs(phase.imag).max()}")
+            phase = phase.real
         phase_gate = asarray([[phase, 0], [0, phase]], dtype=dtype)
         gates = [(phase_gate, qubits[:1]), ] + gates
         gates_are_diagonal = [True] + gates_are_diagonal

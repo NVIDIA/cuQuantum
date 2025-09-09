@@ -4,5 +4,11 @@
 
 
 [build-system]
-requires = ["Cython>=0.29.22", "packaging", "setuptools>=61.0.0", "wheel"]
+requires = [
+    # 3.1.{0|1}: https://github.com/cython/cython/issues/6841
+    "Cython>=3.0.4,!=3.1.0,!=3.1.1", 
+    "setuptools>=77.0.3", 
+    "packaging", 
+    "wheel"
+]
 build-backend = "setuptools.build_meta"

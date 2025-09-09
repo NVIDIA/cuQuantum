@@ -179,19 +179,19 @@ full_extent_dtype = cutn.tensor_svd_info_get_attribute_dtype(cutn.TensorSVDInfoA
 full_extent = np.empty(1, dtype=full_extent_dtype)
 cutn.tensor_svd_info_get_attribute(handle, 
     svd_info, cutn.TensorSVDInfoAttribute.FULL_EXTENT, full_extent.ctypes.data, full_extent.itemsize)
-full_extent = int(full_extent)
+full_extent = full_extent.item()
 
 reduced_extent_dtype = cutn.tensor_svd_info_get_attribute_dtype(cutn.TensorSVDInfoAttribute.REDUCED_EXTENT)
 reduced_extent = np.empty(1, dtype=reduced_extent_dtype)
 cutn.tensor_svd_info_get_attribute(handle, 
     svd_info, cutn.TensorSVDInfoAttribute.REDUCED_EXTENT, reduced_extent.ctypes.data, reduced_extent.itemsize)
-reduced_extent = int(reduced_extent)
+reduced_extent = reduced_extent.item()
 
 discarded_weight_dtype = cutn.tensor_svd_info_get_attribute_dtype(cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT)
 discarded_weight = np.empty(1, dtype=discarded_weight_dtype)
 cutn.tensor_svd_info_get_attribute(handle, 
     svd_info, cutn.TensorSVDInfoAttribute.DISCARDED_WEIGHT, discarded_weight.ctypes.data, discarded_weight.itemsize)
-discarded_weight = float(discarded_weight)
+discarded_weight = discarded_weight.item()
 
 print(f"Execution time: {min_time_cutensornet} ms")
 print("SVD truncation info:")

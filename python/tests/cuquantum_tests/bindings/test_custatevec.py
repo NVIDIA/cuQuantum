@@ -4,7 +4,14 @@
 
 import copy
 
-import cupy as cp
+import pytest
+
+try:
+    import cupy as cp
+except ImportError:
+    cp = None
+    pytest.skip("cupy uninstalled, skipping custatevec binding tests", allow_module_level=True)
+
 from cupy import testing
 import cupyx as cpx
 import numpy as np
@@ -12,14 +19,13 @@ try:
     from mpi4py import MPI  # init!
 except ImportError:
     MPI = None
-import pytest
 
 import cuquantum
-from cuquantum import ComputeType, cudaDataType
+from cuquantum import cudaDataType
 from cuquantum.bindings import custatevec as cusv
 
 from . import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type, 
-               MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase, BindingsDeprecationTestBase)
+               MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase)
 
 
 ###################################################################
@@ -205,8 +211,8 @@ class TestLibHelper:
 
     def test_get_property(self):
         ver = cusv.get_version()
-        major = ver // 1000
-        minor = (ver % 1000) // 100
+        major = ver // 10000
+        minor = (ver % 10000) // 100
 
         assert major == cusv.get_property(
             cuquantum.libraryPropertyType.MAJOR_VERSION)
@@ -645,7 +651,10 @@ class TestMeasureBatched(TestBatchedSV):
             {'bitstrings': (np.int64, 'int_d'), 'bit_ordering': (np.int32, 'seq'), 'rand_nums': (np.float64, 'seq')},
         )
     )
-    @pytest.mark.parametrize('collapse', cusv.Collapse)
+    @pytest.mark.parametrize(
+        'collapse',
+        (cusv.Collapse.NORMALIZE_AND_ZERO, cusv.Collapse.NONE)
+    )
     @pytest.mark.parametrize('xp', (np, cp))
     def test_measure_batched(self, handle, rand, input_form, collapse, xp):
         # change sv to 1/\sqrt{2} (|00...0> + |11...1>)
@@ -1965,8 +1974,3 @@ class TestLogger(LoggerTestBase):
 
     mod = cusv
     prefix = "custatevec"
-
-
-class TestBindingDeprecation(BindingsDeprecationTestBase):
-
-    lib_name = "custatevec"

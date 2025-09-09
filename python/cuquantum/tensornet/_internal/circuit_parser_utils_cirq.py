@@ -3,11 +3,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 
+import importlib
+import numpy as np
+
 import cirq
 from cirq import protocols, unitary, Circuit, MeasurementGate
-import cupy as cp
 
-from ..._internal.tensor_wrapper import _get_backend_asarray_func
+from .helpers import _get_backend_asarray_func, get_dtype_name
 
 def remove_measurements(circuit):
     """
@@ -29,7 +31,7 @@ def get_inverse_circuit(circuit):
     """
     return protocols.inverse(circuit)
 
-def unfold_circuit(circuit, dtype='complex128', backend=cp, check_diagonal=True, **kwargs):
+def unfold_circuit(circuit, backend, dtype, check_diagonal=True, **kwargs):
     """
     Unfold the circuit to obtain the qubits and all gate tensors.
 
@@ -42,7 +44,8 @@ def unfold_circuit(circuit, dtype='complex128', backend=cp, check_diagonal=True,
         All qubits and gate operations from the input circuit
     """
     qubits = sorted(circuit.all_qubits())
-    asarray = _get_backend_asarray_func(backend)
+    package = importlib.import_module(backend)
+    asarray = _get_backend_asarray_func(package)
     gates = []
     gates_are_diagonal = []
     for moment in circuit.moments:
@@ -54,6 +57,11 @@ def unfold_circuit(circuit, dtype='complex128', backend=cp, check_diagonal=True,
             else:
                 gates_are_diagonal.append(False)
             tensor = operand.reshape((2,) * 2 * len(gate_qubits))
+            if get_dtype_name(dtype).startswith("float"):
+                if not np.isreal(tensor).all():
+                    imag_max = abs(tensor.imag).max()
+                    raise RuntimeError(f"gate operand found to have imaginary part {imag_max=} while real dtype {dtype} is specified")
+                tensor = tensor.real
             tensor = asarray(tensor, dtype=dtype)
             gates.append((tensor, operation.qubits))
     return qubits, gates, gates_are_diagonal

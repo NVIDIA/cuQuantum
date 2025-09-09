@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
 
 from ._internal cimport cutensornet as _cutensornet
 
@@ -283,16 +283,12 @@ cdef cutensornetStatus_t cutensornetNetworkGetAttribute(const cutensornetHandle_
     return _cutensornet._cutensornetNetworkGetAttribute(handle, networkDesc, attr, buffer, sizeInBytes)
 
 
-cdef cutensornetStatus_t cutensornetNetworkSetAttribute(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, cutensornetNetworkAttributes_t attr, const void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+cdef cutensornetStatus_t cutensornetNetworkSetAttribute(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, cutensornetNetworkAttributes_t attr, const void* const buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cutensornet._cutensornetNetworkSetAttribute(handle, networkDesc, attr, buffer, sizeInBytes)
 
 
 cdef cutensornetStatus_t cutensornetWorkspacePurgeCache(const cutensornetHandle_t handle, cutensornetWorkspaceDescriptor_t workDesc, cutensornetMemspace_t memSpace) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cutensornet._cutensornetWorkspacePurgeCache(handle, workDesc, memSpace)
-
-
-cdef cutensornetStatus_t cutensornetComputeGradientsBackward(const cutensornetHandle_t handle, cutensornetContractionPlan_t plan, const void* const rawDataIn[], const void* outputGradient, void* const gradients[], int32_t accumulateOutput, cutensornetWorkspaceDescriptor_t workDesc, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
-    return _cutensornet._cutensornetComputeGradientsBackward(handle, plan, rawDataIn, outputGradient, gradients, accumulateOutput, workDesc, stream)
 
 
 cdef cutensornetStatus_t cutensornetCreateState(const cutensornetHandle_t handle, cutensornetStatePurity_t purity, int32_t numStateModes, const int64_t* stateModeExtents, cudaDataType_t dataType, cutensornetState_t* tensorNetworkState) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
@@ -509,3 +505,75 @@ cdef cutensornetStatus_t cutensornetStateProjectionMPSInsertTensor(const cutenso
 
 cdef cutensornetStatus_t cutensornetDestroyStateProjectionMPS(cutensornetStateProjectionMPS_t tensorNetworkProjection) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cutensornet._cutensornetDestroyStateProjectionMPS(tensorNetworkProjection)
+
+
+cdef cutensornetStatus_t cutensornetCreateNetwork(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t* networkDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetCreateNetwork(handle, networkDesc)
+
+
+cdef cutensornetStatus_t cutensornetDestroyNetwork(cutensornetNetworkDescriptor_t networkDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetDestroyNetwork(networkDesc)
+
+
+cdef cutensornetStatus_t cutensornetNetworkAppendTensor(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int32_t numModes, const int64_t extents[], const int32_t modeLabels[], const cutensornetTensorQualifiers_t* const qualifiers, cudaDataType_t dataType, int64_t* tensorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkAppendTensor(handle, networkDesc, numModes, extents, modeLabels, qualifiers, dataType, tensorId)
+
+
+cdef cutensornetStatus_t cutensornetNetworkSetOutputTensor(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int32_t numModes, const int32_t modeLabels[], cudaDataType_t dataType) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkSetOutputTensor(handle, networkDesc, numModes, modeLabels, dataType)
+
+
+cdef cutensornetStatus_t cutensornetNetworkSetOptimizerInfo(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const cutensornetContractionOptimizerInfo_t optimizerInfo) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkSetOptimizerInfo(handle, networkDesc, optimizerInfo)
+
+
+cdef cutensornetStatus_t cutensornetNetworkPrepareContraction(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkPrepareContraction(handle, networkDesc, workDesc)
+
+
+cdef cutensornetStatus_t cutensornetNetworkAutotuneContraction(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const cutensornetWorkspaceDescriptor_t workDesc, const cutensornetNetworkAutotunePreference_t pref, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkAutotuneContraction(handle, networkDesc, workDesc, pref, stream)
+
+
+cdef cutensornetStatus_t cutensornetCreateNetworkAutotunePreference(const cutensornetHandle_t handle, cutensornetNetworkAutotunePreference_t* autotunePreference) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetCreateNetworkAutotunePreference(handle, autotunePreference)
+
+
+cdef cutensornetStatus_t cutensornetNetworkAutotunePreferenceGetAttribute(const cutensornetHandle_t handle, const cutensornetNetworkAutotunePreference_t autotunePreference, cutensornetNetworkAutotunePreferenceAttributes_t attr, void* buffer, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkAutotunePreferenceGetAttribute(handle, autotunePreference, attr, buffer, sizeInBytes)
+
+
+cdef cutensornetStatus_t cutensornetNetworkAutotunePreferenceSetAttribute(const cutensornetHandle_t handle, cutensornetNetworkAutotunePreference_t autotunePreference, cutensornetNetworkAutotunePreferenceAttributes_t attr, const void* buf, size_t sizeInBytes) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkAutotunePreferenceSetAttribute(handle, autotunePreference, attr, buf, sizeInBytes)
+
+
+cdef cutensornetStatus_t cutensornetDestroyNetworkAutotunePreference(cutensornetNetworkAutotunePreference_t autotunePreference) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetDestroyNetworkAutotunePreference(autotunePreference)
+
+
+cdef cutensornetStatus_t cutensornetNetworkSetInputTensorMemory(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int64_t tensorId, const void* const buffer, const int64_t strides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkSetInputTensorMemory(handle, networkDesc, tensorId, buffer, strides)
+
+
+cdef cutensornetStatus_t cutensornetNetworkSetOutputTensorMemory(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, void* const buffer, const int64_t strides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkSetOutputTensorMemory(handle, networkDesc, buffer, strides)
+
+
+cdef cutensornetStatus_t cutensornetNetworkSetGradientTensorMemory(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int64_t correspondingTensorId, void* const buffer, const int64_t strides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkSetGradientTensorMemory(handle, networkDesc, correspondingTensorId, buffer, strides)
+
+
+cdef cutensornetStatus_t cutensornetNetworkSetAdjointTensorMemory(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const void* const buffer, const int64_t strides[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkSetAdjointTensorMemory(handle, networkDesc, buffer, strides)
+
+
+cdef cutensornetStatus_t cutensornetNetworkContract(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int32_t accumulateOutput, const cutensornetWorkspaceDescriptor_t workDesc, const cutensornetSliceGroup_t sliceGroup, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkContract(handle, networkDesc, accumulateOutput, workDesc, sliceGroup, stream)
+
+
+cdef cutensornetStatus_t cutensornetNetworkPrepareGradientsBackward(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, const cutensornetWorkspaceDescriptor_t workDesc) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkPrepareGradientsBackward(handle, networkDesc, workDesc)
+
+
+cdef cutensornetStatus_t cutensornetNetworkComputeGradientsBackward(const cutensornetHandle_t handle, cutensornetNetworkDescriptor_t networkDesc, int32_t accumulateOutput, const cutensornetWorkspaceDescriptor_t workDesc, const cutensornetSliceGroup_t sliceGroup, cudaStream_t stream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetNetworkComputeGradientsBackward(handle, networkDesc, accumulateOutput, workDesc, sliceGroup, stream)

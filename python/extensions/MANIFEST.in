@@ -1,0 +1,6 @@
+include cuquantum/densitymat/jax/cppsrc/CMakeLists.txt
+include cuquantum/densitymat/jax/cppsrc/cudensitymat_jax.cpp
+include cuquantum/densitymat/jax/cppsrc/cudensitymat_jax.h
+include cuquantum/densitymat/jax/cppsrc/pybind.cpp
+include cuquantum/densitymat/jax/cppsrc/utils.h
+prune tests*

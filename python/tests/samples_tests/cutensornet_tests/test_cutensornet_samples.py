@@ -12,7 +12,7 @@ import sys
 from numpy.lib import NumpyVersion as Version
 import pytest
 
-from ..test_utils import cuQuantumSampleTestError, run_sample
+from ..helpers import cuQuantumSampleTestError, run_sample
 
 
 circuit_versions = dict()

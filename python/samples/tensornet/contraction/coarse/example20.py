@@ -8,7 +8,8 @@ Example illustrating a simple memory manager plugin using a PyTorch tensor as a 
 import logging
 import torch
 
-from cuquantum.tensornet import contract, MemoryPointer
+from cuquantum import MemoryPointer
+from cuquantum.tensornet import contract
 
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%m-%d %H:%M:%S')

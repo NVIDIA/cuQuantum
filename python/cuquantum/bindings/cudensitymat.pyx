@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 25.06.0. Do not modify it directly.
+# This code was automatically generated with version 25.09.0. Do not modify it directly.
 
 cimport cython
 from libc.stdlib cimport malloc, free
@@ -15,6 +15,8 @@ from typing import Callable
 import warnings as _warnings
 
 from ._utils cimport get_resource_ptr, get_resource_ptrs, nullable_unique_ptr
+
+import numpy as _numpy
 
 include "cudensitymat.pxi"
 
@@ -76,6 +78,19 @@ class ElementaryOperatorSparsity(_IntEnum):
     """See `cudensitymatElementaryOperatorSparsity_t`."""
     OPERATOR_SPARSITY_NONE = CUDENSITYMAT_OPERATOR_SPARSITY_NONE
     OPERATOR_SPARSITY_MULTIDIAGONAL = CUDENSITYMAT_OPERATOR_SPARSITY_MULTIDIAGONAL
+
+class OperatorSpectrumKind(_IntEnum):
+    """See `cudensitymatOperatorSpectrumKind_t`."""
+    OPERATOR_SPECTRUM_LARGEST = CUDENSITYMAT_OPERATOR_SPECTRUM_LARGEST
+    OPERATOR_SPECTRUM_SMALLEST = CUDENSITYMAT_OPERATOR_SPECTRUM_SMALLEST
+    OPERATOR_SPECTRUM_LARGEST_REAL = CUDENSITYMAT_OPERATOR_SPECTRUM_LARGEST_REAL
+    OPERATOR_SPECTRUM_SMALLEST_REAL = CUDENSITYMAT_OPERATOR_SPECTRUM_SMALLEST_REAL
+
+class OperatorSpectrumConfig(_IntEnum):
+    """See `cudensitymatOperatorSpectrumConfig_t`."""
+    MAX_EXPANSION = CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_EXPANSION
+    MAX_RESTARTS = CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_RESTARTS
+    MIN_BLOCK_SIZE = CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MIN_BLOCK_SIZE
 
 class Memspace(_IntEnum):
     """See `cudensitymatMemspace_t`."""
@@ -1120,7 +1135,7 @@ cpdef intptr_t create_expectation(intptr_t handle, intptr_t superoperator) excep
         superoperator (intptr_t): Operator.
 
     Returns:
-        intptr_t: Expectation value object.
+        intptr_t: Expectation value computation object.
 
     .. seealso:: `cudensitymatCreateExpectation`
     """
@@ -1132,10 +1147,10 @@ cpdef intptr_t create_expectation(intptr_t handle, intptr_t superoperator) excep
 
 
 cpdef destroy_expectation(intptr_t expectation):
-    """Destroys an expectation value object.
+    """Destroys an expectation value computation object.
 
     Args:
-        expectation (intptr_t): Expectation value object.
+        expectation (intptr_t): Expectation value computation object.
 
     .. seealso:: `cudensitymatDestroyExpectation`
     """
@@ -1150,7 +1165,7 @@ cpdef expectation_prepare(intptr_t handle, intptr_t expectation, intptr_t state,
     Args:
         handle (intptr_t): Library handle.
         expectation (intptr_t): Expectation value object.
-        state (intptr_t): Quantum state (or a batch of quantum states).
+        state (intptr_t): Representative quantum state (or a batch of quantum states).
         compute_type (ComputeType): Desired compute type.
         workspace_size_limit (size_t): Workspace buffer size limit (bytes).
         workspace (intptr_t): Empty workspace descriptor on entrance. The workspace size required for the computation will be set on exit.
@@ -1182,6 +1197,135 @@ cpdef expectation_compute(intptr_t handle, intptr_t expectation, double time, in
     """
     with nogil:
         status = cudensitymatExpectationCompute(<const Handle>handle, <Expectation>expectation, time, batch_size, num_params, <const double*>params, <const State>state, <void*>expectation_value, <WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef intptr_t create_operator_spectrum(intptr_t handle, intptr_t superoperator, int32_t is_hermitian, int spectrum_kind) except? 0:
+    """Creates the eigen-spectrum computation object for a given operator.
+
+    Args:
+        handle (intptr_t): Library handle.
+        superoperator (intptr_t): Operator (cannot be batched).
+        is_hermitian (int32_t): Specifies whether the operator is Hermitian (!=0) or not (0).
+        spectrum_kind (OperatorSpectrumKind): Requested kind of the eigen-spectrum computation.
+
+    Returns:
+        intptr_t: Eigen-spectrum computation object.
+
+    .. seealso:: `cudensitymatCreateOperatorSpectrum`
+    """
+    cdef OperatorSpectrum spectrum
+    with nogil:
+        status = cudensitymatCreateOperatorSpectrum(<const Handle>handle, <const Operator>superoperator, is_hermitian, <_OperatorSpectrumKind>spectrum_kind, &spectrum)
+    check_status(status)
+    return <intptr_t>spectrum
+
+
+cpdef destroy_operator_spectrum(intptr_t spectrum):
+    """Destroys an eigen-spectrum computation object.
+
+    Args:
+        spectrum (intptr_t): Eigen-spectrum computation object.
+
+    .. seealso:: `cudensitymatDestroyOperatorSpectrum`
+    """
+    with nogil:
+        status = cudensitymatDestroyOperatorSpectrum(<OperatorSpectrum>spectrum)
+    check_status(status)
+
+
+######################### Python specific utility #########################
+
+cdef dict operator_spectrum_config_sizes = {
+    CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_EXPANSION: _numpy.int32,
+    CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_RESTARTS: _numpy.int32,
+    CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MIN_BLOCK_SIZE: _numpy.int32,
+}
+
+cpdef get_operator_spectrum_config_dtype(int attr):
+    """Get the Python data type of the corresponding OperatorSpectrumConfig attribute.
+
+    Args:
+        attr (OperatorSpectrumConfig): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`operator_spectrum_configure`.
+    """
+    return operator_spectrum_config_sizes[attr]
+
+###########################################################################
+
+
+cpdef operator_spectrum_configure(intptr_t handle, intptr_t spectrum, int attribute, intptr_t attribute_value, size_t attribute_value_size):
+    """Configures the eigen-spectrum computation object.
+
+    Args:
+        handle (intptr_t): Library handle.
+        spectrum (intptr_t): Eigen-spectrum computation object.
+        attribute (OperatorSpectrumConfig): Attribute to configure.
+        attribute_value (intptr_t): CPU-accessible pointer to the attribute value.
+        attribute_value_size (size_t): Size of the attribute value in bytes.
+
+    .. note:: To compute the attribute size, use the itemsize of the corresponding data
+        type, which can be queried using :func:`get_operator_spectrum_config_dtype`.
+
+    .. seealso:: `cudensitymatOperatorSpectrumConfigure`
+    """
+    with nogil:
+        status = cudensitymatOperatorSpectrumConfigure(<const Handle>handle, <OperatorSpectrum>spectrum, <_OperatorSpectrumConfig>attribute, <const void*>attribute_value, attribute_value_size)
+    check_status(status)
+
+
+cpdef operator_spectrum_prepare(intptr_t handle, intptr_t spectrum, int32_t max_eigen_states, intptr_t state, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream):
+    """Prepares the eigen-spectrum object for computation.
+
+    Args:
+        handle (intptr_t): Library handle.
+        spectrum (intptr_t): Eigen-spectrum computation object.
+        max_eigen_states (int32_t): Maximum number of eigen-pairs to compute.
+        state (intptr_t): Representative quantum state (cannot be batched).
+        compute_type (ComputeType): Desired compute type.
+        workspace_size_limit (size_t): Workspace buffer size limit (bytes).
+        workspace (intptr_t): Empty workspace descriptor on entrance. The workspace buffer sizes required for the computation will be set on return.
+        stream (intptr_t): CUDA stream.
+
+    .. seealso:: `cudensitymatOperatorSpectrumPrepare`
+    """
+    with nogil:
+        status = cudensitymatOperatorSpectrumPrepare(<const Handle>handle, <OperatorSpectrum>spectrum, max_eigen_states, <const State>state, <_ComputeType>compute_type, workspace_size_limit, <WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef operator_spectrum_compute(intptr_t handle, intptr_t spectrum, double time, int64_t batch_size, int32_t num_params, intptr_t params, int32_t num_eigen_states, eigenstates, intptr_t eigenvalues, intptr_t tolerances, intptr_t workspace, intptr_t stream):
+    """Computes the eigen-spectrum of an operator.
+
+    Args:
+        handle (intptr_t): Library handle.
+        spectrum (intptr_t): Eigen-spectrum computation object.
+        time (double): Specified time.
+        batch_size (int64_t): Batch size (==1).
+        num_params (int32_t): Number of variable parameters defined by the user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array of user-defined real parameter values: params[num_params, batch_size].
+        num_eigen_states (int32_t): Actual number of eigenstates to compute, which must not exceed the value of the ``maxEigenStates`` parameter provided during the preparation of the eigen-spectrum computation object.
+        eigenstates (object): Quantum eigenstates (cannot be batched). The initial values of the provided quantum states will be used as the initial guesses for the first Krylov subspace block (if the block size is smaller than the number of requested eigenstates, only the leading quantum states will be used). It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of :class:`int`\s (as pointer addresses).
+
+        eigenvalues (intptr_t): Pointer to the eigenvalues storage (F-order array of shape [num_eigen_states, batch_size]) in GPU-accessible RAM (same data type as used by the quantum state and operator).
+        tolerances (intptr_t): Pointer to an F-order array of shape [num_eigen_states, batch_size] in CPU-accessible RAM. The initial values represent the desirable convergence tolerances for all eigen-states. The returned values represent the actually achieved residual norms for all eigen-states.
+        workspace (intptr_t): Allocated workspace descriptor.
+        stream (intptr_t): CUDA stream.
+
+    .. seealso:: `cudensitymatOperatorSpectrumCompute`
+    """
+    cdef nullable_unique_ptr[ vector[State*] ] _eigenstates_
+    get_resource_ptrs[State](_eigenstates_, eigenstates, <State*>NULL)
+    with nogil:
+        status = cudensitymatOperatorSpectrumCompute(<const Handle>handle, <OperatorSpectrum>spectrum, time, batch_size, num_params, <const double*>params, num_eigen_states, <State*>(_eigenstates_.data()), <void*>eigenvalues, <double*>tolerances, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(status)
 
 
@@ -1472,7 +1616,7 @@ cdef int32_t cpu_scalar_callback_wrapper(cudensitymatScalarCallback_t _callback_
         with stream:
             # Reconstruct all arguments.
             callback = <object>(<void *>_callback_)
-            params = _reconstruct_cpu_params(batch_size, num_params, _params_)
+            params = _reconstruct_cpu_params(batch_size, num_params, _params_, PyBUF_READ)
             storage = _reconstruct_cpu_storage(
                 [], batch_size, _CUDA_TO_NUMPY_DATA_TYPE[_data_type_], _storage_)
 
@@ -1540,7 +1684,7 @@ cdef int32_t cpu_tensor_callback_wrapper(cudensitymatTensorCallback_t _callback_
         with stream:
             # Reconstruct all arguments.
             callback = <object>(<void *>_callback_)
-            params = _reconstruct_cpu_params(batch_size, num_params, _params_)
+            params = _reconstruct_cpu_params(batch_size, num_params, _params_, PyBUF_READ)
             storage = _reconstruct_cpu_storage(
                 tuple(_mode_extents_[i] for i in range(num_modes)),
                 batch_size,
@@ -1615,10 +1759,10 @@ cdef int32_t cpu_scalar_gradient_callback_wrapper(cudensitymatScalarGradientCall
         with stream:
             # Reconstruct all arguments.
             callback = <object>(<void *>_callback_)
-            params = _reconstruct_cpu_params(batch_size, num_params, _params_)
+            params = _reconstruct_cpu_params(batch_size, num_params, _params_, PyBUF_READ)
             scalar_grad = _reconstruct_cpu_storage(
                 [], batch_size, _CUDA_TO_NUMPY_DATA_TYPE[_data_type_], _scalar_grad_)
-            params_grad = _reconstruct_cpu_params_grad(batch_size, num_params, _params_grad_)
+            params_grad = _reconstruct_cpu_params(batch_size, num_params, _params_grad_, PyBUF_WRITE)
 
             # Invoke the Python callback.
             callback(time, params, scalar_grad, params_grad)
@@ -1652,7 +1796,7 @@ cdef int32_t gpu_scalar_gradient_callback_wrapper(cudensitymatScalarGradientCall
             params = _reconstruct_gpu_params(batch_size, num_params, _params_)
             scalar_grad = _reconstruct_gpu_storage(
                 [], batch_size, _CUDA_TO_NUMPY_DATA_TYPE[_data_type_], _scalar_grad_)
-            params_grad = _reconstruct_gpu_params_grad(batch_size, num_params, _params_grad_)
+            params_grad = _reconstruct_gpu_params(batch_size, num_params, _params_grad_)
 
             # Invoke the Python callback.
             callback(time, params, scalar_grad, params_grad)
@@ -1687,13 +1831,13 @@ cdef int32_t cpu_tensor_gradient_callback_wrapper(cudensitymatTensorGradientCall
         with stream:
             # Reconstruct all arguments.
             callback = <object>(<void *>_callback_)
-            params = _reconstruct_cpu_params(batch_size, num_params, _params_)
+            params = _reconstruct_cpu_params(batch_size, num_params, _params_, PyBUF_READ)
             tensor_grad = _reconstruct_cpu_storage(
                 tuple(_mode_extents_[i] for i in range(num_modes)),
                 batch_size,
                 _CUDA_TO_NUMPY_DATA_TYPE[_data_type_],
                 _tensor_grad_)
-            params_grad = _reconstruct_cpu_params_grad(batch_size, num_params, _params_grad_)
+            params_grad = _reconstruct_cpu_params(batch_size, num_params, _params_grad_, PyBUF_WRITE)
 
             # Invoke the Python callback.
             callback(time, params, tensor_grad, params_grad)
@@ -1734,7 +1878,7 @@ cdef int32_t gpu_tensor_gradient_callback_wrapper(cudensitymatTensorGradientCall
                 batch_size,
                 _CUDA_TO_NUMPY_DATA_TYPE[_data_type_],
                 _tensor_grad_)
-            params_grad = _reconstruct_gpu_params_grad(batch_size, num_params, _params_grad_)
+            params_grad = _reconstruct_gpu_params(batch_size, num_params, _params_grad_)
 
             # Invoke the Python callback.
             callback(time, params, tensor_grad, params_grad)

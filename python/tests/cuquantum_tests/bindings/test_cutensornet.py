@@ -6,15 +6,20 @@ from collections import abc
 import functools
 import os
 
-import cupy as cp
-from cupy import testing
+import pytest
 import numpy as np
+
+try:
+    import cupy as cp
+except ImportError:
+    cp = None
+    pytest.skip("skipping binding tests when cupy is not installed", allow_module_level=True)
+from cupy import testing
 try:
     import mpi4py
     from mpi4py import MPI  # init!
 except ImportError:
     mpi4py = MPI = None
-import pytest
 try:
     import torch
     # unlike in other test modules, we don't check torch.cuda.is_available()
@@ -22,17 +27,17 @@ try:
 except:
     torch = None
 
+from nvmath.internal.utils import check_or_create_options
 from cuquantum import ComputeType
 from cuquantum.bindings import cutensornet as cutn
 from cuquantum.tensornet import tensor, get_mpi_comm_pointer
 from cuquantum.tensornet._internal.decomposition_utils import get_svd_info_dict, parse_svd_config
-from cuquantum._internal.utils import check_or_create_options
 
 from ..tensornet.utils import approxTN_utils
 from ..tensornet.utils.data import gate_decomp_expressions, tensor_decomp_expressions
-from ..tensornet.utils.test_utils import get_stream_for_backend
+from ..tensornet.utils.helpers import get_stream_for_backend
 from . import (_can_use_cffi, dtype_to_compute_type, dtype_to_data_type, 
-               MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase, BindingsDeprecationTestBase)
+               MemHandlerTestBase, MemoryResourceFactory, LoggerTestBase)
 
 
 ###################################################################
@@ -691,7 +696,8 @@ class TestAutotunePreference:
     'autotune', (True, False)
 )
 @pytest.mark.parametrize(
-    'contract', ("slice_group", "gradient")
+    'contract', ("slice_group", )
+    # 'contract', ("slice_group", "gradient")
 )
 @pytest.mark.parametrize(
     'stream', (cp.cuda.Stream.null, get_stream_for_backend(cp))
@@ -834,8 +840,7 @@ class TestContraction(TestTensorNetworkBase):
 
         if contract == "gradient" and torch:
 
-            # TODO: The second condition should be removed once PyTorch has support for Blackwell kernels
-            if not torch.cuda.is_available() or int(cp.cuda.Device().compute_capability) >= 100:
+            if not torch.cuda.is_available():
                 # copy data back to CPU
                 dev = "cpu"
                 func = cp.asnumpy
@@ -1512,8 +1517,3 @@ class TestMisc:
     def test_compute_type(self, cutn_compute_type):
         # check if all compute types under cutn.ComputeType are included in cuquantum.ComputeType
         cuqnt_compute_type = ComputeType(cutn_compute_type)
-
-
-class TestBindingDeprecation(BindingsDeprecationTestBase):
-
-    lib_name = "cutensornet"

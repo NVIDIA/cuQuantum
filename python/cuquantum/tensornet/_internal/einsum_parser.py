@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -9,8 +9,8 @@ A collection of functions for parsing Einsum expressions.
 from collections import Counter
 from itertools import chain
 
-from ..._internal import formatters
-from ..._internal.tensor_wrapper import wrap_operands
+from nvmath.internal import formatters
+from nvmath.internal.tensor_wrapper import wrap_operands
 from ...bindings._utils import WHITESPACE_UNICODE
 
 

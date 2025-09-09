@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.03.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
 # This layer exposes the C header to Cython as-is.
 
 from libc.stdint cimport int32_t, int64_t, uint32_t, uint64_t
@@ -50,6 +50,7 @@ ctypedef enum custatevecMatrixType_t "custatevecMatrixType_t":
 ctypedef enum custatevecCollapseOp_t "custatevecCollapseOp_t":
     CUSTATEVEC_COLLAPSE_NONE "CUSTATEVEC_COLLAPSE_NONE" = 0
     CUSTATEVEC_COLLAPSE_NORMALIZE_AND_ZERO "CUSTATEVEC_COLLAPSE_NORMALIZE_AND_ZERO" = 1
+    CUSTATEVEC_COLLAPSE_RESET "CUSTATEVEC_COLLAPSE_RESET" = 2
 
 ctypedef enum custatevecComputeType_t "custatevecComputeType_t":
     CUSTATEVEC_COMPUTE_DEFAULT "CUSTATEVEC_COMPUTE_DEFAULT" = 0

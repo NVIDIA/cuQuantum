@@ -34,16 +34,18 @@ with open(os.path.join(source_root, "tests/requirements.txt")) as f:
 #   need to list it
 install_requires = [
     'numpy>=1.21, <3.0',  # ">=1.21,<3"
+    'nvmath-python==0.6.0', # strict version before nvmath.internal module is stable
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}~=1.9',   # ">=1.9.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}~=2.8',  # ">=2.8.0,<3"
-    f'cudensitymat-cu{utils.cuda_major_ver}~=0.2', # ">=0.2.0,<0.3.0"
+    f'custatevec-cu{utils.cuda_major_ver}~=1.10',  # ">=1.10.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.9',  # ">=2.9.0,<3"
+    f'cudensitymat-cu{utils.cuda_major_ver}~=0.3.0', # ">=0.3.0,<0.4.0"
 ]
-if utils.cuda_major_ver == '11':
-    install_requires.append('cupy-cuda11x>=13.0')  # no ambiguity
-elif utils.cuda_major_ver == '12':
+if utils.cuda_major_ver == '12':
     install_requires.append('cupy-cuda12x>=13.0')  # no ambiguity
-
+    install_requires.append('cuda-bindings>=12.9.2, <13.0.0')
+elif utils.cuda_major_ver == '13':
+    install_requires.append('cupy-cuda13x>=13.6.0')  # no ambiguity
+    install_requires.append('cuda-bindings>=13.0.1, <14.0.0')
 
 # WAR: Check if this is still valid
 # TODO: can this support cross-compilation?
@@ -74,6 +76,9 @@ def cleanup_dst_files():
         except FileNotFoundError:
             pass
 
+
+# WAR: cython compilation
+sys.setrecursionlimit(50000)
 
 # Note: the extension attributes are overwritten in build_extension()
 ext_modules = [
@@ -137,10 +142,10 @@ cmdclass = {
 }
 
 cuda_classifier = []
-if utils.cuda_major_ver == '11':
-    cuda_classifier.append("Environment :: GPU :: NVIDIA CUDA :: 11")
-elif utils.cuda_major_ver == '12':
+if utils.cuda_major_ver == '12':
     cuda_classifier.append("Environment :: GPU :: NVIDIA CUDA :: 12")
+elif utils.cuda_major_ver == '13':
+    cuda_classifier.append("Environment :: GPU :: NVIDIA CUDA :: 13")
 
 # TODO: move static metadata to pyproject.toml
 setup(
@@ -183,6 +188,9 @@ setup(
     zip_safe=False,
     python_requires='>=3.11',
     install_requires=install_requires,
-    extras_require={"test": tests_require},
+    extras_require={
+        "test": tests_require,
+        "jax": ["cuquantum-python-jax"]
+    },
     cmdclass=cmdclass,
 )

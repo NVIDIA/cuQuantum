@@ -14,13 +14,15 @@ from operator import add, sub
 import numpy as np
 import cupy as cp
 
+from nvmath.internal.utils import precondition
+from nvmath.internal import typemaps
+
 from cuquantum.bindings import cudensitymat as cudm
 from ._internal.utils import (
     generic_finalizer,
     register_with,
     optimize_strides,
     maybe_move_array,
-    device_ctx,
     device_ctx_from_array,
     transpose_bipartite_tensor,
     matricize_bipartite_tensor,
@@ -31,9 +33,7 @@ from ._internal.utils import (
 )
 from .work_stream import WorkStream
 from .callbacks import Callback, GPUCallback, CPUCallback
-from .._internal import typemaps
 from .._internal.tensor_wrapper import wrap_operand
-from .._internal.utils import precondition, StreamHolder, cuda_call_ctx
 
 
 __all__ = ["DenseOperator", "MultidiagonalOperator"]
@@ -228,8 +228,8 @@ class ElementaryOperator(ABC):
                 diagonal_offsets,
                 self._dtype,
                 self._data.data_ptr,
-                (self.callback._get_internal_wrapper("tensor") if self.callback is not None else None),
-                (self.callback._get_internal_gradient_wrapper("tensor") if (self.callback is not None and self.callback.has_gradient) else None),
+                self.callback._get_internal_wrapper("tensor") if self.callback is not None else None,
+                self.callback._get_internal_gradient_wrapper("tensor") if self.callback is not None else None,
             )
         elif self.batch_size == 1:
             self._ptr = cudm.create_elementary_operator(
@@ -241,8 +241,8 @@ class ElementaryOperator(ABC):
                 diagonal_offsets,
                 self._dtype,
                 self._data.data_ptr,
-                (self.callback._get_internal_wrapper("tensor") if self.callback is not None else None),
-                (self.callback._get_internal_gradient_wrapper("tensor") if (self.callback is not None and self.callback.has_gradient) else None),
+                self.callback._get_internal_wrapper("tensor") if self.callback is not None else None,
+                self.callback._get_internal_gradient_wrapper("tensor") if self.callback is not None else None,
             )
         else:
             raise RuntimeError(f"Unsupported batch size {self.batch_size} of ElementaryOperator.")

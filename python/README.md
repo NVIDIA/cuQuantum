@@ -13,12 +13,12 @@ For instructions on installing *cuQuantum Python*, refer to our
 
 The build-time dependencies of the cuQuantum Python package include:
 
-* CUDA Toolkit 11.x or 12.x
+* CUDA Toolkit 12.x or 13.x
 * Python >=3.11, <3.14
-* Cython >=0.29.22
+* Cython >=3.0.4,!=3.1.0,!=3.1.1
 * pip 21.3.1+
 * [packaging](https://packaging.pypa.io/en/latest/)
-* setuptools 61.0.0+
+* setuptools 77.0.3+
 * wheel 0.34.0+
 
 > **Note:** Starting with cuQuantum Python v25.06, cuQuantum C libraries including cuDensityMat, cuStateVec and cuTensorNet are no longer build-time dependencies. However, they are still required at runtime.
@@ -29,22 +29,19 @@ To compile and install cuQuantum Python from source, please follow the steps bel
 
 1. Clone the [NVIDIA/cuQuantum](https://github.com/NVIDIA/cuQuantum) repository: `git clone https://github.com/NVIDIA/cuQuantum`
 2. Set `CUDA_PATH` to point to your CUDA installation
-3. [optional] Set `CUQUANTUM_ROOT` to point to your cuQuantum installation
-4. [optional] Set `CUTENSOR_ROOT` to point to your cuTENSOR installation
-5. [optional] Make sure cuQuantum and cuTENSOR are visible in your `LD_LIBRARY_PATH`
-6. Switch to the directory containing the Python implementation: `cd cuQuantum/python`
-7. Build and install:
-   - Run `pip install .` if you skip Step 3-5 above
+3. [optional] Make sure cuQuantum and cuTENSOR are visible in your `LD_LIBRARY_PATH`
+4. Switch to the directory containing the Python implementation: `cd cuQuantum/python`
+5. Build and install:
+   - Run `pip install .` if you skip Step 3 above
    - Run `pip install -v --no-deps --no-build-isolation .` otherwise (advanced)
 
 Notes:
-- For Step 7, if you are building from source for testing/developing purposes you'd likely want to insert a `-e` flag before the last period (so `pip ... .` becomes `pip ... -e .`):
+- For Step 5, if you are building from source for testing/developing purposes you'd likely want to insert a `-e` flag before the last period (so `pip ... .` becomes `pip ... -e .`):
   * `-e`: use the "editable" (in-place) mode
   * `-v`: enable more verbose output
   * `--no-deps`: avoid installing the *run-time* dependencies
   * `--no-build-isolation`: reuse the current Python environment instead of creating a new one for building the package (this avoids installing any *build-time* dependencies)
-- As an alternative to setting `CUQUANTUM_ROOT`, `CUSTATEVEC_ROOT`, `CUTENSORNET_ROOT` and `CUDENSITYMAT_ROOT` can be set to point to the cuStateVec, cuTensorNet and cuDensityMat libraries, respectively. The latter three environment variables take precedence if defined.
-- Please ensure that you use consistent binaries and packages for either CUDA 11 or 12. Mixing-and-matching will result in undefined behavior.
+- Please ensure that you use consistent binaries and packages for either CUDA 12 or 13. Mixing-and-matching will result in undefined behavior.
 
 ## Running
 
@@ -52,14 +49,16 @@ Notes:
 
 Runtime dependencies of the cuQuantum Python package include:
 
-* An NVIDIA GPU with compute capability 7.0+
-* Driver: Linux (450.80.02+ for CUDA 11, 525.60.13+ for CUDA 12)
-* CUDA Toolkit 11.x or 12.x
-* cuStateVec 1.9.0+
-* cuTensorNet 2.8.0+
-* cuDensityMat >=0.2.0, <0.3.0
+* An NVIDIA GPU with compute capability 7.5+
+* Driver: Linux (525.60.13+ for CUDA 12, 580.65.06+ for CUDA 13)
+* CUDA Toolkit 12.x or 13.x
+* cuStateVec 1.10.0+
+* cuTensorNet 2.9.0+
+* cuDensityMat >=0.3.0, <0.4.0
 * Python >=3.11, <3.14
 * NumPy v1.21+
+* nvmath-python ==0.6.0
+* cuda-bindings >=12.9.2, <13.0.0 for CUDA 12 or cuda-bindings >=13.0.1, <14.0.0
 * CuPy v13.0.0+ (see [installation guide](https://docs.cupy.dev/en/stable/install.html))
 * PyTorch v1.10+ (optional, see [installation guide](https://pytorch.org/get-started/locally/))
 * Qiskit v1.4.2+ (optional, see [installation guide](https://qiskit.org/documentation/getting_started.html))
@@ -76,7 +75,7 @@ to your `LD_LIBRARY_PATH` environment variable, and that a compatible CuPy is in
 
 Known issues:
 - If a system has multiple copies of cuTENSOR, one of which is installed in a default system path, the Python runtime could pick it up despite cuQuantum Python is linked to another copy installed elsewhere, potentially causing a version-mismatch error. The proper fix is to remove cuTENSOR from the system paths to ensure the visibility of the proper copy. **DO NOT ATTEMPT** to use `LD_PRELOAD` to overwrite it --- it could cause hard to debug behaviors!
-- Please ensure that you use consistent binaries and packages for either CUDA 11 or 12. Mixing-and-matching will result in undefined behavior.
+- Please ensure that you use consistent binaries and packages for either CUDA 12 or 13. Mixing-and-matching will result in undefined behavior.
 
 ### Samples
 

@@ -6,10 +6,8 @@ import logging
 
 import pytest
 
-from cuquantum import ComputeType
+from cuquantum import ComputeType, BaseCUDAMemoryManager, MemoryPointer
 from cuquantum.bindings import cutensornet as cutn
-from cuquantum.tensornet import BaseCUDAMemoryManager
-from cuquantum.tensornet import MemoryPointer
 from cuquantum.tensornet import NetworkOptions
 from cuquantum.tensornet import OptimizerInfo
 from cuquantum.tensornet import OptimizerOptions
@@ -61,6 +59,9 @@ class TestNetworkOptions(_OptionsBase):
 
         class MyAllocator(base):
 
+            def __init__(self, *args, **kwargs):
+                pass
+
             def memalloc(self, size):
                 return MemoryPointer(0, size, None)
 
@@ -98,6 +99,18 @@ class TestOptimizerOptions(_OptionsBase):
 
     def test_seed(self):
         self.create_options({'seed': 100})
+
+    @pytest.mark.parametrize(
+        'cost_function', [c for c in cutn.OptimizerCost]
+    )
+    def test_cost_function(self, cost_function):
+        self.create_options({'cost_function': cost_function})
+
+    @pytest.mark.parametrize(
+        'smart', [True, False]
+    )
+    def test_smart(self, smart):
+        self.create_options({'smart': smart})
 
 
 class TestOptimizerInfo(_OptionsBase):

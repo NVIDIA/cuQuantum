@@ -8,7 +8,7 @@ import re
 
 import pytest
 
-from ..test_utils import run_sample
+from ..helpers import run_sample
 
 
 samples_path = os.path.abspath(os.path.join(

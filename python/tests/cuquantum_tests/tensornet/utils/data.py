@@ -7,19 +7,24 @@ import cuquantum
 
 # We include torch tests here unconditionally, and use pytest deselect to
 # exclude them if torch is not present.
-import cupy as cp
-if int(cp.cuda.Device().compute_capability) < 100:
-    backend_names = (
-        "numpy",
-        "cupy",
-        "torch-cpu",
-        "torch-gpu",
-    )
-else:
-    backend_names = (
-        "numpy",
-        "cupy",
-    )
+BACKEND_MEMSPACE = ['numpy']
+ARRAY_BACKENDS = ['numpy']
+
+try:
+    import cupy as cp
+    BACKEND_MEMSPACE.append('cupy')
+    ARRAY_BACKENDS.append('cupy')
+except ImportError:
+    pass
+
+try:
+    import torch
+    if torch.cuda.is_available():
+        ARRAY_BACKENDS.append('torch')
+        BACKEND_MEMSPACE.append('torch-cpu')
+        BACKEND_MEMSPACE.append('torch-gpu')
+except ImportError:
+    pass
 
 
 dtype_names = (

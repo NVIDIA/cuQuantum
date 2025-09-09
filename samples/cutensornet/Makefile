@@ -12,7 +12,6 @@ INCLUDE_DIRS     := -I${CUTENSORNET_ROOT}/include -I${MPI_ROOT}/include
 LIBRARY_DIRS     := -L${CUTENSORNET_ROOT}/lib -L${CUTENSORNET_ROOT}/lib64 
 LINKER_FLAGS     := -lcutensornet
 
-ARCH_FLAGS_SM70  = -gencode arch=compute_70,code=sm_70
 ARCH_FLAGS_SM75  = -gencode arch=compute_75,code=sm_75
 ARCH_FLAGS_SM80  = -gencode arch=compute_80,code=sm_80
 ARCH_FLAGS_SM86  = -gencode arch=compute_86,code=sm_86
@@ -21,9 +20,9 @@ ARCH_FLAGS_SM100 = -gencode arch=compute_100,code=sm_100 -gencode arch=compute_1
 ARCH_FLAGS_SM120 = -gencode arch=compute_120,code=sm_120
 
 ifeq ($(shell [ $(CUDA_MAJOR_VERSION) -lt 12 ] || ( [ $(CUDA_MAJOR_VERSION) -eq 12 ] && [ $(CUDA_MINOR_VERSION) -lt 8 ] ); echo $$?),0)
-	ARCH_FLAGS = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80) $(ARCH_FLAGS_SM86) $(ARCH_FLAGS_SM90) 
+	ARCH_FLAGS = $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80) $(ARCH_FLAGS_SM86) $(ARCH_FLAGS_SM90) 
 else
-	ARCH_FLAGS = $(ARCH_FLAGS_SM70) $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80) $(ARCH_FLAGS_SM86) $(ARCH_FLAGS_SM90) \
+	ARCH_FLAGS = $(ARCH_FLAGS_SM75) $(ARCH_FLAGS_SM80) $(ARCH_FLAGS_SM86) $(ARCH_FLAGS_SM90) \
 	             $(ARCH_FLAGS_SM100) $(ARCH_FLAGS_SM120)
 endif
 
@@ -33,6 +32,8 @@ all: check-env
 	${CUDA_PATH}/bin/nvcc tensornet_example.cu -o tensornet_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc tensornet_example_reuse.cu -o tensornet_example_reuse ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc tensornet_example_gradients.cu -o tensornet_example_gradients ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc legacy/tensornet_example_legacy.cu -o tensornet_example_legacy ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc legacy/tensornet_example_reuse_legacy.cu -o tensornet_example_reuse_legacy ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc approxTN/tensor_svd_example.cu -o tensor_svd_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc approxTN/tensor_qr_example.cu -o tensor_qr_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc approxTN/gate_split_example.cu -o gate_split_example ${CXX_FLAGS}
@@ -48,10 +49,12 @@ all: check-env
 	${CUDA_PATH}/bin/nvcc high_level/mpo_mps_sampling_example.cu -o mpo_mps_sampling_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/mps_sampling_example.cu -o mps_sampling_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/qft_mps_sampling_example.cu -o qft_mps_sampling_example ${CXX_FLAGS}
-	${CUDA_PATH}/bin/nvcc high_level/proj_mps_circuit_dmrg_example.cu -o proj_mps_circuit_dmrg_example ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc high_level/proj_mps_circuit_dmrg_example.cu -o proj_mps_circuit_dmrg_example ${CXX_FLAGS} -lcublas
     ifdef MPI_ROOT
 		${CUDA_PATH}/bin/nvcc tensornet_example_mpi.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi ${CXX_FLAGS} -lmpi
 		${CUDA_PATH}/bin/nvcc tensornet_example_mpi_auto.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi_auto ${CXX_FLAGS} -lmpi
+		${CUDA_PATH}/bin/nvcc legacy/tensornet_example_mpi_legacy.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi_legacy ${CXX_FLAGS} -lmpi
+		${CUDA_PATH}/bin/nvcc legacy/tensornet_example_mpi_auto_legacy.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o tensornet_example_mpi_auto_legacy ${CXX_FLAGS} -lmpi
 		${CUDA_PATH}/bin/nvcc high_level/sampling_mpi_example.cu -Xlinker -rpath,${MPI_ROOT}/lib -L${MPI_ROOT}/lib -o sampling_mpi_example ${CXX_FLAGS} -lmpi
     endif
 
@@ -78,6 +81,8 @@ clean:
 	rm -f tensornet_example tensornet_example.o
 	rm -f tensornet_example_reuse tensornet_example_reuse.o
 	rm -f tensornet_example_gradients tensornet_example_gradients.o
+	rm -f tensornet_example_legacy tensornet_example_legacy.o
+	rm -f tensornet_example_reuse_legacy tensornet_example_reuse_legacy.o
 	rm -f tensor_svd_example tensor_svd_example.o
 	rm -f tensor_qr_example tensor_qr_example.o
 	rm -f gate_split_example gate_split_example.o
@@ -96,4 +101,6 @@ clean:
 	rm -f proj_mps_circuit_dmrg_example proj_mps_circuit_dmrg_example.o
 	rm -f tensornet_example_mpi tensornet_example_mpi.o
 	rm -f tensornet_example_mpi_auto tensornet_example_mpi_auto.o
+	rm -f tensornet_example_mpi_legacy tensornet_example_mpi_legacy.o
+	rm -f tensornet_example_mpi_auto_legacy tensornet_example_mpi_auto_legacy.o
 	rm -f sampling_mpi_example sampling_mpi_example.o

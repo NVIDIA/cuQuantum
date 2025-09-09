@@ -11,6 +11,10 @@ __all__ = ['contract_decompose']
 import dataclasses
 import logging
 
+from nvmath import memory
+from nvmath.internal import utils as nvmath_utils
+from nvmath.internal import tensor_wrapper
+
 from .configuration import ContractDecomposeAlgorithm, ContractDecomposeInfo
 from ._internal.utils import is_gate_split, maybe_truncate_qr_output_operands
 from ...bindings import cutensornet as cutn
@@ -19,8 +23,6 @@ from ..tensor import decompose, SVDInfo
 from ..tensor_network import contract
 from .._internal import decomposition_utils
 from .._internal import einsum_parser
-from ..._internal import tensor_wrapper
-from ..._internal import utils 
 
 
 
@@ -46,11 +48,17 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
     input_tensor_descriptors = output_tensor_descriptors = []
     workspaces = dict()
     own_handle = False
+
     try:
         # Options converted to an internal option
         wrapped_operands, options, own_handle, operands_location, stream_holder = decomposition_utils.parse_decompose_operands_options(
             options, wrapped_operands, stream, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
         
+        if options.allocator is None:
+            # options is now a new instance of DecompositionOptions and we can modify it
+            package = wrapped_operands[0].name
+            options.allocator = memory._MEMORY_MANAGER[package](options.device_id, options.logger)
+
         mid_extent = max_mid_extent if algorithm.svd_method.max_extent is None else min(max_mid_extent, algorithm.svd_method.max_extent)
 
         handle = options.handle
@@ -96,7 +104,7 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
             options.logger.info("This call is non-blocking and will return immediately after the operation is launched on the device.")
 
         svd_info = cutn.create_tensor_svd_info(handle)
-        with utils.device_ctx(options.device_id), utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
+        with nvmath_utils.cuda_call_ctx(stream_holder, blocking, timing) as (last_compute_event, elapsed):
             cutn.gate_split(handle, 
                 input_tensor_descriptors[0], wrapped_operands[0].data_ptr, 
                 input_tensor_descriptors[1], wrapped_operands[1].data_ptr, 
@@ -118,16 +126,21 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
 
         # Update the operand to reduced_extent if needed
         for (wrapped_tensor, tensor_desc) in zip(output_operands, output_tensor_descriptors):
-            wrapped_tensor.reshape_to_match_tensor_descriptor(handle, tensor_desc)
+            decomposition_utils.reshape_tensor_to_tensor_descriptor(wrapped_tensor, handle, tensor_desc)
             
         reduced_extent = svd_info_obj.reduced_extent
         if s is not None:
             if reduced_extent != mid_extent:
-                s.tensor = s.tensor[:reduced_extent]
+                if s.name != "cuda":
+                    s.tensor = s.tensor[:reduced_extent]
+                else:
+                    s.tensor = s.module.wrap_external(
+                        s.tensor, s.data_ptr, s.dtype, (reduced_extent, ), (1, ), s.device_id, s.itemsize, strides_in_bytes=False)
+
     finally:
         # when host workspace is allocated, synchronize stream before return
         if workspaces.get(cutn.Memspace.HOST) is not None:
-            stream_holder.obj.synchronize()
+            stream_holder.obj.sync()
         # Free resources
         decomposition_utils._destroy_tensor_descriptors(input_tensor_descriptors)
         decomposition_utils._destroy_tensor_descriptors(output_tensor_descriptors)
@@ -140,7 +153,7 @@ def _gate_split(wrapped_operands, inputs, outputs, size_dict, max_mid_extent, al
 
         if own_handle and handle is not None:
             cutn.destroy(handle)
-
+    
     u, v, s = [decomposition_utils.get_return_operand_data(t, operands_location, stream_holder) for t in output_operands + [s, ]]
     
     if return_info:
@@ -182,8 +195,8 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
             dictionary containing the parameters for the ``OptimizerOptions`` constructor can also be provided. If not
             specified, the value will be set to the default-constructed ``OptimizerOptions`` object.
         stream: Provide the CUDA stream to use for the autotuning operation. Acceptable inputs include ``cudaStream_t``
-            (as Python :class:`int`), :class:`cupy.cuda.Stream`, and :class:`torch.cuda.Stream`. If a stream is not provided,
-            the current stream will be used.
+            (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, 
+            and :class:`torch.cuda.Stream` for PyTorch operands. If a stream is not provided, the current stream will be used.
         return_info : If true, information about the contraction and decomposition will also be returned as a ::class:`ContractDecomposeInfo` object.
 
     Returns:
@@ -288,8 +301,8 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
             cutn.destroy(handle)
     """
 
-    algorithm = utils.check_or_create_options(ContractDecomposeAlgorithm, algorithm, "Contract Decompose Algorithm")
-    options = utils.check_or_create_options(NetworkOptions, options, "Network Options")
+    algorithm = nvmath_utils.check_or_create_options(ContractDecomposeAlgorithm, algorithm, "Contract Decompose Algorithm")
+    options = nvmath_utils.check_or_create_options(NetworkOptions, options, "Network Options")
 
     # Get cuTensorNet version (as seen at run-time)
     cutn_ver = cutn.get_version()
@@ -312,8 +325,9 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
     own_handle = False
     try:
         # contraction followed by decomposition
+        # copy_to_device is set to False to avoid double transfer
         wrapped_operands, options, own_handle, operands_location, stream_holder = decomposition_utils.parse_decompose_operands_options(
-            options, wrapped_operands, stream, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES)
+            options, wrapped_operands, stream, allowed_dtype_names=decomposition_utils.DECOMPOSITION_DTYPE_NAMES, copy_to_device=False)
         
         intermediate_modes = einsum_parser.infer_output_mode_labels(outputs)
 
@@ -333,11 +347,7 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
         input_modes, output_modes = subscripts.split('->')
         einsum_subscripts = f"{input_modes}->{intermediate_labels}"
         decompose_subscripts = f"{intermediate_labels}->{output_modes}" 
-        
-        if operands_location == 'cpu':
-            # avoid double transfer
-            operands = [o.tensor for o in wrapped_operands]
-        
+                
         info_dict = {'svd_method': algorithm.svd_method,
                     'qr_method': algorithm.qr_method}
         logger.info("Beginning contraction of the input tensor network...")
@@ -365,7 +375,7 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
                 stream=stream, return_info=False)
             results = maybe_truncate_qr_output_operands(results, outputs, max_mid_extent)
             if operands_location == 'cpu':
-                results = [tensor_wrapper.wrap_operand(o).to('cpu', stream_holder=stream_holder) for o in results]
+                results = [tensor_wrapper.wrap_operand(o).to('cpu', stream_holder=stream_holder).tensor for o in results]
         elif algorithm.svd_method and algorithm.qr_method is False:
             # contract and SVD decompose
             
@@ -383,7 +393,7 @@ def contract_decompose(subscripts, *operands, algorithm=None, options=None, opti
                 results, info_dict['svd_info'] = results[:-1], results[-1]
             if operands_location == 'cpu':
                 results = [o if o is None else tensor_wrapper.wrap_operand(o).to(
-                               'cpu', stream_holder=stream_holder)
+                               'cpu', stream_holder=stream_holder).tensor
                            for o in results]
         else:
             raise NotImplementedError("contract_decompose currently doesn't support QR assisted SVD contract decomposition for more than 3 operands")

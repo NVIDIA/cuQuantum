@@ -13,8 +13,10 @@ import importlib
 from dataclasses import dataclass
 import numpy as np
 
+from nvmath.internal import utils
+
 from ._internal import circuit_converter_utils as circ_utils
-from .._internal import utils
+from ._internal.helpers import get_auto_backend, get_dtype_name
 
 EMPTY_DICT = circ_utils.EMPTY_DICT
 
@@ -29,7 +31,7 @@ class CirqParserOptions:
     .. note::
 
         Setting ``check_diagonal=True`` will perform value-based comparison for gate operands in :class:`cirq.Circuit` object to check if the gate operand can be represented in a diagonal form. 
-        This may lead to performance degradation in the parsing stage but can potentiallyreduce the size of the output tensor network and thus improve the contraction performance.
+        This may lead to performance degradation during the parsing stage, but can potentially reduce the size of the output tensor network and thus improve the contraction performance.
     """
     check_diagonal: bool = True
 
@@ -59,8 +61,11 @@ class CircuitToEinsum:
 
     Args:
         circuit : A fully parameterized :class:`cirq.Circuit` or :class:`qiskit.QuantumCircuit` object.
-        dtype : The datatype for the output tensor operands. If not specified, double complex is used. 
-        backend: The backend for the output tensor operands. If not specified, ``cupy`` is used.
+        dtype : The datatype for the output tensor operands. Currently supports ``'float32'``, ``'float64'``, ``'complex64'``, and ``'complex128'``.
+            If not specified, double complex is used. Note that real dtype should only be used when all gate operands are expected to be real.
+        backend: A string specifying the ndarray backend for the output tensor operands. 
+            Currently supports ``'auto'`` (default), ``'numpy'``, ``'cupy'``, and ``'torch'``.
+            If ``'auto'``, ``'cupy'`` is used when it is available, otherwise ``'numpy'`` is used.
         options: Specify the parser options as a :class:`CirqParserOptions` for :class:`cirq.Circuit` 
             or a :class:`QiskitParserOptions` for :class:`qiskit.QuantumCircuit`. 
             Alternatively, a `dict` containing the parameters for the :class:`CirqParserOptions` or :class:`QiskitParserOptions` constructor can also be provided. 
@@ -113,15 +118,18 @@ class CircuitToEinsum:
         (2, 2, 2, 2)
 
     """
-    def __init__(self, circuit, *, dtype='complex128', backend='cupy', options=None):
+    def __init__(self, circuit, *, dtype='complex128', backend="auto", options=None):
         # infer library-specific parser
         self.parser = circ_utils.infer_parser(circuit)
 
         circuit = self.parser.remove_measurements(circuit)
         self.circuit = circuit
-        if isinstance(backend, str):
+        if backend == "auto":
+            backend = get_auto_backend()
+        elif isinstance(backend, str):
             backend = importlib.import_module(backend)
         self.backend = backend
+        self.backend_name = backend.__name__
 
         circuit_package = utils.infer_object_package(circuit)
         if circuit_package == 'qiskit':
@@ -139,15 +147,13 @@ class CircuitToEinsum:
                 dtype = getattr(backend, dtype)
             except AttributeError:
                 dtype = getattr(backend, np.dtype(dtype).name)
-        dtype_name = str(dtype).split('.')[-1]
-        if not dtype_name.startswith('complex'):
-            raise ValueError(f"dtype shall be complex, found {dtype}")
 
         self.dtype = dtype
+        self.dtype_name = get_dtype_name(dtype)
 
         # unfold circuit metadata
         self._qubits, self._gates, self._gates_are_diagonal = self.parser.unfold_circuit(
-            circuit, dtype=self.dtype, backend=self.backend, check_diagonal=self.check_diagonal, decompose_gates=self.decompose_gates)
+            circuit, self.backend_name, self.dtype, check_diagonal=self.check_diagonal, decompose_gates=self.decompose_gates)
         self.n_qubits = len(self.qubits)
         self._metadata = None
     
@@ -202,7 +208,7 @@ class CircuitToEinsum:
         fixed_mode_labels = [[qubits_frontier[q]] for q in fixed_qubits]    
         mode_labels = input_mode_labels + fixed_mode_labels
         
-        operands = input_operands + circ_utils.get_bitstring_tensors(fixed_bitstring, dtype=self.dtype, backend=self.backend)
+        operands = input_operands + circ_utils.get_bitstring_tensors(fixed_bitstring, self.backend_name, self.dtype)
         output_mode_labels = [qubits_frontier[q] for q in self.qubits if q not in fixed]
 
         expression = circ_utils.convert_mode_labels_to_expression(mode_labels, output_mode_labels)
@@ -227,7 +233,7 @@ class CircuitToEinsum:
         output_mode_labels = []
 
         expression = circ_utils.convert_mode_labels_to_expression(mode_labels, output_mode_labels)
-        operands = input_operands + circ_utils.get_bitstring_tensors(bitstring, dtype=self.dtype, backend=self.backend)
+        operands = input_operands + circ_utils.get_bitstring_tensors(bitstring, self.backend_name, self.dtype)
         return expression, operands 
     
     def reduced_density_matrix(self, where, fixed=EMPTY_DICT, lightcone=True):
@@ -260,7 +266,7 @@ class CircuitToEinsum:
 
         # handle tensors/mode labels for qubits with fixed state
         fixed_qubits, fixed_bitstring = circ_utils.parse_fixed_qubits(fixed)
-        fixed_operands = circ_utils.get_bitstring_tensors(fixed_bitstring, dtype=self.dtype, backend=self.backend)
+        fixed_operands = circ_utils.get_bitstring_tensors(fixed_bitstring, self.backend_name, self.dtype)
 
         mode_labels = input_mode_labels + [[qubits_frontier[ix]] for ix in fixed_qubits]
         for iqubit in fixed_qubits:
@@ -320,6 +326,10 @@ class CircuitToEinsum:
             applied based on the remaining causal qubits to further reduce the size of the network. The reduction effect depends on the circuit topology and the input Pauli string 
             (so the contraction path cannot be reused for the contraction of different Pauli strings). When ``lightcone=False``, the identity Pauli operators are preserved in the output operands such that the output tensor network has the identical topology for different Pauli strings, and the contraction path only needs to be computed once and can be reused for all Pauli strings.
         
+        .. note::
+
+            When the underlying dtype is real, Pauli Y operator is not supported.
+
         .. seealso:: `unitary reverse lightcone cancellation <https://quimb.readthedocs.io/en/latest/tensor-circuit.html#Unitary-Reverse-Lightcone-Cancellation>`_
         """
         if isinstance(pauli_string, collections.abc.Sequence):
@@ -336,9 +346,13 @@ class CircuitToEinsum:
         else:
             pauli_map = pauli_string
         coned_qubits = pauli_map.keys()
+        if self.dtype_name.startswith("float"):
+            pauli_chars = set(pauli_map.values())
+            if 'Y' in pauli_chars:
+                raise ValueError(f"Pauli Y operator is not supported when the underlying dtype is {self.dtype_name}")
         input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates, inverse_gates_diagonals = self._get_forward_inverse_metadata(lightcone, coned_qubits)
 
-        pauli_gates, pauli_gates_diagonal = circ_utils.get_pauli_gates(pauli_map, dtype=self.dtype, backend=self.backend)
+        pauli_gates, pauli_gates_diagonal = circ_utils.get_pauli_gates(pauli_map, self.backend_name, self.dtype)
         gates = pauli_gates + inverse_gates
 
         gate_mode_labels, gate_operands = circ_utils.parse_gates_to_mode_labels_operands(gates, 
@@ -364,7 +378,7 @@ class CircuitToEinsum:
                 - ``qubits_frontier`` : A dictionary that maps all qubits to their current mode labels.
         """
         if self._metadata is None:
-            self._metadata = circ_utils.parse_inputs(self.qubits, self._gates, self._gates_are_diagonal, self.dtype, self.backend)
+            self._metadata = circ_utils.parse_inputs(self.qubits, self._gates, self._gates_are_diagonal, self.dtype, self.backend_name)
         return self._metadata
     
     def _get_forward_inverse_metadata(self, lightcone, coned_qubits):
@@ -386,10 +400,10 @@ class CircuitToEinsum:
         parser = self.parser
         if lightcone:
             circuit = parser.get_lightcone_circuit(self.circuit, coned_qubits)
-            _, gates, gates_are_diagonal = parser.unfold_circuit(circuit, dtype=self.dtype, backend=self.backend, decompose_gates=self.decompose_gates, check_diagonal=self.check_diagonal)
+            _, gates, gates_are_diagonal = parser.unfold_circuit(circuit, self.backend_name, self.dtype, decompose_gates=self.decompose_gates, check_diagonal=self.check_diagonal)
             # in cirq, the lightcone circuit may only contain a subset of the original qubits
             # It's imperative to use qubits=self.qubits to generate the input tensors
-            input_mode_labels, input_operands, qubits_frontier = circ_utils.parse_inputs(self.qubits, gates, gates_are_diagonal, self.dtype, self.backend)
+            input_mode_labels, input_operands, qubits_frontier = circ_utils.parse_inputs(self.qubits, gates, gates_are_diagonal, self.dtype, self.backend_name)
         else:
             circuit = self.circuit
             input_mode_labels, input_operands, qubits_frontier = self._get_inputs()
@@ -399,5 +413,5 @@ class CircuitToEinsum:
         next_frontier = max(qubits_frontier.values()) + 1
         # inverse circuit
         inverse_circuit  = parser.get_inverse_circuit(circuit)
-        _, inverse_gates, inverse_gates_diagonals = parser.unfold_circuit(inverse_circuit, dtype=self.dtype, backend=self.backend, decompose_gates=self.decompose_gates, check_diagonal=self.check_diagonal)
+        _, inverse_gates, inverse_gates_diagonals = parser.unfold_circuit(inverse_circuit, self.backend_name, self.dtype, decompose_gates=self.decompose_gates, check_diagonal=self.check_diagonal)
         return input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates, inverse_gates_diagonals

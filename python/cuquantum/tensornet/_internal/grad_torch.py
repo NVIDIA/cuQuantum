@@ -7,6 +7,9 @@ import itertools
 # TODO: right now, we use try-except throughout the codebase to check the
 # presence of PyTorch, so if it exists it'd get imported. We should switch
 # to use importlib.util.find_spec('torch') so as to reduce the import time.
+
+import cuda.core.experimental as ccx
+
 try:
     import torch
 except ImportError:
@@ -39,6 +42,8 @@ if torch is not None:
 
         @staticmethod
         def backward(context, *output_grad):
+            
+            old_device = None
 
             try:
                 # Retrieve cached objects.
@@ -50,6 +55,10 @@ if torch is not None:
                 output_grad = output_grad[0]
 
                 # Compute backprop.
+                # WAR: pytorch backward propagation seems to uninitialize the device
+                old_device = ccx.Device()
+                execution_device = ccx.Device(network.device_id)
+                execution_device.set_current()
                 input_grads = network.gradients(output_grad, stream=stream)
 
                 # Rearrange return values based on the input format.
@@ -64,6 +73,8 @@ if torch is not None:
                            None, *input_grads)
             finally:
                 # Free network resources explicitly.
+                if old_device is not None:
+                    old_device.set_current()
                 network.free()
  
             return out

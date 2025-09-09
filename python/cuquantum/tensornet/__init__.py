@@ -5,7 +5,6 @@
 
 from cuquantum.tensornet.circuit_converter import *
 from cuquantum.tensornet.configuration import *
-from cuquantum.tensornet.memory import *
 from cuquantum.tensornet.tensor_network import *
 from .._internal.utils import get_mpi_comm_pointer
 from . import experimental

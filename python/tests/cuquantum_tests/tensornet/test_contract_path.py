@@ -8,18 +8,18 @@ import pytest
 from cuquantum.tensornet import contract_path, einsum_path, OptimizerInfo
 
 from .utils.data import einsum_expressions
-from .utils.test_utils import compute_and_normalize_numpy_path
-from .utils.test_utils import EinsumFactory
-from .utils.test_utils import set_path_to_optimizer_options
+from .utils.helpers import compute_and_normalize_numpy_path, _BaseTester
+from .utils.helpers import EinsumFactory
+from .utils.helpers import set_path_to_optimizer_options
 
 
 @pytest.mark.parametrize(
     "einsum_expr_pack", einsum_expressions
 )
-class TestContractPath:
+class TestContractPath(_BaseTester):
 
     def _test_runner(
-            self, func, einsum_expr_pack, use_numpy_path, **kwargs):
+            self, func, einsum_expr_pack, use_numpy_path, rng, **kwargs):
         einsum_expr = copy.deepcopy(einsum_expr_pack)
         if isinstance(einsum_expr_pack, list):
             einsum_expr, network_opts, optimizer_opts, overwrite_dtype = einsum_expr
@@ -29,10 +29,10 @@ class TestContractPath:
             dtype = "float32"
         assert isinstance(einsum_expr, (str, tuple))
 
-        factory = EinsumFactory(einsum_expr)
+        factory = EinsumFactory(einsum_expr, rng)
         # backend/dtype/order do not matter, so we just pick one here
         operands = factory.generate_operands(
-            factory.input_shapes, "cupy", dtype, "C")
+            factory.input_shapes, "numpy", dtype, "C")
 
         path = None
         if use_numpy_path:
@@ -83,10 +83,12 @@ class TestContractPath:
         "use_numpy_path", (False, True)
     )
     def test_contract_path(self, einsum_expr_pack, use_numpy_path):
+        rng = self._get_rng(einsum_expr_pack, use_numpy_path, "contract_path")
         self._test_runner(
-            contract_path, einsum_expr_pack, use_numpy_path)
+            contract_path, einsum_expr_pack, use_numpy_path, rng)
 
     def test_einsum_path(self, einsum_expr_pack):
+        rng = self._get_rng(einsum_expr_pack, "einsum_path")
         # We only support optimize=True and don't allow setting the path
         self._test_runner(
-            einsum_path, einsum_expr_pack, False, optimize=True)
+            einsum_path, einsum_expr_pack, False, rng, optimize=True)

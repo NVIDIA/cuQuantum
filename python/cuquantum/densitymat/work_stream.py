@@ -11,10 +11,13 @@ import weakref
 import collections
 
 import cupy as cp
-from cuquantum.tensornet import memory
-from cuquantum.tensornet.memory import BaseCUDAMemoryManager
+
+from nvmath.internal import utils as nvmath_utils
+from nvmath.internal.mem_limit import check_memory_str
+
+from . import memory
+from .memory import BaseCUDAMemoryManager
 from cuquantum._internal import utils as cutn_utils
-from cuquantum._internal.mem_limit import check_memory_str
 
 from cuquantum.bindings import cudensitymat as cudm
 from ._internal.library_handle import LibraryHandle
@@ -115,8 +118,8 @@ class WorkStream:
         self._stream_holder = cutn_utils.get_or_create_stream(self.device_id, self.stream, "cupy")
         self.stream = self._stream_holder.obj
         check_memory_str(self.memory_limit, "memory limit")
-        self._memory_limit = cutn_utils.get_memory_limit(
-            self.memory_limit, cp.cuda.Device(self.device_id)
+        self._memory_limit = nvmath_utils.get_memory_limit_from_device_id(
+            self.memory_limit, self.device_id
         )
         if issubclass(self.allocator, BaseCUDAMemoryManager):
             self.allocator = self.allocator(self.device_id, self.logger)
@@ -162,7 +165,7 @@ class WorkStream:
         return self._finalizer.alive
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _validated_ptr(self) -> int:
         """
         The workspace descriptor.
@@ -209,7 +212,7 @@ class WorkStream:
         """
         return self._handle._comm
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def release_workspace(self, kind="SCRATCH") -> None:
         """
         Releases the workspace.
@@ -300,13 +303,13 @@ class WorkStream:
         self._required_size_upper_bound = max(self._required_size_upper_bound, size)
         return size, self._required_size_upper_bound
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _sync(self) -> None:
         if self._last_compute_event:
             self._last_compute_event.synchronize()
             self._last_compute_event = None
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _maybe_allocate(self, memspace="DEVICE", kind="SCRATCH") -> None:
         """
         Allocates workspace buffer and attaches it to workspace descriptor, if necessary.
@@ -329,7 +332,7 @@ class WorkStream:
             # normal state after prepare call
             _buf_size = getattr(self, f"_size_{kind.lower()}")
             if _buf_size is None or _buf_size < self._required_size_upper_bound:
-                with cutn_utils.device_ctx(self.device_id), self._stream_holder.ctx:
+                with nvmath_utils.device_ctx(self.device_id), self._stream_holder.ctx:
                     try:
                         self.logger.info(
                             f"Allocating memory buffer of size {self._required_size_upper_bound} on device {self.device_id} with stream {self.stream}."

@@ -71,6 +71,12 @@ if( err != CUTENSORNET_STATUS_SUCCESS )                           \
    { std::cout << "Error: " <<  cudaGetErrorString(err) << " in line " << __LINE__ << std::endl; return err; } \
 };
 
+// Usage: DEV_ATTR(cudaDevAttrClockRate, deviceId)
+#define DEV_ATTR(ENUMCONST, DID)                                                   \
+    ({ int v;                                                                       \
+       HANDLE_CUDA_ERROR(cudaDeviceGetAttribute(&v, ENUMCONST, DID));               \
+       v; })
+
 // Sphinx: #2
 class MPSHelper
 {
@@ -547,8 +553,8 @@ int main()
    printf("===== device info ======\n");
    printf("GPU-local-id:%d\n", deviceId);
    printf("GPU-name:%s\n", prop.name);
-   printf("GPU-clock:%d\n", prop.clockRate);
-   printf("GPU-memoryClock:%d\n", prop.memoryClockRate);
+           printf("GPU-clock:%d\n", DEV_ATTR(cudaDevAttrClockRate, deviceId));
+        printf("GPU-memoryClock:%d\n", DEV_ATTR(cudaDevAttrMemoryClockRate, deviceId));
    printf("GPU-nSM:%d\n", prop.multiProcessorCount);
    printf("GPU-major:%d\n", prop.major);
    printf("GPU-minor:%d\n", prop.minor);

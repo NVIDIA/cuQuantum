@@ -1,4 +1,4 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -9,16 +9,15 @@ A collection of utility functions for decomposition.
 import logging
 
 import numpy
-import cupy as cp
+
+from nvmath import memory
+from nvmath.internal import utils as nvmath_utils
+from nvmath.internal import formatters, tensor_wrapper, typemaps
 
 from ...bindings import cutensornet as cutn
 from . import einsum_parser
-from ..._internal import formatters
-from ..._internal import tensor_wrapper
-from ..._internal import typemaps
-from ..._internal import utils
-from .. import memory
-from ..configuration import NetworkOptions, MemoryLimitExceeded
+from ..configuration import NetworkOptions
+from ...memory import MemoryLimitExceeded
 
 
 DECOMPOSITION_DTYPE_NAMES = ('float32', 'float64', 'complex64', 'complex128')
@@ -165,9 +164,6 @@ def parse_decomposition(subscripts, *operands):
     num_extra_labels = max(len(o.shape) for o in operands) if ellipses_input else 0
     all_modes, _, mode_map_user_to_ord, mode_map_ord_to_user, label_end = einsum_parser.map_modes(inputs + outputs, None, num_extra_labels, morpher)
 
-    mapper = einsum_parser.ModeLabelMapper(mode_map_ord_to_user)
-    mapping_morpher = einsum_parser.select_morpher(False, mapper)
-
     # Replace ellipses with concrete labels
     if ellipses_input:
         if num_input == 1:
@@ -297,18 +293,15 @@ def get_svd_info_dict(handle, svd_info):
     return info
 
 
-def parse_decompose_operands_options(options, wrapped_operands, stream, allowed_dtype_names=None):
+def parse_decompose_operands_options(options, wrapped_operands, stream, *, allowed_dtype_names=None, copy_to_device=True):
     """
     Given initially wrapped tensors and network options, wrap the operands to device and create an internal NetworkOptions object. 
     If cutensornet library handle is not provided in `options`, one will be created in the internal options.
     """
-    package = utils.get_operands_package(wrapped_operands)
+    package = nvmath_utils.get_operands_package(wrapped_operands)
     operands_location = 'cuda'
-    device_id = utils.get_network_device_id(wrapped_operands)
-    if device_id is None:
-        package = wrapped_operands[0].name
-        if package == 'numpy':
-            package = 'cupy'
+    device_id = nvmath_utils.get_operands_device_id(wrapped_operands)
+    if device_id == 'cpu':
         operands_location = 'cpu'
         device_id = options.device_id
     
@@ -318,28 +311,26 @@ def parse_decompose_operands_options(options, wrapped_operands, stream, allowed_
         handle = options.handle
     else:
         own_handle = True
-        with utils.device_ctx(device_id):
+        with nvmath_utils.device_ctx(device_id):
             handle = cutn.create()
     
-    dtype_name = utils.get_operands_dtype(wrapped_operands)
+    dtype_name = nvmath_utils.get_operands_dtype(wrapped_operands)
     if allowed_dtype_names is not None and dtype_name not in allowed_dtype_names:
         raise ValueError(f"dtype {dtype_name} not supported")
     
     # compute_type for decomposition should be None
-    if options.__class__.__name__ == 'NetworkOptions':
+    if type(options) is NetworkOptions: # can not use isinstance due to inheritance
         compute_type = options.compute_type if options.compute_type is not None else typemaps.NAME_TO_COMPUTE_TYPE[dtype_name]
     else:
         compute_type = None
 
-    stream_holder = utils.get_or_create_stream(options.device_id, stream, package)
+    stream_holder = nvmath_utils.get_or_create_stream(options.device_id, stream, "cuda" if package == 'numpy' else package)
 
     logger = logging.getLogger() if options.logger is None else options.logger
-    if operands_location == 'cpu':
+    if operands_location == 'cpu' and copy_to_device:
         logger.info(f"Begin transferring input data from host to device {device_id}")
         wrapped_operands = tensor_wrapper.to(wrapped_operands, device_id, stream_holder)
         logger.info("Input data transfer finished")
-
-    allocator = options.allocator if options.allocator is not None else memory._MEMORY_MANAGER[package](device_id, logger)
     
     internal_options = options.__class__(device_id=device_id,
                                         logger=logger,
@@ -347,7 +338,7 @@ def parse_decompose_operands_options(options, wrapped_operands, stream, allowed_
                                         blocking=options.blocking,
                                         compute_type=compute_type,
                                         memory_limit=options.memory_limit,
-                                        allocator=allocator)
+                                        allocator=options.allocator)
 
     return wrapped_operands, internal_options, own_handle, operands_location, stream_holder
 
@@ -367,23 +358,25 @@ def allocate_and_set_workspace(options: NetworkOptions, workspace_desc, pref, me
     """
     logger = options.logger
     workspace_size = cutn.workspace_get_memory_size(options.handle, workspace_desc, pref, mem_space, workspace_kind)
-    _device = cp.cuda.Device(options.device_id)
-    _memory_limit =  utils.get_memory_limit(options.memory_limit, _device)
+    _memory_limit =  nvmath_utils.get_memory_limit_from_device_id(options.memory_limit, options.device_id)
     if _memory_limit < workspace_size:
         raise MemoryLimitExceeded(_memory_limit, workspace_size, options.device_id)
     # Allocate and set workspace
     if mem_space == cutn.Memspace.DEVICE:
-        with utils.device_ctx(options.device_id), stream_holder.ctx:
+        with nvmath_utils.device_ctx(options.device_id), stream_holder.ctx:
             try:
                 logger.debug(f"Allocating device memory for {task_name}")
-                workspace_ptr = options.allocator.memalloc(workspace_size)
+                if isinstance(options.allocator, memory.BaseCUDAMemoryManagerAsync):
+                    workspace_ptr = options.allocator.memalloc_async(workspace_size, stream_holder.obj)
+                else:
+                    workspace_ptr = options.allocator.memalloc(workspace_size)  # type: ignore[union-attr]
             except TypeError as e:
                 message = "The method 'memalloc' in the allocator object must conform to the interface in the "\
                         "'BaseCUDAMemoryManager' protocol."
                 raise TypeError(message) from e
         
         logger.debug(f"Finished allocating device memory of size {formatters.MemoryStr(workspace_size)} for decomposition in the context of stream {stream_holder.obj}.")
-        device_ptr = utils.get_ptr_from_memory_pointer(workspace_ptr)
+        device_ptr = nvmath_utils.get_ptr_from_memory_pointer(workspace_ptr)
         cutn.workspace_set_memory(options.handle, workspace_desc, mem_space, workspace_kind, device_ptr, workspace_size)
         logger.debug(f"The workspace memory (device pointer = {device_ptr}) has been set in the workspace descriptor.")
         return workspace_ptr
@@ -423,18 +416,18 @@ def create_operands_and_descriptors(
     output_tensor_descriptors = []
     try:
         for (t, modes) in zip(wrapped_operands, inputs):
-            input_tensor_descriptors.append(t.create_tensor_descriptor(handle, modes))
+            input_tensor_descriptors.append(create_tensor_descriptor(t, handle, modes))
         logger.debug("The input tensor descriptors have been created.")
         # Create the output in the context of the current stream to work around a performance issue with CuPy's memory pool.    
         logger.debug("Beginning output tensors and descriptors creation...")
         s = None
         s_ptr = 0
         output_operands = []
-        with utils.device_ctx(device_id):
+        with nvmath_utils.device_ctx(device_id):
             for extent, tensor_modes in zip(output_extents, outputs):
-                operand = utils.create_empty_tensor(output_class, extent, dtype_name, device_id, stream_holder)
+                operand = nvmath_utils.create_empty_tensor(output_class, extent, dtype_name, device_id, stream_holder, False)
                 output_operands.append(operand)
-                output_tensor_descriptors.append(operand.create_tensor_descriptor(handle, tensor_modes))
+                output_tensor_descriptors.append(create_tensor_descriptor(operand, handle, tensor_modes))
             
             if hasattr(method, 'partition') and method.partition is None:
                 if dtype_name in ['float32', 'complex64']:
@@ -443,7 +436,7 @@ def create_operands_and_descriptors(
                     s_dtype_name = 'float64'
                 else:
                     raise ValueError(f"{dtype_name} data type not supported")
-                s = utils.create_empty_tensor(output_class, (mid_extent, ), s_dtype_name, device_id, stream_holder)
+                s = nvmath_utils.create_empty_tensor(output_class, (mid_extent, ), s_dtype_name, device_id, stream_holder, False)
                 s_ptr = s.data_ptr
         logger.debug("The output tensors and descriptors have been created.")
     except: 
@@ -461,6 +454,40 @@ def get_return_operand_data(tensor, target_location, stream_holder):
     if tensor is None: # potentially for s
         return tensor
     if target_location == 'cpu':
-        return tensor.to('cpu', stream_holder=stream_holder)
+        return tensor.to('cpu', stream_holder=stream_holder).tensor
     else: # already on device
         return tensor.tensor
+
+def create_tensor_descriptor(tensor_holder, handle, modes):
+    return cutn.create_tensor_descriptor(handle, 
+                                         len(tensor_holder.shape), 
+                                         tensor_holder.shape, 
+                                         tensor_holder.strides, 
+                                         modes, 
+                                         typemaps.NAME_TO_DATA_TYPE[tensor_holder.dtype])
+
+
+def update_tensor_extents_strides(tensor_holder, extents, strides):
+    if tuple(extents) != tensor_holder.shape or tuple(strides) != tensor_holder.strides:
+        package = tensor_holder.name
+        module = tensor_holder.module
+        if package == 'cupy':
+            # cupy requires strides scaled by itemsize
+            strides = [i * tensor_holder.itemsize for i in strides]
+            tensor_holder.tensor = module.ndarray(extents, dtype=tensor_holder.dtype, memptr=tensor_holder.tensor.data, strides=strides)
+        elif package == 'torch':
+            tensor_holder.tensor = module.as_strided(tensor_holder.tensor, tuple(extents), tuple(strides))
+        elif package == 'numpy':
+            strides = [i * tensor_holder.itemsize for i in strides]
+            tensor_holder.tensor = module.ndarray(extents, dtype=tensor_holder.dtype, buffer=tensor_holder.tensor, strides=strides)
+        elif package == 'cuda':
+            tensor_holder.tensor = module.wrap_external(
+                tensor_holder.tensor, tensor_holder.data_ptr, tensor_holder.dtype, 
+                extents, strides, tensor_holder.device_id, tensor_holder.itemsize, strides_in_bytes=False)
+        else:
+            raise RuntimeError(f"Internal Error on unexpected package: {package}")
+
+
+def reshape_tensor_to_tensor_descriptor(tensor_holder, handle, tensor_descriptor):
+    _, _, extents, strides = cutn.get_tensor_details(handle, tensor_descriptor)
+    update_tensor_extents_strides(tensor_holder, extents, strides)

@@ -1,4 +1,4 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -8,6 +8,9 @@ import numpy as np
 import cuquantum
 from cuquantum.bindings import cutensornet as cutn
 
+ATOL = 1e-8
+RTOL = 1e-5
+SEED = 1234
 
 print("cuTensorNet-vers:", cutn.get_version())
 dev = cp.cuda.Device()  # get current device
@@ -22,17 +25,18 @@ print("GPU-major:", props["major"])
 print("GPU-minor:", props["minor"])
 print("========================")
 
-############################################################################################
+#################################################################################################
 # Computing: O_{a,m} = A_{a,b,c,d} B_{b,c,d,e} C_{e,f,g,h} D_{g,h,i,j} E_{i,j,k,l} F_{k,l,m}
-############################################################################################
+# We will execute the contraction a few times assuming all input tensors being constant except F.
+#################################################################################################
 
 print("Include headers and define data types.")
 
-data_type = cuquantum.cudaDataType.CUDA_R_32F
-compute_type = cuquantum.ComputeType.COMPUTE_32F
+data_type = cuquantum.cudaDataType.CUDA_R_64F
+compute_type = cutn.ComputeType.COMPUTE_64F
 num_inputs = 6
 
-# Create an array of modes
+# Create vectors of tensor modes
 modes_A = [ord(c) for c in ('a','b','c','d')]
 modes_B = [ord(c) for c in ('b','c','d','e')]
 modes_C = [ord(c) for c in ('e','f','g','h')]
@@ -40,9 +44,11 @@ modes_D = [ord(c) for c in ('g','h','i','j')]
 modes_E = [ord(c) for c in ('i','j','k','l')]
 modes_F = [ord(c) for c in ('k','l','m')]
 modes_O = [ord(c) for c in ('a','m')]
+tensor_modes = [modes_A, modes_B, modes_C, modes_D, modes_E, modes_F, modes_O]
+tensor_nmodes = [len(modes) for modes in tensor_modes]
 
-# Create an array of extents (shapes) for each tensor
-dim = 8
+# Set mode extents
+dim = 8  
 extent_A = (dim,) * 4 
 extent_B = (dim,) * 4 
 extent_C = (dim,) * 4 
@@ -50,6 +56,7 @@ extent_D = (dim,) * 4
 extent_E = (dim,) * 4 
 extent_F = (dim,) * 3 
 extent_O = (dim,) * 2
+tensor_extents = [extent_A, extent_B, extent_C, extent_D, extent_E, extent_F, extent_O]
 
 print("Define network, modes, and extents.")
 
@@ -57,14 +64,15 @@ print("Define network, modes, and extents.")
 # Initialize data
 #################
 
-A_d = cp.random.random((np.prod(extent_A),), dtype=np.float32)
-B_d = cp.random.random((np.prod(extent_B),), dtype=np.float32)
-C_d = cp.random.random((np.prod(extent_C),), dtype=np.float32)
-D_d = cp.random.random((np.prod(extent_D),), dtype=np.float32)
-E_d = cp.random.random((np.prod(extent_E),), dtype=np.float32)
-F_d = cp.random.random((np.prod(extent_F),), dtype=np.float32)
-O_d = cp.zeros((np.prod(extent_O),), dtype=np.float32)
-raw_data_in_d = (A_d.data.ptr, B_d.data.ptr, C_d.data.ptr, D_d.data.ptr, E_d.data.ptr, F_d.data.ptr)
+cp.random.seed(SEED)
+A_d = cp.random.random((np.prod(extent_A),), dtype=np.float64).reshape(extent_A, order='F')
+B_d = cp.random.random((np.prod(extent_B),), dtype=np.float64).reshape(extent_B, order='F')
+C_d = cp.random.random((np.prod(extent_C),), dtype=np.float64).reshape(extent_C, order='F')
+D_d = cp.random.random((np.prod(extent_D),), dtype=np.float64).reshape(extent_D, order='F')
+E_d = cp.random.random((np.prod(extent_E),), dtype=np.float64).reshape(extent_E, order='F')
+F_d = cp.random.random((np.prod(extent_F),), dtype=np.float64).reshape(extent_F, order='F')
+O_d = cp.zeros((np.prod(extent_O),), dtype=np.float64).reshape(extent_O, order='F')
+tensor_data_d = [A_d, B_d, C_d, D_d, E_d, F_d, O_d]
 
 #############
 # cuTensorNet
@@ -73,60 +81,83 @@ raw_data_in_d = (A_d.data.ptr, B_d.data.ptr, C_d.data.ptr, D_d.data.ptr, E_d.dat
 stream = cp.cuda.Stream()
 handle = cutn.create()
 
-nmode_A = len(modes_A)
-nmode_B = len(modes_B)
-nmode_C = len(modes_C)
-nmode_D = len(modes_D)
-nmode_E = len(modes_E)
-nmode_F = len(modes_F)
-nmode_O = len(modes_O)
+print("Allocated GPU memory for data, initialized data, and created library handle")
 
-###############################
-# Create Contraction Descriptor
-###############################
+############################
+# Set constant input tensors
+############################
 
-modes_in = (modes_A, modes_B, modes_C, modes_D, modes_E, modes_F)
-extents_in = (extent_A, extent_B, extent_C, extent_D, extent_E, extent_F)
-num_modes_in = (nmode_A, nmode_B, nmode_C, nmode_D, nmode_E, nmode_F)
-
-# Strides are optional; if no stride (0) is provided, then cuTensorNet assumes a generalized column-major data layout
-strides_in = (0, 0, 0, 0, 0, 0)
-
-# Set up the tensor qualifiers for all input tensors
+# specify which input tensors are constant - all but the last one (F)
 qualifiers_in = np.zeros(num_inputs, dtype=cutn.tensor_qualifiers_dtype)
-for i in range(5):
+for i in range(num_inputs-1):
     qualifiers_in[i]['is_constant'] = True
+qualifiers_in[num_inputs-1]['is_constant'] = False
+
+################
+# Create Network
+################
 
 # Set up tensor network
-desc_net = cutn.create_network_descriptor(handle,
-    num_inputs, num_modes_in, extents_in, strides_in, modes_in, qualifiers_in,  # inputs
-    nmode_O, extent_O, 0, modes_O,  # output
-    data_type, compute_type)
+net = cutn.create_network(handle)
 
-print("Initialize the cuTensorNet library and create a network descriptor.")
+tensor_ids = []  # for input tensors
+# attach the input tensors to the network
+for t in range(num_inputs):
+    tensor_id = cutn.network_append_tensor(handle,
+                                         net,
+                                         tensor_nmodes[t],
+                                         tensor_extents[t],
+                                         tensor_modes[t],
+                                         qualifiers_in[t:t+1].ctypes.data,  # qualifiers for constant tensors
+                                         data_type)
+    tensor_ids.append(tensor_id)
 
-#####################################################
-# Choose workspace limit based on available resources
-#####################################################
+# set the output tensor
+cutn.network_set_output_tensor(handle,
+                              net,
+                              tensor_nmodes[num_inputs],
+                              tensor_modes[num_inputs],
+                              data_type)
+
+# set the network compute type
+compute_type_dtype = cutn.get_network_attribute_dtype(cutn.NetworkAttribute.COMPUTE_TYPE)
+compute_type_array = np.asarray([compute_type], dtype=compute_type_dtype)
+cutn.network_set_attribute(handle,
+                          net,
+                          cutn.NetworkAttribute.COMPUTE_TYPE,
+                          compute_type_array.ctypes.data,
+                          compute_type_array.dtype.itemsize)
+
+print("Initialized the cuTensorNet library and created a tensor network")
+
+######################################################
+# Choose workspace limit based on available resources.
+######################################################
 
 free_mem, total_mem = dev.mem_info
 workspace_limit = int(free_mem * 0.9)
+print(f"Workspace limit = {workspace_limit}")
 
-##############################################
-# Set contraction order and slicing
-##############################################
+#######################
+# Set contraction order
+#######################
 
-optimizer_info = cutn.create_contraction_optimizer_info(handle, desc_net)
+# Create contraction optimizer info
+optimizer_info = cutn.create_contraction_optimizer_info(handle, net)
 
-path_dtype = cutn.contraction_optimizer_info_get_attribute_dtype(cutn.ContractionOptimizerInfoAttribute.PATH)
+# set a predetermined contraction path
+path_dtype = cutn.get_contraction_optimizer_info_attribute_dtype(cutn.ContractionOptimizerInfoAttribute.PATH)
 path = np.asarray([(0, 1), (0, 4), (0, 3), (0, 2), (0, 1)], dtype=np.int32)
 path_obj = np.zeros((1,), dtype=path_dtype)
 path_obj["num_contractions"] = num_inputs - 1
 path_obj["data"] = path.ctypes.data
 
-cutn.contraction_optimizer_info_set_attribute(
-    handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.PATH, 
-    path_obj.ctypes.data, path_obj.dtype.itemsize)
+# provide user-specified contPath
+cutn.contraction_optimizer_info_set_attribute(handle,
+                                             optimizer_info,
+                                             cutn.ContractionOptimizerInfoAttribute.PATH,
+                                             path_obj.ctypes.data,
+                                             path_obj.dtype.itemsize)
 
 num_slices_dtype = cutn.contraction_optimizer_info_get_attribute_dtype(
     cutn.ContractionOptimizerInfoAttribute.NUM_SLICES)
@@ -138,130 +169,182 @@ num_slices = num_slices.item()
 
 assert num_slices > 0
 
-print("Set contraction path into cuTensorNet optimizer.")
- 
-###########################################################
-# Initialize all pair-wise contraction plans (for cuTENSOR)
-###########################################################
+print("Set predetermined contraction path into cuTensorNet optimizer")
+
+##############################################################
+# Create workspace descriptor, allocate workspace, and set it.
+##############################################################
 
 work_desc = cutn.create_workspace_descriptor(handle)
-cutn.workspace_compute_contraction_sizes(handle, desc_net, optimizer_info, work_desc)
-required_scratch_workspace_size = cutn.workspace_get_memory_size(
-    handle, work_desc,
-    cutn.WorksizePref.MIN,
-    cutn.Memspace.DEVICE,
-    cutn.WorkspaceKind.SCRATCH)
-work_scratch = cp.cuda.alloc(required_scratch_workspace_size)
-cutn.workspace_set_memory(
-    handle, work_desc,
-    cutn.Memspace.DEVICE,
-    cutn.WorkspaceKind.SCRATCH,
-    work_scratch.ptr, required_scratch_workspace_size)
-required_cache_workspace_size = cutn.workspace_get_memory_size(
-    handle, work_desc,
-    cutn.WorksizePref.MIN,
-    cutn.Memspace.DEVICE,
-    cutn.WorkspaceKind.CACHE)
-work_cache = cp.cuda.alloc(required_cache_workspace_size)
-cutn.workspace_set_memory(
-    handle, work_desc,
-    cutn.Memspace.DEVICE,
-    cutn.WorkspaceKind.CACHE,
-    work_cache.ptr, required_cache_workspace_size)
-plan = cutn.create_contraction_plan(handle, desc_net, optimizer_info, work_desc)
 
-###################################################################################
-# Optional: Auto-tune cuTENSOR's cutensorContractionPlan to pick the fastest kernel
-###################################################################################
+# set SCRATCH workspace, which will be used during each network contraction operation, not needed afterwards
+cutn.workspace_compute_contraction_sizes(handle, net, optimizer_info, work_desc)
 
-pref = cutn.create_contraction_autotune_preference(handle)
+required_workspace_size_scratch = cutn.workspace_get_memory_size(handle,
+                                                               work_desc,
+                                                               cutn.WorksizePref.MIN,
+                                                               cutn.Memspace.DEVICE,
+                                                               cutn.WorkspaceKind.SCRATCH)
 
-num_autotuning_iterations = 5 # may be 0
-n_iter_dtype = cutn.contraction_autotune_preference_get_attribute_dtype(
-    cutn.ContractionAutotunePreferenceAttribute.MAX_ITERATIONS)
-num_autotuning_iterations = np.asarray([num_autotuning_iterations], dtype=n_iter_dtype)
-cutn.contraction_autotune_preference_set_attribute(
-    handle, pref,
-    cutn.ContractionAutotunePreferenceAttribute.MAX_ITERATIONS,
-    num_autotuning_iterations.ctypes.data, num_autotuning_iterations.dtype.itemsize)
+work_scratch = cp.cuda.alloc(required_workspace_size_scratch)
 
-# Modify the plan again to find the best pair-wise contractions
-cutn.contraction_autotune(
-    handle, plan, raw_data_in_d, O_d.data.ptr,
-    work_desc, pref, stream.ptr)
+cutn.workspace_set_memory(handle,
+                         work_desc,
+                         cutn.Memspace.DEVICE,
+                         cutn.WorkspaceKind.SCRATCH,
+                         work_scratch.ptr,
+                         required_workspace_size_scratch)
 
-cutn.destroy_contraction_autotune_preference(pref)
- 
-print("Create a contraction plan for cuTENSOR and optionally auto-tune it.")
- 
-###########
-# Execution
-###########
+# set CACHE workspace, which will be used across network contraction operations
+required_workspace_size_cache = cutn.workspace_get_memory_size(handle,
+                                                             work_desc,
+                                                             cutn.WorksizePref.MIN,
+                                                             cutn.Memspace.DEVICE,
+                                                             cutn.WorkspaceKind.CACHE)
 
-minTimeCUTENSORNET = 1e100
-firstTimeCUTENSORNET = 1e100
-num_runs = 3  # to get stable perf results
-e1 = cp.cuda.Event()
-e2 = cp.cuda.Event()
+work_cache = cp.cuda.alloc(required_workspace_size_cache)
+
+cutn.workspace_set_memory(handle,
+                         work_desc,
+                         cutn.Memspace.DEVICE,
+                         cutn.WorkspaceKind.CACHE,
+                         work_cache.ptr,
+                         required_workspace_size_cache)
+
+print("Allocated and set up the GPU workspace")
+
+##########################
+# Prepare the contraction.
+##########################
+
+cutn.network_set_optimizer_info(handle,
+                               net,
+                               optimizer_info)
+
+cutn.network_prepare_contraction(handle,
+                                net,
+                                work_desc)
+
+# set tensor's data buffers and strides
+for t in range(num_inputs):
+    cutn.network_set_input_tensor_memory(handle,
+                                        net,
+                                        tensor_ids[t],
+                                        tensor_data_d[t].data.ptr,
+                                        0)  # strides (NULL)
+
+cutn.network_set_output_tensor_memory(handle,
+                                     net,
+                                     tensor_data_d[num_inputs].data.ptr,
+                                     0)  # strides (NULL)
+
+#####################################################################
+# Optional: Auto-tune the contraction plan to pick the fastest kernel
+#           for each pairwise tensor contraction.
+#####################################################################
+autotune_pref = cutn.create_network_autotune_preference(handle)
+
+num_autotuning_iterations = 5  # may be 0
+iterations_dtype = cutn.get_network_autotune_preference_attribute_dtype(
+    cutn.NetworkAutotunePreferenceAttribute.NETWORK_AUTOTUNE_MAX_ITERATIONS)
+num_autotuning_iterations_array = np.asarray([num_autotuning_iterations], dtype=iterations_dtype)
+cutn.network_autotune_preference_set_attribute(handle,
+                                              autotune_pref,
+                                              cutn.NetworkAutotunePreferenceAttribute.NETWORK_AUTOTUNE_MAX_ITERATIONS,
+                                              num_autotuning_iterations_array.ctypes.data,
+                                              num_autotuning_iterations_array.dtype.itemsize)
+
+# Modify the network again to find the best pair-wise contractions
+cutn.network_autotune_contraction(handle,
+                                 net,
+                                 work_desc,
+                                 autotune_pref,
+                                 stream.ptr)
+
+cutn.destroy_network_autotune_preference(autotune_pref)
+
+print("Prepared the network contraction for cuTensorNet and optionally auto-tuned it")
+
+########################################
+# Execute the tensor network contraction
+########################################
+
+# Create a cutensornetSliceGroup_t object from a range of slice IDs
 slice_group = cutn.create_slice_group_from_id_range(handle, 0, num_slices, 1)
 
-for i in range(num_runs):
-    # Contract over all slices.
-    # A user may choose to parallelize over the slices across multiple devices.
-    e1.record()
-    cutn.contract_slices(
-        handle, plan, raw_data_in_d, O_d.data.ptr, False,
-        work_desc, slice_group, stream.ptr)
-    e2.record()
+min_time_cutensornet = 1e100
+first_time_cutensornet = 1e100
+num_runs = 3  # number of repeats to get stable performance results
+e1 = cp.cuda.Event()
+e2 = cp.cuda.Event()
 
-    # Synchronize and measure timing
+for i in range(num_runs):
+    # restore the output tensor on GPU
+    tensor_data_d[num_inputs][:] = 0
+    
+    # Contract all slices of the tensor network
+    e1.record()
+    
+    accumulate_output = 0  # output tensor data will be overwritten
+    cutn.network_contract(handle,
+                         net,
+                         accumulate_output,
+                         work_desc,
+                         slice_group,  # alternatively, 0 can also be used to contract over all slices
+                         stream.ptr)
+    
+    e2.record()
+    
+    # Synchronize and measure best timing
     e2.synchronize()
     time = cp.cuda.get_elapsed_time(e1, e2) / 1000  # ms -> s
-    minTimeCUTENSORNET = minTimeCUTENSORNET if minTimeCUTENSORNET < time else time
-    firstTimeCUTENSORNET = firstTimeCUTENSORNET if i > 0 else time
+    if i == 0:
+        first_time_cutensornet = time
+    min_time_cutensornet = min(min_time_cutensornet, time)
 
-print("Contract the network, each slice uses the same contraction plan.")
+print("Contracted the tensor network, each slice used the same contraction plan")
 
-# free up the workspace
-del work_scratch
-del work_cache
+# Print the 1-norm of the output tensor (verification)
+stream.synchronize()
+norm1 = abs(tensor_data_d[num_inputs]).sum()
 
-# Recall that we set strides to null (0), so the data are in F-contiguous layout
-A_d = A_d.reshape(extent_A, order='F')
-B_d = B_d.reshape(extent_B, order='F')
-C_d = C_d.reshape(extent_C, order='F')
-D_d = D_d.reshape(extent_D, order='F')
-E_d = E_d.reshape(extent_E, order='F')
-F_d = F_d.reshape(extent_F, order='F')
-O_d = O_d.reshape(extent_O, order='F')
+print(f"Computed the 1-norm of the output tensor: {norm1:e}")
 
+# Query the total Flop count for the tensor network contraction
+flops_dtype = cutn.get_contraction_optimizer_info_attribute_dtype(
+    cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT)
+flops = np.zeros((1,), dtype=flops_dtype)
+cutn.contraction_optimizer_info_get_attribute(handle,
+                                             optimizer_info,
+                                             cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
+                                             flops.ctypes.data,
+                                             flops.dtype.itemsize)
+flops = flops.item()
+
+# Verification against cupy.einsum
 # Compute the reference using cupy.einsum with the same path
 path = ['einsum_path'] + path.tolist()
 out = cp.einsum("abcd,bcde,efgh,ghij,ijkl,klm->am", A_d, B_d, C_d, D_d, E_d, F_d, optimize=path)
-if not cp.allclose(out, O_d):
-    raise RuntimeError("result is incorrect")
+try:
+    cp.testing.assert_allclose(out, O_d, atol=ATOL, rtol=RTOL)
+except AssertionError as e:
+    raise RuntimeError("result is incorrect") from e
 print("Check cuTensorNet result against that of cupy.einsum().")
 
-#######################################################
-
-flops_dtype = cutn.contraction_optimizer_info_get_attribute_dtype(
-    cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT)
-flops = np.zeros((1,), dtype=flops_dtype)
-cutn.contraction_optimizer_info_get_attribute(
-    handle, optimizer_info, cutn.ContractionOptimizerInfoAttribute.FLOP_COUNT,
-    flops.ctypes.data, flops.dtype.itemsize)
-flops = flops.item()
-
 print(f"num_slices: {num_slices}")
-print(f"First run (intermediate tensors get cached): {firstTimeCUTENSORNET * 1000 / num_slices} ms / slice")
-print(f"Subsequent run (cache reused): {minTimeCUTENSORNET * 1000 / num_slices} ms / slice")
-print(f"{flops / 1e9 / minTimeCUTENSORNET} GFLOPS/s")
+print(f"First run (intermediate tensors get cached): {first_time_cutensornet * 1000 / num_slices} ms / slice")
+print(f"Subsequent run (cache reused): {min_time_cutensornet * 1000 / num_slices} ms / slice")
+print(f"{flops / 1e9 / min_time_cutensornet} GFLOPS/s")
 
+# Free cuTensorNet resources
 cutn.destroy_slice_group(slice_group)
-cutn.destroy_contraction_plan(plan)
-cutn.destroy_contraction_optimizer_info(optimizer_info)
-cutn.destroy_network_descriptor(desc_net)
 cutn.destroy_workspace_descriptor(work_desc)
+cutn.destroy_contraction_optimizer_info(optimizer_info)
+cutn.destroy_network(net)
 cutn.destroy(handle)
 
-print("Free resource and exit.")
+# Free GPU memory resources
+del work_scratch
+del work_cache
+
+print("Free resources and exit.") 

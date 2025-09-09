@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import atexit
-import importlib
 import glob
 import os
 import sys
@@ -287,20 +286,3 @@ class LoggerTestBase:
         log = ''.join(my_data)
         assert log.count("-> logged") >= 2
         assert log.count("is_ok=True") >= 2
-
-
-class BindingsDeprecationTestBase:
-
-    lib_name = None
-
-    def test_binding_deprecation(self):
-        # make sure bindings are still accessible
-        lib = importlib.import_module(f'cuquantum.bindings.{self.lib_name}')
-        lib_deprecated = importlib.import_module(f'cuquantum.{self.lib_name}')
-        binding_api_names = [name for name in dir(lib) if not name.startswith('_')]
-        assert len(binding_api_names) > 10 # make sure this is not empty
-        for name in binding_api_names:
-            if name == 'logger_callback_holder':
-                # From cutensornet.logger_set_callback_data
-                continue
-            assert getattr(lib, name, None) is getattr(lib_deprecated, name, None), f"{self.lib_name} {name} not matching"

@@ -15,10 +15,11 @@ from typing import Dict, Optional, Union, Literal
 import numpy as np
 
 from cuquantum.bindings import cutensornet as cutn
+from nvmath.internal import utils
+
 from ._internal.network_state_utils import MPO_OPTION_MAP, MPS_STATE_ATTRIBUTE_MAP, GAUGE_OPTION_MAP
 from .. import configuration
 from ..tensor import QRMethod, SVDMethod, SVDInfo
-from ..._internal import utils
 from .._internal.decomposition_utils import SVD_ALGORITHM_MAP, NORMALIZATION_MAP
 
 

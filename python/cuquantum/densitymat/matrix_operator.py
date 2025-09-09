@@ -12,19 +12,18 @@ import collections
 import numpy as np
 import cupy as cp
 
+from nvmath.internal.utils import precondition
+from nvmath.internal import typemaps
 from cuquantum.bindings import cudensitymat as cudm
 from ._internal.utils import (
     generic_finalizer,
     register_with,
-    device_ctx,
     NDArrayType,
     InvalidObjectState,
 )
 from .work_stream import WorkStream
 from .callbacks import Callback, GPUCallback, CPUCallback
-from .._internal import typemaps
 from .._internal.tensor_wrapper import wrap_operand
-from .._internal.utils import precondition, StreamHolder, cuda_call_ctx
 
 
 __all__ = ["LocalDenseMatrixOperator"]
@@ -85,6 +84,10 @@ class MatrixOperator(ABC):
         if self._last_compute_event:
             self._last_compute_event.synchronize()
             self._last_compute_event = None
+    
+    @property
+    def has_gradient(self) -> bool:
+        return self.callback.has_gradient if self.callback is not None else False
 
 
 class LocalDenseMatrixOperator(MatrixOperator):

@@ -52,7 +52,7 @@ The sample for tensor QR, gate split and MPS can also be executed in the same fa
 
 **Note**: Depending on how CUDA Toolkit and cuTENSOR are installed, you might need to add them to `LD_LIBRARY_PATH` like this:
 ```
-export LD_LIBRARY_PATH=$CUDA_PATH/lib64:$CUTENSOR_ROOT/lib/11:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$CUDA_PATH/lib64:$CUTENSOR_ROOT/lib:$LD_LIBRARY_PATH
 ```
 The cuTENSOR library path would depend on the CUDA major version. Please refer to the [Getting Started](https://docs.nvidia.com/cuda/cuquantum/latest/cutensornet/getting_started.html) page for further detail.
 
@@ -66,7 +66,7 @@ The cuTENSOR library path would depend on the CUDA major version. Please refer t
 ## Prerequisites
 
 * [CUDA Toolkit 11.x](https://developer.nvidia.com/cuda-downloads) and compatible driver r450+ (see [CUDA Driver Release Notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html#cuda-major-component-versions)).
-* cuTENSOR 2.2.0+.
+* cuTENSOR 2.3.1+.
 * GNU OpenMP (GOMP) runtime.
 * CMake 3.17+ if using `cmake`.
 
@@ -179,5 +179,5 @@ This sample largely builds on first sample provided above.
 This sample demonstrates how to:
 * Mark input tensors for gradient computation when creating a tensor network by calling `cutensornetNetworkSetAttribute`.
 * Provide a cache workspace to the contraction plan which will be used to hold intermediate data needed for gradient computation. It shows how to query the required cache memory size using `cutensornetWorkspaceGetMemorySize` with a `CUTENSORNET_WORKSPACE_CACHE` workspace-kind, and how to the provide the workspace memory using `cutensornetWorkspaceSetMemory`.
-* Call `cutensornetComputeGradientsBackward` to perform the gradient computation.
+* Call `cutensornetNetworkPrepareGradientsBackward` and `cutensornetNetworkComputeGradientsBackward` to perform the gradient computation.
 * Call `cutensornetWorkspacePurgeCache` to clean up the cache and prepare for the next gradient calculation.

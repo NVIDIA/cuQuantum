@@ -25,8 +25,8 @@
 */
 
 /** Define the numerical type and data type for the GPU computations (same) */
-using NumericalType = std::complex<double>;  // do not change
-constexpr cudaDataType_t dataType = CUDA_C_64F;        // do not change
+using NumericalType = std::complex<double>;      // do not change
+constexpr cudaDataType_t dataType = CUDA_C_64F;  // do not change
 
 
 /** Example of a user-provided scalar CPU callback C function

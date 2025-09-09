@@ -11,9 +11,9 @@ import collections
 import numpy as np
 import cupy as cp
 
-from .._internal import typemaps as cutn_typemaps
-from .._internal import utils as cutn_utils
-from .._internal.tensor_wrapper import wrap_operand
+from nvmath.internal import utils as nvmath_utils
+from nvmath.internal import typemaps
+from nvmath.internal.tensor_wrapper import wrap_operand
 
 from cuquantum.bindings import cudensitymat as cudm
 from .elementary_operator import ElementaryOperator, DenseOperator, MultidiagonalOperator
@@ -24,6 +24,7 @@ from ._internal.callbacks import CallbackCoefficient
 from .callbacks import Callback
 from ._internal import utils
 from ._internal.utils import NDArrayType, InvalidObjectState, check_and_get_batchsize
+from ._internal.typemaps import CUDENSITYMAT_COMPUTE_TYPE_MAP
 
 __all__ = [
     "full_matrix_product",
@@ -106,7 +107,7 @@ class OperatorTerm:
         return self._dtype
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _validated_ptr(self):
         return self._ptr
 
@@ -265,7 +266,7 @@ class OperatorTerm:
         ptrs = []
         batch_size = coeff.batch_size
 
-        with cutn_utils.device_ctx(self._ctx.device_id):
+        with nvmath_utils.device_ctx(self._ctx.device_id):
             for matrix_op in matrix_ops:
                 matrix_op._maybe_instantiate(self._ctx)
                 assert matrix_op.data.flags["F_CONTIGUOUS"]
@@ -327,7 +328,7 @@ class OperatorTerm:
         flattened_modes = []
         flattened_duals = []
         batch_size = coeff.batch_size
-        with cutn_utils.device_ctx(self._ctx.device_id):
+        with nvmath_utils.device_ctx(self._ctx.device_id):
             for elem_op, _modes, _duals in zip(elem_ops, modes, duals):
                 elem_op._maybe_instantiate(self._ctx)
                 _batch_size = check_and_get_batchsize(elem_op.batch_size, batch_size)
@@ -670,7 +671,7 @@ class Operator:
         return self._hilbert_space_dims
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _validated_ptr(self):
         """
         The pointer to this instance's C-API counterpart.
@@ -678,7 +679,7 @@ class Operator:
         return self._ptr
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _validated_expectation_ptr(self):
         """
         The pointer to this instance's C-API counterpart.
@@ -889,7 +890,7 @@ class Operator:
             self._ptr,
             state._validated_ptr,
             state_out._validated_ptr if state_out else state._validated_ptr,
-            cutn_typemaps.NAME_TO_COMPUTE_TYPE[self._current_action_compute_type],
+            CUDENSITYMAT_COMPUTE_TYPE_MAP[self._current_action_compute_type],
             self._ctx._memory_limit,
             self._ctx._validated_ptr,
             0,
@@ -945,7 +946,7 @@ class Operator:
                 self._ptr,
                 state_in._validated_ptr, # input state
                 state_out_adj._validated_ptr if state_out_adj else state_in._validated_ptr, # adjoint of output state
-                cutn_typemaps.NAME_TO_COMPUTE_TYPE[self._current_action_gradient_compute_type],
+                CUDENSITYMAT_COMPUTE_TYPE_MAP[self._current_action_gradient_compute_type],
                 self._ctx._memory_limit,
                 self._ctx._validated_ptr,
                 0,
@@ -994,7 +995,7 @@ class Operator:
             self._ctx._handle._validated_ptr,
             self._expectation_ptr,
             state._validated_ptr,
-            cutn_typemaps.NAME_TO_COMPUTE_TYPE[self._current_expectation_compute_type],
+            CUDENSITYMAT_COMPUTE_TYPE_MAP[self._current_expectation_compute_type],
             self._ctx._memory_limit,
             self._ctx._validated_ptr,
             0,
@@ -1004,7 +1005,7 @@ class Operator:
         return
 
     # we don't want to precondition here to avoid hard to parse error message, instead a check for self._ctx is done inside the function body
-    # @cutn_utils.precondition(_check_valid_state)
+    # @nvmath_utils.precondition(_check_valid_state)
     def compute_action(
         self,
         t: float,
@@ -1044,7 +1045,7 @@ class Operator:
 
         self._ctx._maybe_allocate()
 
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -1056,11 +1057,8 @@ class Operator:
             self._ctx._last_compute_event = self._last_compute_event
             state_in._last_compute_event = self._last_compute_event
             state_out._last_compute_event = self._last_compute_event
-            for _op in self._using_ops:
-                _op._last_compute_event = self._last_compute_event
-            # update last event for contained OperatorTerms as well
-            for term in set(self.terms):
-                term._last_compute_event = self._last_compute_event
+            self._update_last_compute_event_downstream()
+
             _ = check_and_get_batchsize(self._batch_size, batch_size)
             cudm.operator_compute_action(
                 self._ctx._handle._validated_ptr,
@@ -1123,7 +1121,7 @@ class Operator:
 
         self._ctx._maybe_allocate()
 
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -1138,12 +1136,7 @@ class Operator:
             state_out_adj._last_compute_event = self._last_compute_event
             state_in._last_compute_event = self._last_compute_event
             state_in_adj._last_compute_event = self._last_compute_event
-
-            for _op in self._using_ops:
-                _op._last_compute_event = self._last_compute_event
-            # update last event for contained OperatorTerms as well
-            for term in set(self.terms):
-                term._last_compute_event = self._last_compute_event
+            self._update_last_compute_event_downstream()
             _ = check_and_get_batchsize(self._batch_size, batch_size)
             if self._gradient_dir == cudm.DifferentiationDir.BACKWARD:
                 cudm.operator_compute_action_backward_diff(
@@ -1165,7 +1158,7 @@ class Operator:
         return params_gradient
     
     #FIXME: for compute_action, we don't want to precondition here to avoid hard to parse error message, instead a check for self._ctx is done inside the function body ---> should it be the same here?
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def compute_expectation(
         self,
         t: float,
@@ -1209,7 +1202,7 @@ class Operator:
 
         self._ctx._maybe_allocate()
 
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx, blocking=True) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx, blocking=True) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -1220,11 +1213,7 @@ class Operator:
             # update last event in participating elementary/general operators to ensure proper stream synchronization and shutdown order
             self._ctx._last_compute_event = self._last_compute_event
             state._last_compute_event = self._last_compute_event
-            for _op in self._using_ops:
-                _op._last_compute_event = self._last_compute_event
-            # update last event for contained OperatorTerms as well
-            for term in set(self.terms):
-                term._last_compute_event = self._last_compute_event
+            self._update_last_compute_event_downstream()
 
             out = cp.ndarray((self._prepared_expectation_batch_size,), dtype=state.dtype)
 
@@ -1241,6 +1230,17 @@ class Operator:
                 self._ctx._stream_holder.ptr,
             )
         return out
+
+
+    def _update_last_compute_event_downstream(self, last_compute_event: cp.cuda.Event | None = None):
+        if last_compute_event is not None:
+            self._last_compute_event = last_compute_event
+        else:
+            last_compute_event = self._last_compute_event
+        for _op in self._using_ops:
+            _op._last_compute_event =last_compute_event
+        for term in set(self.terms):
+            term._last_compute_event =last_compute_event
 
     def __add__(self, other: "Operator") -> "Operator":
         """
@@ -1381,7 +1381,7 @@ class OperatorAction:
         return self._finalizer.alive
 
     @property
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def _validated_ptr(self) -> int:
         """
         The pointer to this instances C-API counterpart.
@@ -1433,7 +1433,7 @@ class OperatorAction:
                     "The provided operands are required to have the same dtype as this OperatorTerm instance."
                 ) from e
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def prepare(
         self,
         ctx: "WorkStream",
@@ -1482,7 +1482,7 @@ class OperatorAction:
             self._ptr,
             [state._validated_ptr for state in states_in],
             state_out._validated_ptr if state_out else states_in[0]._validated_ptr,
-            cutn_typemaps.NAME_TO_COMPUTE_TYPE[self._current_compute_type],
+            CUDENSITYMAT_COMPUTE_TYPE_MAP[self._current_compute_type],
             self._ctx._memory_limit,
             self._ctx._validated_ptr,
             0,
@@ -1491,7 +1491,7 @@ class OperatorAction:
 
         return
 
-    @cutn_utils.precondition(_check_valid_state)
+    @nvmath_utils.precondition(_check_valid_state)
     def compute(
         self,
         t: float,
@@ -1524,7 +1524,7 @@ class OperatorAction:
             raise ValueError("Inconsistent output state batch size.")
         self._ctx._maybe_allocate()
 
-        with cutn_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
+        with nvmath_utils.device_ctx(self._ctx.device_id), utils.cuda_call_ctx(self._ctx) as (
             self._last_compute_event,
             elapsed,
         ):
@@ -1537,13 +1537,7 @@ class OperatorAction:
             for state_in in states_in:
                 state_in._last_compute_event = self._last_compute_event
             state_out._last_compute_event = self._last_compute_event
-            for _op in self._using_tensor_ops:
-                _op._last_compute_event = self._last_compute_event
-            # update last event for contained OperatorTerms as well
-            for _term in self._using_terms:
-                _term._last_compute_event = self._last_compute_event
-            for op in self.operators:
-                op._last_compute_event = self._last_compute_event
+            self._update_last_compute_event_downstream()
 
             cudm.operator_action_compute(
                 self._ctx._handle._validated_ptr,
@@ -1558,6 +1552,17 @@ class OperatorAction:
                 self._ctx._stream_holder.ptr,
             )
 
+    def _update_last_compute_event_downstream(self, last_compute_event: cp.cuda.Event | None = None):
+        if last_compute_event is not None:
+            self._last_compute_event = last_compute_event
+        else:
+            last_compute_event = self._last_compute_event
+        for _op in self._using_tensor_ops:
+            _op._last_compute_event = last_compute_event
+        for _term in self._using_terms:
+            _term._last_compute_event = self._last_compute_event
+        for op in self.operators:
+            op._last_compute_event = self._last_compute_event
 
 def _unpack_operator(op):
     return zip(op.terms, (coeff.unpack() for coeff in op._coefficients), op.dualities)

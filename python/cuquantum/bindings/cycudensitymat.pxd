@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 25.06.0. Do not modify it directly.
+# This code was automatically generated with version 25.09.0. Do not modify it directly.
 
 from libc.stdint cimport int32_t, int64_t, uint32_t, uint64_t
 from libc.stdio cimport FILE
@@ -61,6 +61,17 @@ ctypedef enum cudensitymatElementaryOperatorSparsity_t "cudensitymatElementaryOp
     CUDENSITYMAT_OPERATOR_SPARSITY_NONE "CUDENSITYMAT_OPERATOR_SPARSITY_NONE" = 0
     CUDENSITYMAT_OPERATOR_SPARSITY_MULTIDIAGONAL "CUDENSITYMAT_OPERATOR_SPARSITY_MULTIDIAGONAL" = 1
 
+ctypedef enum cudensitymatOperatorSpectrumKind_t "cudensitymatOperatorSpectrumKind_t":
+    CUDENSITYMAT_OPERATOR_SPECTRUM_LARGEST "CUDENSITYMAT_OPERATOR_SPECTRUM_LARGEST" = 0
+    CUDENSITYMAT_OPERATOR_SPECTRUM_SMALLEST "CUDENSITYMAT_OPERATOR_SPECTRUM_SMALLEST" = 1
+    CUDENSITYMAT_OPERATOR_SPECTRUM_LARGEST_REAL "CUDENSITYMAT_OPERATOR_SPECTRUM_LARGEST_REAL" = 2
+    CUDENSITYMAT_OPERATOR_SPECTRUM_SMALLEST_REAL "CUDENSITYMAT_OPERATOR_SPECTRUM_SMALLEST_REAL" = 3
+
+ctypedef enum cudensitymatOperatorSpectrumConfig_t "cudensitymatOperatorSpectrumConfig_t":
+    CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_EXPANSION "CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_EXPANSION" = 0
+    CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_RESTARTS "CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_RESTARTS" = 1
+    CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MIN_BLOCK_SIZE "CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MIN_BLOCK_SIZE" = 2
+
 ctypedef enum cudensitymatMemspace_t "cudensitymatMemspace_t":
     CUDENSITYMAT_MEMSPACE_DEVICE "CUDENSITYMAT_MEMSPACE_DEVICE" = 0
     CUDENSITYMAT_MEMSPACE_HOST "CUDENSITYMAT_MEMSPACE_HOST" = 1
@@ -104,6 +115,7 @@ ctypedef void* cudensitymatOperatorTerm_t 'cudensitymatOperatorTerm_t'
 ctypedef void* cudensitymatOperator_t 'cudensitymatOperator_t'
 ctypedef void* cudensitymatOperatorAction_t 'cudensitymatOperatorAction_t'
 ctypedef void* cudensitymatExpectation_t 'cudensitymatExpectation_t'
+ctypedef void* cudensitymatOperatorSpectrum_t 'cudensitymatOperatorSpectrum_t'
 ctypedef void* cudensitymatWorkspaceDescriptor_t 'cudensitymatWorkspaceDescriptor_t'
 ctypedef void* cudensitymatDistributedRequest_t 'cudensitymatDistributedRequest_t'
 ctypedef struct cudensitymatTimeRange_t 'cudensitymatTimeRange_t':
@@ -264,6 +276,11 @@ cdef cudensitymatStatus_t cudensitymatCreateExpectation(const cudensitymatHandle
 cdef cudensitymatStatus_t cudensitymatDestroyExpectation(cudensitymatExpectation_t expectation) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
 cdef cudensitymatStatus_t cudensitymatExpectationPrepare(const cudensitymatHandle_t handle, cudensitymatExpectation_t expectation, const cudensitymatState_t state, cudensitymatComputeType_t computeType, size_t workspaceSizeLimit, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
 cdef cudensitymatStatus_t cudensitymatExpectationCompute(const cudensitymatHandle_t handle, cudensitymatExpectation_t expectation, double time, int64_t batchSize, int32_t numParams, const double* params, const cudensitymatState_t state, void* expectationValue, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
+cdef cudensitymatStatus_t cudensitymatCreateOperatorSpectrum(const cudensitymatHandle_t handle, const cudensitymatOperator_t superoperator, int32_t isHermitian, cudensitymatOperatorSpectrumKind_t spectrumKind, cudensitymatOperatorSpectrum_t* spectrum) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
+cdef cudensitymatStatus_t cudensitymatDestroyOperatorSpectrum(cudensitymatOperatorSpectrum_t spectrum) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
+cdef cudensitymatStatus_t cudensitymatOperatorSpectrumConfigure(const cudensitymatHandle_t handle, cudensitymatOperatorSpectrum_t spectrum, cudensitymatOperatorSpectrumConfig_t attribute, const void* attributeValue, size_t attributeValueSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
+cdef cudensitymatStatus_t cudensitymatOperatorSpectrumPrepare(const cudensitymatHandle_t handle, cudensitymatOperatorSpectrum_t spectrum, int32_t maxEigenStates, const cudensitymatState_t state, cudensitymatComputeType_t computeType, size_t workspaceSizeLimit, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
+cdef cudensitymatStatus_t cudensitymatOperatorSpectrumCompute(const cudensitymatHandle_t handle, cudensitymatOperatorSpectrum_t spectrum, double time, int64_t batchSize, int32_t numParams, const double* params, int32_t numEigenStates, cudensitymatState_t eigenstates[], void* eigenvalues, double* tolerances, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
 cdef cudensitymatStatus_t cudensitymatCreateWorkspace(const cudensitymatHandle_t handle, cudensitymatWorkspaceDescriptor_t* workspaceDescr) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
 cdef cudensitymatStatus_t cudensitymatDestroyWorkspace(cudensitymatWorkspaceDescriptor_t workspaceDescr) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil
 cdef cudensitymatStatus_t cudensitymatWorkspaceGetMemorySize(const cudensitymatHandle_t handle, const cudensitymatWorkspaceDescriptor_t workspaceDescr, cudensitymatMemspace_t memSpace, cudensitymatWorkspaceKind_t workspaceKind, size_t* memoryBufferSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil

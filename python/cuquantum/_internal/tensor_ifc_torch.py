@@ -102,6 +102,3 @@ class TorchTensor(Tensor):
         Check if the object is ndarray-like.
         """
         return isinstance(self.tensor, torch.Tensor)
-
-    def update_extents_strides(self, extents, strides):
-        self.tensor = torch.as_strided(self.tensor, tuple(extents), tuple(strides))

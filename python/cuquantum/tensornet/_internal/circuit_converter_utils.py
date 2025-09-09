@@ -10,7 +10,6 @@ try:
     from . import circuit_parser_utils_cirq
 except ImportError:
     cirq = circuit_parser_utils_cirq = None
-import cupy as cp
 import numpy as np
 try:
     import qiskit
@@ -18,7 +17,8 @@ try:
 except ImportError:
     qiskit = circuit_parser_utils_qiskit = None
 
-from ..._internal.tensor_wrapper import _get_backend_asarray_func, infer_tensor_package
+from nvmath.internal.tensor_wrapper import infer_tensor_package
+from .helpers import _get_backend_asarray_func, get_dtype_name
 from ...bindings._utils import WHITESPACE_UNICODE
 
 
@@ -95,7 +95,7 @@ def parse_inputs(qubits, gates, gates_are_diagonal, dtype, backend):
     tensor operands and qubits_frontier map for the initial states and gate operations.
     """
     n_qubits = len(qubits)
-    operands = get_bitstring_tensors('0'*n_qubits, dtype, backend=backend)
+    operands = get_bitstring_tensors('0'*n_qubits, backend, dtype)
     mode_labels, qubits_frontier, next_frontier = _init_mode_labels_from_qubits(qubits)
     gate_mode_labels, gate_operands = parse_gates_to_mode_labels_operands(gates, 
                                                                           qubits_frontier, 
@@ -138,7 +138,7 @@ def _init_mode_labels_from_qubits(qubits):
     n = len(qubits)
     return [[i] for i in range(n)], dict(zip(qubits, count())), n
 
-def get_bitstring_tensors(bitstring, dtype='complex128', backend=cp):
+def get_bitstring_tensors(bitstring, backend, dtype):
     """
     Create the tensors operands for a given bitstring state.
 
@@ -150,7 +150,8 @@ def get_bitstring_tensors(bitstring, dtype='complex128', backend=cp):
     Returns:
         A list of tensor operands stored as `backend` array
     """
-    asarray = _get_backend_asarray_func(backend)
+    package = importlib.import_module(backend)
+    asarray = _get_backend_asarray_func(package)
     state_0 = asarray([1, 0], dtype=dtype)
     state_1 = asarray([0, 1], dtype=dtype)
 
@@ -175,7 +176,7 @@ def convert_mode_labels_to_expression(input_mode_labels, output_mode_labels):
     expression = ','.join(input_symbols) + '->' + ''.join(map(_get_symbol, output_mode_labels))
     return expression
 
-def get_pauli_gates(pauli_map, dtype='complex128', backend=cp):
+def get_pauli_gates(pauli_map, backend, dtype):
     """
     Populate the gates for all pauli operators.
 
@@ -187,16 +188,18 @@ def get_pauli_gates(pauli_map, dtype='complex128', backend=cp):
     Returns:
         A sequence of pauli gates.
     """
-    asarray = _get_backend_asarray_func(backend)
+    package = importlib.import_module(backend)
+    asarray = _get_backend_asarray_func(package)
     pauli_i = asarray([[1,0], [0,1]], dtype=dtype)
     pauli_x = asarray([[0,1], [1,0]], dtype=dtype)
-    pauli_y = asarray([[0,-1j], [1j,0]], dtype=dtype)
     pauli_z = asarray([[1,0], [0,-1]], dtype=dtype)
     
     operand_map = {'I': pauli_i,
                    'X': pauli_x,
-                   'Y': pauli_y,
                    'Z': pauli_z}
+    if not get_dtype_name(dtype).startswith("float"):
+        operand_map['Y'] = asarray([[0,-1j], [1j,0]], dtype=dtype)
+
     gates = []
     gates_are_diagonal = []
     for qubit, pauli_char in pauli_map.items():

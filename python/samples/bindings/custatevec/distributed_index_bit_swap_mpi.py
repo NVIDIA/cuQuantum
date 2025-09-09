@@ -192,7 +192,7 @@ def run_distributed_index_bit_swaps(
 
             # the rank of the communication endpoint is parameters.dst_sub_sv_index
             # as "rank == sub_sv_index" is assumed in the present sample.
-            rank = parameters.dst_sub_sv_index
+            rank = parameters.dst_sub_sv_index.item()
 
             # set parameters to the worker
             cusv.sv_swap_worker_set_parameters(
@@ -200,7 +200,7 @@ def run_distributed_index_bit_swaps(
 
             # execute swap
             cusv.sv_swap_worker_execute(
-                handle, sv_seg_swap_worker, 0, parameters.transfer_size)
+                handle, sv_seg_swap_worker, 0, parameters.transfer_size.item())
 
             # all internal CUDA calls are serialized on local_stream
 

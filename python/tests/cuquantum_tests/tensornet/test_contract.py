@@ -4,47 +4,42 @@
 
 import copy
 import sys
-
-import cupy
-import numpy
+import itertools
 import opt_einsum
 import pytest
 
+from nvmath.internal.utils import infer_object_package
+
+from cuquantum import MemoryLimitExceeded
 from cuquantum.tensornet import contract, einsum, OptimizerInfo
 from cuquantum.bindings import cutensornet as cutn
-from cuquantum._internal.utils import infer_object_package
-from cuquantum.tensornet.configuration import MemoryLimitExceeded
 
-from .utils.data import backend_names, dtype_names, einsum_expressions
-from .utils.test_utils import atol_mapper, EinsumFactory, rtol_mapper
-from .utils.test_utils import compute_and_normalize_numpy_path
-from .utils.test_utils import deselect_contract_tests
-from .utils.test_utils import deselect_gradient_tests
-from .utils.test_utils import get_stream_for_backend
-from .utils.test_utils import set_path_to_optimizer_options
+from .utils.data import BACKEND_MEMSPACE, dtype_names, einsum_expressions
+from .utils.helpers import EinsumFactory, get_contraction_tolerance
+from .utils.helpers import compute_and_normalize_numpy_path
+from .utils.helpers import get_stream_for_backend
+from .utils.helpers import set_path_to_optimizer_options
+from .utils.helpers import _BaseTester
+from .utils.helpers import Deselector
+from .utils.helpers import cleanup_between_tests # fixture to clean up between tests
 
 
-# TODO: parametrize compute type?
-@pytest.mark.parametrize(
-    "use_numpy_path", (False, True)
-)
-@pytest.mark.parametrize(
-    "order", ("C", "F")
-)
-@pytest.mark.parametrize(
-    "dtype", dtype_names
-)
-@pytest.mark.parametrize(
-    "xp", backend_names
-)
-@pytest.mark.parametrize(
-    "einsum_expr_pack", einsum_expressions
-)
-class _TestContractBase:
+class _TestContractBase(_BaseTester):
 
+    def _get_config_iterator(self, xp, dtype, gradient, einsum_expr_pack):
+        rng = self._get_rng(einsum_expr_pack, xp, dtype, gradient)
+        TEST_CONFIGS = list(itertools.product(
+            [True, False], # use_numpy_path
+            ["C", "F"], # order
+            [None, True], # stream
+            [True, False], # return_info
+        ))
+        rng.shuffle(TEST_CONFIGS)
+        yield from TEST_CONFIGS
+    
     def _test_runner(
             self, func, einsum_expr_pack, xp, dtype, order,
-            use_numpy_path, gradient, **kwargs):
+            use_numpy_path, gradient, rng, **kwargs):
         einsum_expr = copy.deepcopy(einsum_expr_pack)
         if isinstance(einsum_expr, list):
             einsum_expr, network_opts, optimizer_opts, _ = einsum_expr
@@ -52,17 +47,21 @@ class _TestContractBase:
             network_opts = optimizer_opts = None
         assert isinstance(einsum_expr, (str, tuple))
 
-        factory = EinsumFactory(einsum_expr)
+        factory = EinsumFactory(einsum_expr, rng)
         operands = factory.generate_operands(
             factory.input_shapes, xp, dtype, order)
         qualifiers, picks = factory.generate_qualifiers(xp, gradient)
         factory.setup_torch_grads(xp, picks, operands)
-        backend = sys.modules[infer_object_package(operands[0])]
+        backend_name = infer_object_package(operands[0])
+        backend = sys.modules[backend_name]
         stream = kwargs.get('stream')
         if stream:
             stream_obj = get_stream_for_backend(backend)
             if stream == "as_int":
-                if backend is numpy or backend is cupy:
+                if backend_name == "numpy" and stream_obj is None:
+                    # CuPy is not installed, skip this test
+                    pytest.skip("CuPy is not installed, skipping this test for numpy with stream as int")
+                elif backend_name in {"numpy", "cupy"}:
                     stream = stream_obj.ptr
                 else:
                     pytest.skip("we do not support torch operands + "
@@ -154,8 +153,9 @@ class _TestContractBase:
         factory.setup_torch_grads(xp, picks, operands)
         out_ref = opt_einsum.contract(
             *data, backend="torch" if "torch" in xp else xp)
+        tolerance = get_contraction_tolerance(dtype)
         assert backend.allclose(
-            out, out_ref, atol=atol_mapper[dtype], rtol=rtol_mapper[dtype])
+            out, out_ref, **tolerance)
 
         # check gradients
         if gradient and func is contract:
@@ -166,7 +166,7 @@ class _TestContractBase:
                 is_close = backend.tensor(tuple(
                     backend.allclose(
                         cutn_grad, op.grad,
-                        atol=atol_mapper[dtype], rtol=rtol_mapper[dtype])
+                        **tolerance)
                     if cutn_grad is not None else cutn_grad is op.grad
                     for cutn_grad, op in zip(input_grads, operands)
                 ))
@@ -177,39 +177,147 @@ class _TestContractBase:
                 print(input_grads)
                 print(tuple(op.grad for op in operands))
                 raise
- 
 
-@pytest.mark.uncollect_if(func=(deselect_contract_tests,
-                                deselect_gradient_tests))
+
+@pytest.mark.uncollect_if(func=Deselector.deselect_gradient_tests)
+@pytest.mark.parametrize(
+    "dtype", dtype_names
+)
 @pytest.mark.parametrize(
     "gradient", (False, "random", "all")
 )
 @pytest.mark.parametrize(
-    "stream", (None, True, "as_int")
+    "xp", BACKEND_MEMSPACE
+)
+class TestContractFunctionality(_TestContractBase):
+
+    @pytest.mark.parametrize(
+        "stream", (None, True, "as_int")
+    )
+    def test_stream(self, xp, gradient, dtype, stream):
+        rng = self._get_rng(xp, gradient, dtype, stream, "stream")
+        self._test_runner(
+            contract,
+            ["abc,bcd,ade", {}, {"slicing": {"min_slices": 4}}, None], # einsum_expr_pack
+            xp, 
+            dtype, 
+            "C", # order
+            False, # use_numpy_path
+            gradient,
+            rng,
+            stream=stream,
+            return_info=False,
+        )
+
+    @pytest.mark.parametrize(
+        "return_info", (False, True)
+    )
+    def test_return_info(self, xp, gradient, dtype, return_info):
+        rng = self._get_rng(xp, gradient, dtype, return_info, "return_info")
+        self._test_runner(
+            contract,
+            [((5, 4, 3), (3, 4, 6), (6, 5), None), {}, {}, None], # einsum_expr_pack
+            xp, 
+            dtype, 
+            "F", # order
+            True, # use_numpy_path
+            gradient,
+            rng,
+            stream=True,
+            return_info=return_info,
+        )
+
+    @pytest.mark.parametrize(
+        "order", ("C", "F")
+    )
+    def test_order(self, xp, gradient, dtype, order):
+        rng = self._get_rng(xp, gradient, dtype, order, "order")
+        self._test_runner(
+            contract,
+            "abc,ace,abd->de", # einsum_expr_pack
+            xp, 
+            dtype, 
+            order,
+            False, # use_numpy_path
+            gradient,
+            rng,
+            stream=None,
+            return_info=False,
+        )
+
+    @pytest.mark.parametrize(
+        "use_numpy_path", (False, True)
+    )
+    def test_use_numpy_path(self, xp, gradient, dtype, use_numpy_path):
+        rng = self._get_rng(xp, gradient, dtype, use_numpy_path, "use_numpy_path")
+        self._test_runner(
+            contract,
+            (('a', 'b'), ('b', 'c', 'd'), ('a',)), # einsum_expr_pack
+            xp, 
+            dtype, 
+            "C", # order
+            use_numpy_path,
+            gradient,
+            rng,
+            stream=True,
+            return_info=True,
+        )
+   
+NUM_TESTS_PER_CASE = 5
+
+
+@pytest.mark.uncollect_if(func=Deselector.deselect_contract_tests)
+@pytest.mark.parametrize(
+    "gradient", (False, "random", "all")
 )
 @pytest.mark.parametrize(
-    "return_info", (False, True)
+    "dtype", dtype_names
+)
+@pytest.mark.parametrize(
+    "xp", BACKEND_MEMSPACE
+)
+@pytest.mark.parametrize(
+    "einsum_expr_pack", einsum_expressions
 )
 class TestContract(_TestContractBase):
 
-    def test_contract(
-            self, einsum_expr_pack, xp, dtype, order,
-            use_numpy_path, gradient, stream, return_info):
-        self._test_runner(
-            contract, einsum_expr_pack, xp, dtype, order,
-            use_numpy_path, gradient, stream=stream, return_info=return_info)
+    def test_contract(self, einsum_expr_pack, xp, dtype, gradient):
+        rng = self._get_rng(einsum_expr_pack, xp, dtype, gradient, "contract")
+        config_iter = self._get_config_iterator(
+            xp, dtype, gradient, einsum_expr_pack)
+        for _ in range(NUM_TESTS_PER_CASE):
+            use_numpy_path, order, stream, return_info = next(config_iter)
+            self._test_runner(
+                contract, einsum_expr_pack, xp, dtype, order,
+                use_numpy_path, gradient, rng, stream=stream, return_info=return_info)
 
 
 # einsum does not support gradient (at some point we should deprecate it...)
-@pytest.mark.uncollect_if(func=deselect_contract_tests)
+@pytest.mark.uncollect_if(func=Deselector.deselect_einsum_tests)
 @pytest.mark.parametrize(
     "optimize", (False, True, "path")
 )
+@pytest.mark.parametrize(
+    "use_numpy_path", (False, True)
+)
+@pytest.mark.parametrize(
+    "order", ("C", "F")
+)
+@pytest.mark.parametrize(
+    "dtype", dtype_names
+)
+@pytest.mark.parametrize(
+    "xp", BACKEND_MEMSPACE
+)
+@pytest.mark.parametrize(
+    "einsum_expr_pack", einsum_expressions
+)
 class TestEinsum(_TestContractBase):
-
+    
     def test_einsum(
             self, einsum_expr_pack, xp, dtype, order,
             use_numpy_path, optimize):
+        rng = self._get_rng(einsum_expr_pack, xp, dtype, optimize, "einsum")
         self._test_runner(
             einsum, einsum_expr_pack, xp, dtype, order,
-            use_numpy_path, None, optimize=optimize)
+            use_numpy_path, None, rng, optimize=optimize)

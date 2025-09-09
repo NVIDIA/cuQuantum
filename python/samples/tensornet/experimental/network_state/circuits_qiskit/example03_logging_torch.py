@@ -18,10 +18,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)-8s %(me
 
 # create a QFT circuit
 n_qubits = 8
-qubits = list(range(n_qubits))
-circuit = qiskit.QuantumCircuit(n_qubits)
-qft = qiskit.circuit.library.QFT(num_qubits=n_qubits)
-circuit.append(qft, qubits)
+circuit = qiskit.circuit.library.QFTGate(n_qubits).definition
+qubits = circuit.qubits
 print(circuit)
 
 # create a NetworkState object with tensor network contraction as simulation method
