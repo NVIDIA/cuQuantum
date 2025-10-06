@@ -177,34 +177,49 @@ cuQuantum/
 │   ├── setup.py               # Python package setup
 │   └── README.md              # Python documentation
 │
-├── 💻 samples/                 # C/C++ Examples
-│   ├── custatevec/            # StateVec C++ samples
-│   │   ├── custatevec/        # Basic examples
-│   │   └── custatevecex/      # Advanced examples
-│   ├── cutensornet/           # TensorNet C++ samples
+├── 💻 samples/                 # Examples & Tutorials
+│   ├── README.md              # Main samples guide with learning paths
+│   │
+│   ├── 🐍 python/             # Python Examples (organized by difficulty)
+│   │   ├── README.md          # Python examples guide
+│   │   ├── basic/             # Beginner: Quick start, gates, Bell states
+│   │   ├── intermediate/      # Intermediate: QFT, Grover's algorithm
+│   │   ├── advanced/          # Advanced: VQE, noise, tensor networks
+│   │   └── frameworks/        # Framework integrations (Qiskit, etc.)
+│   │
+│   ├── ⚡ cuda_cpp/           # C++/CUDA Examples (high performance)
+│   │   ├── README.md          # C++ examples guide
+│   │   ├── Makefile           # Build system
+│   │   ├── basic/             # Bell state, QFT in CUDA
+│   │   └── advanced/          # Coming soon
+│   │
+│   ├── 📓 notebooks/          # Jupyter Notebooks
+│   │   └── 01_getting_started.ipynb
+│   │
+│   ├── 🔷 custatevec/         # StateVec C++ API samples
+│   │   ├── custatevec/        # Basic examples (20+ samples)
+│   │   └── custatevecex/      # Extended examples
+│   │
+│   ├── 🔶 cutensornet/        # TensorNet C++ API samples
 │   │   ├── high_level/        # High-level API samples
-│   │   ├── approxTN/          # Approximate methods
+│   │   ├── approxTN/          # Approximate methods (MPS/MPO)
 │   │   └── legacy/            # Legacy API samples
-│   └── cudensitymat/          # DensityMat C++ samples
+│   │
+│   └── 🔸 cudensitymat/       # DensityMat C++ API samples
+│       └── operator_*.cpp     # Density matrix operations
 │
 ├── 🛠️ extra/                   # Additional Tools
 │   ├── custatevec/            # MPI plugin and utilities
 │   └── demo_build_with_wheels/# Build system demos
 │
-├── 📚 Documentation Files
-│   ├── README.md              # This file
-│   ├── CONTRIBUTING.md        # Contribution guidelines
-│   ├── CODE_OF_CONDUCT.md     # Community standards
-│   ├── SECURITY.md            # Security policies
-│   ├── LICENSE                # BSD-3-Clause license
-│   └── CITATION.cff           # Citation information
-│
-└── 🎯 Custom Enhancement Docs  # KHlaifiabilel additions
-    ├── CONTRIBUTION_ROADMAP.md     # Maintainer path guide
-    ├── FIRST_CONTRIBUTION_PROPOSAL.md  # Grover's algorithm
-    ├── 30_DAY_ACTION_PLAN.md       # Getting started guide
-    ├── QUICK_REFERENCE.md          # Quick lookup guide
-    └── START_HERE.md               # Onboarding document
+└── 📚 Documentation Files
+    ├── README.md              # This file
+    ├── CONTRIBUTING.md        # Contribution guidelines
+    ├── CODE_OF_CONDUCT.md     # Community standards
+    ├── SECURITY.md            # Security policies
+    ├── CHANGELOG.md           # Version history
+    ├── LICENSE                # BSD-3-Clause license
+    └── CITATION.cff           # Citation information
 ```
 
 ---
@@ -231,7 +246,7 @@ pip install cuquantum-python
 python -c "import cuquantum; print(cuquantum.__version__)"
 
 # 4. Run your first quantum simulation
-python examples/quick_start.py
+python samples/python/basic/quick_start.py
 ```
 
 ### Your First Quantum Circuit
@@ -788,11 +803,11 @@ See [CONTRIBUTION_ROADMAP.md](./CONTRIBUTION_ROADMAP.md) for detailed guidance.
 - [C/C++ API Reference](https://docs.nvidia.com/cuda/cuquantum/latest/cpp_api)
 
 ### Tutorials & Guides
-- [Getting Started Guide](./START_HERE.md)
-- [30-Day Learning Plan](./30_DAY_ACTION_PLAN.md)
-- [Benchmark Guide](./benchmarks/README.md)
-- [Python Examples](./python/samples/)
-- [C++ Examples](./samples/)
+- [Samples & Examples Guide](./samples/README.md) - **Start here!**
+- [Python Examples](./samples/python/) - Organized by difficulty
+- [C++/CUDA Examples](./samples/cuda_cpp/) - High-performance code
+- [Jupyter Notebooks](./samples/notebooks/) - Interactive tutorials
+- [Benchmark Guide](./benchmarks/README.md) - Performance benchmarking
 
 ### Community
 - [GitHub Discussions](https://github.com/NVIDIA/cuQuantum/discussions)
