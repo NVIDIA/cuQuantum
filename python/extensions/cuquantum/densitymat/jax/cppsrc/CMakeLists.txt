@@ -8,7 +8,7 @@ project(cudensitymat_jax LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Python3 REQUIRED REQUIRED COMPONENTS Interpreter Development)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 message(STATUS "Python executable: ${Python3_EXECUTABLE}")
 
 find_package(CUDAToolkit REQUIRED)
@@ -43,7 +43,7 @@ find_package(pybind11 REQUIRED)
 
 # FIXME: This should be made more robust and moved to setup.py.
 execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import site; print(f'{site.getsitepackages()[0]}/cuquantum')"
+    COMMAND ${Python3_EXECUTABLE} -c "import os; import cuquantum; print(os.path.dirname(cuquantum.__file__))"
     OUTPUT_STRIP_TRAILING_WHITESPACE
     OUTPUT_VARIABLE CUQUANTUM_PYTHON_ROOT
 )
@@ -84,6 +84,12 @@ if(NOT CUDENSITYMAT_LIBRARY)
 else()
     message(STATUS "cuDensityMat library: ${CUDENSITYMAT_LIBRARY}")
 endif()
+
+set_target_properties(
+    ${PROJECT_NAME}
+    PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+)
 
 target_link_libraries(
     ${PROJECT_NAME}

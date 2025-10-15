@@ -8,7 +8,7 @@ Trajectories based simulation of noisy quantum channels.
 This test uses TrajectorySim API to simulate quantum volumue circuits
 """
 
-from qiskit.circuit.library import QuantumVolume
+from qiskit.circuit.library import quantum_volume
 from qiskit import transpile
 
 import numpy as np
@@ -38,7 +38,7 @@ depth = 30
 
 
 def get_qvolume_circuit(n_qubits, depth, seed=SEED):
-    circuit = QuantumVolume(n_qubits, depth, seed=seed)
+    circuit = quantum_volume(n_qubits, depth, seed=seed)
     circuit.measure_all()
     circuit = transpile(circuit, basis_gates=["u3", "cx"], optimization_level=0)
     return circuit
