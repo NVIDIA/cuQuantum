@@ -228,7 +228,7 @@ class Network:
         cutn_patch = cutn_ver % 100
 
         # Logger.
-        self.logger = options.logger if options.logger is not None else logging.getLogger()
+        self.logger = options.logger if options.logger is not None else logging.getLogger(__name__)
         self.logger.info(f"cuTensorNet version = {cutn_major}.{cutn_minor}.{cutn_patch}")
         self.logger.info("Beginning network creation...")
 
