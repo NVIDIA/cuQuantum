@@ -129,7 +129,7 @@ int main(void) {
                   CUSTATEVEC_COMPUTE_DEFAULT, nullptr, 0) );
 
     // compute expectation
-    double expectationValue;
+    double expectationValue = 0.0;
     HANDLE_ERROR( custatevecComputeExpectation(
                   handle, d_sv, CUDA_C_64F, nIndexBits, &expectationValue, CUDA_R_64F, nullptr,
                   observable, CUDA_C_64F, layout, basisBits, nBasisBits,

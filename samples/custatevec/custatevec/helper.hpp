@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <cmath> // std::fabs
+
 #define HANDLE_ERROR(x)                                                        \
 {   const auto err = x;                                                        \
     if (err != CUSTATEVEC_STATUS_SUCCESS ) {                                   \
@@ -27,5 +29,5 @@ bool almost_equal(cuDoubleComplex x, cuDoubleComplex y) {
 bool almost_equal(double x, double y) {
     const double eps = 1.0e-5;
     const double diff = x - y;
-    return (abs(diff) < eps);
+    return (std::fabs(diff) < eps);
 }

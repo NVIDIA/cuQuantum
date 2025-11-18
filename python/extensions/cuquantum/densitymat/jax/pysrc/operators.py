@@ -254,7 +254,7 @@ class OperatorTerm:
         self.modes: List[Tuple[int, ...]] = []
         self.conjs: List[Tuple[bool, ...]] = []
         self.duals: List[Tuple[bool, ...]] = []
-        self.coeffs: List[float] = []
+        self.coeffs: List[float | complex] = []
         self.coeff_callbacks: List[cudm.WrappedScalarCallback | None] = []
         self.coeff_grad_callbacks: List[cudm.WrappedScalarGradientCallback | None] = []
 
@@ -346,7 +346,7 @@ class OperatorTerm:
                modes: Sequence[int] | None = None,
                conjs: Sequence[bool] | None = None,
                duals: Sequence[bool] | None = None,
-               coeff: float = 1.0,
+               coeff: float | complex = 1.0,
                coeff_callback: cudm.WrappedScalarCallback | None = None,
                coeff_grad_callback: cudm.WrappedScalarGradientCallback | None = None
                ) -> None:
@@ -356,6 +356,7 @@ class OperatorTerm:
         Args:
             op_prod: Product of elementary or matrix operators to be appended.
             modes: Modes acted on by the operator product.
+            conjs: Conjugations in the operator product. Only applies to MatrixOperators.
             duals: Dualities of the operator product.
             coeff: Coefficient of the operator product.
             coeff_callback: Forward callback for the coeffient.
@@ -365,54 +366,76 @@ class OperatorTerm:
         self._check_dtype(op_prod)
         self._check_and_append_op_prod_type(op_prod)
 
-        # TODO: Check that modes have to be in dims.
-
+        # Check consistency and append modes, conjs and duals.
         if self._op_prod_types[-1] is ElementaryOperator:
-            # Check consistency of modes.
+            # Modes have to specified for elementary operators.
             if modes is None:
                 raise ValueError("Modes acted on must be specified for elementary operators.")
-            
-            # FIXME: Check dims of each elementary operator
-            if len(modes) != len(op_prod):
-                pass
-                # raise ValueError(f"Number of modes acted on {len(modes)} does not match number of operator products {len(op_prod)}.")
-            
+
+            # Check all modes are in Hilbert space.
+            if not set(modes) <= set(range(len(self.dims))):
+                raise ValueError("Modes acted on must be in the Hilbert space, i.e. between 0 and len(self.dims) - 1")
+
+            # Check length of modes acted on are the same as combined number of modes in the operator product.
+            if len(modes) != sum([elem_op.num_modes for elem_op in op_prod]):
+                raise ValueError(f"Number of modes acted on {len(modes)} does not match combined number of modes in the operator product.")
+
+            # Check mode extents of each elementary operator match corresponding qubit dimensions.
+            modes_index = 0
+            for elem_op in op_prod:
+                if elem_op.mode_extents != tuple(
+                    [self.dims[modes[i]] for i in range(modes_index, modes_index + elem_op.num_modes)]
+                ):
+                    raise ValueError("Mode extents of each elementary operator must match corresponding qubit dimensions.")
+                modes_index += elem_op.num_modes
+
             # Check that matrix conjugations cannot be specified for elementary operators.
             if conjs is not None:
                 raise ValueError("Matrix conjugations cannot be specified for elementary operators.")
 
-        else:  # matrix operator product
-            # Check consistency of conjs.
-            if conjs is None:
-                conjs = (False,) * len(op_prod)
+            # Check that number of duals matches number of modes.
+            if duals is None:
+                duals = (False,) * len(modes)
             else:
-                # FIXME: Check dims of each elementary operator
-                if len(conjs) != len(op_prod):
-                    pass
-                    # raise ValueError("Number of matrix conjugations must match number of operator products.")
+                if len(duals) != len(modes):
+                    raise ValueError("Number of duals must match number of modes acted on for elementary operator product.")
+
+            # For elementary operator product, we only need modes and duals.
+            self.modes.append(tuple(modes))
+            self.conjs.append(())  # empty tuple is appended here to preserve length
+            self.duals.append(tuple(duals))
+
+        else:  # matrix operator product
+            # Check that mode extents match Hilbert space dimensions.
+            for matrix_op in op_prod:
+                if matrix_op.mode_extents != self.dims:
+                    raise ValueError("Mode extents must match Hilbert space dimensions for matrix operators.")
 
             # Check that modes acted on cannot be specified for matrix operators.
             if modes is not None:
                 raise ValueError("Modes acted on cannot be specified for matrix operators.")
 
-        if duals is None:
-            duals = (False,) * len(op_prod)
-        else:
-            # FIXME: Check dims of each elementary operator
-            if len(duals) != len(op_prod):
-                pass
-                # raise ValueError("Number of duals must match number of operator products.")
+            # Check consistency of conjs.
+            if conjs is None:
+                conjs = (False,) * len(op_prod)
+            else:
+                if len(conjs) != len(op_prod):
+                    raise ValueError("Number of matrix conjugations must match number of operator products.")
+
+            # Check that number of duals matches number of matrix operators.
+            if duals is None:
+                duals = (False,) * len(op_prod)
+            else:
+                if len(duals) != len(op_prod):
+                    raise ValueError("Number of duals must match number of matrix operators.")
+
+            # For matrix operator product, we only need conjs and duals.
+            self.modes.append(tuple(range(len(self.dims))))  # used in reference implementation during testing
+            self.conjs.append(tuple(conjs))
+            self.duals.append(tuple(duals))
 
         # Populate instance attributes.
         self.op_prods.append(tuple(op_prod))
-        if modes is not None:
-            self.modes.append(tuple(modes))
-        else:
-            # Append modes here for testing purposes.
-            self.modes.append(tuple(range(len(self.dims))))
-        if conjs is not None:
-            self.conjs.append(tuple(conjs))
-        self.duals.append(tuple(duals))
         self.coeffs.append(coeff)
         self.coeff_callbacks.append(coeff_callback)
         self.coeff_grad_callbacks.append(coeff_grad_callback)
@@ -498,7 +521,7 @@ class Operator:
 
         self.op_terms: List[OperatorTerm] = []
         self.duals: List[bool] = []
-        self.coeffs: List[float] = []
+        self.coeffs: List[float | complex] = []
         self.coeff_callbacks: List[cudm.WrappedScalarCallback | None] = []
         self.coeff_grad_callbacks: List[cudm.WrappedScalarGradientCallback | None] = []
 
@@ -564,7 +587,7 @@ class Operator:
                op_term: OperatorTerm,
                *,
                dual: bool = False,
-               coeff: float = 1.0,
+               coeff: float | complex = 1.0,
                coeff_callback: cudm.WrappedScalarCallback | None = None,
                coeff_grad_callback: cudm.WrappedScalarGradientCallback | None = None
                ) -> None:

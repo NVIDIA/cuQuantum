@@ -11,3 +11,4 @@ pylatexenc
 jsonschema == 4.17.3
 networkx
 mpi4py
+stim == 1.15.0

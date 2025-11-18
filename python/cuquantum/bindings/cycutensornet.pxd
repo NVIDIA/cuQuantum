@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.11.0. Do not modify it directly.
 # This layer exposes the C header to Cython as-is.
 
 from libc.stdint cimport int32_t, int64_t, uint32_t, uint64_t
@@ -85,6 +85,7 @@ ctypedef enum cutensornetContractionOptimizerConfigAttributes_t "cutensornetCont
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE "CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE" = 61
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_CACHE_REUSE_NRUNS "CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_CACHE_REUSE_NRUNS" = 62
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION "CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION" = 63
+    CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GPU_ARCH "CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GPU_ARCH" = 64
 
 ctypedef enum cutensornetContractionOptimizerInfoAttributes_t "cutensornetContractionOptimizerInfoAttributes_t":
     CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_PATH "CUTENSORNET_CONTRACTION_OPTIMIZER_INFO_PATH" = 0

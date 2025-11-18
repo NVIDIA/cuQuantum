@@ -7,6 +7,8 @@ import os
 
 import pytest
 
+from .custabilizer_tests.test_custabilizer_samples import sample_files as cust_samples
+from .cupauliprop_tests.test_cupauliprop_samples import sample_files as cupp_samples
 from .cudensitymat_tests.test_cudensitymat_samples import sample_files as cudm_samples
 from .custatevec_tests.test_custatevec_samples import sample_files as cusv_samples
 from .cutensornet_tests.test_cutensornet_samples import sample_files as cutn_samples
@@ -15,7 +17,7 @@ from .cutensornet_tests.test_cutensornet_samples import notebook_files as cutn_n
 # All tests here marked as utility tests
 pytestmark = pytest.mark.utility
 
-testing_python_samples = set(cudm_samples + cusv_samples + cutn_samples)
+testing_python_samples = set(cudm_samples + cusv_samples + cutn_samples + cupp_samples + cust_samples)
 testing_notebook_samples = set(cutn_notebooks)
 
 samples_path = os.path.abspath(os.path.join(

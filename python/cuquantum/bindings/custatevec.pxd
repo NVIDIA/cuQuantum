@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.11.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 

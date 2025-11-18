@@ -8,6 +8,7 @@ Tensor network contraction with the standard einsum interface using cutensornet.
 
 __all__ = ['contract', 'contract_path', 'einsum', 'einsum_path', 'Network', 'tensor_qualifiers_dtype']
 
+from cuda.core.experimental import system
 import collections
 import dataclasses
 import logging
@@ -213,7 +214,7 @@ class Network:
         as specifying options for the tensor network and the optimizer.
     """
 
-    def __init__(self, *operands, qualifiers=None, options=None, stream=None):
+    def __init__(self, *operands, qualifiers=None, options=None, stream=None, allow_cpu_pathfinder = False):
         """
         __init__(subscripts, *operands, qualifiers=None, options=None, stream=None)
         """
@@ -247,11 +248,29 @@ class Network:
             self.network_location = 'cpu'
             self.device_id = options.device_id
 
+        self.cpu_only = False
+        try:
+            ndev = system.num_devices
+            if ndev == 0:
+                self.cpu_only = True
+                self.device_id = 'cpu'
+        except:
+            self.cpu_only = True
+            self.device_id = 'cpu'
+        if not allow_cpu_pathfinder and self.cpu_only:
+            raise RuntimeError(f"No GPU device detected, operation aborted")
+
+        if self.cpu_only and not isinstance(options.memory_limit, int):
+            raise RuntimeError(f"options.memory_limit must be specified for CPU only runs in the form of int representing the number of bytes")
+
         # Allocate device memory (in stream context) if needed.
-        stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.package)
+        if not self.cpu_only:
+            stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.package)
+        else:
+            stream_holder = None
 
         # Copy operands to device if needed.
-        if self.network_location == 'cpu':
+        if self.network_location == 'cpu' and not self.cpu_only:
             self.operands = tensor_wrapper.to(self.operands, self.device_id, stream_holder)
 
         # Set blocking or non-blocking behavior.
@@ -263,12 +282,17 @@ class Network:
 
         # The output class is that of the first wrapped device operand.
         self.output_class = self.operands[0].__class__
+        if self.output_class.name == "cupy" and self.cpu_only:
+            raise RuntimeError(f"Failed creating a network with CuPy operands when no device is available")
 
-        # Set memory allocator.
-        self.allocator = options.allocator if options.allocator is not None else memory._MEMORY_MANAGER[self.package](self.device_id, self.logger)
-
-        # Set memory limit.
-        self.memory_limit = nvmath_utils.get_memory_limit_from_device_id(self.options.memory_limit, self.device_id)
+        if not self.cpu_only:
+            # Set memory allocator.
+            self.allocator = options.allocator if options.allocator is not None else memory._MEMORY_MANAGER[self.package](self.device_id, self.logger)
+            # Set memory limit.
+            self.memory_limit = nvmath_utils.get_memory_limit_from_device_id(self.options.memory_limit, self.device_id)
+        else:
+            self.allocator = None
+            self.memory_limit = options.memory_limit
         self.logger.info(f"The memory limit is {formatters.MemoryStr(self.memory_limit)}.")
 
         # Define data types.
@@ -319,8 +343,11 @@ class Network:
             self.handle = options.handle
         else:
             self.own_handle = True
-            with nvmath_utils.device_ctx(self.device_id):
+            if self.cpu_only:
                 self.handle = cutn.create()
+            else:
+                with nvmath_utils.device_ctx(self.device_id):
+                    self.handle = cutn.create()
  
         # Network definition
         self.network = cutn.create_network(self.handle)
@@ -751,6 +778,9 @@ class Network:
         enum = ConfEnum.SMART_OPTION
         self._set_opt_config_option('smart', enum, optimize.smart)
 
+        enum = ConfEnum.GPU_ARCH
+        self._set_opt_config_option('gpu_arch', enum, optimize.gpu_arch)
+
     @nvmath_utils.precondition(_check_valid_network)
     @nvmath_utils.atomic(_free_path_resources, method=True)
     def contract_path(self, optimize=None, **kwargs):
@@ -900,6 +930,9 @@ class Network:
                 memory from and to the package memory pool on every call. The default is `False`.
         """
 
+        if self.cpu_only:
+            raise RuntimeError(f"Network constructed with no GPU device, autotune is disabled")
+
         message = check_autotune_params(iterations)
         self.logger.info(message)
         if self.autotune_pref_ptr is None:
@@ -991,7 +1024,10 @@ class Network:
         check_attributes_match([self.data_type] * len(self.inputs), [o.dtype for o in operands], "data type")
         check_attributes_match(self.extents_in, [o.shape for o in operands], 'shape')
 
-        stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.package)
+        if self.cpu_only:
+            stream_holder = None
+        else:
+            stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.package)
 
         package = nvmath_utils.get_operands_package(operands)
         if self.input_package != package:
@@ -1057,6 +1093,10 @@ class Network:
         Returns:
             The result is of the same type and on the same device as the operands.
         """
+
+        if self.cpu_only:
+            raise RuntimeError(f"Network constructed with no GPU device, contract is not possible")
+
         # Allocate device memory (in stream context) if needed.
         stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.package)
         self._allocate_workspace_memory_perhaps(stream_holder, "scratch")
@@ -1156,6 +1196,9 @@ class Network:
         """
         warnings.warn("Network.gradients() is an experimental API and subject to future changes",
                       stacklevel=2)
+
+        if self.cpu_only:
+            raise RuntimeError(f"Network constructed with no GPU device, gradients is disabled")
 
         # Allocate scratch memory (in stream context) if needed.
         stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.package)
@@ -1534,7 +1577,7 @@ def contract_path(*operands, qualifiers=None, options=None, optimize=None):
     """
 
     # Create network.
-    with Network(*operands, qualifiers=qualifiers, options=options) as network:
+    with Network(*operands, qualifiers=qualifiers, options=options, allow_cpu_pathfinder=True) as network:
 
         # Compute path.
         path, opt_info = network.contract_path(optimize=optimize, prepare_contraction=False)
@@ -1667,7 +1710,7 @@ The only allowed value for 'optimize' is True."""
         raise NotImplementedError(message)
 
     # Create network.
-    with Network(*operands) as network:
+    with Network(*operands, allow_cpu_pathfinder=True) as network:
 
         # Compute path.
         path, opt_info = network.contract_path(prepare_contraction=False)

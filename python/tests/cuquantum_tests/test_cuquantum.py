@@ -22,6 +22,7 @@ class TestModuleUtils:
         pytest.param("cudensitymat", marks=pytest.mark.cudensitymat),
         pytest.param("custatevec", marks=pytest.mark.custatevec),
         pytest.param("cutensornet", marks=pytest.mark.cutensornet),
+        pytest.param("custabilizer", marks=pytest.mark.custabilizer),
     ])
     def test_cuquantum(self, includes, libs, target):
         # We need to launch a subprocess to have a clean ld state

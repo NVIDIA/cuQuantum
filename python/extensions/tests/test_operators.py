@@ -13,11 +13,10 @@ from itertools import product
 import jax
 import jax.numpy as jnp
 
+jax.config.update("jax_enable_x64", True)
+
 from cuquantum.bindings import cudensitymat as cudm
 from cuquantum.densitymat.jax import ElementaryOperator, MatrixOperator, OperatorTerm, Operator
-
-
-jax.config.update("jax_enable_x64", True)
 
 
 key = jax.random.key(0)
@@ -278,7 +277,7 @@ class TestOperatorTerm:
     @pytest.mark.parametrize(
         "data",
         [
-            ((4, 4), jnp.complex128),
+            ((3, 3), jnp.complex128),
         ],
         indirect=True,
     )
@@ -289,43 +288,27 @@ class TestOperatorTerm:
         ],
         indirect=True,
     )
-    @pytest.mark.parametrize(
-        "operator_class",
-        [
-            ElementaryOperator,
-            MatrixOperator,
-        ],
-    )
-    def test_append_single(self, data, data_, operator_class):
+    def test_append_single_elementary_product(self, data, data_):
         """
         Test appending a single operator product.
         """
-        base_op1 = operator_class(data)
-        base_op2 = operator_class(data_)
+        base_op1 = ElementaryOperator(data)
+        base_op2 = ElementaryOperator(data_)
 
         op_term = OperatorTerm(self.dims)
         assert op_term.dims == self.dims
 
-        if operator_class is ElementaryOperator:
-            op_term.append([base_op1, base_op2], modes=(0, 1), duals=(False, True))
-        else:
-            op_term.append([base_op1, base_op2], conjs=(False, True), duals=(False, True))
+        op_term.append([base_op1, base_op2], modes=(0, 1), duals=(False, True))
 
         assert len(op_term.op_prods) == 1
-        if operator_class is ElementaryOperator:
-            assert len(op_term.modes) == 1
-        else:
-            assert len(op_term.conjs) == 1
+        assert len(op_term.modes) == 1
         assert len(op_term.duals) == 1
         assert len(op_term.coeffs) == 1
         assert len(op_term.coeff_callbacks) == 1
         assert len(op_term.coeff_grad_callbacks) == 1
 
         assert op_term.op_prods[0] == (base_op1, base_op2)
-        if operator_class is ElementaryOperator:
-            assert op_term.modes[0] == (0, 1)
-        else:
-            assert op_term.conjs[0] == (False, True)
+        assert op_term.modes[0] == (0, 1)
         assert op_term.duals[0] == (False, True)
         assert op_term.coeffs[0] == 1.0
         assert op_term.coeff_callbacks[0] is None
@@ -334,7 +317,47 @@ class TestOperatorTerm:
     @pytest.mark.parametrize(
         "data",
         [
-            ((4, 4), jnp.complex128),
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "data_",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_single_matrix_product(self, data, data_):
+        """
+        Test appending a single operator product.
+        """
+        base_op1 = MatrixOperator(data)
+        base_op2 = MatrixOperator(data_)
+
+        op_term = OperatorTerm(self.dims)
+        assert op_term.dims == self.dims
+
+        op_term.append([base_op1, base_op2], conjs=(False, True), duals=(False, True))
+
+        assert len(op_term.op_prods) == 1
+        assert len(op_term.conjs) == 1
+        assert len(op_term.duals) == 1
+        assert len(op_term.coeffs) == 1
+        assert len(op_term.coeff_callbacks) == 1
+        assert len(op_term.coeff_grad_callbacks) == 1
+
+        assert op_term.op_prods[0] == (base_op1, base_op2)
+        assert op_term.conjs[0] == (False, True)
+        assert op_term.duals[0] == (False, True)
+        assert op_term.coeffs[0] == 1.0
+        assert op_term.coeff_callbacks[0] is None
+        assert op_term.coeff_grad_callbacks[0] is None
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((3, 3), jnp.complex128),
         ],
         indirect=True,
     )
@@ -345,59 +368,267 @@ class TestOperatorTerm:
         ],
         indirect=True,
     )
-    @pytest.mark.parametrize(
-        "operator_class",
-        [
-            ElementaryOperator,
-            MatrixOperator,
-        ],
-    )
-    def test_append_multiple(self, data, data_, operator_class):
+    def test_append_multiple_elementary_products(self, data, data_):
         """
         Test appending multiple operator products.
         """
-        base_op1 = operator_class(data)
-        base_op2 = operator_class(data_)
+        base_op1 = ElementaryOperator(data)
+        base_op2 = ElementaryOperator(data_)
 
         op_term = OperatorTerm(self.dims)
         assert op_term.dims == self.dims
 
-        if operator_class is ElementaryOperator:
-            op_term.append([base_op1], modes=(0,), duals=(False,))
-            op_term.append([base_op2], modes=(1,), duals=(True,))
-        else:
-            op_term.append([base_op1], conjs=(False,), duals=(False,))
-            op_term.append([base_op2], conjs=(True,), duals=(True,))
+        op_term.append([base_op1], modes=(0,), duals=(False,))
+        op_term.append([base_op2], modes=(1,), duals=(True,))
 
         assert len(op_term.op_prods) == 2
-        if operator_class is ElementaryOperator:
-            assert len(op_term.modes) == 2
-        else:
-            assert len(op_term.conjs) == 2
+        assert len(op_term.modes) == 2
         assert len(op_term.duals) == 2
         assert len(op_term.coeffs) == 2
         assert len(op_term.coeff_callbacks) == 2
         assert len(op_term.coeff_grad_callbacks) == 2
 
         assert op_term.op_prods[0] == (base_op1,)
-        if operator_class is ElementaryOperator:
-            assert op_term.modes[0] == (0,)
-        else:
-            assert op_term.conjs[0] == (False,)
+        assert op_term.modes[0] == (0,)
         assert op_term.duals[0] == (False,)
         assert op_term.coeffs[0] == 1.0
         assert op_term.coeff_callbacks[0] is None
         assert op_term.coeff_grad_callbacks[0] is None
 
         assert op_term.op_prods[1] == (base_op2,)
-        if operator_class is ElementaryOperator:
-            assert op_term.modes[1] == (1,)
-        else:
-            assert op_term.conjs[1] == (True,)
+        assert op_term.modes[1] == (1,)
         assert op_term.duals[1] == (True,)
         assert op_term.coeffs[1] == 1.0
         assert op_term.coeff_callbacks[1] is None
         assert op_term.coeff_grad_callbacks[1] is None
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "data_",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_multiple_matrix_products(self, data, data_):
+        """
+        Test appending multiple operator products.
+        """
+        base_op1 = MatrixOperator(data)
+        base_op2 = MatrixOperator(data_)
+
+        op_term = OperatorTerm(self.dims)
+        assert op_term.dims == self.dims
+
+        op_term.append([base_op1], conjs=(False,), duals=(False,))
+        op_term.append([base_op2], conjs=(True,), duals=(True,))
+
+        assert len(op_term.op_prods) == 2
+        assert len(op_term.conjs) == 2
+        assert len(op_term.duals) == 2
+        assert len(op_term.coeffs) == 2
+        assert len(op_term.coeff_callbacks) == 2
+        assert len(op_term.coeff_grad_callbacks) == 2
+
+        assert op_term.op_prods[0] == (base_op1,)
+        assert op_term.conjs[0] == (False,)
+        assert op_term.duals[0] == (False,)
+        assert op_term.coeffs[0] == 1.0
+        assert op_term.coeff_callbacks[0] is None
+        assert op_term.coeff_grad_callbacks[0] is None
+
+        assert op_term.op_prods[1] == (base_op2,)
+        assert op_term.conjs[1] == (True,)
+        assert op_term.duals[1] == (True,)
+        assert op_term.coeffs[1] == 1.0
+        assert op_term.coeff_callbacks[1] is None
+        assert op_term.coeff_grad_callbacks[1] is None
+
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((3, 3), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "data_",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_mixed_elementary_matrix_products(self, data, data_):
+        """
+        Test appending multiple operator products.
+        """
+        base_op1 = ElementaryOperator(data)
+        base_op2 = MatrixOperator(data_)
+
+        op_term = OperatorTerm(self.dims)
+        assert op_term.dims == self.dims
+
+        op_term.append([base_op1], modes=(0,), duals=(False,))
+        op_term.append([base_op2], conjs=(True,), duals=(True,))
+
+        assert len(op_term.op_prods) == 2
+        assert len(op_term.modes) == 2
+        assert len(op_term.conjs) == 2
+        assert len(op_term.duals) == 2
+        assert len(op_term.coeffs) == 2
+        assert len(op_term.coeff_callbacks) == 2
+        assert len(op_term.coeff_grad_callbacks) == 2
+
+        assert op_term.op_prods[0] == (base_op1,)
+        assert op_term.modes[0] == (0,)
+        assert op_term.conjs[0] == ()
+        assert op_term.duals[0] == (False,)
+        assert op_term.coeffs[0] == 1.0
+        assert op_term.coeff_callbacks[0] is None
+        assert op_term.coeff_grad_callbacks[0] is None
+
+        assert op_term.op_prods[1] == (base_op2,)
+        assert op_term.modes[1] == (0, 1, 2)
+        assert op_term.conjs[1] == (True,)
+        assert op_term.duals[1] == (True,)
+        assert op_term.coeffs[1] == 1.0
+        assert op_term.coeff_callbacks[1] is None
+        assert op_term.coeff_grad_callbacks[1] is None
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((4, 4), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_elementary_modes_none(self, data):
+        """
+        Test appending elementary operator products with None modes.
+        """
+        elem_op = ElementaryOperator(data)
+        op_term = OperatorTerm(self.dims)
+        with pytest.raises(ValueError):
+            op_term.append([elem_op])
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((4, 4), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_elementary_modes_out_of_hilbert_space(self, data):
+        """
+        Test appending elementary operator products with modes out of Hilbert space.
+        """
+        elem_op = ElementaryOperator(data)
+        op_term = OperatorTerm(self.dims)
+        with pytest.raises(ValueError):
+            op_term.append([elem_op], modes=(3,))
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((4, 4), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_elementary_conjs_not_none(self, data):
+        """
+        Test appending elementary operator products with conjugations.
+        """
+        elem_op = ElementaryOperator(data)
+        op_term = OperatorTerm(self.dims)
+        with pytest.raises(ValueError):
+            op_term.append([elem_op], conjs=[True])
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((3, 4, 3, 4), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_elementary_duals_not_equal_to_modes_length(self, data):
+        """
+        Test appending elementary operator products with duals not equal to mode length.
+        """
+        elem_op = ElementaryOperator(data)
+        op_term = OperatorTerm(self.dims)
+        with pytest.raises(ValueError):
+            op_term.append([elem_op], modes=[0, 1], duals=[True])
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_matrix_modes_not_none(self, data):
+        """
+        Test appending matrix operator products with modes not None.
+        """
+        matrix_op = MatrixOperator(data)
+        op_term = OperatorTerm(self.dims)
+        with pytest.raises(ValueError):
+            op_term.append([matrix_op], modes=[0, 1])
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "data_",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_matrix_conjs_not_equal_to_op_prod_length(self, data, data_):
+        """
+        Test appending matrix operator products with conjugations not equal to operator product length.
+        """
+        matrix_op = MatrixOperator(data)
+        matrix_op_ = MatrixOperator(data_)
+        op_term = OperatorTerm(self.dims)
+        with pytest.raises(ValueError):
+            op_term.append([matrix_op, matrix_op_], conjs=[True])
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "data_",
+        [
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
+        ],
+        indirect=True,
+    )
+    def test_append_matrix_duals_not_equal_to_op_prod_length(self, data, data_):
+        """
+        Test appending matrix operator products with duals not equal to operator product length.
+        """
+        matrix_op = MatrixOperator(data)
+        matrix_op_ = MatrixOperator(data_)
+        op_term = OperatorTerm(self.dims)
+        with pytest.raises(ValueError):
+            op_term.append([matrix_op, matrix_op_], duals=[True])
 
     @pytest.mark.parametrize(
         "data",
@@ -413,24 +644,17 @@ class TestOperatorTerm:
         ],
         indirect=True,
     )
-    @pytest.mark.parametrize(
-        "operator_class",
-        [
-            ElementaryOperator,
-            MatrixOperator,
-        ],
-    )
-    def test_append_fail_mixed_dtypes(self, data, data_, operator_class):
+    def test_append_fail_mixed_dtypes(self, data, data_):
         """
         Test appending operator products of different dtypes fails.
         """
-        base_op1 = operator_class(data)
-        base_op2 = operator_class(data_)
+        base_op1 = ElementaryOperator(data)
+        base_op2 = ElementaryOperator(data_)
 
         op_term = OperatorTerm(self.dims)
 
         with pytest.raises(ValueError):
-            op_term.append([base_op1, base_op2])
+            op_term.append([base_op1, base_op2], modes=[1, 1])
 
     @pytest.mark.parametrize(
         "data",
@@ -442,7 +666,7 @@ class TestOperatorTerm:
     @pytest.mark.parametrize(
         "data_",
         [
-            ((4, 4), jnp.complex128),
+            ((3, 4, 5, 3, 4, 5), jnp.complex128),
         ],
         indirect=True,
     )

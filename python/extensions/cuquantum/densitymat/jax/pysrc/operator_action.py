@@ -154,7 +154,7 @@ register_primitive(OperatorActionPrimitive)
 
 def operator_action_prim(op: Operator,
                          t: float,
-                         state_in_bufs: Sequence[jax.Array],
+                         state_in_bufs: Tuple[jax.Array, ...],
                          params: jax.Array
                          ) -> List[jax.Array]:
     """
@@ -308,8 +308,8 @@ register_primitive(OperatorActionBackwardDiffPrimitive)
 
 def operator_action_backward_diff_prim(op: Operator,
                                        t: float,
-                                       state_in_bufs: Sequence[jax.Array],
-                                       state_out_adj_bufs: Sequence[jax.Array],
+                                       state_in_bufs: Tuple[jax.Array, ...],
+                                       state_out_adj_bufs: Tuple[jax.Array, ...],
                                        params: jax.Array
                                        ) -> Tuple[jax.Array, ...]:
     """
