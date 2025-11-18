@@ -109,6 +109,7 @@ class build_ext(_build_ext):
             if "cutensornet" in ext_name or "cudensitymat" in ext_name:
                 ldflag += ",-rpath,$ORIGIN/../../../cutensor/lib"
                 ldflag += ",-rpath,$ORIGIN/../../../nvidia/cusolver/lib"
+                #TODO: curand is only a cudensitymat dependency, not cutensornet
                 ldflag += ",-rpath,$ORIGIN/../../../nvidia/curand/lib"
             extra_linker_flags = [ldflag]
 

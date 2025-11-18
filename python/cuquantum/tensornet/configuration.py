@@ -111,6 +111,7 @@ class OptimizerOptions(object):
             See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE`.
         smart: Whether the optimizer can execute the pre-defined, intelligent heuristics to accelerate path optimization.
             See `CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION`.
+        gpu_arch: integer representing the target GPU architecture for which the pathfinder should optimize the path for, eg. for Volta set to 7, Ampere 8, etc
     """
     samples : Optional[int] = None
     threads : Optional[int] = None
@@ -120,6 +121,7 @@ class OptimizerOptions(object):
     seed : Optional[int] = None
     cost_function: Optional[int] = None
     smart: Optional[bool] = None
+    gpu_arch: Optional[int] = None
 
     def _check_option(self, option, option_class, checker=None):
         if isinstance(option, option_class):
@@ -169,6 +171,7 @@ class OptimizerOptions(object):
         self.slicing = self._check_option(self.slicing, SlicerOptions, self._check_specified_slices)
         self.reconfiguration = self._check_option(self.reconfiguration, ReconfigOptions, None)
         self._check_int(self.seed, "seed")
+        self._check_int(self.gpu_arch, "gpu_arch")
         if self.cost_function is not None:
             self.cost_function = cutn.OptimizerCost(self.cost_function)
         if self.smart is not None:

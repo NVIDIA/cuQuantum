@@ -213,7 +213,6 @@ class MPS:
         else:
             svd_options = self.svd_options.copy()
             svd_options['max_extent'] = min(self.max_extents[a], mid_extent)
-
         self[a], s, self[b] = tensor_decompose(decompose_expr, tmp, method='svd', **svd_options)
         if s is not None:
             self.gauges[b] = self.backend.asarray(s)
@@ -396,18 +395,19 @@ class MPS:
         else:
             # insert swap gates recursively
             swaps = []
+            exact = self.is_exact_svd
             while (j != i+1):
-                self._swap(i, 'right', False)
+                self._swap(i, 'right', exact)
                 swaps.append([i, 'right'])
                 i += 1
                 if (j == i+1):
                     break
-                self._swap(j, 'left', False)
+                self._swap(j, 'left', exact)
                 swaps.append([j, 'left'])
                 j -= 1
             self._apply_gate_2q(i, j, operand)
             for x, direction in swaps[::-1]:
-                self._swap(x, direction=direction)
+                self._swap(x, direction=direction, exact=exact)
     
     def apply_gate(self, qudits, operand):
         gauge_option = self.gauge_option             
@@ -570,6 +570,7 @@ class MPS:
             mps_tensors = None
         qudit_dims = factory.state_dims
         mps = cls(qudits, factory.backend, qudit_dims=qudit_dims, mps_tensors=mps_tensors, dtype=factory.dtype, **kwargs)
+        
         for op, modes, gate_info in factory.sequence:
             if gate_info is None:
                 if isinstance(op, (list, tuple)):

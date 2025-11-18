@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.11.0. Do not modify it directly.
 
 cimport cython
 cimport cpython
@@ -239,6 +239,7 @@ class ContractionOptimizerConfigAttribute(_IntEnum):
     COST_FUNCTION_OBJECTIVE = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE
     CACHE_REUSE_NRUNS = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_CACHE_REUSE_NRUNS
     SMART_OPTION = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION
+    GPU_ARCH = CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GPU_ARCH
 
 class ContractionOptimizerInfoAttribute(_IntEnum):
     """See `cutensornetContractionOptimizerInfoAttributes_t`."""
@@ -522,8 +523,8 @@ cpdef intptr_t create() except? 0:
     """
     cdef Handle handle
     with nogil:
-        status = cutensornetCreate(&handle)
-    check_status(status)
+        __status__ = cutensornetCreate(&handle)
+    check_status(__status__)
     return <intptr_t>handle
 
 
@@ -536,8 +537,8 @@ cpdef destroy(intptr_t handle):
     .. seealso:: `cutensornetDestroy`
     """
     with nogil:
-        status = cutensornetDestroy(<Handle>handle)
-    check_status(status)
+        __status__ = cutensornetDestroy(<Handle>handle)
+    check_status(__status__)
 
 
 cpdef intptr_t create_network_descriptor(intptr_t handle, int32_t num_inputs, num_modes_in, extents_in, strides_in, modes_in, qualifiers_in, int32_t num_modes_out, extents_out, strides_out, modes_out, int data_type, int compute_type) except? 0:
@@ -619,8 +620,8 @@ cpdef intptr_t create_network_descriptor(intptr_t handle, int32_t num_inputs, nu
     get_resource_ptr[int32_t](_modes_out_, modes_out, <int32_t*>NULL)
     cdef NetworkDescriptor network_desc
     with nogil:
-        status = cutensornetCreateNetworkDescriptor(<const Handle>handle, num_inputs, <const int32_t*>(_num_modes_in_.data()), <const int64_t* const*>(_extents_in_.ptrs.data()), <const int64_t* const*>(_strides_in_.ptrs.data()), <const int32_t* const*>(_modes_in_.ptrs.data()), <const cutensornetTensorQualifiers_t*>(_qualifiers_in_.data()), num_modes_out, <const int64_t*>(_extents_out_.data()), <const int64_t*>(_strides_out_.data()), <const int32_t*>(_modes_out_.data()), <DataType>data_type, <_ComputeType>compute_type, &network_desc)
-    check_status(status)
+        __status__ = cutensornetCreateNetworkDescriptor(<const Handle>handle, num_inputs, <const int32_t*>(_num_modes_in_.data()), <const int64_t* const*>(_extents_in_.ptrs.data()), <const int64_t* const*>(_strides_in_.ptrs.data()), <const int32_t* const*>(_modes_in_.ptrs.data()), <const cutensornetTensorQualifiers_t*>(_qualifiers_in_.data()), num_modes_out, <const int64_t*>(_extents_out_.data()), <const int64_t*>(_strides_out_.data()), <const int32_t*>(_modes_out_.data()), <DataType>data_type, <_ComputeType>compute_type, &network_desc)
+    check_status(__status__)
     return <intptr_t>network_desc
 
 
@@ -633,8 +634,8 @@ cpdef destroy_network_descriptor(intptr_t network_desc):
     .. seealso:: `cutensornetDestroyNetworkDescriptor`
     """
     with nogil:
-        status = cutensornetDestroyNetworkDescriptor(<NetworkDescriptor>network_desc)
-    check_status(status)
+        __status__ = cutensornetDestroyNetworkDescriptor(<NetworkDescriptor>network_desc)
+    check_status(__status__)
 
 
 cpdef intptr_t get_output_tensor_descriptor(intptr_t handle, intptr_t network_desc) except? 0:
@@ -651,8 +652,8 @@ cpdef intptr_t get_output_tensor_descriptor(intptr_t handle, intptr_t network_de
     """
     cdef TensorDescriptor output_tensor_desc
     with nogil:
-        status = cutensornetGetOutputTensorDescriptor(<const Handle>handle, <const NetworkDescriptor>network_desc, &output_tensor_desc)
-    check_status(status)
+        __status__ = cutensornetGetOutputTensorDescriptor(<const Handle>handle, <const NetworkDescriptor>network_desc, &output_tensor_desc)
+    check_status(__status__)
     return <intptr_t>output_tensor_desc
 
 
@@ -669,8 +670,8 @@ cpdef intptr_t create_workspace_descriptor(intptr_t handle) except? 0:
     """
     cdef WorkspaceDescriptor work_desc
     with nogil:
-        status = cutensornetCreateWorkspaceDescriptor(<const Handle>handle, &work_desc)
-    check_status(status)
+        __status__ = cutensornetCreateWorkspaceDescriptor(<const Handle>handle, &work_desc)
+    check_status(__status__)
     return <intptr_t>work_desc
 
 
@@ -686,8 +687,8 @@ cpdef workspace_compute_contraction_sizes(intptr_t handle, intptr_t network_desc
     .. seealso:: `cutensornetWorkspaceComputeContractionSizes`
     """
     with nogil:
-        status = cutensornetWorkspaceComputeContractionSizes(<const Handle>handle, <const NetworkDescriptor>network_desc, <const ContractionOptimizerInfo>optimizer_info, <WorkspaceDescriptor>work_desc)
-    check_status(status)
+        __status__ = cutensornetWorkspaceComputeContractionSizes(<const Handle>handle, <const NetworkDescriptor>network_desc, <const ContractionOptimizerInfo>optimizer_info, <WorkspaceDescriptor>work_desc)
+    check_status(__status__)
 
 
 cpdef int64_t workspace_get_memory_size(intptr_t handle, intptr_t work_desc, int work_pref, int mem_space, int work_kind) except? -1:
@@ -707,8 +708,8 @@ cpdef int64_t workspace_get_memory_size(intptr_t handle, intptr_t work_desc, int
     """
     cdef int64_t memory_size
     with nogil:
-        status = cutensornetWorkspaceGetMemorySize(<const Handle>handle, <const WorkspaceDescriptor>work_desc, <_WorksizePref>work_pref, <_Memspace>mem_space, <_WorkspaceKind>work_kind, &memory_size)
-    check_status(status)
+        __status__ = cutensornetWorkspaceGetMemorySize(<const Handle>handle, <const WorkspaceDescriptor>work_desc, <_WorksizePref>work_pref, <_Memspace>mem_space, <_WorkspaceKind>work_kind, &memory_size)
+    check_status(__status__)
     return memory_size
 
 
@@ -726,8 +727,8 @@ cpdef workspace_set_memory(intptr_t handle, intptr_t work_desc, int mem_space, i
     .. seealso:: `cutensornetWorkspaceSetMemory`
     """
     with nogil:
-        status = cutensornetWorkspaceSetMemory(<const Handle>handle, <WorkspaceDescriptor>work_desc, <_Memspace>mem_space, <_WorkspaceKind>work_kind, <void* const>memory_ptr, memory_size)
-    check_status(status)
+        __status__ = cutensornetWorkspaceSetMemory(<const Handle>handle, <WorkspaceDescriptor>work_desc, <_Memspace>mem_space, <_WorkspaceKind>work_kind, <void* const>memory_ptr, memory_size)
+    check_status(__status__)
 
 
 cpdef tuple workspace_get_memory(intptr_t handle, intptr_t work_desc, int mem_space, int work_kind):
@@ -750,8 +751,8 @@ cpdef tuple workspace_get_memory(intptr_t handle, intptr_t work_desc, int mem_sp
     cdef void* memory_ptr
     cdef int64_t memory_size
     with nogil:
-        status = cutensornetWorkspaceGetMemory(<const Handle>handle, <const WorkspaceDescriptor>work_desc, <_Memspace>mem_space, <_WorkspaceKind>work_kind, &memory_ptr, &memory_size)
-    check_status(status)
+        __status__ = cutensornetWorkspaceGetMemory(<const Handle>handle, <const WorkspaceDescriptor>work_desc, <_Memspace>mem_space, <_WorkspaceKind>work_kind, &memory_ptr, &memory_size)
+    check_status(__status__)
     return (<intptr_t>memory_ptr, memory_size)
 
 
@@ -764,8 +765,8 @@ cpdef destroy_workspace_descriptor(intptr_t work_desc):
     .. seealso:: `cutensornetDestroyWorkspaceDescriptor`
     """
     with nogil:
-        status = cutensornetDestroyWorkspaceDescriptor(<WorkspaceDescriptor>work_desc)
-    check_status(status)
+        __status__ = cutensornetDestroyWorkspaceDescriptor(<WorkspaceDescriptor>work_desc)
+    check_status(__status__)
 
 
 cpdef intptr_t create_contraction_optimizer_config(intptr_t handle) except? 0:
@@ -781,8 +782,8 @@ cpdef intptr_t create_contraction_optimizer_config(intptr_t handle) except? 0:
     """
     cdef ContractionOptimizerConfig optimizer_config
     with nogil:
-        status = cutensornetCreateContractionOptimizerConfig(<const Handle>handle, &optimizer_config)
-    check_status(status)
+        __status__ = cutensornetCreateContractionOptimizerConfig(<const Handle>handle, &optimizer_config)
+    check_status(__status__)
     return <intptr_t>optimizer_config
 
 
@@ -795,8 +796,8 @@ cpdef destroy_contraction_optimizer_config(intptr_t optimizer_config):
     .. seealso:: `cutensornetDestroyContractionOptimizerConfig`
     """
     with nogil:
-        status = cutensornetDestroyContractionOptimizerConfig(<ContractionOptimizerConfig>optimizer_config)
-    check_status(status)
+        __status__ = cutensornetDestroyContractionOptimizerConfig(<ContractionOptimizerConfig>optimizer_config)
+    check_status(__status__)
 
 
 ######################### Python specific utility #########################
@@ -822,6 +823,7 @@ cdef dict contraction_optimizer_config_attribute_sizes = {
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_COST_FUNCTION_OBJECTIVE: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_CACHE_REUSE_NRUNS: _numpy.int32,
     CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_SMART_OPTION: _numpy.int32,
+    CUTENSORNET_CONTRACTION_OPTIMIZER_CONFIG_GPU_ARCH: _numpy.int32,
 }
 
 cpdef get_contraction_optimizer_config_attribute_dtype(int attr):
@@ -857,8 +859,8 @@ cpdef contraction_optimizer_config_get_attribute(intptr_t handle, intptr_t optim
     .. seealso:: `cutensornetContractionOptimizerConfigGetAttribute`
     """
     with nogil:
-        status = cutensornetContractionOptimizerConfigGetAttribute(<const Handle>handle, <const ContractionOptimizerConfig>optimizer_config, <_ContractionOptimizerConfigAttribute>attr, <void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetContractionOptimizerConfigGetAttribute(<const Handle>handle, <const ContractionOptimizerConfig>optimizer_config, <_ContractionOptimizerConfigAttribute>attr, <void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef contraction_optimizer_config_set_attribute(intptr_t handle, intptr_t optimizer_config, int attr, intptr_t buffer, size_t size_in_bytes):
@@ -877,8 +879,8 @@ cpdef contraction_optimizer_config_set_attribute(intptr_t handle, intptr_t optim
     .. seealso:: `cutensornetContractionOptimizerConfigSetAttribute`
     """
     with nogil:
-        status = cutensornetContractionOptimizerConfigSetAttribute(<const Handle>handle, <ContractionOptimizerConfig>optimizer_config, <_ContractionOptimizerConfigAttribute>attr, <const void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetContractionOptimizerConfigSetAttribute(<const Handle>handle, <ContractionOptimizerConfig>optimizer_config, <_ContractionOptimizerConfigAttribute>attr, <const void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef destroy_contraction_optimizer_info(intptr_t optimizer_info):
@@ -890,8 +892,8 @@ cpdef destroy_contraction_optimizer_info(intptr_t optimizer_info):
     .. seealso:: `cutensornetDestroyContractionOptimizerInfo`
     """
     with nogil:
-        status = cutensornetDestroyContractionOptimizerInfo(<ContractionOptimizerInfo>optimizer_info)
-    check_status(status)
+        __status__ = cutensornetDestroyContractionOptimizerInfo(<ContractionOptimizerInfo>optimizer_info)
+    check_status(__status__)
 
 
 cpdef intptr_t create_contraction_optimizer_info(intptr_t handle, intptr_t network_desc) except? 0:
@@ -908,8 +910,8 @@ cpdef intptr_t create_contraction_optimizer_info(intptr_t handle, intptr_t netwo
     """
     cdef ContractionOptimizerInfo optimizer_info
     with nogil:
-        status = cutensornetCreateContractionOptimizerInfo(<const Handle>handle, <const NetworkDescriptor>network_desc, &optimizer_info)
-    check_status(status)
+        __status__ = cutensornetCreateContractionOptimizerInfo(<const Handle>handle, <const NetworkDescriptor>network_desc, &optimizer_info)
+    check_status(__status__)
     return <intptr_t>optimizer_info
 
 
@@ -926,8 +928,8 @@ cpdef contraction_optimize(intptr_t handle, intptr_t network_desc, intptr_t opti
     .. seealso:: `cutensornetContractionOptimize`
     """
     with nogil:
-        status = cutensornetContractionOptimize(<const Handle>handle, <const NetworkDescriptor>network_desc, <const ContractionOptimizerConfig>optimizer_config, workspace_size_constraint, <ContractionOptimizerInfo>optimizer_info)
-    check_status(status)
+        __status__ = cutensornetContractionOptimize(<const Handle>handle, <const NetworkDescriptor>network_desc, <const ContractionOptimizerConfig>optimizer_config, workspace_size_constraint, <ContractionOptimizerInfo>optimizer_info)
+    check_status(__status__)
 
 
 ######################### Python specific utility #########################
@@ -982,8 +984,8 @@ cpdef contraction_optimizer_info_get_attribute(intptr_t handle, intptr_t optimiz
     .. seealso:: `cutensornetContractionOptimizerInfoGetAttribute`
     """
     with nogil:
-        status = cutensornetContractionOptimizerInfoGetAttribute(<const Handle>handle, <const ContractionOptimizerInfo>optimizer_info, <_ContractionOptimizerInfoAttribute>attr, <void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetContractionOptimizerInfoGetAttribute(<const Handle>handle, <const ContractionOptimizerInfo>optimizer_info, <_ContractionOptimizerInfoAttribute>attr, <void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef contraction_optimizer_info_set_attribute(intptr_t handle, intptr_t optimizer_info, int attr, intptr_t buffer, size_t size_in_bytes):
@@ -1002,8 +1004,8 @@ cpdef contraction_optimizer_info_set_attribute(intptr_t handle, intptr_t optimiz
     .. seealso:: `cutensornetContractionOptimizerInfoSetAttribute`
     """
     with nogil:
-        status = cutensornetContractionOptimizerInfoSetAttribute(<const Handle>handle, <ContractionOptimizerInfo>optimizer_info, <_ContractionOptimizerInfoAttribute>attr, <const void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetContractionOptimizerInfoSetAttribute(<const Handle>handle, <ContractionOptimizerInfo>optimizer_info, <_ContractionOptimizerInfoAttribute>attr, <const void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef size_t contraction_optimizer_info_get_packed_size(intptr_t handle, intptr_t optimizer_info) except? 0:
@@ -1020,8 +1022,8 @@ cpdef size_t contraction_optimizer_info_get_packed_size(intptr_t handle, intptr_
     """
     cdef size_t size_in_bytes
     with nogil:
-        status = cutensornetContractionOptimizerInfoGetPackedSize(<const Handle>handle, <const ContractionOptimizerInfo>optimizer_info, &size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetContractionOptimizerInfoGetPackedSize(<const Handle>handle, <const ContractionOptimizerInfo>optimizer_info, &size_in_bytes)
+    check_status(__status__)
     return size_in_bytes
 
 
@@ -1038,8 +1040,8 @@ cpdef contraction_optimizer_info_pack_data(intptr_t handle, intptr_t optimizer_i
     """
     cdef void* _buffer_ = get_buffer_pointer(buffer, size_in_bytes, readonly=False)
     with nogil:
-        status = cutensornetContractionOptimizerInfoPackData(<const Handle>handle, <const ContractionOptimizerInfo>optimizer_info, <void*>_buffer_, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetContractionOptimizerInfoPackData(<const Handle>handle, <const ContractionOptimizerInfo>optimizer_info, <void*>_buffer_, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef intptr_t create_contraction_optimizer_info_from_packed_data(intptr_t handle, intptr_t network_desc, buffer, size_t size_in_bytes) except? 0:
@@ -1059,8 +1061,8 @@ cpdef intptr_t create_contraction_optimizer_info_from_packed_data(intptr_t handl
     cdef void* _buffer_ = get_buffer_pointer(buffer, size_in_bytes, readonly=True)
     cdef ContractionOptimizerInfo optimizer_info
     with nogil:
-        status = cutensornetCreateContractionOptimizerInfoFromPackedData(<const Handle>handle, <const NetworkDescriptor>network_desc, <const void*>_buffer_, size_in_bytes, &optimizer_info)
-    check_status(status)
+        __status__ = cutensornetCreateContractionOptimizerInfoFromPackedData(<const Handle>handle, <const NetworkDescriptor>network_desc, <const void*>_buffer_, size_in_bytes, &optimizer_info)
+    check_status(__status__)
     return <intptr_t>optimizer_info
 
 
@@ -1077,8 +1079,8 @@ cpdef update_contraction_optimizer_info_from_packed_data(intptr_t handle, buffer
     """
     cdef void* _buffer_ = get_buffer_pointer(buffer, size_in_bytes, readonly=True)
     with nogil:
-        status = cutensornetUpdateContractionOptimizerInfoFromPackedData(<const Handle>handle, <const void*>_buffer_, size_in_bytes, <ContractionOptimizerInfo>optimizer_info)
-    check_status(status)
+        __status__ = cutensornetUpdateContractionOptimizerInfoFromPackedData(<const Handle>handle, <const void*>_buffer_, size_in_bytes, <ContractionOptimizerInfo>optimizer_info)
+    check_status(__status__)
 
 
 cpdef intptr_t create_contraction_plan(intptr_t handle, intptr_t network_desc, intptr_t optimizer_info, intptr_t work_desc) except? 0:
@@ -1097,8 +1099,8 @@ cpdef intptr_t create_contraction_plan(intptr_t handle, intptr_t network_desc, i
     """
     cdef ContractionPlan plan
     with nogil:
-        status = cutensornetCreateContractionPlan(<const Handle>handle, <const NetworkDescriptor>network_desc, <const ContractionOptimizerInfo>optimizer_info, <const WorkspaceDescriptor>work_desc, &plan)
-    check_status(status)
+        __status__ = cutensornetCreateContractionPlan(<const Handle>handle, <const NetworkDescriptor>network_desc, <const ContractionOptimizerInfo>optimizer_info, <const WorkspaceDescriptor>work_desc, &plan)
+    check_status(__status__)
     return <intptr_t>plan
 
 
@@ -1111,8 +1113,8 @@ cpdef destroy_contraction_plan(intptr_t plan):
     .. seealso:: `cutensornetDestroyContractionPlan`
     """
     with nogil:
-        status = cutensornetDestroyContractionPlan(<ContractionPlan>plan)
-    check_status(status)
+        __status__ = cutensornetDestroyContractionPlan(<ContractionPlan>plan)
+    check_status(__status__)
 
 
 cpdef contraction_autotune(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_data_out, intptr_t work_desc, intptr_t pref, intptr_t stream):
@@ -1136,8 +1138,8 @@ cpdef contraction_autotune(intptr_t handle, intptr_t plan, raw_data_in, intptr_t
     cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_
     get_resource_ptrs[void](_raw_data_in_, raw_data_in, <void*>NULL)
     with nogil:
-        status = cutensornetContractionAutotune(<const Handle>handle, <ContractionPlan>plan, <const void* const*>(_raw_data_in_.data()), <void*>raw_data_out, <WorkspaceDescriptor>work_desc, <const ContractionAutotunePreference>pref, <Stream>stream)
-    check_status(status)
+        __status__ = cutensornetContractionAutotune(<const Handle>handle, <ContractionPlan>plan, <const void* const*>(_raw_data_in_.data()), <void*>raw_data_out, <WorkspaceDescriptor>work_desc, <const ContractionAutotunePreference>pref, <Stream>stream)
+    check_status(__status__)
 
 
 cpdef intptr_t create_contraction_autotune_preference(intptr_t handle) except? 0:
@@ -1153,8 +1155,8 @@ cpdef intptr_t create_contraction_autotune_preference(intptr_t handle) except? 0
     """
     cdef ContractionAutotunePreference autotune_preference
     with nogil:
-        status = cutensornetCreateContractionAutotunePreference(<const Handle>handle, &autotune_preference)
-    check_status(status)
+        __status__ = cutensornetCreateContractionAutotunePreference(<const Handle>handle, &autotune_preference)
+    check_status(__status__)
     return <intptr_t>autotune_preference
 
 
@@ -1198,8 +1200,8 @@ cpdef contraction_autotune_preference_get_attribute(intptr_t handle, intptr_t au
     .. seealso:: `cutensornetContractionAutotunePreferenceGetAttribute`
     """
     with nogil:
-        status = cutensornetContractionAutotunePreferenceGetAttribute(<const Handle>handle, <const ContractionAutotunePreference>autotune_preference, <_ContractionAutotunePreferenceAttribute>attr, <void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetContractionAutotunePreferenceGetAttribute(<const Handle>handle, <const ContractionAutotunePreference>autotune_preference, <_ContractionAutotunePreferenceAttribute>attr, <void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef contraction_autotune_preference_set_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buffer, size_t size_in_bytes):
@@ -1218,8 +1220,8 @@ cpdef contraction_autotune_preference_set_attribute(intptr_t handle, intptr_t au
     .. seealso:: `cutensornetContractionAutotunePreferenceSetAttribute`
     """
     with nogil:
-        status = cutensornetContractionAutotunePreferenceSetAttribute(<const Handle>handle, <ContractionAutotunePreference>autotune_preference, <_ContractionAutotunePreferenceAttribute>attr, <const void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetContractionAutotunePreferenceSetAttribute(<const Handle>handle, <ContractionAutotunePreference>autotune_preference, <_ContractionAutotunePreferenceAttribute>attr, <const void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef destroy_contraction_autotune_preference(intptr_t autotune_preference):
@@ -1231,8 +1233,8 @@ cpdef destroy_contraction_autotune_preference(intptr_t autotune_preference):
     .. seealso:: `cutensornetDestroyContractionAutotunePreference`
     """
     with nogil:
-        status = cutensornetDestroyContractionAutotunePreference(<ContractionAutotunePreference>autotune_preference)
-    check_status(status)
+        __status__ = cutensornetDestroyContractionAutotunePreference(<ContractionAutotunePreference>autotune_preference)
+    check_status(__status__)
 
 
 cpdef intptr_t create_slice_group_from_id_range(intptr_t handle, int64_t slice_id_start, int64_t slice_id_stop, int64_t slice_id_step) except? 0:
@@ -1251,8 +1253,8 @@ cpdef intptr_t create_slice_group_from_id_range(intptr_t handle, int64_t slice_i
     """
     cdef SliceGroup slice_group
     with nogil:
-        status = cutensornetCreateSliceGroupFromIDRange(<const Handle>handle, slice_id_start, slice_id_stop, slice_id_step, &slice_group)
-    check_status(status)
+        __status__ = cutensornetCreateSliceGroupFromIDRange(<const Handle>handle, slice_id_start, slice_id_stop, slice_id_step, &slice_group)
+    check_status(__status__)
     return <intptr_t>slice_group
 
 
@@ -1265,8 +1267,8 @@ cpdef destroy_slice_group(intptr_t slice_group):
     .. seealso:: `cutensornetDestroySliceGroup`
     """
     with nogil:
-        status = cutensornetDestroySliceGroup(<SliceGroup>slice_group)
-    check_status(status)
+        __status__ = cutensornetDestroySliceGroup(<SliceGroup>slice_group)
+    check_status(__status__)
 
 
 cpdef contract_slices(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_data_out, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream):
@@ -1291,8 +1293,8 @@ cpdef contract_slices(intptr_t handle, intptr_t plan, raw_data_in, intptr_t raw_
     cdef nullable_unique_ptr[ vector[void*] ] _raw_data_in_
     get_resource_ptrs[void](_raw_data_in_, raw_data_in, <void*>NULL)
     with nogil:
-        status = cutensornetContractSlices(<const Handle>handle, <ContractionPlan>plan, <const void* const*>(_raw_data_in_.data()), <void*>raw_data_out, accumulate_output, <WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
-    check_status(status)
+        __status__ = cutensornetContractSlices(<const Handle>handle, <ContractionPlan>plan, <const void* const*>(_raw_data_in_.data()), <void*>raw_data_out, accumulate_output, <WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
+    check_status(__status__)
 
 
 cpdef intptr_t create_tensor_descriptor(intptr_t handle, int32_t num_modes, extents, strides, mode_labels, int data_type) except? 0:
@@ -1331,8 +1333,8 @@ cpdef intptr_t create_tensor_descriptor(intptr_t handle, int32_t num_modes, exte
     get_resource_ptr[int32_t](_mode_labels_, mode_labels, <int32_t*>NULL)
     cdef TensorDescriptor tensor_desc
     with nogil:
-        status = cutensornetCreateTensorDescriptor(<const Handle>handle, num_modes, <const int64_t*>(_extents_.data()), <const int64_t*>(_strides_.data()), <const int32_t*>(_mode_labels_.data()), <DataType>data_type, &tensor_desc)
-    check_status(status)
+        __status__ = cutensornetCreateTensorDescriptor(<const Handle>handle, num_modes, <const int64_t*>(_extents_.data()), <const int64_t*>(_strides_.data()), <const int32_t*>(_mode_labels_.data()), <DataType>data_type, &tensor_desc)
+    check_status(__status__)
     return <intptr_t>tensor_desc
 
 
@@ -1345,8 +1347,8 @@ cpdef destroy_tensor_descriptor(intptr_t tensor_desc):
     .. seealso:: `cutensornetDestroyTensorDescriptor`
     """
     with nogil:
-        status = cutensornetDestroyTensorDescriptor(<TensorDescriptor>tensor_desc)
-    check_status(status)
+        __status__ = cutensornetDestroyTensorDescriptor(<TensorDescriptor>tensor_desc)
+    check_status(__status__)
 
 
 cpdef intptr_t create_tensor_svd_config(intptr_t handle) except? 0:
@@ -1362,8 +1364,8 @@ cpdef intptr_t create_tensor_svd_config(intptr_t handle) except? 0:
     """
     cdef TensorSVDConfig svd_config
     with nogil:
-        status = cutensornetCreateTensorSVDConfig(<const Handle>handle, &svd_config)
-    check_status(status)
+        __status__ = cutensornetCreateTensorSVDConfig(<const Handle>handle, &svd_config)
+    check_status(__status__)
     return <intptr_t>svd_config
 
 
@@ -1376,8 +1378,8 @@ cpdef destroy_tensor_svd_config(intptr_t svd_config):
     .. seealso:: `cutensornetDestroyTensorSVDConfig`
     """
     with nogil:
-        status = cutensornetDestroyTensorSVDConfig(<TensorSVDConfig>svd_config)
-    check_status(status)
+        __status__ = cutensornetDestroyTensorSVDConfig(<TensorSVDConfig>svd_config)
+    check_status(__status__)
 
 
 ######################### Python specific utility #########################
@@ -1426,8 +1428,8 @@ cpdef tensor_svd_config_get_attribute(intptr_t handle, intptr_t svd_config, int 
     .. seealso:: `cutensornetTensorSVDConfigGetAttribute`
     """
     with nogil:
-        status = cutensornetTensorSVDConfigGetAttribute(<const Handle>handle, <const TensorSVDConfig>svd_config, <_TensorSVDConfigAttribute>attr, <void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetTensorSVDConfigGetAttribute(<const Handle>handle, <const TensorSVDConfig>svd_config, <_TensorSVDConfigAttribute>attr, <void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef tensor_svd_config_set_attribute(intptr_t handle, intptr_t svd_config, int attr, intptr_t buffer, size_t size_in_bytes):
@@ -1446,8 +1448,8 @@ cpdef tensor_svd_config_set_attribute(intptr_t handle, intptr_t svd_config, int 
     .. seealso:: `cutensornetTensorSVDConfigSetAttribute`
     """
     with nogil:
-        status = cutensornetTensorSVDConfigSetAttribute(<const Handle>handle, <TensorSVDConfig>svd_config, <_TensorSVDConfigAttribute>attr, <const void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetTensorSVDConfigSetAttribute(<const Handle>handle, <TensorSVDConfig>svd_config, <_TensorSVDConfigAttribute>attr, <const void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef workspace_compute_svd_sizes(intptr_t handle, intptr_t desc_tensor_in, intptr_t desc_tensor_u, intptr_t desc_tensor_v, intptr_t svd_config, intptr_t work_desc):
@@ -1464,8 +1466,8 @@ cpdef workspace_compute_svd_sizes(intptr_t handle, intptr_t desc_tensor_in, intp
     .. seealso:: `cutensornetWorkspaceComputeSVDSizes`
     """
     with nogil:
-        status = cutensornetWorkspaceComputeSVDSizes(<const Handle>handle, <const TensorDescriptor>desc_tensor_in, <const TensorDescriptor>desc_tensor_u, <const TensorDescriptor>desc_tensor_v, <const TensorSVDConfig>svd_config, <WorkspaceDescriptor>work_desc)
-    check_status(status)
+        __status__ = cutensornetWorkspaceComputeSVDSizes(<const Handle>handle, <const TensorDescriptor>desc_tensor_in, <const TensorDescriptor>desc_tensor_u, <const TensorDescriptor>desc_tensor_v, <const TensorSVDConfig>svd_config, <WorkspaceDescriptor>work_desc)
+    check_status(__status__)
 
 
 cpdef workspace_compute_qr_sizes(intptr_t handle, intptr_t desc_tensor_in, intptr_t desc_tensor_q, intptr_t desc_tensor_r, intptr_t work_desc):
@@ -1481,8 +1483,8 @@ cpdef workspace_compute_qr_sizes(intptr_t handle, intptr_t desc_tensor_in, intpt
     .. seealso:: `cutensornetWorkspaceComputeQRSizes`
     """
     with nogil:
-        status = cutensornetWorkspaceComputeQRSizes(<const Handle>handle, <const TensorDescriptor>desc_tensor_in, <const TensorDescriptor>desc_tensor_q, <const TensorDescriptor>desc_tensor_r, <WorkspaceDescriptor>work_desc)
-    check_status(status)
+        __status__ = cutensornetWorkspaceComputeQRSizes(<const Handle>handle, <const TensorDescriptor>desc_tensor_in, <const TensorDescriptor>desc_tensor_q, <const TensorDescriptor>desc_tensor_r, <WorkspaceDescriptor>work_desc)
+    check_status(__status__)
 
 
 cpdef intptr_t create_tensor_svd_info(intptr_t handle) except? 0:
@@ -1498,8 +1500,8 @@ cpdef intptr_t create_tensor_svd_info(intptr_t handle) except? 0:
     """
     cdef TensorSVDInfo svd_info
     with nogil:
-        status = cutensornetCreateTensorSVDInfo(<const Handle>handle, &svd_info)
-    check_status(status)
+        __status__ = cutensornetCreateTensorSVDInfo(<const Handle>handle, &svd_info)
+    check_status(__status__)
     return <intptr_t>svd_info
 
 
@@ -1547,8 +1549,8 @@ cpdef tensor_svd_info_get_attribute(intptr_t handle, intptr_t svd_info, int attr
     .. seealso:: `cutensornetTensorSVDInfoGetAttribute`
     """
     with nogil:
-        status = cutensornetTensorSVDInfoGetAttribute(<const Handle>handle, <const TensorSVDInfo>svd_info, <_TensorSVDInfoAttribute>attr, <void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetTensorSVDInfoGetAttribute(<const Handle>handle, <const TensorSVDInfo>svd_info, <_TensorSVDInfoAttribute>attr, <void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef destroy_tensor_svd_info(intptr_t svd_info):
@@ -1560,8 +1562,8 @@ cpdef destroy_tensor_svd_info(intptr_t svd_info):
     .. seealso:: `cutensornetDestroyTensorSVDInfo`
     """
     with nogil:
-        status = cutensornetDestroyTensorSVDInfo(<TensorSVDInfo>svd_info)
-    check_status(status)
+        __status__ = cutensornetDestroyTensorSVDInfo(<TensorSVDInfo>svd_info)
+    check_status(__status__)
 
 
 cpdef tensor_svd(intptr_t handle, intptr_t desc_tensor_in, intptr_t raw_data_in, intptr_t desc_tensor_u, intptr_t u, intptr_t s, intptr_t desc_tensor_v, intptr_t v, intptr_t svd_config, intptr_t svd_info, intptr_t work_desc, intptr_t stream):
@@ -1584,8 +1586,8 @@ cpdef tensor_svd(intptr_t handle, intptr_t desc_tensor_in, intptr_t raw_data_in,
     .. seealso:: `cutensornetTensorSVD`
     """
     with nogil:
-        status = cutensornetTensorSVD(<const Handle>handle, <const TensorDescriptor>desc_tensor_in, <const void* const>raw_data_in, <TensorDescriptor>desc_tensor_u, <void*>u, <void*>s, <TensorDescriptor>desc_tensor_v, <void*>v, <const TensorSVDConfig>svd_config, <TensorSVDInfo>svd_info, <const WorkspaceDescriptor>work_desc, <Stream>stream)
-    check_status(status)
+        __status__ = cutensornetTensorSVD(<const Handle>handle, <const TensorDescriptor>desc_tensor_in, <const void* const>raw_data_in, <TensorDescriptor>desc_tensor_u, <void*>u, <void*>s, <TensorDescriptor>desc_tensor_v, <void*>v, <const TensorSVDConfig>svd_config, <TensorSVDInfo>svd_info, <const WorkspaceDescriptor>work_desc, <Stream>stream)
+    check_status(__status__)
 
 
 cpdef tensor_qr(intptr_t handle, intptr_t desc_tensor_in, intptr_t raw_data_in, intptr_t desc_tensor_q, intptr_t q, intptr_t desc_tensor_r, intptr_t r, intptr_t work_desc, intptr_t stream):
@@ -1605,8 +1607,8 @@ cpdef tensor_qr(intptr_t handle, intptr_t desc_tensor_in, intptr_t raw_data_in, 
     .. seealso:: `cutensornetTensorQR`
     """
     with nogil:
-        status = cutensornetTensorQR(<const Handle>handle, <const TensorDescriptor>desc_tensor_in, <const void* const>raw_data_in, <const TensorDescriptor>desc_tensor_q, <void*>q, <const TensorDescriptor>desc_tensor_r, <void*>r, <const WorkspaceDescriptor>work_desc, <Stream>stream)
-    check_status(status)
+        __status__ = cutensornetTensorQR(<const Handle>handle, <const TensorDescriptor>desc_tensor_in, <const void* const>raw_data_in, <const TensorDescriptor>desc_tensor_q, <void*>q, <const TensorDescriptor>desc_tensor_r, <void*>r, <const WorkspaceDescriptor>work_desc, <Stream>stream)
+    check_status(__status__)
 
 
 cpdef workspace_compute_gate_split_sizes(intptr_t handle, intptr_t desc_tensor_in_a, intptr_t desc_tensor_in_b, intptr_t desc_tensor_in_g, intptr_t desc_tensor_u, intptr_t desc_tensor_v, int gate_algo, intptr_t svd_config, int compute_type, intptr_t work_desc):
@@ -1627,8 +1629,8 @@ cpdef workspace_compute_gate_split_sizes(intptr_t handle, intptr_t desc_tensor_i
     .. seealso:: `cutensornetWorkspaceComputeGateSplitSizes`
     """
     with nogil:
-        status = cutensornetWorkspaceComputeGateSplitSizes(<const Handle>handle, <const TensorDescriptor>desc_tensor_in_a, <const TensorDescriptor>desc_tensor_in_b, <const TensorDescriptor>desc_tensor_in_g, <const TensorDescriptor>desc_tensor_u, <const TensorDescriptor>desc_tensor_v, <const _GateSplitAlgo>gate_algo, <const TensorSVDConfig>svd_config, <_ComputeType>compute_type, <WorkspaceDescriptor>work_desc)
-    check_status(status)
+        __status__ = cutensornetWorkspaceComputeGateSplitSizes(<const Handle>handle, <const TensorDescriptor>desc_tensor_in_a, <const TensorDescriptor>desc_tensor_in_b, <const TensorDescriptor>desc_tensor_in_g, <const TensorDescriptor>desc_tensor_u, <const TensorDescriptor>desc_tensor_v, <const _GateSplitAlgo>gate_algo, <const TensorSVDConfig>svd_config, <_ComputeType>compute_type, <WorkspaceDescriptor>work_desc)
+    check_status(__status__)
 
 
 cpdef gate_split(intptr_t handle, intptr_t desc_tensor_in_a, intptr_t raw_data_in_a, intptr_t desc_tensor_in_b, intptr_t raw_data_in_b, intptr_t desc_tensor_in_g, intptr_t raw_data_in_g, intptr_t desc_tensor_u, intptr_t u, intptr_t s, intptr_t desc_tensor_v, intptr_t v, int gate_algo, intptr_t svd_config, int compute_type, intptr_t svd_info, intptr_t work_desc, intptr_t stream):
@@ -1657,8 +1659,8 @@ cpdef gate_split(intptr_t handle, intptr_t desc_tensor_in_a, intptr_t raw_data_i
     .. seealso:: `cutensornetGateSplit`
     """
     with nogil:
-        status = cutensornetGateSplit(<const Handle>handle, <const TensorDescriptor>desc_tensor_in_a, <const void*>raw_data_in_a, <const TensorDescriptor>desc_tensor_in_b, <const void*>raw_data_in_b, <const TensorDescriptor>desc_tensor_in_g, <const void*>raw_data_in_g, <TensorDescriptor>desc_tensor_u, <void*>u, <void*>s, <TensorDescriptor>desc_tensor_v, <void*>v, <const _GateSplitAlgo>gate_algo, <const TensorSVDConfig>svd_config, <_ComputeType>compute_type, <TensorSVDInfo>svd_info, <const WorkspaceDescriptor>work_desc, <Stream>stream)
-    check_status(status)
+        __status__ = cutensornetGateSplit(<const Handle>handle, <const TensorDescriptor>desc_tensor_in_a, <const void*>raw_data_in_a, <const TensorDescriptor>desc_tensor_in_b, <const void*>raw_data_in_b, <const TensorDescriptor>desc_tensor_in_g, <const void*>raw_data_in_g, <TensorDescriptor>desc_tensor_u, <void*>u, <void*>s, <TensorDescriptor>desc_tensor_v, <void*>v, <const _GateSplitAlgo>gate_algo, <const TensorSVDConfig>svd_config, <_ComputeType>compute_type, <TensorSVDInfo>svd_info, <const WorkspaceDescriptor>work_desc, <Stream>stream)
+    check_status(__status__)
 
 
 cpdef logger_set_file(intptr_t file):
@@ -1670,8 +1672,8 @@ cpdef logger_set_file(intptr_t file):
     .. seealso:: `cutensornetLoggerSetFile`
     """
     with nogil:
-        status = cutensornetLoggerSetFile(<FILE*>file)
-    check_status(status)
+        __status__ = cutensornetLoggerSetFile(<FILE*>file)
+    check_status(__status__)
 
 
 cpdef logger_open_file(log_file):
@@ -1687,8 +1689,8 @@ cpdef logger_open_file(log_file):
     cdef bytes _temp_log_file_ = (<str>log_file).encode()
     cdef char* _log_file_ = _temp_log_file_
     with nogil:
-        status = cutensornetLoggerOpenFile(<const char*>_log_file_)
-    check_status(status)
+        __status__ = cutensornetLoggerOpenFile(<const char*>_log_file_)
+    check_status(__status__)
 
 
 cpdef logger_set_level(int32_t level):
@@ -1700,8 +1702,8 @@ cpdef logger_set_level(int32_t level):
     .. seealso:: `cutensornetLoggerSetLevel`
     """
     with nogil:
-        status = cutensornetLoggerSetLevel(level)
-    check_status(status)
+        __status__ = cutensornetLoggerSetLevel(level)
+    check_status(__status__)
 
 
 cpdef logger_set_mask(int32_t mask):
@@ -1713,8 +1715,8 @@ cpdef logger_set_mask(int32_t mask):
     .. seealso:: `cutensornetLoggerSetMask`
     """
     with nogil:
-        status = cutensornetLoggerSetMask(mask)
-    check_status(status)
+        __status__ = cutensornetLoggerSetMask(mask)
+    check_status(__status__)
 
 
 cpdef logger_force_disable():
@@ -1723,8 +1725,8 @@ cpdef logger_force_disable():
     .. seealso:: `cutensornetLoggerForceDisable`
     """
     with nogil:
-        status = cutensornetLoggerForceDisable()
-    check_status(status)
+        __status__ = cutensornetLoggerForceDisable()
+    check_status(__status__)
 
 
 cpdef size_t get_version() except? 0:
@@ -1767,8 +1769,8 @@ cpdef distributed_reset_configuration(intptr_t handle, intptr_t comm_ptr, size_t
     .. seealso:: `cutensornetDistributedResetConfiguration`
     """
     with nogil:
-        status = cutensornetDistributedResetConfiguration(<Handle>handle, <const void*>comm_ptr, comm_size)
-    check_status(status)
+        __status__ = cutensornetDistributedResetConfiguration(<Handle>handle, <const void*>comm_ptr, comm_size)
+    check_status(__status__)
 
 
 cpdef int32_t distributed_get_num_ranks(intptr_t handle) except? -1:
@@ -1784,8 +1786,8 @@ cpdef int32_t distributed_get_num_ranks(intptr_t handle) except? -1:
     """
     cdef int32_t num_ranks
     with nogil:
-        status = cutensornetDistributedGetNumRanks(<const Handle>handle, &num_ranks)
-    check_status(status)
+        __status__ = cutensornetDistributedGetNumRanks(<const Handle>handle, &num_ranks)
+    check_status(__status__)
     return num_ranks
 
 
@@ -1802,8 +1804,8 @@ cpdef int32_t distributed_get_proc_rank(intptr_t handle) except? -1:
     """
     cdef int32_t proc_rank
     with nogil:
-        status = cutensornetDistributedGetProcRank(<const Handle>handle, &proc_rank)
-    check_status(status)
+        __status__ = cutensornetDistributedGetProcRank(<const Handle>handle, &proc_rank)
+    check_status(__status__)
     return proc_rank
 
 
@@ -1816,8 +1818,8 @@ cpdef distributed_synchronize(intptr_t handle):
     .. seealso:: `cutensornetDistributedSynchronize`
     """
     with nogil:
-        status = cutensornetDistributedSynchronize(<const Handle>handle)
-    check_status(status)
+        __status__ = cutensornetDistributedSynchronize(<const Handle>handle)
+    check_status(__status__)
 
 
 ######################### Python specific utility #########################
@@ -1865,8 +1867,8 @@ cpdef network_get_attribute(intptr_t handle, intptr_t network_desc, int attr, in
     .. seealso:: `cutensornetNetworkGetAttribute`
     """
     with nogil:
-        status = cutensornetNetworkGetAttribute(<const Handle>handle, <const NetworkDescriptor>network_desc, <_NetworkAttribute>attr, <void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetNetworkGetAttribute(<const Handle>handle, <const NetworkDescriptor>network_desc, <_NetworkAttribute>attr, <void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef network_set_attribute(intptr_t handle, intptr_t network_desc, int attr, intptr_t buffer, size_t size_in_bytes):
@@ -1885,8 +1887,8 @@ cpdef network_set_attribute(intptr_t handle, intptr_t network_desc, int attr, in
     .. seealso:: `cutensornetNetworkSetAttribute`
     """
     with nogil:
-        status = cutensornetNetworkSetAttribute(<const Handle>handle, <NetworkDescriptor>network_desc, <_NetworkAttribute>attr, <const void* const>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetNetworkSetAttribute(<const Handle>handle, <NetworkDescriptor>network_desc, <_NetworkAttribute>attr, <const void* const>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef workspace_purge_cache(intptr_t handle, intptr_t work_desc, int mem_space):
@@ -1900,8 +1902,8 @@ cpdef workspace_purge_cache(intptr_t handle, intptr_t work_desc, int mem_space):
     .. seealso:: `cutensornetWorkspacePurgeCache`
     """
     with nogil:
-        status = cutensornetWorkspacePurgeCache(<const Handle>handle, <WorkspaceDescriptor>work_desc, <_Memspace>mem_space)
-    check_status(status)
+        __status__ = cutensornetWorkspacePurgeCache(<const Handle>handle, <WorkspaceDescriptor>work_desc, <_Memspace>mem_space)
+    check_status(__status__)
 
 
 cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_state_modes, state_mode_extents, int data_type) except? 0:
@@ -1927,8 +1929,8 @@ cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_state_modes
     get_resource_ptr[int64_t](_state_mode_extents_, state_mode_extents, <int64_t*>NULL)
     cdef State tensor_network_state
     with nogil:
-        status = cutensornetCreateState(<const Handle>handle, <_StatePurity>purity, num_state_modes, <const int64_t*>(_state_mode_extents_.data()), <DataType>data_type, &tensor_network_state)
-    check_status(status)
+        __status__ = cutensornetCreateState(<const Handle>handle, <_StatePurity>purity, num_state_modes, <const int64_t*>(_state_mode_extents_.data()), <DataType>data_type, &tensor_network_state)
+    check_status(__status__)
     return <intptr_t>tensor_network_state
 
 
@@ -1965,8 +1967,8 @@ cpdef int64_t state_apply_tensor(intptr_t handle, intptr_t tensor_network_state,
     get_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
     cdef int64_t tensor_id
     with nogil:
-        status = cutensornetStateApplyTensor(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
-    check_status(status)
+        __status__ = cutensornetStateApplyTensor(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
+    check_status(__status__)
     return tensor_id
 
 
@@ -1983,8 +1985,8 @@ cpdef state_update_tensor(intptr_t handle, intptr_t tensor_network_state, int64_
     .. seealso:: `cutensornetStateUpdateTensor`
     """
     with nogil:
-        status = cutensornetStateUpdateTensor(<const Handle>handle, <State>tensor_network_state, tensor_id, <void*>tensor_data, unitary)
-    check_status(status)
+        __status__ = cutensornetStateUpdateTensor(<const Handle>handle, <State>tensor_network_state, tensor_id, <void*>tensor_data, unitary)
+    check_status(__status__)
 
 
 cpdef destroy_state(intptr_t tensor_network_state):
@@ -1996,8 +1998,8 @@ cpdef destroy_state(intptr_t tensor_network_state):
     .. seealso:: `cutensornetDestroyState`
     """
     with nogil:
-        status = cutensornetDestroyState(<State>tensor_network_state)
-    check_status(status)
+        __status__ = cutensornetDestroyState(<State>tensor_network_state)
+    check_status(__status__)
 
 
 cpdef intptr_t create_marginal(intptr_t handle, intptr_t tensor_network_state, int32_t num_marginal_modes, marginal_modes, int32_t num_projected_modes, projected_modes, marginal_tensor_strides) except? 0:
@@ -2037,8 +2039,8 @@ cpdef intptr_t create_marginal(intptr_t handle, intptr_t tensor_network_state, i
     get_resource_ptr[int64_t](_marginal_tensor_strides_, marginal_tensor_strides, <int64_t*>NULL)
     cdef StateMarginal tensor_network_marginal
     with nogil:
-        status = cutensornetCreateMarginal(<const Handle>handle, <State>tensor_network_state, num_marginal_modes, <const int32_t*>(_marginal_modes_.data()), num_projected_modes, <const int32_t*>(_projected_modes_.data()), <const int64_t*>(_marginal_tensor_strides_.data()), &tensor_network_marginal)
-    check_status(status)
+        __status__ = cutensornetCreateMarginal(<const Handle>handle, <State>tensor_network_state, num_marginal_modes, <const int32_t*>(_marginal_modes_.data()), num_projected_modes, <const int32_t*>(_projected_modes_.data()), <const int64_t*>(_marginal_tensor_strides_.data()), &tensor_network_marginal)
+    check_status(__status__)
     return <intptr_t>tensor_network_marginal
 
 
@@ -2083,8 +2085,8 @@ cpdef marginal_configure(intptr_t handle, intptr_t tensor_network_marginal, int 
     .. seealso:: `cutensornetMarginalConfigure`
     """
     with nogil:
-        status = cutensornetMarginalConfigure(<const Handle>handle, <StateMarginal>tensor_network_marginal, <_MarginalAttribute>attribute, <const void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetMarginalConfigure(<const Handle>handle, <StateMarginal>tensor_network_marginal, <_MarginalAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef marginal_prepare(intptr_t handle, intptr_t tensor_network_marginal, size_t max_workspace_size_device, intptr_t work_desc, intptr_t cuda_stream):
@@ -2100,8 +2102,8 @@ cpdef marginal_prepare(intptr_t handle, intptr_t tensor_network_marginal, size_t
     .. seealso:: `cutensornetMarginalPrepare`
     """
     with nogil:
-        status = cutensornetMarginalPrepare(<const Handle>handle, <StateMarginal>tensor_network_marginal, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetMarginalPrepare(<const Handle>handle, <StateMarginal>tensor_network_marginal, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef marginal_compute(intptr_t handle, intptr_t tensor_network_marginal, projected_mode_values, intptr_t work_desc, intptr_t marginal_tensor, intptr_t cuda_stream):
@@ -2124,8 +2126,8 @@ cpdef marginal_compute(intptr_t handle, intptr_t tensor_network_marginal, projec
     cdef nullable_unique_ptr[ vector[int64_t] ] _projected_mode_values_
     get_resource_ptr[int64_t](_projected_mode_values_, projected_mode_values, <int64_t*>NULL)
     with nogil:
-        status = cutensornetMarginalCompute(<const Handle>handle, <StateMarginal>tensor_network_marginal, <const int64_t*>(_projected_mode_values_.data()), <WorkspaceDescriptor>work_desc, <void*>marginal_tensor, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetMarginalCompute(<const Handle>handle, <StateMarginal>tensor_network_marginal, <const int64_t*>(_projected_mode_values_.data()), <WorkspaceDescriptor>work_desc, <void*>marginal_tensor, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef destroy_marginal(intptr_t tensor_network_marginal):
@@ -2137,8 +2139,8 @@ cpdef destroy_marginal(intptr_t tensor_network_marginal):
     .. seealso:: `cutensornetDestroyMarginal`
     """
     with nogil:
-        status = cutensornetDestroyMarginal(<StateMarginal>tensor_network_marginal)
-    check_status(status)
+        __status__ = cutensornetDestroyMarginal(<StateMarginal>tensor_network_marginal)
+    check_status(__status__)
 
 
 cpdef intptr_t create_sampler(intptr_t handle, intptr_t tensor_network_state, int32_t num_modes_to_sample, modes_to_sample) except? 0:
@@ -2163,8 +2165,8 @@ cpdef intptr_t create_sampler(intptr_t handle, intptr_t tensor_network_state, in
     get_resource_ptr[int32_t](_modes_to_sample_, modes_to_sample, <int32_t*>NULL)
     cdef StateSampler tensor_network_sampler
     with nogil:
-        status = cutensornetCreateSampler(<const Handle>handle, <State>tensor_network_state, num_modes_to_sample, <const int32_t*>(_modes_to_sample_.data()), &tensor_network_sampler)
-    check_status(status)
+        __status__ = cutensornetCreateSampler(<const Handle>handle, <State>tensor_network_state, num_modes_to_sample, <const int32_t*>(_modes_to_sample_.data()), &tensor_network_sampler)
+    check_status(__status__)
     return <intptr_t>tensor_network_sampler
 
 
@@ -2210,8 +2212,8 @@ cpdef sampler_configure(intptr_t handle, intptr_t tensor_network_sampler, int at
     .. seealso:: `cutensornetSamplerConfigure`
     """
     with nogil:
-        status = cutensornetSamplerConfigure(<const Handle>handle, <StateSampler>tensor_network_sampler, <_SamplerAttribute>attribute, <const void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetSamplerConfigure(<const Handle>handle, <StateSampler>tensor_network_sampler, <_SamplerAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef sampler_prepare(intptr_t handle, intptr_t tensor_network_sampler, size_t max_workspace_size_device, intptr_t work_desc, intptr_t cuda_stream):
@@ -2227,8 +2229,8 @@ cpdef sampler_prepare(intptr_t handle, intptr_t tensor_network_sampler, size_t m
     .. seealso:: `cutensornetSamplerPrepare`
     """
     with nogil:
-        status = cutensornetSamplerPrepare(<const Handle>handle, <StateSampler>tensor_network_sampler, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetSamplerPrepare(<const Handle>handle, <StateSampler>tensor_network_sampler, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef sampler_sample(intptr_t handle, intptr_t tensor_network_sampler, int64_t num_shots, intptr_t work_desc, intptr_t samples, intptr_t cuda_stream):
@@ -2245,8 +2247,8 @@ cpdef sampler_sample(intptr_t handle, intptr_t tensor_network_sampler, int64_t n
     .. seealso:: `cutensornetSamplerSample`
     """
     with nogil:
-        status = cutensornetSamplerSample(<const Handle>handle, <StateSampler>tensor_network_sampler, num_shots, <WorkspaceDescriptor>work_desc, <int64_t*>samples, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetSamplerSample(<const Handle>handle, <StateSampler>tensor_network_sampler, num_shots, <WorkspaceDescriptor>work_desc, <int64_t*>samples, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef destroy_sampler(intptr_t tensor_network_sampler):
@@ -2258,8 +2260,8 @@ cpdef destroy_sampler(intptr_t tensor_network_sampler):
     .. seealso:: `cutensornetDestroySampler`
     """
     with nogil:
-        status = cutensornetDestroySampler(<StateSampler>tensor_network_sampler)
-    check_status(status)
+        __status__ = cutensornetDestroySampler(<StateSampler>tensor_network_sampler)
+    check_status(__status__)
 
 
 cpdef state_finalize_mps(intptr_t handle, intptr_t tensor_network_state, int boundary_condition, extents_out, strides_out):
@@ -2291,8 +2293,8 @@ cpdef state_finalize_mps(intptr_t handle, intptr_t tensor_network_state, int bou
     cdef nested_resource[ int64_t ] _strides_out_
     get_nested_resource_ptr[int64_t](_strides_out_, strides_out, <int64_t*>NULL)
     with nogil:
-        status = cutensornetStateFinalizeMPS(<const Handle>handle, <State>tensor_network_state, <_BoundaryCondition>boundary_condition, <const int64_t* const*>(_extents_out_.ptrs.data()), <const int64_t* const*>(_strides_out_.ptrs.data()))
-    check_status(status)
+        __status__ = cutensornetStateFinalizeMPS(<const Handle>handle, <State>tensor_network_state, <_BoundaryCondition>boundary_condition, <const int64_t* const*>(_extents_out_.ptrs.data()), <const int64_t* const*>(_strides_out_.ptrs.data()))
+    check_status(__status__)
 
 
 ######################### Python specific utility #########################
@@ -2354,8 +2356,8 @@ cpdef state_configure(intptr_t handle, intptr_t tensor_network_state, int attrib
     .. seealso:: `cutensornetStateConfigure`
     """
     with nogil:
-        status = cutensornetStateConfigure(<const Handle>handle, <State>tensor_network_state, <_StateAttribute>attribute, <const void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetStateConfigure(<const Handle>handle, <State>tensor_network_state, <_StateAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef state_prepare(intptr_t handle, intptr_t tensor_network_state, size_t max_workspace_size_device, intptr_t work_desc, intptr_t cuda_stream):
@@ -2371,8 +2373,8 @@ cpdef state_prepare(intptr_t handle, intptr_t tensor_network_state, size_t max_w
     .. seealso:: `cutensornetStatePrepare`
     """
     with nogil:
-        status = cutensornetStatePrepare(<const Handle>handle, <State>tensor_network_state, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetStatePrepare(<const Handle>handle, <State>tensor_network_state, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef intptr_t create_network_operator(intptr_t handle, int32_t num_state_modes, state_mode_extents, int data_type) except? 0:
@@ -2397,8 +2399,8 @@ cpdef intptr_t create_network_operator(intptr_t handle, int32_t num_state_modes,
     get_resource_ptr[int64_t](_state_mode_extents_, state_mode_extents, <int64_t*>NULL)
     cdef NetworkOperator tensor_network_operator
     with nogil:
-        status = cutensornetCreateNetworkOperator(<const Handle>handle, num_state_modes, <const int64_t*>(_state_mode_extents_.data()), <DataType>data_type, &tensor_network_operator)
-    check_status(status)
+        __status__ = cutensornetCreateNetworkOperator(<const Handle>handle, num_state_modes, <const int64_t*>(_state_mode_extents_.data()), <DataType>data_type, &tensor_network_operator)
+    check_status(__status__)
     return <intptr_t>tensor_network_operator
 
 
@@ -2451,8 +2453,8 @@ cpdef int64_t network_operator_append_product(intptr_t handle, intptr_t tensor_n
     get_resource_ptrs[void](_tensor_data_, tensor_data, <void*>NULL)
     cdef int64_t component_id
     with nogil:
-        status = cutensornetNetworkOperatorAppendProduct(<const Handle>handle, <NetworkOperator>tensor_network_operator, <cuDoubleComplex>_coefficient_, num_tensors, <const int32_t*>(_num_state_modes_.data()), <const int32_t**>(_state_modes_.ptrs.data()), <const int64_t**>(_tensor_mode_strides_.ptrs.data()), <const void**>(_tensor_data_.data()), &component_id)
-    check_status(status)
+        __status__ = cutensornetNetworkOperatorAppendProduct(<const Handle>handle, <NetworkOperator>tensor_network_operator, <cuDoubleComplex>_coefficient_, num_tensors, <const int32_t*>(_num_state_modes_.data()), <const int32_t**>(_state_modes_.ptrs.data()), <const int64_t**>(_tensor_mode_strides_.ptrs.data()), <const void**>(_tensor_data_.data()), &component_id)
+    check_status(__status__)
     return component_id
 
 
@@ -2465,8 +2467,8 @@ cpdef destroy_network_operator(intptr_t tensor_network_operator):
     .. seealso:: `cutensornetDestroyNetworkOperator`
     """
     with nogil:
-        status = cutensornetDestroyNetworkOperator(<NetworkOperator>tensor_network_operator)
-    check_status(status)
+        __status__ = cutensornetDestroyNetworkOperator(<NetworkOperator>tensor_network_operator)
+    check_status(__status__)
 
 
 cpdef intptr_t create_accessor(intptr_t handle, intptr_t tensor_network_state, int32_t num_projected_modes, projected_modes, amplitudes_tensor_strides) except? 0:
@@ -2498,8 +2500,8 @@ cpdef intptr_t create_accessor(intptr_t handle, intptr_t tensor_network_state, i
     get_resource_ptr[int64_t](_amplitudes_tensor_strides_, amplitudes_tensor_strides, <int64_t*>NULL)
     cdef StateAccessor tensor_network_accessor
     with nogil:
-        status = cutensornetCreateAccessor(<const Handle>handle, <State>tensor_network_state, num_projected_modes, <const int32_t*>(_projected_modes_.data()), <const int64_t*>(_amplitudes_tensor_strides_.data()), &tensor_network_accessor)
-    check_status(status)
+        __status__ = cutensornetCreateAccessor(<const Handle>handle, <State>tensor_network_state, num_projected_modes, <const int32_t*>(_projected_modes_.data()), <const int64_t*>(_amplitudes_tensor_strides_.data()), &tensor_network_accessor)
+    check_status(__status__)
     return <intptr_t>tensor_network_accessor
 
 
@@ -2544,8 +2546,8 @@ cpdef accessor_configure(intptr_t handle, intptr_t tensor_network_accessor, int 
     .. seealso:: `cutensornetAccessorConfigure`
     """
     with nogil:
-        status = cutensornetAccessorConfigure(<const Handle>handle, <StateAccessor>tensor_network_accessor, <_AccessorAttribute>attribute, <const void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetAccessorConfigure(<const Handle>handle, <StateAccessor>tensor_network_accessor, <_AccessorAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef accessor_prepare(intptr_t handle, intptr_t tensor_network_accessor, size_t max_workspace_size_device, intptr_t work_desc, intptr_t cuda_stream):
@@ -2561,8 +2563,8 @@ cpdef accessor_prepare(intptr_t handle, intptr_t tensor_network_accessor, size_t
     .. seealso:: `cutensornetAccessorPrepare`
     """
     with nogil:
-        status = cutensornetAccessorPrepare(<const Handle>handle, <StateAccessor>tensor_network_accessor, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetAccessorPrepare(<const Handle>handle, <StateAccessor>tensor_network_accessor, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef accessor_compute(intptr_t handle, intptr_t tensor_network_accessor, projected_mode_values, intptr_t work_desc, intptr_t amplitudes_tensor, intptr_t state_norm, intptr_t cuda_stream):
@@ -2586,8 +2588,8 @@ cpdef accessor_compute(intptr_t handle, intptr_t tensor_network_accessor, projec
     cdef nullable_unique_ptr[ vector[int64_t] ] _projected_mode_values_
     get_resource_ptr[int64_t](_projected_mode_values_, projected_mode_values, <int64_t*>NULL)
     with nogil:
-        status = cutensornetAccessorCompute(<const Handle>handle, <StateAccessor>tensor_network_accessor, <const int64_t*>(_projected_mode_values_.data()), <WorkspaceDescriptor>work_desc, <void*>amplitudes_tensor, <void*>state_norm, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetAccessorCompute(<const Handle>handle, <StateAccessor>tensor_network_accessor, <const int64_t*>(_projected_mode_values_.data()), <WorkspaceDescriptor>work_desc, <void*>amplitudes_tensor, <void*>state_norm, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef destroy_accessor(intptr_t tensor_network_accessor):
@@ -2599,8 +2601,8 @@ cpdef destroy_accessor(intptr_t tensor_network_accessor):
     .. seealso:: `cutensornetDestroyAccessor`
     """
     with nogil:
-        status = cutensornetDestroyAccessor(<StateAccessor>tensor_network_accessor)
-    check_status(status)
+        __status__ = cutensornetDestroyAccessor(<StateAccessor>tensor_network_accessor)
+    check_status(__status__)
 
 
 cpdef intptr_t create_expectation(intptr_t handle, intptr_t tensor_network_state, intptr_t tensor_network_operator) except? 0:
@@ -2618,8 +2620,8 @@ cpdef intptr_t create_expectation(intptr_t handle, intptr_t tensor_network_state
     """
     cdef StateExpectation tensor_network_expectation
     with nogil:
-        status = cutensornetCreateExpectation(<const Handle>handle, <State>tensor_network_state, <NetworkOperator>tensor_network_operator, &tensor_network_expectation)
-    check_status(status)
+        __status__ = cutensornetCreateExpectation(<const Handle>handle, <State>tensor_network_state, <NetworkOperator>tensor_network_operator, &tensor_network_expectation)
+    check_status(__status__)
     return <intptr_t>tensor_network_expectation
 
 
@@ -2664,8 +2666,8 @@ cpdef expectation_configure(intptr_t handle, intptr_t tensor_network_expectation
     .. seealso:: `cutensornetExpectationConfigure`
     """
     with nogil:
-        status = cutensornetExpectationConfigure(<const Handle>handle, <StateExpectation>tensor_network_expectation, <_ExpectationAttribute>attribute, <const void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetExpectationConfigure(<const Handle>handle, <StateExpectation>tensor_network_expectation, <_ExpectationAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef expectation_prepare(intptr_t handle, intptr_t tensor_network_expectation, size_t max_workspace_size_device, intptr_t work_desc, intptr_t cuda_stream):
@@ -2681,8 +2683,8 @@ cpdef expectation_prepare(intptr_t handle, intptr_t tensor_network_expectation, 
     .. seealso:: `cutensornetExpectationPrepare`
     """
     with nogil:
-        status = cutensornetExpectationPrepare(<const Handle>handle, <StateExpectation>tensor_network_expectation, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetExpectationPrepare(<const Handle>handle, <StateExpectation>tensor_network_expectation, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef expectation_compute(intptr_t handle, intptr_t tensor_network_expectation, intptr_t work_desc, intptr_t expectation_value, intptr_t state_norm, intptr_t cuda_stream):
@@ -2699,8 +2701,8 @@ cpdef expectation_compute(intptr_t handle, intptr_t tensor_network_expectation, 
     .. seealso:: `cutensornetExpectationCompute`
     """
     with nogil:
-        status = cutensornetExpectationCompute(<const Handle>handle, <StateExpectation>tensor_network_expectation, <WorkspaceDescriptor>work_desc, <void*>expectation_value, <void*>state_norm, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetExpectationCompute(<const Handle>handle, <StateExpectation>tensor_network_expectation, <WorkspaceDescriptor>work_desc, <void*>expectation_value, <void*>state_norm, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef destroy_expectation(intptr_t tensor_network_expectation):
@@ -2712,8 +2714,8 @@ cpdef destroy_expectation(intptr_t tensor_network_expectation):
     .. seealso:: `cutensornetDestroyExpectation`
     """
     with nogil:
-        status = cutensornetDestroyExpectation(<StateExpectation>tensor_network_expectation)
-    check_status(status)
+        __status__ = cutensornetDestroyExpectation(<StateExpectation>tensor_network_expectation)
+    check_status(__status__)
 
 
 cpdef int64_t state_apply_tensor_operator(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, intptr_t tensor_data, tensor_mode_strides, int32_t immutable, int32_t adjoint, int32_t unitary) except? -1:
@@ -2749,8 +2751,8 @@ cpdef int64_t state_apply_tensor_operator(intptr_t handle, intptr_t tensor_netwo
     get_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
     cdef int64_t tensor_id
     with nogil:
-        status = cutensornetStateApplyTensorOperator(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
-    check_status(status)
+        __status__ = cutensornetStateApplyTensorOperator(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
+    check_status(__status__)
     return tensor_id
 
 
@@ -2802,8 +2804,8 @@ cpdef int64_t state_apply_controlled_tensor_operator(intptr_t handle, intptr_t t
     get_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
     cdef int64_t tensor_id
     with nogil:
-        status = cutensornetStateApplyControlledTensorOperator(<const Handle>handle, <State>tensor_network_state, num_control_modes, <const int32_t*>(_state_control_modes_.data()), <const int64_t*>(_state_control_values_.data()), num_target_modes, <const int32_t*>(_state_target_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
-    check_status(status)
+        __status__ = cutensornetStateApplyControlledTensorOperator(<const Handle>handle, <State>tensor_network_state, num_control_modes, <const int32_t*>(_state_control_modes_.data()), <const int64_t*>(_state_control_values_.data()), num_target_modes, <const int32_t*>(_state_target_modes_.data()), <void*>tensor_data, <const int64_t*>(_tensor_mode_strides_.data()), <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &tensor_id)
+    check_status(__status__)
     return tensor_id
 
 
@@ -2820,8 +2822,8 @@ cpdef state_update_tensor_operator(intptr_t handle, intptr_t tensor_network_stat
     .. seealso:: `cutensornetStateUpdateTensorOperator`
     """
     with nogil:
-        status = cutensornetStateUpdateTensorOperator(<const Handle>handle, <State>tensor_network_state, tensor_id, <void*>tensor_data, unitary)
-    check_status(status)
+        __status__ = cutensornetStateUpdateTensorOperator(<const Handle>handle, <State>tensor_network_state, tensor_id, <void*>tensor_data, unitary)
+    check_status(__status__)
 
 
 cpdef int64_t state_apply_network_operator(intptr_t handle, intptr_t tensor_network_state, intptr_t tensor_network_operator, int32_t immutable, int32_t adjoint, int32_t unitary) except? -1:
@@ -2842,8 +2844,8 @@ cpdef int64_t state_apply_network_operator(intptr_t handle, intptr_t tensor_netw
     """
     cdef int64_t operator_id
     with nogil:
-        status = cutensornetStateApplyNetworkOperator(<const Handle>handle, <State>tensor_network_state, <const NetworkOperator>tensor_network_operator, <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &operator_id)
-    check_status(status)
+        __status__ = cutensornetStateApplyNetworkOperator(<const Handle>handle, <State>tensor_network_state, <const NetworkOperator>tensor_network_operator, <const int32_t>immutable, <const int32_t>adjoint, <const int32_t>unitary, &operator_id)
+    check_status(__status__)
     return operator_id
 
 
@@ -2883,8 +2885,8 @@ cpdef state_initialize_mps(intptr_t handle, intptr_t tensor_network_state, int b
     cdef nullable_unique_ptr[ vector[void*] ] _state_tensors_in_
     get_resource_ptrs[void](_state_tensors_in_, state_tensors_in, <void*>NULL)
     with nogil:
-        status = cutensornetStateInitializeMPS(<const Handle>handle, <State>tensor_network_state, <_BoundaryCondition>boundary_condition, <const int64_t* const*>(_extents_in_.ptrs.data()), <const int64_t* const*>(_strides_in_.ptrs.data()), <void**>(_state_tensors_in_.data()))
-    check_status(status)
+        __status__ = cutensornetStateInitializeMPS(<const Handle>handle, <State>tensor_network_state, <_BoundaryCondition>boundary_condition, <const int64_t* const*>(_extents_in_.ptrs.data()), <const int64_t* const*>(_strides_in_.ptrs.data()), <void**>(_state_tensors_in_.data()))
+    check_status(__status__)
 
 
 cpdef state_get_info(intptr_t handle, intptr_t tensor_network_state, int attribute, intptr_t attribute_value, size_t attribute_size):
@@ -2903,8 +2905,8 @@ cpdef state_get_info(intptr_t handle, intptr_t tensor_network_state, int attribu
     .. seealso:: `cutensornetStateGetInfo`
     """
     with nogil:
-        status = cutensornetStateGetInfo(<const Handle>handle, <const State>tensor_network_state, <_StateAttribute>attribute, <void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetStateGetInfo(<const Handle>handle, <const State>tensor_network_state, <_StateAttribute>attribute, <void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef int64_t network_operator_append_mpo(intptr_t handle, intptr_t tensor_network_operator, complex coefficient, int32_t num_state_modes, state_modes, tensor_mode_extents, tensor_mode_strides, tensor_data, int boundary_condition) except? -1:
@@ -2957,8 +2959,8 @@ cpdef int64_t network_operator_append_mpo(intptr_t handle, intptr_t tensor_netwo
     get_resource_ptrs[void](_tensor_data_, tensor_data, <void*>NULL)
     cdef int64_t component_id
     with nogil:
-        status = cutensornetNetworkOperatorAppendMPO(<const Handle>handle, <NetworkOperator>tensor_network_operator, <cuDoubleComplex>_coefficient_, num_state_modes, <const int32_t*>(_state_modes_.data()), <const int64_t**>(_tensor_mode_extents_.ptrs.data()), <const int64_t**>(_tensor_mode_strides_.ptrs.data()), <const void**>(_tensor_data_.data()), <_BoundaryCondition>boundary_condition, &component_id)
-    check_status(status)
+        __status__ = cutensornetNetworkOperatorAppendMPO(<const Handle>handle, <NetworkOperator>tensor_network_operator, <cuDoubleComplex>_coefficient_, num_state_modes, <const int32_t*>(_state_modes_.data()), <const int64_t**>(_tensor_mode_extents_.ptrs.data()), <const int64_t**>(_tensor_mode_strides_.ptrs.data()), <const void**>(_tensor_data_.data()), <_BoundaryCondition>boundary_condition, &component_id)
+    check_status(__status__)
     return component_id
 
 
@@ -2978,8 +2980,8 @@ cpdef accessor_get_info(intptr_t handle, intptr_t tensor_network_accessor, int a
     .. seealso:: `cutensornetAccessorGetInfo`
     """
     with nogil:
-        status = cutensornetAccessorGetInfo(<const Handle>handle, <const StateAccessor>tensor_network_accessor, <_AccessorAttribute>attribute, <void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetAccessorGetInfo(<const Handle>handle, <const StateAccessor>tensor_network_accessor, <_AccessorAttribute>attribute, <void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef expectation_get_info(intptr_t handle, intptr_t tensor_network_expectation, int attribute, intptr_t attribute_value, size_t attribute_size):
@@ -2998,8 +3000,8 @@ cpdef expectation_get_info(intptr_t handle, intptr_t tensor_network_expectation,
     .. seealso:: `cutensornetExpectationGetInfo`
     """
     with nogil:
-        status = cutensornetExpectationGetInfo(<const Handle>handle, <const StateExpectation>tensor_network_expectation, <_ExpectationAttribute>attribute, <void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetExpectationGetInfo(<const Handle>handle, <const StateExpectation>tensor_network_expectation, <_ExpectationAttribute>attribute, <void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef marginal_get_info(intptr_t handle, intptr_t tensor_network_marginal, int attribute, intptr_t attribute_value, size_t attribute_size):
@@ -3018,8 +3020,8 @@ cpdef marginal_get_info(intptr_t handle, intptr_t tensor_network_marginal, int a
     .. seealso:: `cutensornetMarginalGetInfo`
     """
     with nogil:
-        status = cutensornetMarginalGetInfo(<const Handle>handle, <const StateMarginal>tensor_network_marginal, <_MarginalAttribute>attribute, <void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetMarginalGetInfo(<const Handle>handle, <const StateMarginal>tensor_network_marginal, <_MarginalAttribute>attribute, <void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef sampler_get_info(intptr_t handle, intptr_t tensor_network_sampler, int attribute, intptr_t attribute_value, size_t attribute_size):
@@ -3038,8 +3040,8 @@ cpdef sampler_get_info(intptr_t handle, intptr_t tensor_network_sampler, int att
     .. seealso:: `cutensornetSamplerGetInfo`
     """
     with nogil:
-        status = cutensornetSamplerGetInfo(<const Handle>handle, <const StateSampler>tensor_network_sampler, <_SamplerAttribute>attribute, <void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetSamplerGetInfo(<const Handle>handle, <const StateSampler>tensor_network_sampler, <_SamplerAttribute>attribute, <void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef int64_t state_apply_unitary_channel(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, int32_t num_tensors, tensor_data, tensor_mode_strides, probabilities) except? -1:
@@ -3086,8 +3088,8 @@ cpdef int64_t state_apply_unitary_channel(intptr_t handle, intptr_t tensor_netwo
     get_resource_ptr[double](_probabilities_, probabilities, <double*>NULL)
     cdef int64_t channel_id
     with nogil:
-        status = cutensornetStateApplyUnitaryChannel(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), num_tensors, <void**>(_tensor_data_.data()), <const int64_t*>(_tensor_mode_strides_.data()), <const double*>(_probabilities_.data()), &channel_id)
-    check_status(status)
+        __status__ = cutensornetStateApplyUnitaryChannel(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), num_tensors, <void**>(_tensor_data_.data()), <const int64_t*>(_tensor_mode_strides_.data()), <const double*>(_probabilities_.data()), &channel_id)
+    check_status(__status__)
     return channel_id
 
 
@@ -3101,8 +3103,8 @@ cpdef state_capture_mps(intptr_t handle, intptr_t tensor_network_state):
     .. seealso:: `cutensornetStateCaptureMPS`
     """
     with nogil:
-        status = cutensornetStateCaptureMPS(<const Handle>handle, <State>tensor_network_state)
-    check_status(status)
+        __status__ = cutensornetStateCaptureMPS(<const Handle>handle, <State>tensor_network_state)
+    check_status(__status__)
 
 
 cpdef int64_t state_apply_general_channel(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, int32_t num_tensors, tensor_data, tensor_mode_strides) except? -1:
@@ -3142,8 +3144,8 @@ cpdef int64_t state_apply_general_channel(intptr_t handle, intptr_t tensor_netwo
     get_resource_ptr[int64_t](_tensor_mode_strides_, tensor_mode_strides, <int64_t*>NULL)
     cdef int64_t channel_id
     with nogil:
-        status = cutensornetStateApplyGeneralChannel(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), num_tensors, <void**>(_tensor_data_.data()), <const int64_t*>(_tensor_mode_strides_.data()), &channel_id)
-    check_status(status)
+        __status__ = cutensornetStateApplyGeneralChannel(<const Handle>handle, <State>tensor_network_state, num_state_modes, <const int32_t*>(_state_modes_.data()), num_tensors, <void**>(_tensor_data_.data()), <const int64_t*>(_tensor_mode_strides_.data()), &channel_id)
+    check_status(__status__)
     return channel_id
 
 
@@ -3207,8 +3209,8 @@ cpdef intptr_t create_state_projection_mps(intptr_t handle, int32_t num_states, 
     get_resource_ptrs[void](_dual_tensors_data_out_, dual_tensors_data_out, <void*>NULL)
     cdef StateProjectionMPS tensor_network_projection
     with nogil:
-        status = cutensornetCreateStateProjectionMPS(<const Handle>handle, num_states, <const State*>(_tensor_network_states_.data()), <const cuDoubleComplex*>coeffs, symmetric, num_envs, <const cutensornetMPSEnvBounds_t*>spec_envs, <_BoundaryCondition>boundary_condition, num_tensors, <const int32_t*>(_qudits_per_tensor_.data()), <const int64_t**>(_extents_out_.ptrs.data()), <const int64_t**>(_strides_out_.ptrs.data()), <void**>(_dual_tensors_data_out_.data()), <const cutensornetMPSEnvBounds_t*>ortho_spec, &tensor_network_projection)
-    check_status(status)
+        __status__ = cutensornetCreateStateProjectionMPS(<const Handle>handle, num_states, <const State*>(_tensor_network_states_.data()), <const cuDoubleComplex*>coeffs, symmetric, num_envs, <const cutensornetMPSEnvBounds_t*>spec_envs, <_BoundaryCondition>boundary_condition, num_tensors, <const int32_t*>(_qudits_per_tensor_.data()), <const int64_t**>(_extents_out_.ptrs.data()), <const int64_t**>(_strides_out_.ptrs.data()), <void**>(_dual_tensors_data_out_.data()), <const cutensornetMPSEnvBounds_t*>ortho_spec, &tensor_network_projection)
+    check_status(__status__)
     return <intptr_t>tensor_network_projection
 
 
@@ -3252,8 +3254,8 @@ cpdef state_projection_mps_configure(intptr_t handle, intptr_t tensor_network_pr
     .. seealso:: `cutensornetStateProjectionMPSConfigure`
     """
     with nogil:
-        status = cutensornetStateProjectionMPSConfigure(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, <_StateProjectionMPSAttribute>attribute, <const void*>attribute_value, attribute_size)
-    check_status(status)
+        __status__ = cutensornetStateProjectionMPSConfigure(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, <_StateProjectionMPSAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
 
 
 cpdef state_projection_mps_prepare(intptr_t handle, intptr_t tensor_network_projection, size_t max_workspace_size_device, intptr_t work_desc, intptr_t cuda_stream):
@@ -3269,8 +3271,8 @@ cpdef state_projection_mps_prepare(intptr_t handle, intptr_t tensor_network_proj
     .. seealso:: `cutensornetStateProjectionMPSPrepare`
     """
     with nogil:
-        status = cutensornetStateProjectionMPSPrepare(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetStateProjectionMPSPrepare(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, max_workspace_size_device, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef state_projection_mps_compute_tensor_env(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, strides_in, intptr_t env_tensor_data_in, strides_out, intptr_t env_tensor_data_out, int32_t apply_inv_metric, int32_t re_resolve_channels, intptr_t work_desc, intptr_t cuda_stream):
@@ -3304,8 +3306,8 @@ cpdef state_projection_mps_compute_tensor_env(intptr_t handle, intptr_t tensor_n
     cdef nullable_unique_ptr[ vector[int64_t] ] _strides_out_
     get_resource_ptr[int64_t](_strides_out_, strides_out, <int64_t*>NULL)
     with nogil:
-        status = cutensornetStateProjectionMPSComputeTensorEnv(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, <const cutensornetMPSEnvBounds_t*>env_spec, <const int64_t*>(_strides_in_.data()), <const void*>env_tensor_data_in, <const int64_t*>(_strides_out_.data()), <void*>env_tensor_data_out, apply_inv_metric, re_resolve_channels, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetStateProjectionMPSComputeTensorEnv(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, <const cutensornetMPSEnvBounds_t*>env_spec, <const int64_t*>(_strides_in_.data()), <const void*>env_tensor_data_in, <const int64_t*>(_strides_out_.data()), <void*>env_tensor_data_out, apply_inv_metric, re_resolve_channels, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef state_projection_mps_get_tensor_info(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, intptr_t extents, intptr_t recommended_strides):
@@ -3321,8 +3323,8 @@ cpdef state_projection_mps_get_tensor_info(intptr_t handle, intptr_t tensor_netw
     .. seealso:: `cutensornetStateProjectionMPSGetTensorInfo`
     """
     with nogil:
-        status = cutensornetStateProjectionMPSGetTensorInfo(<const Handle>handle, <const StateProjectionMPS>tensor_network_projection, <const cutensornetMPSEnvBounds_t*>env_spec, <int64_t*>extents, <int64_t*>recommended_strides)
-    check_status(status)
+        __status__ = cutensornetStateProjectionMPSGetTensorInfo(<const Handle>handle, <const StateProjectionMPS>tensor_network_projection, <const cutensornetMPSEnvBounds_t*>env_spec, <int64_t*>extents, <int64_t*>recommended_strides)
+    check_status(__status__)
 
 
 cpdef state_projection_mps_extract_tensor(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream):
@@ -3346,8 +3348,8 @@ cpdef state_projection_mps_extract_tensor(intptr_t handle, intptr_t tensor_netwo
     cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
     get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
     with nogil:
-        status = cutensornetStateProjectionMPSExtractTensor(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, <const cutensornetMPSEnvBounds_t*>env_spec, <const int64_t*>(_strides_.data()), <void*>env_tensor_data, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetStateProjectionMPSExtractTensor(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, <const cutensornetMPSEnvBounds_t*>env_spec, <const int64_t*>(_strides_.data()), <void*>env_tensor_data, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef state_projection_mps_insert_tensor(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, intptr_t ortho_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream):
@@ -3372,8 +3374,8 @@ cpdef state_projection_mps_insert_tensor(intptr_t handle, intptr_t tensor_networ
     cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
     get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
     with nogil:
-        status = cutensornetStateProjectionMPSInsertTensor(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, <const cutensornetMPSEnvBounds_t*>env_spec, <const cutensornetMPSEnvBounds_t*>ortho_spec, <const int64_t*>(_strides_.data()), <const void*>env_tensor_data, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
-    check_status(status)
+        __status__ = cutensornetStateProjectionMPSInsertTensor(<const Handle>handle, <StateProjectionMPS>tensor_network_projection, <const cutensornetMPSEnvBounds_t*>env_spec, <const cutensornetMPSEnvBounds_t*>ortho_spec, <const int64_t*>(_strides_.data()), <const void*>env_tensor_data, <WorkspaceDescriptor>work_desc, <Stream>cuda_stream)
+    check_status(__status__)
 
 
 cpdef destroy_state_projection_mps(intptr_t tensor_network_projection):
@@ -3385,8 +3387,8 @@ cpdef destroy_state_projection_mps(intptr_t tensor_network_projection):
     .. seealso:: `cutensornetDestroyStateProjectionMPS`
     """
     with nogil:
-        status = cutensornetDestroyStateProjectionMPS(<StateProjectionMPS>tensor_network_projection)
-    check_status(status)
+        __status__ = cutensornetDestroyStateProjectionMPS(<StateProjectionMPS>tensor_network_projection)
+    check_status(__status__)
 
 
 cpdef intptr_t create_network(intptr_t handle) except? 0:
@@ -3402,8 +3404,8 @@ cpdef intptr_t create_network(intptr_t handle) except? 0:
     """
     cdef NetworkDescriptor network_desc
     with nogil:
-        status = cutensornetCreateNetwork(<const Handle>handle, &network_desc)
-    check_status(status)
+        __status__ = cutensornetCreateNetwork(<const Handle>handle, &network_desc)
+    check_status(__status__)
     return <intptr_t>network_desc
 
 
@@ -3416,8 +3418,8 @@ cpdef destroy_network(intptr_t network_desc):
     .. seealso:: `cutensornetDestroyNetwork`
     """
     with nogil:
-        status = cutensornetDestroyNetwork(<NetworkDescriptor>network_desc)
-    check_status(status)
+        __status__ = cutensornetDestroyNetwork(<NetworkDescriptor>network_desc)
+    check_status(__status__)
 
 
 cpdef int64_t network_append_tensor(intptr_t handle, intptr_t network_desc, int32_t num_modes, extents, mode_labels, intptr_t qualifiers, int data_type) except? -1:
@@ -3451,8 +3453,8 @@ cpdef int64_t network_append_tensor(intptr_t handle, intptr_t network_desc, int3
     get_resource_ptr[int32_t](_mode_labels_, mode_labels, <int32_t*>NULL)
     cdef int64_t tensor_id
     with nogil:
-        status = cutensornetNetworkAppendTensor(<const Handle>handle, <NetworkDescriptor>network_desc, num_modes, <const int64_t*>(_extents_.data()), <const int32_t*>(_mode_labels_.data()), <const cutensornetTensorQualifiers_t* const>qualifiers, <DataType>data_type, &tensor_id)
-    check_status(status)
+        __status__ = cutensornetNetworkAppendTensor(<const Handle>handle, <NetworkDescriptor>network_desc, num_modes, <const int64_t*>(_extents_.data()), <const int32_t*>(_mode_labels_.data()), <const cutensornetTensorQualifiers_t* const>qualifiers, <DataType>data_type, &tensor_id)
+    check_status(__status__)
     return tensor_id
 
 
@@ -3475,8 +3477,8 @@ cpdef network_set_output_tensor(intptr_t handle, intptr_t network_desc, int32_t 
     cdef nullable_unique_ptr[ vector[int32_t] ] _mode_labels_
     get_resource_ptr[int32_t](_mode_labels_, mode_labels, <int32_t*>NULL)
     with nogil:
-        status = cutensornetNetworkSetOutputTensor(<const Handle>handle, <NetworkDescriptor>network_desc, num_modes, <const int32_t*>(_mode_labels_.data()), <DataType>data_type)
-    check_status(status)
+        __status__ = cutensornetNetworkSetOutputTensor(<const Handle>handle, <NetworkDescriptor>network_desc, num_modes, <const int32_t*>(_mode_labels_.data()), <DataType>data_type)
+    check_status(__status__)
 
 
 cpdef network_set_optimizer_info(intptr_t handle, intptr_t network_desc, intptr_t optimizer_info):
@@ -3490,8 +3492,8 @@ cpdef network_set_optimizer_info(intptr_t handle, intptr_t network_desc, intptr_
     .. seealso:: `cutensornetNetworkSetOptimizerInfo`
     """
     with nogil:
-        status = cutensornetNetworkSetOptimizerInfo(<const Handle>handle, <NetworkDescriptor>network_desc, <const ContractionOptimizerInfo>optimizer_info)
-    check_status(status)
+        __status__ = cutensornetNetworkSetOptimizerInfo(<const Handle>handle, <NetworkDescriptor>network_desc, <const ContractionOptimizerInfo>optimizer_info)
+    check_status(__status__)
 
 
 cpdef network_prepare_contraction(intptr_t handle, intptr_t network_desc, intptr_t work_desc):
@@ -3505,8 +3507,8 @@ cpdef network_prepare_contraction(intptr_t handle, intptr_t network_desc, intptr
     .. seealso:: `cutensornetNetworkPrepareContraction`
     """
     with nogil:
-        status = cutensornetNetworkPrepareContraction(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc)
-    check_status(status)
+        __status__ = cutensornetNetworkPrepareContraction(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc)
+    check_status(__status__)
 
 
 cpdef network_autotune_contraction(intptr_t handle, intptr_t network_desc, intptr_t work_desc, intptr_t pref, intptr_t stream):
@@ -3522,8 +3524,8 @@ cpdef network_autotune_contraction(intptr_t handle, intptr_t network_desc, intpt
     .. seealso:: `cutensornetNetworkAutotuneContraction`
     """
     with nogil:
-        status = cutensornetNetworkAutotuneContraction(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc, <const NetworkAutotunePreference>pref, <Stream>stream)
-    check_status(status)
+        __status__ = cutensornetNetworkAutotuneContraction(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc, <const NetworkAutotunePreference>pref, <Stream>stream)
+    check_status(__status__)
 
 
 cpdef intptr_t create_network_autotune_preference(intptr_t handle) except? 0:
@@ -3539,8 +3541,8 @@ cpdef intptr_t create_network_autotune_preference(intptr_t handle) except? 0:
     """
     cdef NetworkAutotunePreference autotune_preference
     with nogil:
-        status = cutensornetCreateNetworkAutotunePreference(<const Handle>handle, &autotune_preference)
-    check_status(status)
+        __status__ = cutensornetCreateNetworkAutotunePreference(<const Handle>handle, &autotune_preference)
+    check_status(__status__)
     return <intptr_t>autotune_preference
 
 
@@ -3584,8 +3586,8 @@ cpdef network_autotune_preference_get_attribute(intptr_t handle, intptr_t autotu
     .. seealso:: `cutensornetNetworkAutotunePreferenceGetAttribute`
     """
     with nogil:
-        status = cutensornetNetworkAutotunePreferenceGetAttribute(<const Handle>handle, <const NetworkAutotunePreference>autotune_preference, <_NetworkAutotunePreferenceAttribute>attr, <void*>buffer, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetNetworkAutotunePreferenceGetAttribute(<const Handle>handle, <const NetworkAutotunePreference>autotune_preference, <_NetworkAutotunePreferenceAttribute>attr, <void*>buffer, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef network_autotune_preference_set_attribute(intptr_t handle, intptr_t autotune_preference, int attr, intptr_t buf, size_t size_in_bytes):
@@ -3604,8 +3606,8 @@ cpdef network_autotune_preference_set_attribute(intptr_t handle, intptr_t autotu
     .. seealso:: `cutensornetNetworkAutotunePreferenceSetAttribute`
     """
     with nogil:
-        status = cutensornetNetworkAutotunePreferenceSetAttribute(<const Handle>handle, <NetworkAutotunePreference>autotune_preference, <_NetworkAutotunePreferenceAttribute>attr, <const void*>buf, size_in_bytes)
-    check_status(status)
+        __status__ = cutensornetNetworkAutotunePreferenceSetAttribute(<const Handle>handle, <NetworkAutotunePreference>autotune_preference, <_NetworkAutotunePreferenceAttribute>attr, <const void*>buf, size_in_bytes)
+    check_status(__status__)
 
 
 cpdef destroy_network_autotune_preference(intptr_t autotune_preference):
@@ -3617,8 +3619,8 @@ cpdef destroy_network_autotune_preference(intptr_t autotune_preference):
     .. seealso:: `cutensornetDestroyNetworkAutotunePreference`
     """
     with nogil:
-        status = cutensornetDestroyNetworkAutotunePreference(<NetworkAutotunePreference>autotune_preference)
-    check_status(status)
+        __status__ = cutensornetDestroyNetworkAutotunePreference(<NetworkAutotunePreference>autotune_preference)
+    check_status(__status__)
 
 
 cpdef network_set_input_tensor_memory(intptr_t handle, intptr_t network_desc, int64_t tensor_id, intptr_t buffer, strides):
@@ -3640,8 +3642,8 @@ cpdef network_set_input_tensor_memory(intptr_t handle, intptr_t network_desc, in
     cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
     get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
     with nogil:
-        status = cutensornetNetworkSetInputTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, tensor_id, <const void* const>buffer, <const int64_t*>(_strides_.data()))
-    check_status(status)
+        __status__ = cutensornetNetworkSetInputTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, tensor_id, <const void* const>buffer, <const int64_t*>(_strides_.data()))
+    check_status(__status__)
 
 
 cpdef network_set_output_tensor_memory(intptr_t handle, intptr_t network_desc, intptr_t buffer, strides):
@@ -3662,8 +3664,8 @@ cpdef network_set_output_tensor_memory(intptr_t handle, intptr_t network_desc, i
     cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
     get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
     with nogil:
-        status = cutensornetNetworkSetOutputTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, <void* const>buffer, <const int64_t*>(_strides_.data()))
-    check_status(status)
+        __status__ = cutensornetNetworkSetOutputTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, <void* const>buffer, <const int64_t*>(_strides_.data()))
+    check_status(__status__)
 
 
 cpdef network_set_gradient_tensor_memory(intptr_t handle, intptr_t network_desc, int64_t corresponding_tensor_id, intptr_t buffer, strides):
@@ -3685,8 +3687,8 @@ cpdef network_set_gradient_tensor_memory(intptr_t handle, intptr_t network_desc,
     cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
     get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
     with nogil:
-        status = cutensornetNetworkSetGradientTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, corresponding_tensor_id, <void* const>buffer, <const int64_t*>(_strides_.data()))
-    check_status(status)
+        __status__ = cutensornetNetworkSetGradientTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, corresponding_tensor_id, <void* const>buffer, <const int64_t*>(_strides_.data()))
+    check_status(__status__)
 
 
 cpdef network_set_adjoint_tensor_memory(intptr_t handle, intptr_t network_desc, intptr_t buffer, strides):
@@ -3707,8 +3709,8 @@ cpdef network_set_adjoint_tensor_memory(intptr_t handle, intptr_t network_desc, 
     cdef nullable_unique_ptr[ vector[int64_t] ] _strides_
     get_resource_ptr[int64_t](_strides_, strides, <int64_t*>NULL)
     with nogil:
-        status = cutensornetNetworkSetAdjointTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, <const void* const>buffer, <const int64_t*>(_strides_.data()))
-    check_status(status)
+        __status__ = cutensornetNetworkSetAdjointTensorMemory(<const Handle>handle, <NetworkDescriptor>network_desc, <const void* const>buffer, <const int64_t*>(_strides_.data()))
+    check_status(__status__)
 
 
 cpdef network_contract(intptr_t handle, intptr_t network_desc, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream):
@@ -3725,8 +3727,8 @@ cpdef network_contract(intptr_t handle, intptr_t network_desc, int32_t accumulat
     .. seealso:: `cutensornetNetworkContract`
     """
     with nogil:
-        status = cutensornetNetworkContract(<const Handle>handle, <NetworkDescriptor>network_desc, accumulate_output, <const WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
-    check_status(status)
+        __status__ = cutensornetNetworkContract(<const Handle>handle, <NetworkDescriptor>network_desc, accumulate_output, <const WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
+    check_status(__status__)
 
 
 cpdef network_prepare_gradients_backward(intptr_t handle, intptr_t network_desc, intptr_t work_desc):
@@ -3740,8 +3742,8 @@ cpdef network_prepare_gradients_backward(intptr_t handle, intptr_t network_desc,
     .. seealso:: `cutensornetNetworkPrepareGradientsBackward`
     """
     with nogil:
-        status = cutensornetNetworkPrepareGradientsBackward(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc)
-    check_status(status)
+        __status__ = cutensornetNetworkPrepareGradientsBackward(<const Handle>handle, <NetworkDescriptor>network_desc, <const WorkspaceDescriptor>work_desc)
+    check_status(__status__)
 
 
 cpdef network_compute_gradients_backward(intptr_t handle, intptr_t network_desc, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream):
@@ -3758,8 +3760,8 @@ cpdef network_compute_gradients_backward(intptr_t handle, intptr_t network_desc,
     .. seealso:: `cutensornetNetworkComputeGradientsBackward`
     """
     with nogil:
-        status = cutensornetNetworkComputeGradientsBackward(<const Handle>handle, <NetworkDescriptor>network_desc, accumulate_output, <const WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
-    check_status(status)
+        __status__ = cutensornetNetworkComputeGradientsBackward(<const Handle>handle, <NetworkDescriptor>network_desc, accumulate_output, <const WorkspaceDescriptor>work_desc, <const SliceGroup>slice_group, <Stream>stream)
+    check_status(__status__)
 
 
 # for backward compat

@@ -23,7 +23,7 @@ int main(void) {
     const int basisBits[]  = {2};
     const int nMatrices = 2;
 
-    cuDoubleComplex expectationValue[4];
+    cuDoubleComplex expectationValue[] = {{0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}};
     cuDoubleComplex expectationValueResult[] = {{0.48, 0.0}, {-0.10, 0.0}, {0.46, 0.0}, {-0.16, 0.0}};
 
     // 2 state vectors are allocated contiguously in single memory chunk.
@@ -70,6 +70,9 @@ int main(void) {
                   CUSTATEVEC_MATRIX_LAYOUT_ROW, nMatrices, basisBits, nBasisBits,
                   CUSTATEVEC_COMPUTE_64F, extraWorkspace,
                   extraWorkspaceSizeInBytes) );
+
+    // ensure that the expectation values are ready
+    HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
 
     // destroy handle
     HANDLE_ERROR( custatevecDestroy(handle) );

@@ -20,7 +20,7 @@ int main(void) {
 
     const int basisBits[] = {1};
 
-    cuDoubleComplex expectationValue;
+    cuDoubleComplex expectationValue = {0.0, 0.0};
     cuDoubleComplex expectationValueResult = {4.1, 0.0};
 
     cuDoubleComplex h_sv[]        = {{ 0.0, 0.0}, { 0.0, 0.1}, { 0.1, 0.1}, { 0.1, 0.2}, 
@@ -57,6 +57,9 @@ int main(void) {
                   handle, d_sv, CUDA_C_64F, nIndexBits, &expectationValue, CUDA_C_64F, nullptr,
                   matrix, CUDA_C_64F, CUSTATEVEC_MATRIX_LAYOUT_ROW, basisBits, nBasisBits,
                   CUSTATEVEC_COMPUTE_64F, extraWorkspace, extraWorkspaceSizeInBytes) );
+
+    // ensure that the expectation value is ready
+    HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
 
     // destroy handle
     HANDLE_ERROR( custatevecDestroy(handle) );

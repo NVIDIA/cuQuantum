@@ -5,9 +5,13 @@
 from cuquantum.bindings import cudensitymat
 from cuquantum.bindings import custatevec
 from cuquantum.bindings import cutensornet
+from cuquantum.bindings import cupauliprop
+from cuquantum.bindings import custabilizer
 
 __all__ = [
     "cudensitymat",
     "custatevec",
     "cutensornet",
+    "cupauliprop",
+    "custabilizer",
 ]

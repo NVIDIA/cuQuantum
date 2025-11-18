@@ -11,20 +11,21 @@ import pytest
 from cuquantum.densitymat import WorkStream, DensePureState, DenseMixedState
 from nvmath.internal.utils import device_ctx
 
-def get_state(ctx, hilbert_space_dims, batch_size, package, dtype, init="random", mixed=False):
-    ctor_args = (ctx, hilbert_space_dims, batch_size, dtype)
-    state = DenseMixedState(*ctor_args) if mixed else DensePureState(*ctor_args)
-    shape, offsets = state.local_info
+def get_state(ctx, hilbert_space_dims, batch_size, package, dtype, init="random", mixed=False, allocator=None):
+    with cp.cuda.using_allocator(allocator):
+        ctor_args = (ctx, hilbert_space_dims, batch_size, dtype)
+        state = DenseMixedState(*ctor_args) if mixed else DensePureState(*ctor_args)
+        shape, offsets = state.local_info
 
-    _state = package.empty(shape, dtype=dtype, order="F")
-    if init == "random":
-        _state[:] = package.random.rand(*_state.shape) - 0.5
-        if "complex" in dtype:
-            _state[:] += 1j * (package.random.rand(*_state.shape) - 0.5)
-    elif init == "zeros":
-        _state[:] = 0.0
-    state.attach_storage(_state)
-    return state
+        _state = package.empty(shape, dtype=dtype, order="F")
+        if init == "random":
+            _state[:] = package.random.rand(*_state.shape) - 0.5
+            if "complex" in dtype:
+                _state[:] += 1j * (package.random.rand(*_state.shape) - 0.5)
+        elif init == "zeros":
+            _state[:] = 0.0
+        state.attach_storage(_state)
+        return state
 
 
 @pytest.fixture
@@ -35,12 +36,12 @@ def work_stream():
     return WorkStream()
 
 
-@pytest.fixture(params=list(product([(2,), (2, 3)], [cp], ["random"], [True, False])))
+@pytest.fixture(params=list(product([(2,), (2, 3)], [cp], ["random"], [True, False], [None, cp.cuda.memory.malloc_managed])))
 def state(request, work_stream):
-    hilbert_space_dims, package, init, mixed = request.param
+    hilbert_space_dims, package, init, mixed, alloc = request.param
 
     def _state(batch_size, dtype):
-        return get_state(work_stream, hilbert_space_dims, batch_size, package, dtype, init, mixed)
+        return get_state(work_stream, hilbert_space_dims, batch_size, package, dtype, init, mixed, alloc)
 
     return _state
 

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 25.11.0. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -14,6 +14,8 @@ from .._utils import FunctionNotFoundError, NotSupportedError
 ###############################################################################
 # Extern
 ###############################################################################
+
+# You must 'from .utils import NotSupportedError' before using this template
 
 cdef extern from "<dlfcn.h>" nogil:
     void* dlopen(const char*, int)
@@ -28,6 +30,25 @@ cdef extern from "<dlfcn.h>" nogil:
         RTLD_LOCAL
 
     const void* RTLD_DEFAULT 'RTLD_DEFAULT'
+
+cdef int get_cuda_version():
+    cdef void* handle = NULL
+    cdef int err, driver_ver = 0
+
+    # Load driver to check version
+    handle = dlopen('libcuda.so.1', RTLD_NOW | RTLD_GLOBAL)
+    if handle == NULL:
+        err_msg = dlerror()
+        raise NotSupportedError(f'CUDA driver is not found ({err_msg.decode()})')
+    cuDriverGetVersion = dlsym(handle, "cuDriverGetVersion")
+    if cuDriverGetVersion == NULL:
+        raise RuntimeError('Did not find cuDriverGetVersion symbol in libcuda.so.1')
+    err = (<int (*)(int*) noexcept nogil>cuDriverGetVersion)(&driver_ver)
+    if err != 0:
+        raise RuntimeError(f'cuDriverGetVersion returned error code {err}')
+
+    return driver_ver
+
 
 
 ###############################################################################

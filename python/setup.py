@@ -36,9 +36,11 @@ install_requires = [
     'numpy>=1.21, <3.0',  # ">=1.21,<3"
     'nvmath-python==0.6.0', # strict version before nvmath.internal module is stable
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}>=1.10.1, <2',  # ">=1.10.1,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}>=2.9.1, <3',  # ">=2.9.1,<3"
-    f'cudensitymat-cu{utils.cuda_major_ver}>=0.3.1, <0.4', # ">=0.3.1,<0.4.0"
+    f'custatevec-cu{utils.cuda_major_ver}~=1.11',  # ">=1.11.0,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}~=2.10',  # ">=2.10.0,<3"
+    f'cudensitymat-cu{utils.cuda_major_ver}>=0.3.2, <0.4', # ">=0.3.2,<0.4.0"
+    f'cupauliprop-cu{utils.cuda_major_ver}>=0.1.0, <0.2', # ">=0.1.0,<0.2.0"
+    f'custabilizer-cu{utils.cuda_major_ver}>=0.1.0, <0.2', # ">=0.1.0,<0.2.0"
 ]
 if utils.cuda_major_ver == '12':
     install_requires.append('cupy-cuda12x>=13.0')  # no ambiguity
@@ -125,6 +127,36 @@ ext_modules = [
     Extension(
         "cuquantum.bindings._internal.cudensitymat",
         sources=["cuquantum/bindings/_internal/cudensitymat.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings.cupauliprop",
+        sources=["cuquantum/bindings/cupauliprop.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings.cycupauliprop",
+        sources=["cuquantum/bindings/cycupauliprop.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings._internal.cupauliprop",
+        sources=["cuquantum/bindings/_internal/cupauliprop.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings.custabilizer",
+        sources=["cuquantum/bindings/custabilizer.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings.cycustabilizer",
+        sources=["cuquantum/bindings/cycustabilizer.pyx"],
+        language="c++",
+    ),
+    Extension(
+        "cuquantum.bindings._internal.custabilizer",
+        sources=["cuquantum/bindings/_internal/custabilizer.pyx"],
         language="c++",
     ),
     Extension(

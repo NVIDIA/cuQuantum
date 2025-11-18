@@ -155,7 +155,7 @@ generic_states_L0 = [
 
 generic_states_L1 = [
     create_state_factory(5, "float32", "SDDS", next(rng_iterator)),
-    create_state_factory((2, 3, 4, 3, 2), "complex64", "SDDS", next(rng_iterator)),
+    create_state_factory((2, 3, 4, 3, 2), "complex64", "SDDDS", next(rng_iterator), adjacent_double_layer=False),
     create_state_factory(5, "complex64", "SDMS", next(rng_iterator), adjacent_double_layer=False, mpo_bond_dim=3),
     create_state_factory(4, "float64", "SDMDS", next(rng_iterator), mpo_bond_dim=2, mpo_num_sites=3, mpo_geometry="random-ordered"),
     create_state_factory((2, 5, 3, 2), "complex128", "SDMDS", next(rng_iterator), mpo_bond_dim=2, mpo_geometry="random"),

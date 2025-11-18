@@ -114,7 +114,7 @@ def create_output_tensor(cls, output, size_dict, device_id, stream_holder, data_
     extents = tuple(size_dict[m] for m in output)
 
     output = create_empty_tensor(cls, extents, data_type, device_id, stream_holder, False)
-    output_event = stream_holder.obj.record()
+    output_event = stream_holder.obj.record() if stream_holder is not None else None
 
     strides = output.strides
     return output, output_event, modes, extents, strides

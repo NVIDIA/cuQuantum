@@ -26,6 +26,12 @@ def get_lib_path(name):
     elif "cudensitymat" in name:
         from cuquantum import bindings
         bindings._internal.cudensitymat._inspect_function_pointers()
+    elif "cupauliprop" in name:
+        from cuquantum import bindings
+        bindings._internal.cupauliprop._inspect_function_pointers()
+    elif "custabilizer" in name:
+        from cuquantum import bindings
+        bindings._internal.custabilizer._inspect_function_pointers()
 
     try:
         with open('/proc/self/maps') as f:
@@ -67,7 +73,7 @@ def _get_cuquantum_lib(lib):
 
 def _get_cuquantum_libs():
     paths = set()
-    for lib in ('custatevec', 'cutensornet', 'cutensor', 'cudensitymat'):
+    for lib in ('custatevec', 'cutensornet', 'cutensor', 'cudensitymat', 'custabilizer', 'cupauliprop'):
         path = _get_cuquantum_lib(lib)
         if path is not None:
             paths.add(path)
@@ -106,7 +112,7 @@ if __name__ == '__main__':
     parser.add_argument('--libs', action='store_true',
                         help='get cuQuantum linker flags')
     parser.add_argument('--target', action='append', default=[],
-                        choices=('custatevec', 'cutensornet', 'cudensitymat'),
+                        choices=('custatevec', 'cutensornet', 'cudensitymat', 'custabilizer', 'cupauliprop'),
                         help='get the linker flag for the target cuQuantum component')
     args = parser.parse_args()
 

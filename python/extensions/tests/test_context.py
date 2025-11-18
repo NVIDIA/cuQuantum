@@ -11,12 +11,11 @@ import pytest
 import jax
 import jax.numpy as jnp
 
+jax.config.update("jax_enable_x64", True)
 
 from cuquantum.bindings import cudensitymat as cudm
 from cuquantum.densitymat.jax import ElementaryOperator, OperatorTerm, Operator
 from cuquantum.densitymat.jax.pysrc.context import CudensitymatContext, OperatorActionContext
-
-jax.config.update("jax_enable_x64", True)
 
 def generate_operator(dims, dtype):
     """

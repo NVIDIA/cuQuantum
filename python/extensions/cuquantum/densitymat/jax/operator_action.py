@@ -19,9 +19,6 @@ from .pysrc.operator_action import (
     OperatorActionBackwardDiffPrimitive
 )
 
-# params are required to be float64 when passed to the cuDensityMat library.
-jax.config.update("jax_enable_x64", True)
-
 logger = logging.getLogger("cudensitymat-jax.operator_action")
 
 
@@ -62,7 +59,9 @@ def operator_action(op: Operator,
     
     # Process input arguments.
     if isinstance(state_in_bufs, jax.Array):
-        state_in_bufs = [state_in_bufs]
+        state_in_bufs = (state_in_bufs,)
+    else:
+        state_in_bufs = tuple(state_in_bufs)
 
     # Check all states are of the same shape.
     state_in_shape = state_in_bufs[0].shape
@@ -71,9 +70,9 @@ def operator_action(op: Operator,
             raise ValueError("All input state buffers must have the same shape.")
 
     # Determine the state purity.
-    if state_in_shape == op.dims:
+    if state_in_shape == op.dims:  # state vector
         purity = cudm.StatePurity.PURE
-    elif state_in_shape == (*op.dims, *op.dims):
+    elif state_in_shape == (*op.dims, *op.dims):  # density matrix
         purity = cudm.StatePurity.MIXED
     else:
         raise ValueError("The dimensions of the input state do not match the dimensions of the operator.")
@@ -108,7 +107,7 @@ def operator_action(op: Operator,
 @jax.custom_vjp
 def _operator_action(op: Operator,
                      t: float,
-                     state_in_bufs: Sequence[jax.Array],
+                     state_in_bufs: Tuple[jax.Array, ...],
                      params: jax.Array
                      ) -> List[jax.Array]:
     """
@@ -121,7 +120,7 @@ def _operator_action(op: Operator,
 
 def _operator_action_fwd(op: Operator,
                          t: float,
-                         state_in_bufs: Sequence[jax.Array],
+                         state_in_bufs: Tuple[jax.Array, ...],
                          params: jax.Array
                          ) -> Tuple[List[jax.Array], tuple]:
     """
@@ -135,6 +134,9 @@ def _operator_action_fwd(op: Operator,
 def _operator_action_bwd(res: tuple, state_out_adj_bufs: jax.Array | Sequence[jax.Array]) -> tuple:
     """
     Backward rule for operator_action.
+
+    Args:
+        state_out_adj_bufs: Data buffers of the output state adjoint.
     """
     logger.info(f"Calling _operator_action_bwd")
 
@@ -147,7 +149,9 @@ def _operator_action_bwd(res: tuple, state_out_adj_bufs: jax.Array | Sequence[ja
 
     # Process input argument.
     if isinstance(state_out_adj_bufs, jax.Array):
-        state_out_adj_bufs = [state_out_adj_bufs]
+        state_out_adj_bufs = (state_out_adj_bufs,)
+    else:
+        state_out_adj_bufs = tuple(state_out_adj_bufs)
 
     if len(state_in_bufs) != len(state_out_adj_bufs):
         raise ValueError("state_in_bufs and state_out_adj_bufs must have the same number of components.")

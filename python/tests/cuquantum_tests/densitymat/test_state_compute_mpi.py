@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from typing import Sequence
 from numbers import Number
+import math
 
 from cuquantum.densitymat import DenseMixedState, DensePureState, WorkStream
 
@@ -24,6 +25,26 @@ ATOLERANCES = dict(zip(dtypes, [np.finfo(np.dtype(_dtype)).eps * 1e2 for _dtype 
 
 NUM_DEVICES = cp.cuda.runtime.getDeviceCount()
 print("num_devices:", NUM_DEVICES)
+
+def skip_if_insufficient_volume(hilbert_space, batch_size, purity):
+    """
+    Skip test if state is too small to be distributed across all MPI processes.
+    """
+    num_processes = MPI.COMM_WORLD.Get_size()
+
+    effective_volume = 1
+    for dim in hilbert_space:
+        effective_volume *= 2 ** math.floor(math.log2(dim))
+    
+    if purity == "MIXED":
+        effective_volume **= 2
+        
+    effective_volume *= 2 ** math.floor(math.log2(batch_size))
+    
+    if effective_volume < num_processes:
+        pytest.skip(
+            f"State is too small to be distributed across {num_processes} processes."
+        )
 
 def get_state(ctx, hilbert_space_dims, batch_size, package, dtype, mixed, init="random"):
     assert package == cp
@@ -116,13 +137,13 @@ class TestStateAPI:
     )
     @pytest.mark.parametrize("purity", ["PURE", "MIXED"])
     def test_state_inplace_scale(self, hilbert_space, package, dtype, batch_size, factors, purity):
+        skip_if_insufficient_volume(hilbert_space, batch_size, purity)
         try:
             device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
             ctx = WorkStream(device_id = device_id)
             # self.ctx._comm = MPI.COMM_WORLD.Dup()
             ctx.set_communicator(comm=MPI.COMM_WORLD, provider="MPI")
             cp.cuda.Device(device_id).use()
-
             psi, _ = get_state(
                 ctx,
                 hilbert_space,
@@ -216,6 +237,7 @@ class TestStateAPI:
     def test_state_inplace_accumulate(
         self, hilbert_space, package, dtype, batch_size, factors, purity
     ):
+        skip_if_insufficient_volume(hilbert_space, batch_size, purity)
         try:
             device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
             ctx = WorkStream(device_id = device_id)
@@ -279,6 +301,7 @@ class TestStateAPI:
     @pytest.mark.parametrize("batch_size", [1, 2])
     @pytest.mark.parametrize("purity", ["PURE", "MIXED"])
     def test_state_inner_product(self, hilbert_space, package, dtype, batch_size, purity):
+        skip_if_insufficient_volume(hilbert_space, batch_size, purity)
         try:
             device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
             ctx = WorkStream(device_id = device_id)
@@ -338,6 +361,7 @@ class TestStateAPI:
     @pytest.mark.parametrize("batch_size", [1, 2])
     @pytest.mark.parametrize("purity", ("PURE", "MIXED"))
     def test_state_norm(self, hilbert_space, package, dtype, batch_size, purity):
+        skip_if_insufficient_volume(hilbert_space, batch_size, purity)
         try:
             device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES
             ctx = WorkStream(device_id = device_id)
@@ -386,6 +410,7 @@ class TestStateAPI:
     @pytest.mark.parametrize("batch_size", [1, 2, 3])
     @pytest.mark.parametrize("purity", ("PURE","MIXED"))
     def test_state_trace(self, hilbert_space, package, dtype, batch_size, purity):
+        skip_if_insufficient_volume(hilbert_space, batch_size, purity)
         #hilbert_space = tuple(hilbert_space[i] + int(purity == "MIXED") for i in range(len(hilbert_space)))
         try:
             device_id = MPI.COMM_WORLD.Get_rank() % NUM_DEVICES

@@ -1,31 +1,7 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.
+ *
  * SPDX-License-Identifier: BSD-3-Clause
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 //
@@ -59,40 +35,7 @@
 #include <numeric>        // std::iota
 #include <cstring>        // strcmp
 #include <cstdarg>        // va_list, va_start, va_end
-
-// Global variable for output control
-static bool output_enabled = true;
-
-// Output function that respects output control
-void output(const char* format, ...)
-{
-    if (!output_enabled)
-        return;
-    va_list args;
-    va_start(args, format);
-    vprintf(format, args);
-    va_end(args);
-}
-
-#define ERRCHK(s)                                                                                  \
-    {                                                                                              \
-        auto status = (s);                                                                         \
-        if (status != CUSTATEVEC_STATUS_SUCCESS)                                                   \
-        {                                                                                          \
-            printf("%s, %s\n", custatevecGetErrorName(status), #s);                                \
-            exit(EXIT_FAILURE); /* Error exit skips resource cleanup for simplicity */             \
-        }                                                                                          \
-    }
-
-#define ERRCHK_CUDA(s)                                                                             \
-    {                                                                                              \
-        auto status = (s);                                                                         \
-        if (status != cudaSuccess)                                                                 \
-        {                                                                                          \
-            printf("%s, %s\n", cudaGetErrorName(status), #s);                                      \
-            exit(EXIT_FAILURE); /* Error exit skips resource cleanup for simplicity */             \
-        }                                                                                          \
-    }
+#include "common.hpp"     // custatevecEx error checking utilities
 
 typedef custatevecExStateVectorDescriptor_t ExStateVector;
 typedef custatevecIndex_t Index_t;
@@ -239,7 +182,7 @@ int main(int argc, char* argv[])
 {
     // Check for quiet mode option
     if (argc >= 2 && strcmp(argv[1], "-q") == 0)
-        output_enabled = false;
+        setOutputEnabled(false);
 
     const int numWires = 4;
     const cudaDataType_t svDataType = CUDA_C_64F;

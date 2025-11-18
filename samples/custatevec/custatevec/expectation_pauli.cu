@@ -28,8 +28,8 @@ int main(void) {
     const int basisBitsXY[] = {1, 2};
     const int* basisBitsArray[] = {basisBitsI, basisBitsXY};
 
-    double expectationValues[nPauliOperatorArrays];
-    double expectationValues_result[] = {1.0, -0.14};
+    double expectationValues[nPauliOperatorArrays] = {0.0, 0.0};
+    double expectationValues_result[nPauliOperatorArrays] = {1.0, -0.14};
     cuDoubleComplex h_sv[]  = {{ 0.0, 0.0}, { 0.0, 0.1}, { 0.1, 0.1}, { 0.1, 0.2},
                                { 0.2, 0.2}, { 0.3, 0.3}, { 0.3, 0.4}, { 0.4, 0.5}};
 
@@ -49,6 +49,9 @@ int main(void) {
     HANDLE_ERROR( custatevecComputeExpectationsOnPauliBasis(
                   handle, d_sv, CUDA_C_64F, nIndexBits, expectationValues,
                   pauliOperatorsArray, nPauliOperatorArrays, basisBitsArray, nBasisBitsArray) );
+
+    // ensure that the expectation values are ready
+    HANDLE_CUDA_ERROR(cudaDeviceSynchronize());
 
     // destroy handle
     HANDLE_ERROR( custatevecDestroy(handle) );

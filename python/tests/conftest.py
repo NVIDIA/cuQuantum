@@ -11,7 +11,7 @@ from collections.abc import Iterable
 import pytest
 
 
-VALID_TEST_MARKERS = {"cudensitymat", "custatevec", "cutensornet", "utility", "cudensitymat-jax"}
+VALID_TEST_MARKERS = {"cudensitymat", "custatevec", "cutensornet", "utility", "custabilizer", "cupauliprop"}
 
 def pytest_configure(config):
     config.addinivalue_line(
@@ -21,12 +21,12 @@ def pytest_configure(config):
 def mark_test_items(items):
     for item in items:
         path = str(item.fspath)
-        for lib_name in ('cudensitymat', 'custatevec', 'cutensornet'):
+        for lib_name in ('cudensitymat', 'custatevec', 'cutensornet', 'custabilizer', 'cupauliprop'):
             # bindings tests & sample tests
             if lib_name in path:
                 item.add_marker(getattr(pytest.mark, lib_name))
         else:
-            for module_name in ('densitymat', 'tensornet', 'densitymat-jax'):
+            for module_name in ('densitymat', 'tensornet', 'stabilizer', 'pauliprop'):
                 # tests for pythonic modules
                 if f'cuquantum_tests/{module_name.replace("-", "/")}/' in path:
                     item.add_marker(getattr(pytest.mark, f'cu{module_name}'))
