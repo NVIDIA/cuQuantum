@@ -341,6 +341,27 @@ class TestNetworkStateBasicFunctionality(_BaseTester):
             with NetworkState.from_circuit(circuit, backend=backend, dtype=dtype) as state:
                 pass
             assert "imaginary part" in str(e.value)
+    
+    def test_mps_with_fixed_bond_truncation(self):
+        num_qubits = 6
+        num_double_layers = 2
+
+        config = MPSConfig(max_extent=3)
+        state = NetworkState((2, ) * num_qubits, dtype='float64', config=config)
+
+        for i in range(num_qubits):
+            state.apply_tensor_operator((i,), np.random.random([2, 2]))
+
+        for _ in range(num_double_layers):
+            for i in range(2):
+                for j in range(i, num_qubits-1, 2):
+                    state.apply_tensor_operator((j, j+1), np.random.random([2, 2, 2, 2]))
+
+        state.apply_tensor_operator((1, 3), np.random.random([2, 2, 2, 2]))
+
+        with state:
+            mps = state.compute_output_state()
+            assert mps is not None
 
 
 @pytest.fixture(params=CircuitStateMatrix.L1(), scope="class")

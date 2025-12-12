@@ -53,7 +53,7 @@ Runtime dependencies of the cuQuantum Python package include:
 * Driver: Linux (525.60.13+ for CUDA 12, 580.65.06+ for CUDA 13)
 * CUDA Toolkit 12.x or 13.x
 * cuStateVec 1.11.0+
-* cuTensorNet 2.10.0+
+* cuTensorNet 2.10.1+
 * cuDensityMat >=0.3.2, <0.4.0
 * cuPauliProp  >=0.1.0, <0.2.0
 * cuStabilizer >=0.1.0, <0.2.0
