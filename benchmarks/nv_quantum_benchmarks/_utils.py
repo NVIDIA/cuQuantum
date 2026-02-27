@@ -256,7 +256,7 @@ def get_gpu_driver_version():
         status = func(ctypes.byref(out), 80)
         if status != 0:
             raise RuntimeError('cannot get driver version')
-    except:
+    except Exception:
         ver = "N/A"
     else:
         ver = out.value.decode()

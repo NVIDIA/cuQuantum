@@ -11,7 +11,7 @@ def find_package_location(package_name):
     path = None
     try:
         path = _find_package_location_by_license(package_name)
-    except:
+    except Exception:
         pass
     if path is None:
         path = _find_package_location_by_root(package_name)

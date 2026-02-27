@@ -70,7 +70,7 @@ def compute_and_normalize_numpy_path(data, num_operands):
     try:
         # this can fail if the TN is too large (ex: containing unicode)
         path, _ = np.einsum_path(*data, optimize=True)
-    except:
+    except Exception:
         raise NotImplementedError
     path = path[1:]
 

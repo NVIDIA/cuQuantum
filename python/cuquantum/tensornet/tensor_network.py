@@ -254,7 +254,7 @@ class Network:
             if ndev == 0:
                 self.cpu_only = True
                 self.device_id = 'cpu'
-        except:
+        except Exception:
             self.cpu_only = True
             self.device_id = 'cpu'
         if not allow_cpu_pathfinder and self.cpu_only:

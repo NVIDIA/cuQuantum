@@ -24,7 +24,7 @@ try:
     import torch
     # unlike in other test modules, we don't check torch.cuda.is_available()
     # here because we allow verifying against PyTorch CPU tensors
-except:
+except Exception:
     torch = None
 
 from nvmath.internal.utils import check_or_create_options
@@ -161,7 +161,7 @@ def manage_resource(name):
                     assert False, f'name "{name}" not recognized'
                 setattr(self, name, h)
                 impl(self, *args, **kwargs)
-            except:
+            except Exception:
                 print(f'managing resource {name} failed')
                 raise
             finally:

@@ -257,7 +257,7 @@ class TestCmdCircuit:
                     assert len(cached_circuits) == 1
                     cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
                     assert len(cached_json) == 1  # TODO: test aggregate behavior too?
-                except:
+                except Exception:
                     # make debugging easier
                     print("stdout:\n", result.stdout.decode())
                     print("stderr:\n", result.stderr.decode())
@@ -314,7 +314,7 @@ class TestCmdApi:
             assert bool(result.check_returncode()) == False
             cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
             assert len(cached_json) == 1  # TODO: test aggregate behavior too?
-        except:
+        except Exception:
             # make debugging easier
             print("stdout:\n", result.stdout.decode())
             print("stderr:\n", result.stderr.decode())
@@ -374,7 +374,7 @@ class TestCmdApi:
             assert bool(result.check_returncode()) == False
             cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
             assert len(cached_json) == 1  # TODO: test aggregate behavior too?
-        except:
+        except Exception:
             # make debugging easier
             print("stdout:\n", result.stdout.decode())
             print("stderr:\n", result.stderr.decode())
@@ -411,7 +411,7 @@ class TestCmdApi:
             assert bool(result.check_returncode()) == False
             cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
             assert len(cached_json) == 1  # TODO: test aggregate behavior too?
-        except:
+        except Exception:
             # make debugging easier
             print("stdout:\n", result.stdout.decode())
             print("stderr:\n", result.stderr.decode())
@@ -465,7 +465,7 @@ class TestCmdApi:
             assert bool(result.check_returncode()) == False
             cached_json = [f for f in glob.glob(str(tmp_path / f"data/{benchmark}.json")) if os.path.isfile(f)]
             assert len(cached_json) == 1  # TODO: test aggregate behavior too?
-        except:
+        except Exception:
             # make debugging easier
             print("stdout:\n", result.stdout.decode())
             print("stderr:\n", result.stderr.decode())

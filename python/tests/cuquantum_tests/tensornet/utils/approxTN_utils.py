@@ -561,7 +561,7 @@ def verify_split_SVD(
     shared_extent = array_u.shape[shared_mode_idx]
     try:
         max_mid_extent = min(array_u.size, array_v.size) // shared_extent
-    except:
+    except Exception:
         # for torch
         max_mid_extent = min(array_u.numel(), array_v.numel()) // shared_extent 
     max_extent = split_options.pop('max_extent', max_mid_extent)

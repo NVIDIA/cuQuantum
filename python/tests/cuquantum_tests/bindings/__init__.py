@@ -268,7 +268,7 @@ class LoggerTestBase:
             try:
                 handle = self.mod.create()
                 self.mod.destroy(handle)
-            except:
+            except Exception:
                 if handle:
                     self.mod.destroy(handle)
                 raise

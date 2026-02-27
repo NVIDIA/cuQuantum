@@ -90,7 +90,7 @@ def manage_resource(name):
                     
                 setattr(self, name, h)
                 impl(self, *args, **kwargs)
-            except:
+            except Exception:
                 print(f'managing resource {name} failed')
                 raise
             finally:

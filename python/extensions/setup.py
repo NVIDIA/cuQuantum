@@ -39,7 +39,7 @@ def check_cuda_version():
             ver = int(m.group(1))
         else:
             raise RuntimeError("cannot parse CUDA_VERSION")
-    except:
+    except Exception:
         raise
     else:
         # 12020 -> "12.2"
