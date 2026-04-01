@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -30,8 +30,15 @@
 // Module-level flag to track multi-process environment state
 static bool isMultiProcess_ = false;
 
-// Module-level communicator for multi-process operations
+// True when custatevecExCommunicatorInitialize() succeeded (Finalize must be called on shutdown)
+static bool communicatorLibraryInitialized_ = false;
+
+// Module-level communicator for multi-process operations (non-null when creation succeeded)
 static custatevecExCommunicatorDescriptor_t exCommunicator_ = nullptr;
+
+// Rank of module-level communicator, permanently bound after exCommunicator
+// initialisation, persisting even after exCommunicator destruction
+static int exCommunicatorRank_ = 0;
 
 // Module-level data type for state vector
 static cudaDataType_t svDataType_ = CUDA_C_32F;
@@ -39,6 +46,30 @@ static cudaDataType_t svDataType_ = CUDA_C_32F;
 //
 // State Vector Configuration Factory
 //
+
+/**
+ * @brief Internal function for silently aborting or finalizing communication
+ */
+void disableAndCleanUpMultiProcessEnvironment()
+{
+    // Destroy communicator first (required before Finalize per API contract)
+    if (exCommunicator_ != nullptr)
+    {
+        custatevecExCommunicatorDestroy(exCommunicator_);
+        exCommunicator_ = nullptr;
+    }
+
+    // Finalize IPC library if it was successfully initialized
+    if (communicatorLibraryInitialized_)
+    {
+        custatevecExCommunicatorStatus_t status;
+        custatevecExCommunicatorFinalize(&status);
+        communicatorLibraryInitialized_ = false;
+    }
+
+    // Mark multi-process as disabled
+    isMultiProcess_ = false;
+}
 
 /**
  * @brief Bootstrap multi-process environment with quiet mode handling
@@ -54,6 +85,11 @@ void bootstrapMultiProcessEnvironment(int* argc, char*** argv)
     // custatevecCommunicatorType_t communicatorType = CUSTATEVEC_COMMUNICATOR_TYPE_EXTERNAL;
     // const char* libraryPath = "./libmpiCommunicator.so";  // or nullptr to search in process
 
+    // Begin by assuming multi-process and successful comm initialisation, later disabling if
+    // impossible or initialisation fails, as done by disableAndCleanUpMultiProcessEnvironment()
+    isMultiProcess_ = true;
+    communicatorLibraryInitialized_ = true;
+
     // Try to initialize communicator
     custatevecExCommunicatorStatus_t commStatus;
     // clang-format off
@@ -62,50 +98,58 @@ void bootstrapMultiProcessEnvironment(int* argc, char*** argv)
         libraryPath,            // libraryPath
         argc,                   // argc
         argv,                   // argv
-        &commStatus             // status
+        &commStatus             // output status
     );
     // clang-format on
 
-    // Check if MPI was successfully initialized
+    // Disable multi-process if MPI was not successfully initialized
     if (status != CUSTATEVEC_STATUS_SUCCESS ||
         commStatus != CUSTATEVEC_EX_COMMUNICATOR_STATUS_SUCCESS)
     {
-        isMultiProcess_ = false;
-        exCommunicator_ = nullptr;
-        output("Running in single-process mode\n");
-        return;
+        disableAndCleanUpMultiProcessEnvironment();
     }
 
-    isMultiProcess_ = true;
-
-    // Create and store communicator for later use
-    status = custatevecExCommunicatorCreate(&exCommunicator_);
-    if (status != CUSTATEVEC_STATUS_SUCCESS)
-    {
-        output("Failed creating communicator\n");
-        isMultiProcess_ = false;
-    }
-
-    // Get the number of processes to validate multi-process environment
+    // Try create communicator, otherwise disable multi-process
     if (isMultiProcess_)
     {
-        int numProcesses;
-        ERRCHK_EXCOMM(exCommunicator_->intf->getSize(exCommunicator_, &numProcesses));
-        // Validate: numProcesses must be >= 2 and a power of two
-        isMultiProcess_ = (numProcesses >= 2) && ((numProcesses & (numProcesses - 1)) == 0);
-
-        // In multi-process mode, disable output for non-master processes
-        if (isMultiProcess_)
+        status = custatevecExCommunicatorCreate(&exCommunicator_);
+        if (status != CUSTATEVEC_STATUS_SUCCESS)
         {
-            int rank;
-            ERRCHK_EXCOMM(exCommunicator_->intf->getRank(exCommunicator_, &rank));
-            if (rank != 0)
-                setOutputEnabled(false);
+            output("Failed creating communicator; proceeding with single process.\n");
+            disableAndCleanUpMultiProcessEnvironment();
         }
     }
 
+    // Get and validate the number of processes
+    int numProcesses = 1;
     if (isMultiProcess_)
-        output("Multi-process environment initialized successfully\n");
+    {
+        ERRCHK_EXCOMM(exCommunicator_->intf->getSize(exCommunicator_, &numProcesses));
+
+        // Clean up and exit if process config is invalid (do not fallback to single-process)
+        if (numProcesses == 0 || (numProcesses & (numProcesses - 1)) != 0)
+        {
+            output("Number of processes must be positive and a power of 2\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Disable multi-process when only a single process was deployed
+    if (numProcesses == 1)
+    {
+        disableAndCleanUpMultiProcessEnvironment();
+    }
+
+    // In multi-process mode, bind rank, and disable output for non-root processes
+    if (isMultiProcess_)
+    {
+        ERRCHK_EXCOMM(exCommunicator_->intf->getRank(exCommunicator_, &exCommunicatorRank_));
+        if (exCommunicatorRank_ != 0)
+            setOutputEnabled(false);
+    }
+
+    if (isMultiProcess_)
+        output("Multi-process (%d processes) environment initialized successfully\n", numProcesses);
     else
         output("Running in single-process mode\n");
 }
@@ -115,23 +159,14 @@ void bootstrapMultiProcessEnvironment(int* argc, char*** argv)
  */
 void finalizeMultiProcessEnvironment()
 {
-    // Clean up communicator if it exists
-    if (exCommunicator_ != nullptr)
-    {
-        custatevecExCommunicatorDestroy(exCommunicator_);
-        exCommunicator_ = nullptr;
-    }
+    bool wasMultiProcess = isMultiProcess_;
 
-    // Finalize MPI communicator infrastructure
-    if (isMultiProcess_)
+    disableAndCleanUpMultiProcessEnvironment();
+
+    if (wasMultiProcess)
     {
-        custatevecExCommunicatorStatus_t status;
-        custatevecExCommunicatorFinalize(&status);
         output("Multi-process environment finalized\n");
     }
-
-    // Reset module state
-    isMultiProcess_ = false;
 }
 
 /**
@@ -139,10 +174,12 @@ void finalizeMultiProcessEnvironment()
  *
  * @param svDataType State vector data type (CUDA_C_32F or CUDA_C_64F)
  * @param numWires Number of qubits
+ * @param numMigrationWires Number of migration wires, informing portion of
+ *   the state vector stored in host memory
  * @return Dictionary containing state vector configuration
  */
 static custatevecExDictionaryDescriptor_t
-createSingleDeviceConfig(cudaDataType_t svDataType, int32_t numWires)
+createSingleDeviceConfig(cudaDataType_t svDataType, int32_t numWires, int32_t numMigrationWires)
 {
     custatevecExDictionaryDescriptor_t svConfig{nullptr};
 
@@ -150,10 +187,10 @@ createSingleDeviceConfig(cudaDataType_t svDataType, int32_t numWires)
     ERRCHK(custatevecExConfigureStateVectorSingleDevice(
         &svConfig,
         svDataType,
-        numWires,           // numWires
-        numWires,           // numDeviceWires (same as numWires for now)
-        -1,                 // deviceId, -1 specifies the current device.
-        0                   // capability
+        numWires,                     // numWires
+        numWires - numMigrationWires, // numDeviceWires
+        -1,                           // deviceId, -1 specifies the current device.
+        0                             // capability
     ));
     // clang-format on
 
@@ -196,7 +233,7 @@ createMultiDeviceConfig(cudaDataType_t svDataType, int numWires, int numDevices,
         break;
     default:
         output("Unknown networkType\n");
-        std::exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 
     // clang-format off
@@ -224,7 +261,8 @@ createMultiDeviceConfig(cudaDataType_t svDataType, int numWires, int numDevices,
  * @return Dictionary containing state vector configuration
  */
 static custatevecExDictionaryDescriptor_t createMultiProcessConfig(
-    cudaDataType_t svDataType, int32_t numWires, const NetworkLayers& networkLayers,
+    cudaDataType_t svDataType, int32_t numWires,
+    const NetworkLayers& networkLayers,
     custatevecExCommunicatorDescriptor_t exCommDesc)
 {
     custatevecExDictionaryDescriptor_t svConfig{nullptr};
@@ -234,36 +272,33 @@ static custatevecExDictionaryDescriptor_t createMultiProcessConfig(
     ERRCHK_EXCOMM(exCommDesc->intf->getRank(exCommDesc, &rank));
     ERRCHK_EXCOMM(exCommDesc->intf->getSize(exCommDesc, &numProcesses));
 
-    // Calculate device wires: numWires = numGlobalBits + numDeviceWires
-    int32_t numGlobalBits = 0;
-    int32_t tempProcesses = numProcesses;
-    while (tempProcesses > 1)
+    // Find numInterProcWires = log2(numProcesses)
+    int32_t numInterProcBits = 0;
+    int32_t temp = numProcesses;
+    while (temp > 1)
     {
-        numGlobalBits++;
-        tempProcesses >>= 1;
+        numInterProcBits++;
+        temp >>= 1;
     }
-    int32_t numDeviceWires = numWires - numGlobalBits;
-    int32_t deviceId = -1; // Dynamic device assignment on creating state vector
 
-    // Build globalIndexBitClasses and numGlobalIndexBitsPerLayer from NetworkLayers
+    // We will collect and group global bits, spanned across processes
     std::vector<custatevecExGlobalIndexBitClass_t> globalIndexBitClasses;
     std::vector<int32_t> numGlobalIndexBitsPerLayer;
 
+    // Collect non-empty inter-process global bit groups and count total assigned bits
     int32_t numAccumulatedGlobalIndexBits = 0;
-
-    // First pass: collect non-zero layers and count total assigned bits
     for (const auto& layer : networkLayers)
     {
         globalIndexBitClasses.push_back(layer.globalIndexBitClass);
         int numGlobalBitsPerLayer;
         if (layer.numGlobalIndexBits == 0)
         {
-            numGlobalBitsPerLayer = numGlobalBits - numAccumulatedGlobalIndexBits;
+            numGlobalBitsPerLayer = numInterProcBits - numAccumulatedGlobalIndexBits;
             numGlobalIndexBitsPerLayer.push_back(numGlobalBitsPerLayer);
-            numAccumulatedGlobalIndexBits = numGlobalBits;
+            numAccumulatedGlobalIndexBits = numInterProcBits;
             break;
         }
-        auto maxNumGlobalIndexBitsPerLayer = numGlobalBits - numAccumulatedGlobalIndexBits;
+        auto maxNumGlobalIndexBitsPerLayer = numInterProcBits - numAccumulatedGlobalIndexBits;
         if (maxNumGlobalIndexBitsPerLayer <= layer.numGlobalIndexBits)
         {
             numGlobalIndexBitsPerLayer.push_back(maxNumGlobalIndexBitsPerLayer);
@@ -273,13 +308,17 @@ static custatevecExDictionaryDescriptor_t createMultiProcessConfig(
         numGlobalIndexBitsPerLayer.push_back(layer.numGlobalIndexBits);
         numAccumulatedGlobalIndexBits += layer.numGlobalIndexBits;
     }
-    if (numAccumulatedGlobalIndexBits < numGlobalBits)
+    if (numAccumulatedGlobalIndexBits < numInterProcBits)
     {
         output("NetworkLayers is too thin to build numWires state vector.\n");
-        std::exit(1);
+        exit(EXIT_FAILURE);
     }
+    
+    // All remaining wires are local, spanned within a single device
+    int32_t numDeviceWires = numWires - numInterProcBits;
+    int32_t deviceId = -1; // Dynamic device assignment on creating state vector
 
-    // Determine memory sharing method based on network layers
+    // Specify only exchanges between P2P processes can leverage shared memory
     custatevecExMemorySharingMethod_t memorySharingMethod =
         CUSTATEVEC_EX_MEMORY_SHARING_METHOD_NONE;
     for (const auto& layer : networkLayers)
@@ -324,6 +363,7 @@ static void showUsage(const char* programName)
     output("  -h          Show this help message and exit\n");
     output("  -q          Quiet mode (suppress output)\n");
     output("  -d <num>    Number of devices for multi-device (default: auto-detect)\n");
+    output("  -m <num>    Number of migration wires for host-memory usage (default: 0)\n");
     output("  -t <type>   Data type - 'f'/'float' or 'd'/'double' (default: float)\n");
     output("  -k <net>    Device network topology for multi-device: 1=SWITCH, 2=FULLMESH "
            "(default: SWITCH)\n");
@@ -333,6 +373,7 @@ static void showUsage(const char* programName)
     output("Examples:\n");
     output("  %s                    # Use default settings\n", programName);
     output("  %s -d 2               # Use 2 GPUs in multi-device mode\n", programName);
+    output("  %s -m 2               # Use 2 migration wires, storing 75% of state in host memory\n", programName);
     output("  %s -t double          # Use double precision\n", programName);
     output("  %s -k 4               # Use GB200NVL for multi-process mode\n", programName);
     output("\n");
@@ -347,6 +388,7 @@ custatevecExDictionaryDescriptor_t configureStateVector(int argc, char* argv[], 
     cudaDataType_t svDataType = CUDA_C_32F;
     int networkType = 0; // 0: Use the default according to the state vector configuration.
     int numDevices = -1;
+    int numMigrationWires = 0;
 
     // Parse command line options with getopt
     int opt;
@@ -354,7 +396,7 @@ custatevecExDictionaryDescriptor_t configureStateVector(int argc, char* argv[], 
     // Reset getopt state for proper parsing
     optind = 1;
 
-    while ((opt = getopt(argc, argv, "hqd:t:k:")) != -1)
+    while ((opt = getopt(argc, argv, "hqd:m:t:k:")) != -1)
     {
         switch (opt)
         {
@@ -367,9 +409,27 @@ custatevecExDictionaryDescriptor_t configureStateVector(int argc, char* argv[], 
             break;
         case 'd':
             numDevices = atoi(optarg);
-            if (numDevices <= 1)
+            if (numDevices < 1)
             {
                 output("Error: Number of devices must be positive\n");
+                exit(EXIT_FAILURE);
+            }
+            if (numDevices & (numDevices - 1))
+            {
+                output("Error: Number of devices must be a power of 2\n");
+                exit(EXIT_FAILURE);
+            }
+            if (numDevices > 1 && isMultiProcess_)
+            {
+                output("Error: Only one device can be utilised per-process in multi-process mode\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'm':
+            numMigrationWires = atoi(optarg);
+            if (numMigrationWires < 0)
+            {
+                output("Error: Number of migration wires must be positive or zero\n");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -406,8 +466,8 @@ custatevecExDictionaryDescriptor_t configureStateVector(int argc, char* argv[], 
         }
     }
 
-    // Auto-detect devices if not specified
-    if (numDevices == -1)
+    // Auto-detect devices if not specified (not consulted by multi-process; assumes =1)
+    if (numDevices == -1 && (!isMultiProcess_))
         ERRCHK_CUDA(cudaGetDeviceCount(&numDevices));
 
     // Store the configured data type for later retrieval
@@ -416,18 +476,30 @@ custatevecExDictionaryDescriptor_t configureStateVector(int argc, char* argv[], 
     // Branch based on detected environment
     if ((numDevices == 1) && (!isMultiProcess_))
     {
-        output("Configure state vector: Single-device, Qubits: %d, DataType: %s\n", numWires,
-               (svDataType == CUDA_C_32F) ? "float" : "double");
-        return createSingleDeviceConfig(svDataType, numWires);
+        output("Configure state vector: Single-device, Qubits: %d, MigrationWires: %d, DataType: %s\n", 
+               numWires, numMigrationWires, (svDataType == CUDA_C_32F) ? "float" : "double");
+        return createSingleDeviceConfig(svDataType, numWires, numMigrationWires);
     }
     else if ((1 < numDevices) && (!isMultiProcess_))
     {
+        if (numMigrationWires > 0)
+        {
+            output("Error: Cannot use host memory (via migration wires) in multi-device mode\n");
+            exit(EXIT_FAILURE);
+        }
+
         output("Configure state vector: Multi-device, Qubits: %d, DataType: %s, Devices: %d\n",
                numWires, (svDataType == CUDA_C_32F) ? "float" : "double", numDevices);
         return createMultiDeviceConfig(svDataType, numWires, numDevices, networkType);
     }
     else
     {
+        if (numMigrationWires > 0)
+        {
+            output("Error: Cannot use host memory (via migration wires) in multi-process mode\n");
+            exit(EXIT_FAILURE);
+        }
+
         output("Configure state vector: Multi-process, Qubits: %d, DataType: %s, NetworkType: %d\n",
                numWires, (svDataType == CUDA_C_32F) ? "float" : "double", networkType);
 
@@ -449,8 +521,8 @@ custatevecExDictionaryDescriptor_t configureStateVector(int argc, char* argv[], 
             networkConfig = createCommunicatorNetwork();
             break;
         default:
-            output("Unknown networkType");
-            std::exit(EXIT_FAILURE);
+            output("Error: Unknown networkType\n");
+            exit(EXIT_FAILURE);
         }
         return createMultiProcessConfig(svDataType, numWires, networkConfig, exCommunicator_);
     }
@@ -489,6 +561,15 @@ custatevecExStateVectorDescriptor_t createStateVector(custatevecExDictionaryDesc
 custatevecExCommunicatorDescriptor_t getMultiProcessCommunicator()
 {
     return exCommunicator_;
+}
+
+/**
+ * @brief Get rank in the multi-process communicator
+ */
+int getMultiProcessRank() 
+{
+    // Can be non-zero even after exCommunicator_ destruction (isMultiProcess_=0)
+    return exCommunicatorRank_;
 }
 
 /**

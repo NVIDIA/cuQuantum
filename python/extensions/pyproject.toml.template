@@ -1,0 +1,47 @@
+# Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# *** AUTO-GENERATED from pyproject.toml.template by configure.sh ***
+# *** Do not edit pyproject.toml directly. Edit pyproject.toml.template instead. ***
+
+[build-system]
+requires = [
+    "setuptools>=77.0.3",
+    "wheel",
+    "pybind11",
+    "jax[cuda@CUDA_MAJOR_VER@-local]@JAX_VERSION_SPEC@",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cuquantum-python-jax-cu@CUDA_MAJOR_VER@"
+version = "0.0.5.post0"
+description = "NVIDIA cuQuantum Python JAX"
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE", "NV.LICENSE"]
+requires-python = ">=3.11.0"
+authors = [
+    { name = "NVIDIA Corporation", email = "cuquantum-python@nvidia.com" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Education",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "@CUDA_CLASSIFIER@",
+]
+dependencies = [
+    "cuquantum-python-cu@CUDA_MAJOR_VER@~=26.3.0",
+    "jax[cuda@CUDA_MAJOR_VER@-local]@JAX_VERSION_SPEC@",
+]
+
+[project.urls]
+Homepage = "https://developer.nvidia.com/cuquantum-sdk"

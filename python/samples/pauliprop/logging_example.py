@@ -52,7 +52,8 @@ def main():
     result = expansion.apply_gate(gate, sort_order=None)
 
     # Step 6: Compute trace (logs INFO on start/completion).
-    trace = result.trace_with_zero_state()
+    trace_significand, trace_exponent = result.trace_with_zero_state()
+    trace = trace_significand * pow(2.0, trace_exponent)
     print(f"\nTrace result: {trace}")
 
     # Step 7: Clean up (destructor logs DEBUG).

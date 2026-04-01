@@ -9,11 +9,8 @@ import os
 import pytest
 import numpy as np
 
-try:
-    import cupy as cp
-except ImportError:
-    cp = None
-    pytest.skip("skipping binding tests when cupy is not installed", allow_module_level=True)
+cp = pytest.importorskip("cupy")
+
 from cupy import testing
 try:
     import mpi4py
@@ -911,6 +908,22 @@ class TestStateAPIs(TestStateBase):
     @manage_resource('handle')
     @manage_resource('workspace')
     @manage_resource('state')
+    def test_mps_state_compute_returns_finalized_layout(self):
+        if self.mps is False:
+            pytest.skip("MPS-only layout contract test")
+
+        extents_out, strides_out = cutn.state_compute(
+            self.handle, self.state, self.workspace, self.simple_state.mps_tensor_ptrs, self.stream.ptr)
+        self.stream.synchronize()
+
+        for i in range(self.num_qubits):
+            np.testing.assert_array_equal(extents_out[i], np.asarray(self.simple_state.mps_tensor_extents[i], dtype=np.int64))
+            np.testing.assert_array_equal(strides_out[i], np.asarray(self.simple_state.mps_tensor_strides[i], dtype=np.int64))
+
+
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    @manage_resource('state')
     @manage_resource('accessor')
     def test_accessor_bindings(self):
         fixed_values = ()
@@ -960,8 +973,183 @@ class TestStateAPIs(TestStateBase):
         scratch_space = self._configure_prepare('marginal', self.handle, self.marginal, self.workspace, self.stream)
         cutn.marginal_compute(self.handle, self.marginal, 0, self.workspace, self.rdm.data.ptr, self.stream.ptr)
         self.stream.synchronize()
-        
-  
+
+
+class TestMPSOvercompleteExtentsSUGauge:
+    """Regression: SU gauge with overcomplete (over-allocated) MPS tensor extents.
+
+    When boundary MPS tensors are allocated with max_extent larger than
+    their combinatorial bond dimension and SU gauge is enabled,
+    state_compute must not fail with 'Unsupported tensor memory layout!'.
+    """
+
+    @pytest.mark.parametrize("order", ("C", "F"))
+    def test_overcomplete_extents_su_gauge(self, order):
+        num_qubits = 6
+        max_extent = 8
+        dtype = np.complex128
+        stream = cp.cuda.Stream()
+
+        handle = cutn.create()
+        try:
+            qubits_dims = np.asarray([2] * num_qubits, dtype=np.int64)
+            state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits,
+                                      qubits_dims, dtype_to_data_type[dtype])
+            try:
+                gate_h = (2**-0.5 * cp.asarray([[1, 1], [1, -1]], dtype=dtype)).reshape(2, 2, order='F')
+                gate_h_strides = np.array([s // gate_h.itemsize for s in gate_h.strides], dtype=np.int64)
+                cutn.state_apply_tensor_operator(handle, state, 1, (0,),
+                    gate_h.data.ptr, gate_h_strides, 1, 0, 1)
+
+                gate_cx = cp.asarray([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]],
+                                     dtype=dtype).reshape(2, 2, 2, 2, order='F')
+                gate_cx_strides = np.array([s // gate_cx.itemsize for s in gate_cx.strides], dtype=np.int64)
+                for i in range(1, num_qubits):
+                    cutn.state_apply_tensor_operator(handle, state, 2, (i - 1, i),
+                        gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)
+
+                mps_tensor_extents = []
+                mps_tensor_strides = []
+                mps_tensors = []
+                mps_tensor_ptrs = []
+                for i in range(num_qubits):
+                    if i == 0:
+                        extents = (2, max_extent)
+                    elif i == num_qubits - 1:
+                        extents = (max_extent, 2)
+                    else:
+                        extents = (max_extent, 2, max_extent)
+                    mps_tensor_extents.append(extents)
+                    tensor = cp.zeros(extents, dtype=dtype, order=order)
+                    mps_tensors.append(tensor)
+                    mps_tensor_ptrs.append(tensor.data.ptr)
+                    mps_tensor_strides.append([s // tensor.itemsize for s in tensor.strides])
+
+                cutn.state_finalize_mps(handle, state, cutn.BoundaryCondition.OPEN,
+                                        mps_tensor_extents, mps_tensor_strides)
+
+                gauge_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.CONFIG_MPS_GAUGE_OPTION)
+                gauge_val = np.array(cutn.StateMPSGaugeOption.STATE_MPS_GAUGE_SIMPLE, dtype=gauge_dtype)
+                cutn.state_configure(handle, state, cutn.StateAttribute.CONFIG_MPS_GAUGE_OPTION,
+                                     gauge_val.ctypes.data, gauge_val.dtype.itemsize)
+
+                svd_algo_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.MPS_SVD_CONFIG_ALGO)
+                svd_algo = np.array(cutn.TensorSVDAlgo.GESVDJ, dtype=svd_algo_dtype)
+                cutn.state_configure(handle, state, cutn.StateAttribute.MPS_SVD_CONFIG_ALGO,
+                                     svd_algo.ctypes.data, svd_algo.dtype.itemsize)
+
+                workspace = cutn.create_workspace_descriptor(handle)
+                try:
+                    free_mem = cp.cuda.Device().mem_info[0]
+                    cutn.state_prepare(handle, state, free_mem // 4, workspace, stream.ptr)
+                    workspace_size = cutn.workspace_get_memory_size(handle, workspace,
+                        cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+                    scratch = cp.cuda.alloc(workspace_size)
+                    cutn.workspace_set_memory(handle, workspace, cutn.Memspace.DEVICE,
+                        cutn.WorkspaceKind.SCRATCH, scratch.ptr, workspace_size)
+
+                    cutn.state_compute(handle, state, workspace, mps_tensor_ptrs, stream.ptr)
+                    stream.synchronize()
+                finally:
+                    cutn.destroy_workspace_descriptor(workspace)
+            finally:
+                cutn.destroy_state(state)
+        finally:
+            cutn.destroy(handle)
+
+
+class TestMPSNonContiguousStrides:
+
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    def test_mps_noncontiguous_strides_simple_gauge(self):
+        num_qubits = 3
+        dtype = np.complex128
+        stream = cp.cuda.Stream.null
+        qubits_dims = np.array([2] * num_qubits, dtype=np.int64)
+        state = cutn.create_state(self.handle, cutn.StatePurity.PURE, num_qubits, qubits_dims.ctypes.data,
+                                  dtype_to_data_type[dtype])
+        try:
+            gate_h = 2**-0.5 * cp.asarray([[1,1], [1,-1]], dtype=dtype, order='F')
+            gate_cx = cp.asarray([[1,0,0,0],[0,1,0,0],[0,0,0,1],[0,0,1,0]], dtype=dtype).reshape(2,2,2,2, order='F')
+            gate_h_strides = np.asarray((1, 2), dtype=np.int64)
+            gate_cx_strides = np.asarray((1, 2, 4, 8), dtype=np.int64)
+            cutn.state_apply_tensor_operator(self.handle, state, 1, (0,), gate_h.data.ptr,
+                                             gate_h_strides.ctypes.data, 1, 0, 1)
+            cutn.state_apply_tensor_operator(self.handle, state, 2, (0, 1), gate_cx.data.ptr,
+                                             gate_cx_strides.ctypes.data, 1, 0, 1)
+            cutn.state_apply_tensor_operator(self.handle, state, 2, (1, 2), gate_cx.data.ptr,
+                                             gate_cx_strides.ctypes.data, 1, 0, 1)
+
+            max_extent = 2
+            padded_strides = []
+            extents_list = []
+            tensors = []
+            tensor_ptrs = []
+            for i in range(num_qubits):
+                if i == 0:
+                    ext = (2, max_extent)
+                elif i == num_qubits - 1:
+                    ext = (max_extent, 2)
+                else:
+                    ext = (max_extent, 2, max_extent)
+                extents_list.append(ext)
+                strides = [1]
+                for d in ext[:-1]:
+                    strides.append(strides[-1] * (d + 1))
+                padded_strides.append(strides)
+                storage_size = 1
+                for e, s in zip(ext, strides):
+                    storage_size += (e - 1) * s
+                t = cp.zeros(storage_size, dtype=dtype)
+                tensors.append(t)
+                tensor_ptrs.append(t.data.ptr)
+
+            cutn.state_finalize_mps(self.handle, state, cutn.BoundaryCondition.OPEN,
+                                    extents_list, padded_strides)
+
+            gauge_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.CONFIG_MPS_GAUGE_OPTION)
+            gauge_val = np.array(cutn.StateMPSGaugeOption.STATE_MPS_GAUGE_SIMPLE, dtype=gauge_dtype)
+            cutn.state_configure(self.handle, state, cutn.StateAttribute.CONFIG_MPS_GAUGE_OPTION,
+                                 gauge_val.ctypes.data, gauge_val.dtype.itemsize)
+
+            free_mem = cp.cuda.Device().mem_info[0]
+            max_scratch = free_mem // 4
+            cutn.state_prepare(self.handle, state, max_scratch, self.workspace, stream.ptr)
+            ws_size = cutn.workspace_get_memory_size(self.handle, self.workspace,
+                                                     cutn.WorksizePref.RECOMMENDED,
+                                                     cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+            scratch = cp.cuda.alloc(ws_size)
+            cutn.workspace_set_memory(self.handle, self.workspace, cutn.Memspace.DEVICE,
+                                      cutn.WorkspaceKind.SCRATCH, scratch.ptr, ws_size)
+
+            extents_out, strides_out = cutn.state_compute(self.handle, state, self.workspace,
+                                                          tensor_ptrs, stream.ptr)
+            stream.synchronize()
+
+            for i in range(num_qubits):
+                np.testing.assert_array_equal(extents_out[i], np.asarray(extents_list[i], dtype=np.int64))
+                np.testing.assert_array_equal(strides_out[i], np.asarray(padded_strides[i], dtype=np.int64))
+
+            # Correctness: extract strided MPS data, contract, verify GHZ state.
+            # GHZ(3) = (|000⟩ + |111⟩) / √2, which is exact at max_extent=2.
+            itemsize = np.dtype(dtype).itemsize
+            mps_np = []
+            for i in range(num_qubits):
+                byte_strides = tuple(s * itemsize for s in padded_strides[i])
+                view = cp.ndarray(extents_list[i], dtype=dtype, memptr=tensors[i].data, strides=byte_strides)
+                mps_np.append(cp.asnumpy(view))
+
+            sv = np.einsum('ia,ajb,bk->ijk', mps_np[0], mps_np[1], mps_np[2])
+            inv_sqrt2 = 1.0 / np.sqrt(2.0)
+            expected = np.zeros((2, 2, 2), dtype=dtype)
+            expected[0, 0, 0] = inv_sqrt2
+            expected[1, 1, 1] = inv_sqrt2
+            np.testing.assert_allclose(sv, expected, atol=1e-12)
+        finally:
+            cutn.destroy_state(state)
+
+
 @pytest.mark.parametrize(
     'source', ('int', 'seq', 'range')
 )

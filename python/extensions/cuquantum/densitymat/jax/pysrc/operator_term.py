@@ -8,8 +8,9 @@ Operator term class in cuDensityMat.
 
 import ctypes
 import logging
-from typing import List, Tuple, Sequence, Type
+from collections.abc import Sequence
 
+import cupy as cp
 import jax
 import jax.numpy as jnp
 
@@ -17,6 +18,14 @@ from cuquantum.bindings import cudensitymat as cudm
 
 from .elementary_operator import ElementaryOperator
 from .matrix_operator import MatrixOperator
+from ..utils import (
+    get_scalar_assignment_callback,
+    get_empty_scalar_callback,
+    get_scalar_gradient_attachment_callback,
+    get_random_odd_pointer_and_object,
+    detect_ad_traced_object,
+    is_vmap_traced,
+)
 
 
 @jax.tree_util.register_pytree_node_class
@@ -35,110 +44,61 @@ class OperatorTerm:
             dims: Hilbert space dimensions.
         """
         # Input argument.
-        self.dims: Tuple[int, ...] = tuple(dims)
+        self.dims: tuple[int, ...] = tuple(dims)
 
         # Attributes for handling arguments in append.
-        self.op_prods: List[Tuple[ElementaryOperator | MatrixOperator, ...]] = []
-        self.modes: List[Tuple[int, ...]] = []
-        self.conjs: List[Tuple[bool, ...]] = []
-        self.duals: List[Tuple[bool, ...]] = []
+        self.op_prods: list[tuple[ElementaryOperator | MatrixOperator, ...]] = []
+        self.modes: list[tuple[int, ...]] = []
+        self.conjs: list[tuple[bool, ...]] = []
+        self.duals: list[tuple[bool, ...]] = []
 
-        self.coeffs: List[float | complex] = []
-        self.static_coeffs: List[jax.Array | None] = []
-        self.total_coeffs: List[jax.ShapeDtypeStruct | None] = []
-        self.coeff_callbacks: List[cudm.WrappedScalarCallback | None] = []
-        self.coeff_grad_callbacks: List[cudm.WrappedScalarGradientCallback | None] = []
+        # When coeff is stored inside, it is always a jax.Array.
+        self.coeffs: list[jax.Array] = []
 
+        # Attributes inferred from multiple append calls.
+        self.batch_sizes: list[int] = []  # keep track of batch sizes of all operator products
         self.batch_size: int = 1
         self.dtype: jnp.dtype | None = None
 
-        # Temporary pointers to be replaced by real pointers at execution time.
-        self.static_coeffs_ptrs: List[int] = []
-        self.total_coeffs_ptrs: List[int] = []
-        self._static_coeffs_ptr_objs: List[ctypes.c_short] = []
-        self._total_coeffs_ptr_objs: List[ctypes.c_short] = []
-
-        self._batch_sizes: List[int] = []
-        self._op_prod_types: List[Type[ElementaryOperator] | Type[MatrixOperator]] = []
+        # Internal attributes from interfacing to cuDensityMat.
+        self._op_prod_types: list[type[ElementaryOperator] | type[MatrixOperator]] = []
         self._ptr: int | None = None
 
-    def copy(self) -> "OperatorTerm":
-        """
-        Copy the operator term.
-        """
-        op_term = OperatorTerm(self.dims)
-        for (
-            op_prod,
-            modes,
-            conjs,
-            duals,
-            coeff,
-            static_coeffs,
-            total_coeffs,
-            coeff_callback,
-            coeff_grad_callbacks
-        ) in zip(
-            self.op_prods,
-            self.modes,
-            self.conjs,
-            self.duals,
-            self.coeffs,
-            self.static_coeffs,
-            self.total_coeffs,
-            self.coeff_callbacks,
-            self.coeff_grad_callbacks
-        ):
-            # This is due to empty tuple appended to preserve length.
-            if conjs == ():
-                conjs = None
-            
-            # This is due to modes set to all Hilbert space modes internally
-            # for reference implementation.
-            if isinstance(op_prod[0], MatrixOperator):
-                modes = None
-
-            op_prod_ = tuple(base_op.copy() for base_op in op_prod)
-            static_coeffs_ = jnp.copy(static_coeffs) if static_coeffs is not None else None
-            total_coeffs_ = total_coeffs if total_coeffs is not None else None
-            op_term.append(op_prod_,
-                           modes=modes,
-                           conjs=conjs,
-                           duals=duals,
-                           coeff=coeff,
-                           static_coeffs=static_coeffs_,
-                           total_coeffs=total_coeffs_,
-                           coeff_callback=coeff_callback,
-                           coeff_grad_callback=coeff_grad_callbacks)
-        
-        # Preserve pointer information to maintain PyTree structure consistency.
-        # This is critical for custom VJP: the backward output must have the same
-        # PyTree structure as the forward input, including pointer values.
-        op_term.static_coeffs_ptrs = self.static_coeffs_ptrs.copy()
-        op_term.total_coeffs_ptrs = self.total_coeffs_ptrs.copy()
-        op_term._ptr = self._ptr
-        
-        return op_term
+        # Attributes for handling gradients.
+        self._coeff_requires_grads = []
+        self._coeff_callbacks = []
+        self._coeff_grad_callbacks = []
+        self._coeff_ptrs: list[int] = []
+        self._coeff_ptr_objs: list[ctypes.c_short | None] = []  # Keep ctypes objects alive
+        self._coeff_grad_ptrs: list[int] = []
+        self._coeff_grad_ptr_objs: list[ctypes.c_short | None] = []  # Keep ctypes objects alive
+        self._total_coeffs_ptrs: list[int] = []
+        self._total_coeffs_ptr_objs: list[ctypes.c_short | None] = []  # Keep ctypes objects alive
 
     def tree_flatten(self):
         """
         Flatten the operator term into a PyTree.
         """
-        children = (self.op_prods, self.static_coeffs, self.static_coeffs_ptrs)
+        children = (self.op_prods, self.coeffs)
         aux_data = (
             self.dims,
-            self.batch_size,
             self.modes,
             self.conjs,
             self.duals,
-            self.coeffs,
-            self.total_coeffs,
-            self.total_coeffs_ptrs,
-            self.coeff_callbacks,
-            self.coeff_grad_callbacks,
+            self.batch_size,
+            self.batch_sizes,
             self.dtype,
-            self._batch_sizes,
             self._op_prod_types,
-            self._ptr
+            self._ptr,
+            self._coeff_ptrs,
+            self._coeff_ptr_objs,
+            self._coeff_grad_ptrs,
+            self._coeff_requires_grads,
+            self._coeff_callbacks,
+            self._coeff_grad_callbacks,
+            self._coeff_grad_ptr_objs,
+            self._total_coeffs_ptrs,
+            self._total_coeffs_ptr_objs,
         )
         return children, aux_data
 
@@ -147,51 +107,79 @@ class OperatorTerm:
         """
         Unflatten the operator term from a PyTree.
         """
-        op_prods, static_coeffs, static_coeffs_ptrs = children
+        inst = cls.__new__(cls)
+        inst.op_prods, inst.coeffs = children
         (
-            dims,
-            batch_size,
-            modes,
-            conjs,
-            duals,
-            coeffs,
-            total_coeffs,
-            total_coeffs_ptrs,
-            coeff_callbacks,
-            coeff_grad_callbacks,
-            dtype,
-            _batch_sizes,
-            _op_prod_types,
-            _ptr
+            inst.dims,
+            inst.modes,
+            inst.conjs,
+            inst.duals,
+            inst.batch_size,
+            inst.batch_sizes,
+            inst.dtype,
+            inst._op_prod_types,
+            inst._ptr,
+            inst._coeff_ptrs,
+            inst._coeff_ptr_objs,
+            inst._coeff_grad_ptrs,
+            inst._coeff_requires_grads,
+            inst._coeff_callbacks,
+            inst._coeff_grad_callbacks,
+            inst._coeff_grad_ptr_objs,
+            inst._total_coeffs_ptrs,
+            inst._total_coeffs_ptr_objs,
         ) = aux_data
-
-        # Create the instance.
-        inst = cls(dims)
-
-        # Populate traced attributes.
-        inst.op_prods = op_prods
-        inst.static_coeffs = static_coeffs
-        inst.static_coeffs_ptrs = static_coeffs_ptrs
-        inst.total_coeffs = total_coeffs
-        inst.total_coeffs_ptrs = total_coeffs_ptrs
-
-        # Populate static attributes.
-        inst.batch_size = batch_size
-        inst.modes = modes
-        inst.conjs = conjs
-        inst.duals = duals
-        inst.coeffs = coeffs
-        inst.coeff_callbacks = coeff_callbacks
-        inst.coeff_grad_callbacks = coeff_grad_callbacks
-        inst.dtype = dtype
-        inst._batch_sizes = _batch_sizes
-        inst._op_prod_types = _op_prod_types
-        inst._ptr = _ptr
         return inst
 
-    def _check_dtype(self, op_prod):
+    @property
+    def in_axes(self) -> "OperatorTerm":
         """
-        Check if all elementary or matrix operators have the same data type.
+        Return the in_axes PyTree spec for vmapping over the batch dimension.
+        """
+        in_axes_op_prods = [tuple(op.in_axes for op in op_prod) for op_prod in self.op_prods]
+        in_axes_coeffs = []
+        for coeff in self.coeffs:
+            if is_vmap_traced(coeff) or len(coeff) > 1:
+                in_axes_coeffs.append(0)
+            else:
+                in_axes_coeffs.append(None)
+
+        _, aux_data = self.tree_flatten()
+        return type(self).tree_unflatten(aux_data, (in_axes_op_prods, in_axes_coeffs))
+
+    def _copy(self) -> "OperatorTerm":
+        """
+        Internal method to copy the operator term for VJP backward pass.
+        """
+        op_term = type(self).__new__(type(self))
+
+        op_term.op_prods = [tuple(base_op._copy() for base_op in op_prod) for op_prod in self.op_prods]
+        op_term.coeffs = [jnp.copy(c) for c in self.coeffs]
+
+        op_term.dims = self.dims
+        op_term.modes = self.modes.copy()
+        op_term.conjs = self.conjs.copy()
+        op_term.duals = self.duals.copy()
+        op_term.batch_size = self.batch_size
+        op_term.batch_sizes = self.batch_sizes.copy()
+        op_term.dtype = self.dtype
+        op_term._op_prod_types = self._op_prod_types.copy()
+        op_term._ptr = self._ptr
+        op_term._coeff_ptrs = self._coeff_ptrs.copy()
+        op_term._coeff_ptr_objs = self._coeff_ptr_objs.copy()
+        op_term._coeff_grad_ptrs = self._coeff_grad_ptrs.copy()
+        op_term._coeff_grad_ptr_objs = self._coeff_grad_ptr_objs.copy()
+        op_term._coeff_requires_grads = self._coeff_requires_grads.copy()
+        op_term._coeff_callbacks = self._coeff_callbacks.copy()
+        op_term._coeff_grad_callbacks = self._coeff_grad_callbacks.copy()
+        op_term._total_coeffs_ptrs = self._total_coeffs_ptrs.copy()
+        op_term._total_coeffs_ptr_objs = self._total_coeffs_ptr_objs.copy()
+
+        return op_term
+
+    def _check_and_set_dtype(self, op_prod) -> None:
+        """
+        Check if the operator product has the same data type as the operator term.
         """
         if self.dtype is None:
             # If the data type is not set, set it to the data type of the first operator.
@@ -216,13 +204,12 @@ class OperatorTerm:
                 raise ValueError("All terms in an operator product must be of the same type.")
         self._op_prod_types.append(op_prod_type)
 
-    def _check_and_append_batch_size(self,
-                                     op_prod: Sequence[ElementaryOperator | MatrixOperator],
-                                     static_coeffs: jax.Array | None,
-                                     total_coeffs: jax.Array | None
-                                     ) -> None:
+    def _check_and_set_batch_size(self,
+                                  op_prod: Sequence[ElementaryOperator | MatrixOperator],
+                                  coeff: jax.Array,
+                                  ) -> None:
         """
-        Check if all terms in an operator product have batch size 1 or N.
+        Check if the operator product and coefficient batch sizes are consistent.
         """
         # Extract the batch size for the operator product.
         op_prod_batch_size = max([base_op.batch_size for base_op in op_prod])
@@ -230,20 +217,8 @@ class OperatorTerm:
             if base_op.batch_size not in (1, op_prod_batch_size):
                 raise ValueError("All basic operators in an operator product must have batch size 1 or N.")
 
-        # Extract the batch sizes of the static and total coefficients.
-        if static_coeffs is not None and total_coeffs is None:
-            coeffs_batch_size = static_coeffs.shape[0]
-        elif static_coeffs is None and total_coeffs is not None:
-            coeffs_batch_size = total_coeffs.shape[0]
-        elif static_coeffs is not None and total_coeffs is not None:
-            if static_coeffs.shape[0] != total_coeffs.shape[0]:
-                raise ValueError("Static and total coefficients must have the same batch size if both are provided.")
-            coeffs_batch_size = static_coeffs.shape[0]
-        else:
-            coeffs_batch_size = 1
-        self._batch_sizes.append(coeffs_batch_size)
-
-        batch_size = max(op_prod_batch_size, coeffs_batch_size)
+        # Possibly update the batch size of this operator term and check consistency.
+        batch_size = max(op_prod_batch_size, len(coeff))
         if self.batch_size == 1:
             self.batch_size = batch_size
         else:
@@ -252,15 +227,10 @@ class OperatorTerm:
 
     def append(self,
                op_prod: Sequence[ElementaryOperator | MatrixOperator],
-               *,
                modes: Sequence[int] | None = None,
                conjs: Sequence[bool] | None = None,
                duals: Sequence[bool] | None = None,
-               coeff: float | complex = 1.0,
-               static_coeffs: jax.Array | None = None,
-               total_coeffs: jax.ShapeDtypeStruct | None = None,
-               coeff_callback: cudm.WrappedScalarCallback | None = None,
-               coeff_grad_callback: cudm.WrappedScalarGradientCallback | None = None
+               coeff: float | complex | jax.Array = 1.0,
                ) -> None:
         """
         Append an elementary or matrix product to an operator term.
@@ -270,22 +240,27 @@ class OperatorTerm:
             modes: Modes acted on by the operator product.
             conjs: Conjugations in the operator product. Only applies to MatrixOperators.
             duals: Dualities of the operator product.
-            coeff: Coefficient of the operator product.
-            static_coeffs: Static batched coefficients of the operator product.
-            total_coeffs: Total batched coefficients of the operator product.
-            coeff_callback: Forward callback for the coefficients.
-            coeff_grad_callback: Gradient callback for the coefficients.
+            coeff: Non-batched coefficient or batched coefficients of the operator product.
         """
-        # Only require total_coeffs when using batched coefficients (static_coeffs provided)
-        if coeff_callback is not None and static_coeffs is not None:
-            if not isinstance(total_coeffs, jax.ShapeDtypeStruct):
-                raise RuntimeError("For dynamically constructed batched coefficients, "
-                                   "total_coeffs must be a jax.ShapeDtypeStruct.")
+        if self._ptr is not None:
+            raise RuntimeError("Cannot modify operator term after it has been used in an operator action.")
+
+        # coeff is converted to a length-1 array if it is a Python scalar.
+        if (
+            isinstance(coeff, (float, complex)) or
+            (isinstance(coeff, jax.Array) and coeff.ndim == 0)  # scalar but traced
+        ):
+            coeff = jnp.array([coeff], dtype=jnp.complex128)
+        elif isinstance(coeff, jax.Array) and coeff.ndim > 0:
+            if coeff.dtype != jnp.complex128:
+                raise ValueError("Coefficient must be of type complex128.")
+        else:
+            raise ValueError("Coefficient must be a float, complex, or jax.Array.")
 
         # Check if all elementary or matrix operators have the same data type.
-        self._check_dtype(op_prod)
+        self._check_and_set_dtype(op_prod)
         self._check_and_append_op_prod_type(op_prod)
-        self._check_and_append_batch_size(op_prod, static_coeffs, total_coeffs)
+        self._check_and_set_batch_size(op_prod, coeff)
 
         # Check consistency and append modes, conjs and duals.
         if self._op_prod_types[-1] is ElementaryOperator:
@@ -355,17 +330,26 @@ class OperatorTerm:
             self.conjs.append(tuple(conjs))
             self.duals.append(tuple(duals))
 
-        # Populate instance attributes.
+        # Attributes from function arguments.
         self.op_prods.append(tuple(op_prod))
         self.coeffs.append(coeff)
-        self.static_coeffs.append(static_coeffs)
-        self.total_coeffs.append(total_coeffs)
-        self.static_coeffs_ptrs.append(None)
-        self.total_coeffs_ptrs.append(None)
-        self.coeff_callbacks.append(coeff_callback)
-        self.coeff_grad_callbacks.append(coeff_grad_callback)
 
-    def __getitem__(self, index: int) -> Tuple[ElementaryOperator | MatrixOperator, ...]:
+        # Set batch size.
+        self.batch_sizes.append(len(coeff))
+
+        # Attributes for handling gradients. None is appended here to preserve length, which is then
+        # updated in the _create method.
+        self._coeff_requires_grads.append(None)
+        self._coeff_ptrs.append(0)
+        self._coeff_ptr_objs.append(None)
+        self._coeff_grad_ptrs.append(0)
+        self._coeff_callbacks.append(None)
+        self._coeff_grad_callbacks.append(None)
+        self._coeff_grad_ptr_objs.append(None)
+        self._total_coeffs_ptrs.append(0)
+        self._total_coeffs_ptr_objs.append(None)
+
+    def __getitem__(self, index: int) -> tuple[ElementaryOperator | MatrixOperator, ...]:
         """
         Get an operator product from the operator term.
         """
@@ -376,22 +360,54 @@ class OperatorTerm:
         Create opaque handle to the operator term.
         """
         # Create opaque handle to dependent elementary or matrix operators.
+        # XXX: We are creating redundant elementary operators here.
+        # When JAX flattens and unflattens the PyTrees, it creates new Python objects.
         for op_prod in self.op_prods:
             for elem_op in op_prod:
                 elem_op._create(handle)
 
-        # Create opaque handle to the operator term.    
+        # Create the current operator term.
         if self._ptr is None:
-            self._ptr = cudm.create_operator_term(
-                handle,
-                len(self.dims),
-                self.dims
-            )
+            self._ptr = cudm.create_operator_term(handle, len(self.dims), self.dims)
             self.logger.debug(f"Created operator term at {hex(self._ptr)}")
 
             for i in range(len(self.op_prods)):
+
+                # Detect if the coefficient requires gradient and assign callback, gradient callback,
+                # temporary coefficient pointer and object.
+                self._coeff_requires_grads[i] = detect_ad_traced_object(self.coeffs[i])
+                if not is_vmap_traced(self.coeffs[i]) and len(self.coeffs[i]) == 1:  # non-batched coefficient
+
+                    # Traced scalars need to be passed through an intermediate memory slot.
+                    self._coeff_callbacks[i] = get_scalar_assignment_callback(self.coeffs[i])
+                    self._coeff_ptrs[i] = self._coeff_callbacks[i].callback.coeff.data.ptr
+
+                    # If gradient is computed on the coefficient, assign gradient callback and pointer.
+                    if self._coeff_requires_grads[i]:
+                        self._coeff_grad_callbacks[i] = get_scalar_gradient_attachment_callback(self.coeffs[i])
+                        self._coeff_grad_ptrs[i] = self._coeff_grad_callbacks[i].callback.scalar_grad.data.ptr
+
+                else:  # batched coefficients
+                    if is_vmap_traced(self.coeffs[i]):
+                        coeff_shape = self.coeffs[i].val.shape
+                        coeff_dtype = self.coeffs[i].val.dtype
+                    else:
+                        coeff_shape = self.coeffs[i].shape
+                        coeff_dtype = self.coeffs[i].dtype
+                    static_coeff_buf = cp.ones(coeff_shape, dtype=coeff_dtype)
+                    self._coeff_ptrs[i] = static_coeff_buf.data.ptr
+                    self._coeff_ptr_objs[i] = static_coeff_buf
+
+                    # For batched coefficients, callback is required by the API but is a no-op.
+                    self._coeff_callbacks[i] = get_empty_scalar_callback()
+                    self._total_coeffs_ptrs[i], self._total_coeffs_ptr_objs[i] = get_random_odd_pointer_and_object()
+
+                    if self._coeff_requires_grads[i]:
+                        self._coeff_grad_callbacks[i] = get_scalar_gradient_attachment_callback(self.coeffs[i])
+                        self._coeff_grad_ptrs[i] = self._coeff_grad_callbacks[i].callback.scalar_grad.data.ptr
+
                 if self._op_prod_types[i] is ElementaryOperator:
-                    if self._batch_sizes[i] == 1:
+                    if self.batch_sizes[i] == 1:
                         cudm.operator_term_append_elementary_product(
                             handle,
                             self._ptr,
@@ -399,35 +415,11 @@ class OperatorTerm:
                             [elem_op._ptr for elem_op in self.op_prods[i]],
                             self.modes[i],
                             self.duals[i],
-                            self.coeffs[i],
-                            self.coeff_callbacks[i],
-                            self.coeff_grad_callbacks[i]
+                            1.0,  # coefficient, to be updated to the real coefficient by callback
+                            self._coeff_callbacks[i],
+                            self._coeff_grad_callbacks[i],
                         )
-                    else:  # batched
-                        if self.static_coeffs[i] is not None:
-                            # Create and store object for temporary static coefficients.
-                            static_coeffs_ptr_obj = ctypes.c_short()
-                            self._static_coeffs_ptr_objs.append(static_coeffs_ptr_obj)
-
-                            # Extract pointer of the object for temporary static coefficients.
-                            static_coeffs_ptr = ctypes.addressof(static_coeffs_ptr_obj) + 1
-                            assert static_coeffs_ptr % 2 == 1, "Temporary static coefficients pointer must be an odd number."
-                            self.static_coeffs_ptrs[i] = static_coeffs_ptr
-                        else:
-                            static_coeffs_ptr = 0
-
-                        if self.total_coeffs[i] is not None:
-                            # Create and store object for temporary pointer.
-                            total_coeffs_ptr_obj = ctypes.c_short()
-                            self._total_coeffs_ptr_objs.append(total_coeffs_ptr_obj)
-
-                            # Extract pointer of the object for temporary total coefficients.
-                            total_coeffs_ptr = ctypes.addressof(total_coeffs_ptr_obj) + 1
-                            assert total_coeffs_ptr % 2 == 1, "Temporary total coefficients pointer must be an odd number."
-                            self.total_coeffs_ptrs[i] = total_coeffs_ptr
-                        else:
-                            total_coeffs_ptr = 0
-
+                    else:
                         cudm.operator_term_append_elementary_product_batch(
                             handle,
                             self._ptr,
@@ -435,14 +427,14 @@ class OperatorTerm:
                             [elem_op._ptr for elem_op in self.op_prods[i]],
                             self.modes[i],
                             self.duals[i],
-                            self._batch_sizes[i],
-                            static_coeffs_ptr,
-                            total_coeffs_ptr,
-                            self.coeff_callbacks[i],
-                            self.coeff_grad_callbacks[i],
+                            self.batch_sizes[i],
+                            self._coeff_ptrs[i],
+                            self._total_coeffs_ptrs[i],
+                            self._coeff_callbacks[i],
+                            self._coeff_grad_callbacks[i],
                         )
                 else:  # MatrixOperator
-                    if self._batch_sizes[i] == 1:
+                    if self.batch_sizes[i] == 1:
                         cudm.operator_term_append_matrix_product(
                             handle,
                             self._ptr,
@@ -450,35 +442,11 @@ class OperatorTerm:
                             [mat_op._ptr for mat_op in self.op_prods[i]],
                             self.conjs[i],
                             self.duals[i],
-                            self.coeffs[i],
-                            self.coeff_callbacks[i],
-                            self.coeff_grad_callbacks[i]
+                            1.0,  # coefficient, to be updated to the real coefficient by callback
+                            self._coeff_callbacks[i],
+                            self._coeff_grad_callbacks[i],
                         )
-                    else:  # batched
-                        if self.static_coeffs[i] is not None:
-                            # Create and store object for temporary static coefficients.
-                            static_coeffs_ptr_obj = ctypes.c_short()
-                            self._static_coeffs_ptr_objs.append(static_coeffs_ptr_obj)
-
-                            # Extract pointer of the object for temporary static coefficients.
-                            static_coeffs_ptr = ctypes.addressof(static_coeffs_ptr_obj) + 1
-                            assert static_coeffs_ptr % 2 == 1, "Temporary static coefficients pointer must be an odd number."
-                            self.static_coeffs_ptrs[i] = static_coeffs_ptr
-                        else:
-                            static_coeffs_ptr = 0
-
-                        if self.total_coeffs[i] is not None:
-                            # Create and store object for temporary total coefficients.
-                            total_coeffs_ptr_obj = ctypes.c_short()
-                            self._total_coeffs_ptr_objs.append(total_coeffs_ptr_obj)
-
-                            # Extract pointer of the object for temporary total coefficients.
-                            total_coeffs_ptr = ctypes.addressof(total_coeffs_ptr_obj) + 1
-                            assert total_coeffs_ptr % 2 == 1, "Temporary total coefficients pointer must be an odd number."
-                            self.total_coeffs_ptrs[i] = total_coeffs_ptr
-                        else:
-                            total_coeffs_ptr = 0
-
+                    else:
                         cudm.operator_term_append_matrix_product_batch(
                             handle,
                             self._ptr,
@@ -486,11 +454,11 @@ class OperatorTerm:
                             [mat_op._ptr for mat_op in self.op_prods[i]],
                             self.conjs[i],
                             self.duals[i],
-                            self._batch_sizes[i],
-                            static_coeffs_ptr,
-                            total_coeffs_ptr,
-                            self.coeff_callbacks[i],
-                            self.coeff_grad_callbacks[i],
+                            self.batch_sizes[i],
+                            self._coeff_ptrs[i],
+                            self._total_coeffs_ptrs[i],
+                            self._coeff_callbacks[i],
+                            self._coeff_grad_callbacks[i],
                         )
 
             self.logger.debug(f"Appended operator products to operator term at {hex(self._ptr)}")
@@ -499,10 +467,6 @@ class OperatorTerm:
         """
         Destroy opaque handle to the operator term.
         """
-        self._static_coeffs_ptr_objs.clear()
-        self._total_coeffs_ptr_objs.clear()
-
-        # Destroy opaque handle to the operator term.
         if self._ptr is not None:
             cudm.destroy_operator_term(self._ptr)
             self.logger.debug(f"Destroyed operator term at {hex(self._ptr)}")

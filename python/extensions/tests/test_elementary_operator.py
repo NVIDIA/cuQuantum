@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Test the ElementaryOperator class in cuQuantum Python JAX.
+Tests for the ElementaryOperator class.
 """
 
 from itertools import product

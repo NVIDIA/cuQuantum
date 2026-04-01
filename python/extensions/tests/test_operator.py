@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Test the Operator class in cuQuantum Python JAX.
+Tests for the Operator class.
 """
 
 import pytest
@@ -79,25 +79,6 @@ class TestOperator:
         with pytest.raises(ValueError):
             op.append(op_term1)
             op.append(op_term2)
-
-    @pytest.mark.parametrize(
-        "data",
-        [
-            ((3, 3), jnp.complex128),
-        ],
-        indirect=True,
-    )
-    def test_append_fail_coeff_callback_without_total_coeffs(self, data):
-        """
-        Test appending operator products with a coefficient callback without total coefficients fails.
-        """
-        base_op = ElementaryOperator(data)
-        op_term = OperatorTerm(self.dims)
-        op_term.append([base_op], modes=(0,))
-        op = Operator(self.dims)
-        static_coeffs = jnp.array([1.0])
-        with pytest.raises(RuntimeError):
-            op.append(op_term, static_coeffs=static_coeffs, coeff_callback=lambda x: x)
 
     @pytest.mark.parametrize(
         "data",

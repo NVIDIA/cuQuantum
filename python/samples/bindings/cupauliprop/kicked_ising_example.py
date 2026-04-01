@@ -535,9 +535,9 @@ def main():
     # zero state, i.e. Tr(outExpansion * |0><0|), as we now compute.
     
     # Obtain a view of the full output expansion (we'll free it in 'Clean up')
-    num_out_terms = cupauliprop.pauli_expansion_get_num_terms(handle, in_expansion)
+    num_out_terms = cupauliprop.pauli_expansion_get_num_terms(handle, out_expansion)
     out_view = cupauliprop.pauli_expansion_get_contiguous_range(
-        handle, in_expansion, 0, num_out_terms)
+        handle, out_expansion, 0, num_out_terms)
     
     # Check that the existing workspace memory is sufficient to compute the trace
     cupauliprop.pauli_expansion_view_prepare_trace_with_zero_state(
@@ -557,16 +557,20 @@ def main():
         d_workspace_buffer.ptr, workspace_mem)
     
     # Compute the trace; the main and final output of this simulation!
-    expec = np.zeros(1, dtype=np.float64)
+    trace_significand = np.zeros(1, dtype=np.float64)
+    trace_exponent = np.zeros(1, dtype=np.float64)
     cupauliprop.pauli_expansion_view_compute_trace_with_zero_state(
-        handle, out_view, expec.ctypes.data, workspace, 0)
+        handle, out_view,
+        trace_significand.ctypes.data, trace_exponent.ctypes.data,
+        workspace, 0)
+    expec = trace_significand[0] * np.exp2(trace_exponent[0])
     
     # End timing after trace is evaluated
     end_time = time.time()
     duration = end_time - start_time
     
     print()
-    print(f"Expectation value:       {expec[0]}")
+    print(f"Expectation value:       {expec}")
     print(f"Final number of terms:   {num_out_terms}")
     print(f"Maximum number of terms: {max_num_terms}")
     print(f"Runtime:                 {duration} seconds")

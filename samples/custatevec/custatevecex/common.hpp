@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdarg>
+#include <vector>
 
 //
 // Error checking macro for cuStateVec Ex API
@@ -85,3 +86,9 @@ void output(const char* format, ...);
 // Respects setOutputEnabled() for quiet mode
 //
 void outputChar(char c);
+
+//
+// Output integer vector function - implemented in common.cpp
+// Respects setOutputEnabled() for quiet mode
+//
+void outputVectorDump(const char* label, const std::vector<int32_t>& vec);

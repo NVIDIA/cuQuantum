@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.01.0. Do not modify it directly.
+# This code was automatically generated with version 26.03.0, generator version 0.3.1.dev1332+g03874867a.d20260311. Do not modify it directly.
 
 cimport cython
 cimport cpython
@@ -36,7 +36,12 @@ include "cudensitymat.pxi"
 ###############################################################################
 
 class Status(_IntEnum):
-    """See `cudensitymatStatus_t`."""
+    """
+    Return status of the library API functions.All library API functions
+    return a status which can take one of the following values.
+
+    See `cudensitymatStatus_t`.
+    """
     SUCCESS = CUDENSITYMAT_STATUS_SUCCESS
     NOT_INITIALIZED = CUDENSITYMAT_STATUS_NOT_INITIALIZED
     ALLOC_FAILED = CUDENSITYMAT_STATUS_ALLOC_FAILED
@@ -61,55 +66,158 @@ class Status(_IntEnum):
     CUTENSORNET_ERROR = CUDENSITYMAT_STATUS_CUTENSORNET_ERROR
 
 class ComputeType(_IntEnum):
-    """See `cudensitymatComputeType_t`."""
+    """
+    Supported compute types.
+
+    See `cudensitymatComputeType_t`.
+    """
     COMPUTE_32F = CUDENSITYMAT_COMPUTE_32F
     COMPUTE_64F = CUDENSITYMAT_COMPUTE_64F
 
 class DistributedProvider(_IntEnum):
-    """See `cudensitymatDistributedProvider_t`."""
+    """
+    Supported providers of the distributed communication service.
+
+    See `cudensitymatDistributedProvider_t`.
+    """
     NONE = CUDENSITYMAT_DISTRIBUTED_PROVIDER_NONE
     MPI = CUDENSITYMAT_DISTRIBUTED_PROVIDER_MPI
     NCCL = CUDENSITYMAT_DISTRIBUTED_PROVIDER_NCCL
 
 class CallbackDevice(_IntEnum):
-    """See `cudensitymatCallbackDevice_t`."""
+    """
+    Supported target devices for user-defined callbacks.
+
+    See `cudensitymatCallbackDevice_t`.
+    """
     CPU = CUDENSITYMAT_CALLBACK_DEVICE_CPU
     GPU = CUDENSITYMAT_CALLBACK_DEVICE_GPU
 
 class DifferentiationDir(_IntEnum):
-    """See `cudensitymatDifferentiationDir_t`."""
+    """
+    Supported differentiation directions.
+
+    See `cudensitymatDifferentiationDir_t`.
+    """
     BACKWARD = CUDENSITYMAT_DIFFERENTIATION_DIR_BACKWARD
 
 class StatePurity(_IntEnum):
-    """See `cudensitymatStatePurity_t`."""
+    """
+    Quantum state purity (pure or mixed state).
+
+    See `cudensitymatStatePurity_t`.
+    """
     PURE = CUDENSITYMAT_STATE_PURITY_PURE
     MIXED = CUDENSITYMAT_STATE_PURITY_MIXED
 
 class ElementaryOperatorSparsity(_IntEnum):
-    """See `cudensitymatElementaryOperatorSparsity_t`."""
+    """
+    Elementary operator sparsity kind.
+
+    See `cudensitymatElementaryOperatorSparsity_t`.
+    """
     OPERATOR_SPARSITY_NONE = CUDENSITYMAT_OPERATOR_SPARSITY_NONE
     OPERATOR_SPARSITY_MULTIDIAGONAL = CUDENSITYMAT_OPERATOR_SPARSITY_MULTIDIAGONAL
 
 class OperatorSpectrumKind(_IntEnum):
-    """See `cudensitymatOperatorSpectrumKind_t`."""
+    """
+    Kinds of the operator extreme eigen-spectrum computation.
+
+    See `cudensitymatOperatorSpectrumKind_t`.
+    """
     OPERATOR_SPECTRUM_LARGEST = CUDENSITYMAT_OPERATOR_SPECTRUM_LARGEST
     OPERATOR_SPECTRUM_SMALLEST = CUDENSITYMAT_OPERATOR_SPECTRUM_SMALLEST
     OPERATOR_SPECTRUM_LARGEST_REAL = CUDENSITYMAT_OPERATOR_SPECTRUM_LARGEST_REAL
     OPERATOR_SPECTRUM_SMALLEST_REAL = CUDENSITYMAT_OPERATOR_SPECTRUM_SMALLEST_REAL
 
 class OperatorSpectrumConfig(_IntEnum):
-    """See `cudensitymatOperatorSpectrumConfig_t`."""
+    """
+    Configuration options for the operator extreme eigen-spectrum
+    computation.
+
+    See `cudensitymatOperatorSpectrumConfig_t`.
+    """
     MAX_EXPANSION = CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_EXPANSION
     MAX_RESTARTS = CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_RESTARTS
     MIN_BLOCK_SIZE = CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MIN_BLOCK_SIZE
 
+class BoundaryCondition(_IntEnum):
+    """
+    This enum lists supported boundary conditions for supported state
+    factorizations.
+
+    See `cudensitymatBoundaryCondition_t`.
+    """
+    OPEN = CUDENSITYMAT_BOUNDARY_CONDITION_OPEN
+
+class TimePropagationScopeKind(_IntEnum):
+    """
+    Time propagation scope (full vs split evolution).
+
+    See `cudensitymatTimePropagationScopeKind_t`.
+    """
+    PROPAGATION_SCOPE_SPLIT = CUDENSITYMAT_PROPAGATION_SCOPE_SPLIT
+
+class TimePropagationScopeSplitKind(_IntEnum):
+    """
+    Split kind for split-scope propagation.
+
+    See `cudensitymatTimePropagationScopeSplitKind_t`.
+    """
+    PROPAGATION_SCOPE_SPLIT_TDVP = CUDENSITYMAT_PROPAGATION_SCOPE_SPLIT_TDVP
+
+class TimePropagationApproachKind(_IntEnum):
+    """
+    Time propagation approach (time integration / exponentiation method).
+
+    See `cudensitymatTimePropagationApproachKind_t`.
+    """
+    PROPAGATION_APPROACH_KRYLOV = CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV
+
+class TimePropagationAttribute(_IntEnum):
+    """
+    Time propagation configuration attributes.
+
+    See `cudensitymatTimePropagationAttribute_t`.
+    """
+    PROPAGATION_SPLIT_SCOPE_KIND = CUDENSITYMAT_PROPAGATION_SPLIT_SCOPE_KIND
+    PROPAGATION_SPLIT_SCOPE_TDVP_CONFIG = CUDENSITYMAT_PROPAGATION_SPLIT_SCOPE_TDVP_CONFIG
+    PROPAGATION_APPROACH_KRYLOV_CONFIG = CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_CONFIG
+
+class TimePropagationApproachKrylovConfigAttribute(_IntEnum):
+    """
+    Configuration attributes for Krylov-subspace method.
+
+    See `cudensitymatTimePropagationApproachKrylovConfigAttribute_t`.
+    """
+    PROPAGATION_APPROACH_KRYLOV_TOLERANCE = CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_TOLERANCE
+    PROPAGATION_APPROACH_KRYLOV_MAX_DIM = CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_MAX_DIM
+    PROPAGATION_APPROACH_KRYLOV_MIN_BETA = CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_MIN_BETA
+    PROPAGATION_APPROACH_KRYLOV_ADAPTIVE_STEP_SIZE = CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_ADAPTIVE_STEP_SIZE
+
+class TimePropagationScopeSplitTDVPConfigAttribute(_IntEnum):
+    """
+    Configuration attributes for TDVP time propagation method.
+
+    See `cudensitymatTimePropagationScopeSplitTDVPConfigAttribute_t`.
+    """
+    PROPAGATION_SPLIT_SCOPE_TDVP_ORDER = CUDENSITYMAT_PROPAGATION_SPLIT_SCOPE_TDVP_ORDER
+
 class Memspace(_IntEnum):
-    """See `cudensitymatMemspace_t`."""
+    """
+    Memory spaces for workspace buffer allocation.
+
+    See `cudensitymatMemspace_t`.
+    """
     DEVICE = CUDENSITYMAT_MEMSPACE_DEVICE
     HOST = CUDENSITYMAT_MEMSPACE_HOST
 
 class WorkspaceKind(_IntEnum):
-    """See `cudensitymatWorkspaceKind_t`."""
+    """
+    Kinds of workspace memory buffers.
+
+    See `cudensitymatWorkspaceKind_t`.
+    """
     WORKSPACE_SCRATCH = CUDENSITYMAT_WORKSPACE_SCRATCH
 
 
@@ -255,7 +363,7 @@ cpdef reset_random_seed(intptr_t handle, int32_t random_seed):
 
 
 cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int data_type) except? 0:
-    """Defines an empty quantum state of a given purity and shape, or a batch of such quantum states.
+    """Defines an empty dense quantum state of a given purity and shape, or a batch of such dense quantum states.
 
     Args:
         handle (intptr_t): Library handle.
@@ -270,7 +378,7 @@ cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_space_modes
         data_type (int): Numerical representation data type (type of tensor elements).
 
     Returns:
-        intptr_t: Empty quantum state (or a batch of quantum states).
+        intptr_t: Empty dense quantum state (or a batch of such quantum states).
 
     .. seealso:: `cudensitymatCreateState`
     """
@@ -279,6 +387,43 @@ cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_space_modes
     cdef State state
     with nogil:
         __status__ = cudensitymatCreateState(<const Handle>handle, <_StatePurity>purity, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), batch_size, <DataType>data_type, &state)
+    check_status(__status__)
+    return <intptr_t>state
+
+
+cpdef intptr_t create_state_mps(intptr_t handle, int purity, int32_t num_space_modes, space_mode_extents, int boundary_condition, bond_extents, int data_type, int64_t batch_size) except? 0:
+    """Defines an empty quantum state of a given purity and shape in the Matrix Product State (MPS) factorized form, or a batch of such MPS factorized quantum states.
+
+    Args:
+        handle (intptr_t): Library handle.
+        purity (StatePurity): Desired quantum state purity.
+        num_space_modes (int32_t): Number of space modes (number of quantum degrees of freedom).
+        space_mode_extents (object): Extents of the space modes (dimensions of the quantum degrees of freedom). It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+        boundary_condition (BoundaryCondition): Boundary condition.
+        bond_extents (object): Extents of the bond modes. For open boundary condition, the length of the array must be equal to the number of space modes minus one, where ``bond_extents[i]`` is the bond dimension between site ``i`` and site ``i+1``. For periodic boundary condition, the length of the array must be equal to the number of space modes. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+        data_type (int): Quantum state data type.
+        batch_size (int64_t): Batch size (number of equally-shaped quantum states in the batch).
+
+    Returns:
+        intptr_t: Empty quantum state (or a batch of quantum states) in the MPS factorized form.
+
+    .. seealso:: `cudensitymatCreateStateMPS`
+    """
+    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
+    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _bond_extents_
+    get_resource_ptr[int64_t](_bond_extents_, bond_extents, <int64_t*>NULL)
+    cdef State state
+    with nogil:
+        __status__ = cudensitymatCreateStateMPS(<const Handle>handle, <_StatePurity>purity, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), <_BoundaryCondition>boundary_condition, <const int64_t*>(_bond_extents_.data()), <DataType>data_type, batch_size, &state)
     check_status(__status__)
     return <intptr_t>state
 
@@ -517,6 +662,7 @@ cpdef intptr_t create_elementary_operator(intptr_t handle, int32_t num_space_mod
         __status__ = cudensitymatCreateElementaryOperator(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), <_ElementaryOperatorSparsity>sparsity, num_diagonals, <const int32_t*>(_diagonal_offsets_.data()), <DataType>data_type, <void*>tensor_data, _tensor_callback_, _tensor_gradient_callback_, &elem_operator)
     check_status(__status__)
     _hold_tensor_callback_reference(<intptr_t>elem_operator, tensor_callback)
+    _hold_tensor_gradient_callback_reference(<intptr_t>elem_operator, tensor_gradient_callback)
     return <intptr_t>elem_operator
 
 
@@ -560,6 +706,7 @@ cpdef intptr_t create_elementary_operator_batch(intptr_t handle, int32_t num_spa
         __status__ = cudensitymatCreateElementaryOperatorBatch(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), batch_size, <_ElementaryOperatorSparsity>sparsity, num_diagonals, <const int32_t*>(_diagonal_offsets_.data()), <DataType>data_type, <void*>tensor_data, _tensor_callback_, _tensor_gradient_callback_, &elem_operator)
     check_status(__status__)
     _hold_tensor_callback_reference(<intptr_t>elem_operator, tensor_callback)
+    _hold_tensor_gradient_callback_reference(<intptr_t>elem_operator, tensor_gradient_callback)
     return <intptr_t>elem_operator
 
 
@@ -607,6 +754,7 @@ cpdef intptr_t create_matrix_operator_dense_local(intptr_t handle, int32_t num_s
         __status__ = cudensitymatCreateMatrixOperatorDenseLocal(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), <DataType>data_type, <void*>matrix_data, _matrix_callback_, _matrix_gradient_callback_, &matrix_operator)
     check_status(__status__)
     _hold_tensor_callback_reference(<intptr_t>matrix_operator, matrix_callback)
+    _hold_tensor_gradient_callback_reference(<intptr_t>matrix_operator, matrix_gradient_callback)
     return <intptr_t>matrix_operator
 
 
@@ -641,6 +789,7 @@ cpdef intptr_t create_matrix_operator_dense_local_batch(intptr_t handle, int32_t
         __status__ = cudensitymatCreateMatrixOperatorDenseLocalBatch(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), batch_size, <DataType>data_type, <void*>matrix_data, _matrix_callback_, _matrix_gradient_callback_, &matrix_operator)
     check_status(__status__)
     _hold_tensor_callback_reference(<intptr_t>matrix_operator, matrix_callback)
+    _hold_tensor_gradient_callback_reference(<intptr_t>matrix_operator, matrix_gradient_callback)
     return <intptr_t>matrix_operator
 
 
@@ -656,6 +805,82 @@ cpdef destroy_matrix_operator(intptr_t matrix_operator):
         __status__ = cudensitymatDestroyMatrixOperator(<MatrixOperator>matrix_operator)
     check_status(__status__)
     _callback_holders.pop(matrix_operator, None)
+
+
+cpdef intptr_t create_matrix_product_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents, int boundary_condition, bond_extents, int data_type, tensor_data, tensor_callbacks, tensor_gradient_callbacks) except? 0:
+    """Creates a matrix product operator (MPO) acting on a subset of quantum state modes (aka space modes).
+
+    Args:
+        handle (intptr_t): Library handle.
+        num_space_modes (int32_t): Number of the (state) space modes acted on.
+        space_mode_extents (object): Extents of the (state) space modes acted on. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+        boundary_condition (BoundaryCondition): Boundary condition.
+        bond_extents (object): Extents of the bond modes. For open boundary condition, the length of the array must be equal to the number of space modes minus one, where ``bond_extents[i]`` is the bond dimension between site ``i`` and site ``i+1``. For periodic boundary condition, the length of the array must be equal to the number of space modes. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int64_t``.
+
+        data_type (int): Matrix product operator data type.
+        tensor_data (object): GPU-accessible pointers to the elements of each site tensor constituting the matrix product operator (``tensor_data[i]`` points to site ``i``). It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of :class:`int`\s (as pointer addresses).
+
+        tensor_callbacks (object): Optional user-defined tensor callback functions (for each MPO tensor) which can be called later to fill in the matrix product operator elements in the provided storage, or NULL.
+        tensor_gradient_callbacks (object): Optional user-defined tensor gradient callback functions (for each MPO tensor) which can be called later to compute the Vector-Jacobian Product (VJP) for the matrix product operator, to produce gradients with respect to the user-defined real parameters, or NULL.
+
+    Returns:
+        intptr_t: Matrix product operator.
+
+    .. seealso:: `cudensitymatCreateMatrixProductOperator`
+    """
+    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
+    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int64_t] ] _bond_extents_
+    get_resource_ptr[int64_t](_bond_extents_, bond_extents, <int64_t*>NULL)
+    cdef nullable_unique_ptr[ vector[void*] ] _tensor_data_
+    get_resource_ptrs[void](_tensor_data_, tensor_data, <void*>NULL)
+    cdef vector[_WrappedTensorCallback] _tensor_callbacks_vec_
+    cdef _WrappedTensorCallback * _tensor_callbacks_ = NULL
+    if tensor_callbacks is not None:
+        for _cb_ in tensor_callbacks:
+            _tensor_callbacks_vec_.push_back(_convert_tensor_callback(_cb_))
+        _tensor_callbacks_ = _tensor_callbacks_vec_.data()
+    cdef vector[_WrappedTensorGradientCallback] _tensor_gradient_callbacks_vec_
+    cdef _WrappedTensorGradientCallback * _tensor_gradient_callbacks_ = NULL
+    if tensor_gradient_callbacks is not None:
+        for _cb_ in tensor_gradient_callbacks:
+            _tensor_gradient_callbacks_vec_.push_back(_convert_tensor_gradient_callback(_cb_))
+        _tensor_gradient_callbacks_ = _tensor_gradient_callbacks_vec_.data()
+    cdef MatrixProductOperator matrix_product_operator
+    with nogil:
+        __status__ = cudensitymatCreateMatrixProductOperator(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), <_BoundaryCondition>boundary_condition, <const int64_t*>(_bond_extents_.data()), <DataType>data_type, <void**>(_tensor_data_.data()), <cudensitymatWrappedTensorCallback_t*>_tensor_callbacks_, <cudensitymatWrappedTensorGradientCallback_t*>_tensor_gradient_callbacks_, &matrix_product_operator)
+    check_status(__status__)
+    if tensor_callbacks is not None:
+        for _cb_ in tensor_callbacks:
+            _hold_tensor_callback_reference(<intptr_t>matrix_product_operator, _cb_)
+    if tensor_gradient_callbacks is not None:
+        for _cb_ in tensor_gradient_callbacks:
+            _hold_tensor_gradient_callback_reference(<intptr_t>matrix_product_operator, _cb_)
+    return <intptr_t>matrix_product_operator
+
+
+cpdef destroy_matrix_product_operator(intptr_t matrix_product_operator):
+    """Destroys a matrix product operator (MPO).
+
+    Args:
+        matrix_product_operator (intptr_t): Matrix product operator.
+
+    .. seealso:: `cudensitymatDestroyMatrixProductOperator`
+    """
+    with nogil:
+        __status__ = cudensitymatDestroyMatrixProductOperator(<MatrixProductOperator>matrix_product_operator)
+    check_status(__status__)
+    _callback_holders.pop(matrix_product_operator, None)
 
 
 cpdef intptr_t create_operator_term(intptr_t handle, int32_t num_space_modes, space_mode_extents) except? 0:
@@ -739,6 +964,7 @@ cpdef operator_term_append_elementary_product(intptr_t handle, intptr_t operator
         __status__ = cudensitymatOperatorTermAppendElementaryProduct(<const Handle>handle, <OperatorTerm>operator_term, num_elem_operators, <const ElementaryOperator*>(_elem_operators_.data()), <const int32_t*>(_state_modes_acted_on_.data()), <const int32_t*>(_mode_action_duality_.data()), <cuDoubleComplex>_coefficient_, _coefficient_callback_, _coefficient_gradient_callback_)
     check_status(__status__)
     _hold_scalar_callback_reference(<intptr_t>operator_term, coefficient_callback)
+    _hold_scalar_gradient_callback_reference(<intptr_t>operator_term, coefficient_gradient_callback)
 
 
 cpdef operator_term_append_elementary_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback):
@@ -783,6 +1009,7 @@ cpdef operator_term_append_elementary_product_batch(intptr_t handle, intptr_t op
         __status__ = cudensitymatOperatorTermAppendElementaryProductBatch(<const Handle>handle, <OperatorTerm>operator_term, num_elem_operators, <const ElementaryOperator*>(_elem_operators_.data()), <const int32_t*>(_state_modes_acted_on_.data()), <const int32_t*>(_mode_action_duality_.data()), batch_size, <const cuDoubleComplex*>static_coefficients, <cuDoubleComplex*>total_coefficients, _coefficient_callback_, _coefficient_gradient_callback_)
     check_status(__status__)
     _hold_scalar_callback_reference(<intptr_t>operator_term, coefficient_callback)
+    _hold_scalar_gradient_callback_reference(<intptr_t>operator_term, coefficient_gradient_callback)
 
 
 cpdef operator_term_append_matrix_product(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, complex coefficient, coefficient_callback, coefficient_gradient_callback):
@@ -826,6 +1053,7 @@ cpdef operator_term_append_matrix_product(intptr_t handle, intptr_t operator_ter
         __status__ = cudensitymatOperatorTermAppendMatrixProduct(<const Handle>handle, <OperatorTerm>operator_term, num_matrix_operators, <const MatrixOperator*>(_matrix_operators_.data()), <const int32_t*>(_matrix_conjugation_.data()), <const int32_t*>(_action_duality_.data()), <cuDoubleComplex>_coefficient_, _coefficient_callback_, _coefficient_gradient_callback_)
     check_status(__status__)
     _hold_scalar_callback_reference(<intptr_t>operator_term, coefficient_callback)
+    _hold_scalar_gradient_callback_reference(<intptr_t>operator_term, coefficient_gradient_callback)
 
 
 cpdef operator_term_append_matrix_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback):
@@ -870,6 +1098,58 @@ cpdef operator_term_append_matrix_product_batch(intptr_t handle, intptr_t operat
         __status__ = cudensitymatOperatorTermAppendMatrixProductBatch(<const Handle>handle, <OperatorTerm>operator_term, num_matrix_operators, <const MatrixOperator*>(_matrix_operators_.data()), <const int32_t*>(_matrix_conjugation_.data()), <const int32_t*>(_action_duality_.data()), batch_size, <const cuDoubleComplex*>static_coefficients, <cuDoubleComplex*>total_coefficients, _coefficient_callback_, _coefficient_gradient_callback_)
     check_status(__status__)
     _hold_scalar_callback_reference(<intptr_t>operator_term, coefficient_callback)
+    _hold_scalar_gradient_callback_reference(<intptr_t>operator_term, coefficient_gradient_callback)
+
+
+cpdef operator_term_append_mpo_product(intptr_t handle, intptr_t operator_term, int32_t num_mpo_operators, mpo_operators, mpo_conjugation, state_modes_acted_on, mode_action_duality, complex coefficient, coefficient_callback, coefficient_gradient_callback):
+    """Appends a product of matrix product operators (MPOs) to the operator term.
+
+    Args:
+        handle (intptr_t): Library handle.
+        operator_term (intptr_t): Operator term.
+        num_mpo_operators (int32_t): Number of MPO operators in the MPO product.
+        mpo_operators (object): MPO operators constituting the MPO product. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of :class:`int`\s (as pointer addresses).
+
+        mpo_conjugation (object): Hermitean conjugation status of each MPO in the MPO product (zero means normal, positive integer means conjugate-transposed). It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
+
+        state_modes_acted_on (object): State modes acted on by the product of matrix product operators. This is a concatenated list of the state modes acted on by all constituting MPO operators in the same order how they appear in the mpo_operators argument. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
+
+        mode_action_duality (object): Duality status of each mode action, that is, whether the action applies to a ket mode of the quantum state (value zero) or a bra mode of the quantum state (positive value). It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
+
+        coefficient (complex): Constant (static) complex scalar coefficient associated with the MPO product.
+        coefficient_callback (object): Optional user-defined complex scalar callback function which can be called later to update the scalar coefficient associated with the MPO product, or NULL. The total coefficient associated with the MPO product is a product of the constant coefficient and the result of the scalar callback function, if defined.
+        coefficient_gradient_callback (object): Optional user-defined scalar gradient callback function function which can be called later to compute the gradients of the complex scalar coefficient with respect to the user-defined real parameters, or NULL.
+
+    .. seealso:: `cudensitymatOperatorTermAppendMPOProduct`
+    """
+    cdef nullable_unique_ptr[ vector[MatrixProductOperator*] ] _mpo_operators_
+    get_resource_ptrs[MatrixProductOperator](_mpo_operators_, mpo_operators, <MatrixProductOperator*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mpo_conjugation_
+    get_resource_ptr[int32_t](_mpo_conjugation_, mpo_conjugation, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_acted_on_
+    get_resource_ptr[int32_t](_state_modes_acted_on_, state_modes_acted_on, <int32_t*>NULL)
+    cdef nullable_unique_ptr[ vector[int32_t] ] _mode_action_duality_
+    get_resource_ptr[int32_t](_mode_action_duality_, mode_action_duality, <int32_t*>NULL)
+    cdef cuDoubleComplex _coefficient_ = cuDoubleComplex(coefficient.real, coefficient.imag)
+    cdef _WrappedScalarCallback _coefficient_callback_ = _convert_scalar_callback(coefficient_callback)
+    cdef _WrappedScalarGradientCallback _coefficient_gradient_callback_ = _convert_scalar_gradient_callback(coefficient_gradient_callback)
+    with nogil:
+        __status__ = cudensitymatOperatorTermAppendMPOProduct(<const Handle>handle, <OperatorTerm>operator_term, num_mpo_operators, <const MatrixProductOperator*>(_mpo_operators_.data()), <const int32_t*>(_mpo_conjugation_.data()), <const int32_t*>(_state_modes_acted_on_.data()), <const int32_t*>(_mode_action_duality_.data()), <cuDoubleComplex>_coefficient_, _coefficient_callback_, _coefficient_gradient_callback_)
+    check_status(__status__)
+    _hold_scalar_callback_reference(<intptr_t>operator_term, coefficient_callback)
+    _hold_scalar_gradient_callback_reference(<intptr_t>operator_term, coefficient_gradient_callback)
 
 
 cpdef intptr_t create_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents) except? 0:
@@ -933,6 +1213,7 @@ cpdef operator_append_term(intptr_t handle, intptr_t superoperator, intptr_t ope
         __status__ = cudensitymatOperatorAppendTerm(<const Handle>handle, <Operator>superoperator, <OperatorTerm>operator_term, duality, <cuDoubleComplex>_coefficient_, _coefficient_callback_, _coefficient_gradient_callback_)
     check_status(__status__)
     _hold_scalar_callback_reference(<intptr_t>superoperator, coefficient_callback)
+    _hold_scalar_gradient_callback_reference(<intptr_t>superoperator, coefficient_gradient_callback)
 
 
 cpdef operator_append_term_batch(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback):
@@ -957,6 +1238,7 @@ cpdef operator_append_term_batch(intptr_t handle, intptr_t superoperator, intptr
         __status__ = cudensitymatOperatorAppendTermBatch(<const Handle>handle, <Operator>superoperator, <OperatorTerm>operator_term, duality, batch_size, <const cuDoubleComplex*>static_coefficients, <cuDoubleComplex*>total_coefficients, _coefficient_callback_, _coefficient_gradient_callback_)
     check_status(__status__)
     _hold_scalar_callback_reference(<intptr_t>superoperator, coefficient_callback)
+    _hold_scalar_gradient_callback_reference(<intptr_t>superoperator, coefficient_gradient_callback)
 
 
 cpdef attach_batched_coefficients(intptr_t handle, intptr_t superoperator, int32_t num_operator_term_batched_coeffs, operator_term_batched_coeffs_tmp, operator_term_batched_coeffs, int32_t num_operator_product_batched_coeffs, operator_product_batched_coeffs_tmp, operator_product_batched_coeffs):
@@ -1000,6 +1282,24 @@ cpdef attach_batched_coefficients(intptr_t handle, intptr_t superoperator, int32
     get_resource_ptrs[void](_operator_product_batched_coeffs_, operator_product_batched_coeffs, <void*>NULL)
     with nogil:
         __status__ = cudensitymatAttachBatchedCoefficients(<const Handle>handle, <Operator>superoperator, num_operator_term_batched_coeffs, <void**>(_operator_term_batched_coeffs_tmp_.data()), <void**>(_operator_term_batched_coeffs_.data()), num_operator_product_batched_coeffs, <void**>(_operator_product_batched_coeffs_tmp_.data()), <void**>(_operator_product_batched_coeffs_.data()))
+    check_status(__status__)
+
+
+cpdef operator_configure_action(intptr_t handle, intptr_t superoperator, intptr_t state_in, intptr_t state_out, intptr_t attribute_value, size_t attribute_size):
+    """Configures the operator action on a quantum state.
+
+    Args:
+        handle (intptr_t): Library handle.
+        superoperator (intptr_t): Operator.
+        state_in (intptr_t): Representative input quantum state on which the operator is supposed to act. The actual quantum state acted on during computation may be different, but it has to be of the same shape, kind, and factorization structure (topology, bond dimensions, etc).
+        state_out (intptr_t): Representative output quantum state produced by the action of the operator on the input quantum state. The actual quantum state acted on during computation may be different, but it has to be of the same shape, kind, and factorization structure (topology, bond dimensions, etc).
+        attribute_value (intptr_t): Configuration attribute.
+        attribute_size (size_t): Pointer to the configuration attribute value (type-erased).
+
+    .. seealso:: `cudensitymatOperatorConfigureAction`
+    """
+    with nogil:
+        __status__ = cudensitymatOperatorConfigureAction(<const Handle>handle, <Operator>superoperator, <const State>state_in, <const State>state_out, <const void*>attribute_value, attribute_size)
     check_status(__status__)
 
 
@@ -1381,6 +1681,321 @@ cpdef operator_spectrum_compute(intptr_t handle, intptr_t spectrum, double time,
     get_resource_ptrs[State](_eigenstates_, eigenstates, <State*>NULL)
     with nogil:
         __status__ = cudensitymatOperatorSpectrumCompute(<const Handle>handle, <OperatorSpectrum>spectrum, time, batch_size, num_params, <const double*>params, num_eigen_states, <State*>(_eigenstates_.data()), <void*>eigenvalues, <double*>tolerances, <WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(__status__)
+
+
+cpdef intptr_t create_time_propagation_scope_split_tdvp_config(intptr_t handle) except? 0:
+    """Creates a TDVP configuration object with default settings.
+
+    Args:
+        handle (intptr_t): Library handle.
+
+    Returns:
+        intptr_t: TDVP configuration object.
+
+    .. seealso:: `cudensitymatCreateTimePropagationScopeSplitTDVPConfig`
+    """
+    cdef TimePropagationScopeSplitTDVPConfig config
+    with nogil:
+        __status__ = cudensitymatCreateTimePropagationScopeSplitTDVPConfig(<const Handle>handle, &config)
+    check_status(__status__)
+    return <intptr_t>config
+
+
+cpdef destroy_time_propagation_scope_split_tdvp_config(intptr_t config):
+    """Destroys a TDVP configuration object.
+
+    Args:
+        config (intptr_t): TDVP configuration object.
+
+    .. seealso:: `cudensitymatDestroyTimePropagationScopeSplitTDVPConfig`
+    """
+    with nogil:
+        __status__ = cudensitymatDestroyTimePropagationScopeSplitTDVPConfig(<TimePropagationScopeSplitTDVPConfig>config)
+    check_status(__status__)
+
+
+######################### Python specific utility #########################
+
+cdef dict time_propagation_scope_split_tdvp_config_attribute_sizes = {
+    CUDENSITYMAT_PROPAGATION_SPLIT_SCOPE_TDVP_ORDER: _numpy.int32,
+}
+
+cpdef get_time_propagation_scope_split_tdvp_config_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding TimePropagationScopeSplitTDVPConfigAttribute attribute.
+
+    Args:
+        attr (TimePropagationScopeSplitTDVPConfigAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`time_propagation_scope_split_tdvp_config_get_attribute`, :func:`time_propagation_scope_split_tdvp_config_set_attribute`.
+    """
+    return time_propagation_scope_split_tdvp_config_attribute_sizes[attr]
+
+###########################################################################
+
+
+cpdef time_propagation_scope_split_tdvp_config_set_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size):
+    """Sets an attribute of the TDVP configuration.
+
+    Args:
+        handle (intptr_t): Library handle.
+        config (intptr_t): TDVP configuration object.
+        attribute (TimePropagationScopeSplitTDVPConfigAttribute): Attribute to set.
+        attribute_value (intptr_t): Pointer to the attribute value.
+        attribute_size (size_t): Size of the attribute value in bytes.
+
+    .. note:: To compute the attribute size, use the itemsize of the corresponding data
+        type, which can be queried using :func:`get_time_propagation_scope_split_tdvp_config_attribute_dtype`.
+
+    .. seealso:: `cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute`
+    """
+    with nogil:
+        __status__ = cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute(<const Handle>handle, <TimePropagationScopeSplitTDVPConfig>config, <_TimePropagationScopeSplitTDVPConfigAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
+
+
+cpdef time_propagation_scope_split_tdvp_config_get_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size):
+    """Gets an attribute of the TDVP configuration.
+
+    Args:
+        handle (intptr_t): Library handle.
+        config (intptr_t): TDVP configuration object.
+        attribute (TimePropagationScopeSplitTDVPConfigAttribute): Attribute to get.
+        attribute_value (intptr_t): Pointer to store the attribute value.
+        attribute_size (size_t): Size of the buffer in bytes.
+
+    .. note:: To compute the attribute size, use the itemsize of the corresponding data
+        type, which can be queried using :func:`get_time_propagation_scope_split_tdvp_config_attribute_dtype`.
+
+    .. seealso:: `cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute`
+    """
+    with nogil:
+        __status__ = cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute(<const Handle>handle, <const TimePropagationScopeSplitTDVPConfig>config, <_TimePropagationScopeSplitTDVPConfigAttribute>attribute, <void*>attribute_value, attribute_size)
+    check_status(__status__)
+
+
+cpdef intptr_t create_time_propagation_approach_krylov_config(intptr_t handle) except? 0:
+    """Creates a Krylov configuration object with default settings.
+
+    Args:
+        handle (intptr_t): Library handle.
+
+    Returns:
+        intptr_t: Krylov configuration object.
+
+    .. seealso:: `cudensitymatCreateTimePropagationApproachKrylovConfig`
+    """
+    cdef TimePropagationApproachKrylovConfig config
+    with nogil:
+        __status__ = cudensitymatCreateTimePropagationApproachKrylovConfig(<const Handle>handle, &config)
+    check_status(__status__)
+    return <intptr_t>config
+
+
+cpdef destroy_time_propagation_approach_krylov_config(intptr_t config):
+    """Destroys a Krylov configuration object.
+
+    Args:
+        config (intptr_t): Krylov configuration object.
+
+    .. seealso:: `cudensitymatDestroyTimePropagationApproachKrylovConfig`
+    """
+    with nogil:
+        __status__ = cudensitymatDestroyTimePropagationApproachKrylovConfig(<TimePropagationApproachKrylovConfig>config)
+    check_status(__status__)
+
+
+######################### Python specific utility #########################
+
+cdef dict time_propagation_approach_krylov_config_attribute_sizes = {
+    CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_TOLERANCE: _numpy.float64,
+    CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_MAX_DIM: _numpy.int32,
+    CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_MIN_BETA: _numpy.float64,
+    CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_ADAPTIVE_STEP_SIZE: _numpy.int32,
+}
+
+cpdef get_time_propagation_approach_krylov_config_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding TimePropagationApproachKrylovConfigAttribute attribute.
+
+    Args:
+        attr (TimePropagationApproachKrylovConfigAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`time_propagation_approach_krylov_config_get_attribute`, :func:`time_propagation_approach_krylov_config_set_attribute`.
+    """
+    return time_propagation_approach_krylov_config_attribute_sizes[attr]
+
+###########################################################################
+
+
+cpdef time_propagation_approach_krylov_config_set_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size):
+    """Sets an attribute of the Krylov configuration.
+
+    Args:
+        handle (intptr_t): Library handle.
+        config (intptr_t): Krylov configuration object.
+        attribute (TimePropagationApproachKrylovConfigAttribute): Attribute to set.
+        attribute_value (intptr_t): Pointer to the attribute value.
+        attribute_size (size_t): Size of the attribute value in bytes.
+
+    .. note:: To compute the attribute size, use the itemsize of the corresponding data
+        type, which can be queried using :func:`get_time_propagation_approach_krylov_config_attribute_dtype`.
+
+    .. seealso:: `cudensitymatTimePropagationApproachKrylovConfigSetAttribute`
+    """
+    with nogil:
+        __status__ = cudensitymatTimePropagationApproachKrylovConfigSetAttribute(<const Handle>handle, <TimePropagationApproachKrylovConfig>config, <_TimePropagationApproachKrylovConfigAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
+
+
+cpdef time_propagation_approach_krylov_config_get_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size):
+    """Gets an attribute of the Krylov configuration.
+
+    Args:
+        handle (intptr_t): Library handle.
+        config (intptr_t): Krylov configuration object.
+        attribute (TimePropagationApproachKrylovConfigAttribute): Attribute to get.
+        attribute_value (intptr_t): Pointer to store the attribute value.
+        attribute_size (size_t): Size of the buffer in bytes.
+
+    .. note:: To compute the attribute size, use the itemsize of the corresponding data
+        type, which can be queried using :func:`get_time_propagation_approach_krylov_config_attribute_dtype`.
+
+    .. seealso:: `cudensitymatTimePropagationApproachKrylovConfigGetAttribute`
+    """
+    with nogil:
+        __status__ = cudensitymatTimePropagationApproachKrylovConfigGetAttribute(<const Handle>handle, <const TimePropagationApproachKrylovConfig>config, <_TimePropagationApproachKrylovConfigAttribute>attribute, <void*>attribute_value, attribute_size)
+    check_status(__status__)
+
+
+cpdef intptr_t create_time_propagation(intptr_t handle, intptr_t superoperator, int32_t is_hermitian, int scope_kind, int approach_kind) except? 0:
+    """Creates a time propagation object for a given operator.
+
+    Args:
+        handle (intptr_t): Library handle.
+        superoperator (intptr_t): Operator.
+        is_hermitian (int32_t): Specifies whether the operator is Hermitian (!=0) or not (0).
+        scope_kind (TimePropagationScopeKind): Requested propagation scope.
+        approach_kind (TimePropagationApproachKind): Requested propagation approach.
+
+    Returns:
+        intptr_t: Time propagation object.
+
+    .. seealso:: `cudensitymatCreateTimePropagation`
+    """
+    cdef TimePropagation time_propagation
+    with nogil:
+        __status__ = cudensitymatCreateTimePropagation(<const Handle>handle, <Operator>superoperator, is_hermitian, <_TimePropagationScopeKind>scope_kind, <_TimePropagationApproachKind>approach_kind, &time_propagation)
+    check_status(__status__)
+    return <intptr_t>time_propagation
+
+
+cpdef destroy_time_propagation(intptr_t time_propagation):
+    """Destroys a time propagation object.
+
+    Args:
+        time_propagation (intptr_t): Time propagation object.
+
+    .. seealso:: `cudensitymatDestroyTimePropagation`
+    """
+    with nogil:
+        __status__ = cudensitymatDestroyTimePropagation(<TimePropagation>time_propagation)
+    check_status(__status__)
+
+
+######################### Python specific utility #########################
+
+cdef dict time_propagation_attribute_sizes = {
+    CUDENSITYMAT_PROPAGATION_SPLIT_SCOPE_KIND: _numpy.int32,
+    CUDENSITYMAT_PROPAGATION_SPLIT_SCOPE_TDVP_CONFIG: _numpy.intp,
+    CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_CONFIG: _numpy.intp,
+}
+
+cpdef get_time_propagation_attribute_dtype(int attr):
+    """Get the Python data type of the corresponding TimePropagationAttribute attribute.
+
+    Args:
+        attr (TimePropagationAttribute): The attribute to query.
+
+    Returns:
+        The data type of the queried attribute.
+
+    .. note:: This API has no C counterpart and is a convenient helper for
+        allocating memory for :func:`time_propagation_configure`.
+    """
+    return time_propagation_attribute_sizes[attr]
+
+###########################################################################
+
+
+cpdef time_propagation_configure(intptr_t handle, intptr_t time_propagation, int attribute, intptr_t attribute_value, size_t attribute_size):
+    """Configures the time propagation object with a configuration attribute.
+
+    Args:
+        handle (intptr_t): Library handle.
+        time_propagation (intptr_t): Time propagation object.
+        attribute (TimePropagationAttribute): Attribute to set.
+        attribute_value (intptr_t): Pointer to the attribute value.
+        attribute_size (size_t): Size of the attribute value in bytes.
+
+    .. note:: To compute the attribute size, use the itemsize of the corresponding data
+        type, which can be queried using :func:`get_time_propagation_attribute_dtype`.
+
+    .. seealso:: `cudensitymatTimePropagationConfigure`
+    """
+    with nogil:
+        __status__ = cudensitymatTimePropagationConfigure(<const Handle>handle, <TimePropagation>time_propagation, <_TimePropagationAttribute>attribute, <const void*>attribute_value, attribute_size)
+    check_status(__status__)
+
+
+cpdef time_propagation_prepare(intptr_t handle, intptr_t time_propagation, intptr_t state_in, intptr_t state_out, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream):
+    """Prepares the time propagation object for computation.
+
+    Args:
+        handle (intptr_t): Library handle.
+        time_propagation (intptr_t): Time propagation object.
+        state_in (intptr_t): Representative input quantum state for the time propagation.
+        state_out (intptr_t): Representative output quantum state for the time propagation.
+        compute_type (ComputeType): Desired compute type.
+        workspace_size_limit (size_t): Workspace buffer size limit (bytes).
+        workspace (intptr_t): Empty workspace descriptor on entrance. The workspace size required for the computation will be set on exit.
+        stream (intptr_t): CUDA stream.
+
+    .. seealso:: `cudensitymatTimePropagationPrepare`
+    """
+    with nogil:
+        __status__ = cudensitymatTimePropagationPrepare(<const Handle>handle, <TimePropagation>time_propagation, <const State>state_in, <const State>state_out, <_ComputeType>compute_type, workspace_size_limit, <WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(__status__)
+
+
+cpdef time_propagation_compute(intptr_t handle, intptr_t time_propagation, double time_step_real, double time_step_imag, double time, int64_t batch_size, int32_t num_params, intptr_t params, intptr_t state_in, intptr_t state_out, intptr_t workspace, intptr_t stream):
+    """Computes the time propagation of a quantum state under the action of the operator.
+
+    Args:
+        handle (intptr_t): Library handle.
+        time_propagation (intptr_t): Time propagation object.
+        time_step_real (double): Real part of time step for propagation.
+        time_step_imag (double): Imaginary part of time step for propagation.
+        time (double): Time value.
+        batch_size (int64_t): Batch size (>=1).
+        num_params (int32_t): Number of variable parameters defined by the user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array of user-defined real parameter values: params[num_params, batch_size].
+        state_in (intptr_t): Input quantum state (can be batched).
+        state_out (intptr_t): Time propagated output quantum state (can be batched).
+        workspace (intptr_t): Allocated workspace descriptor.
+        stream (intptr_t): CUDA stream.
+
+    .. seealso:: `cudensitymatTimePropagationCompute`
+    """
+    with nogil:
+        __status__ = cudensitymatTimePropagationCompute(<const Handle>handle, <TimePropagation>time_propagation, time_step_real, time_step_imag, time, batch_size, num_params, <const double*>params, <const State>state_in, <State>state_out, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(__status__)
 
 

@@ -8,7 +8,7 @@
 #include <string>
 
 #include <cuda_runtime.h>
-#include <cudensitymat.h>
+#include "cudensitymat.h"
 #include <xla/ffi/api/ffi.h>
 
 

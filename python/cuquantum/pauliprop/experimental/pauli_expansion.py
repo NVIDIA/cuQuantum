@@ -26,7 +26,12 @@ from .handles import LibraryHandle
 from .operators import QuantumOperator
 from .truncation import Truncation
 
-__all__ = ["PauliExpansion", "PauliExpansionView", "PauliExpansionOptions", "RehearsalInfo", "GateApplicationRehearsalInfo", "SortOrder"]
+__all__ = [
+    "PauliExpansion", "PauliExpansionView", "PauliExpansionOptions",
+    "RehearsalInfo", "GateApplicationRehearsalInfo",
+    "TraceBackwardRehearsalInfo", "ProductTraceBackwardRehearsalInfo",
+    "SortOrder",
+]
 
 
 @dataclass
@@ -54,16 +59,26 @@ class RehearsalInfo:
     host_scratch_workspace_required: int
 
     def __or__(self, other: "RehearsalInfo") -> "RehearsalInfo":
-        """Combine two RehearsalInfo by taking the max of each field."""
+        """Combine two RehearsalInfo by taking the max of each field.
+
+        When the two operands are the same concrete subclass, the result
+        preserves that subclass (merging all its fields).  When one
+        operand is the exact base class, the subclass is preserved
+        (the base has no extra fields to lose).  When both are
+        *different* subclasses, the result decays to the base
+        :class:`RehearsalInfo`, retaining only the workspace fields
+        that are common to every subclass.
+        """
         if not isinstance(other, RehearsalInfo):
             raise TypeError("other must be a RehearsalInfo or subclass thereof")
-        if isinstance(other, GateApplicationRehearsalInfo):
+        # If self is the exact base and other is a subclass, let the
+        # subclass handle it so it can preserve its extra fields.
+        if type(self) is RehearsalInfo and type(other) is not RehearsalInfo:
             return other | self
-        else:
-            return RehearsalInfo(
-                device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
-                host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
-            )
+        return RehearsalInfo(
+            device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
+            host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
+        )
 
     @staticmethod
     def _format_bytes(num_bytes: int) -> str:
@@ -83,6 +98,80 @@ class RehearsalInfo:
         )
 
 @dataclass
+class TraceBackwardRehearsalInfo(RehearsalInfo):
+    """
+    Rehearsal information for backward differentiation of a trace operation.
+
+    Includes the required number of terms for the cotangent expansion output(s).
+    """
+    cotangent_num_terms: int
+
+    def __str__(self) -> str:
+        return (
+            f"TraceBackwardRehearsalInfo(\n"
+            f"  cotangent_num_terms:               {self.cotangent_num_terms:,}\n"
+            f"  device_scratch_workspace_required: {self._format_bytes(self.device_scratch_workspace_required)}\n"
+            f"  host_scratch_workspace_required:   {self._format_bytes(self.host_scratch_workspace_required)}\n"
+            f")"
+        )
+
+    def __or__(self, other: "RehearsalInfo") -> "TraceBackwardRehearsalInfo | RehearsalInfo":
+        if not isinstance(other, RehearsalInfo):
+            raise TypeError("other must be a RehearsalInfo or subclass thereof")
+        if isinstance(other, TraceBackwardRehearsalInfo):
+            return TraceBackwardRehearsalInfo(
+                cotangent_num_terms=max(self.cotangent_num_terms, other.cotangent_num_terms),
+                device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
+                host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
+            )
+        if type(other) is RehearsalInfo:
+            return TraceBackwardRehearsalInfo(
+                cotangent_num_terms=self.cotangent_num_terms,
+                device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
+                host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
+            )
+        return super().__or__(other)
+
+@dataclass
+class ProductTraceBackwardRehearsalInfo(RehearsalInfo):
+    """
+    Rehearsal information for backward differentiation of a product trace operation.
+
+    Includes the required number of terms for both cotangent expansion outputs.
+    """
+    cotangent_num_terms1: int
+    cotangent_num_terms2: int
+
+    def __str__(self) -> str:
+        return (
+            f"ProductTraceBackwardRehearsalInfo(\n"
+            f"  cotangent_num_terms1:              {self.cotangent_num_terms1:,}\n"
+            f"  cotangent_num_terms2:              {self.cotangent_num_terms2:,}\n"
+            f"  device_scratch_workspace_required: {self._format_bytes(self.device_scratch_workspace_required)}\n"
+            f"  host_scratch_workspace_required:   {self._format_bytes(self.host_scratch_workspace_required)}\n"
+            f")"
+        )
+
+    def __or__(self, other: "RehearsalInfo") -> "ProductTraceBackwardRehearsalInfo | RehearsalInfo":
+        if not isinstance(other, RehearsalInfo):
+            raise TypeError("other must be a RehearsalInfo or subclass thereof")
+        if isinstance(other, ProductTraceBackwardRehearsalInfo):
+            return ProductTraceBackwardRehearsalInfo(
+                cotangent_num_terms1=max(self.cotangent_num_terms1, other.cotangent_num_terms1),
+                cotangent_num_terms2=max(self.cotangent_num_terms2, other.cotangent_num_terms2),
+                device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
+                host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
+            )
+        if type(other) is RehearsalInfo:
+            return ProductTraceBackwardRehearsalInfo(
+                cotangent_num_terms1=self.cotangent_num_terms1,
+                cotangent_num_terms2=self.cotangent_num_terms2,
+                device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
+                host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
+            )
+        return super().__or__(other)
+
+@dataclass
 class GateApplicationRehearsalInfo(RehearsalInfo):
     """
     Information about the required resources for a gate application rehearsal.
@@ -98,15 +187,29 @@ class GateApplicationRehearsalInfo(RehearsalInfo):
             f")"
         )
     
-    def __or__(self, other: "RehearsalInfo") -> "GateApplicationRehearsalInfo":
-        """Combine two GateApplicationRehearsalInfo by taking the max of each field."""
+    def __or__(self, other: "RehearsalInfo") -> "GateApplicationRehearsalInfo | RehearsalInfo":
+        """Combine two RehearsalInfo instances.
+
+        Same-type merges preserve :class:`GateApplicationRehearsalInfo`.
+        Merging with the exact base :class:`RehearsalInfo` also preserves
+        the subclass (the base has no extra fields to lose).  Mixed
+        subclass merges decay to the base :class:`RehearsalInfo`.
+        """
         if not isinstance(other, RehearsalInfo):
             raise TypeError("other must be a RehearsalInfo or subclass thereof")
-        return GateApplicationRehearsalInfo(
-            num_terms_required=max(self.num_terms_required, other.num_terms_required) if isinstance(other, GateApplicationRehearsalInfo) else self.num_terms_required,
-            device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
-            host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
-        )
+        if isinstance(other, GateApplicationRehearsalInfo):
+            return GateApplicationRehearsalInfo(
+                num_terms_required=max(self.num_terms_required, other.num_terms_required),
+                device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
+                host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
+            )
+        if type(other) is RehearsalInfo:
+            return GateApplicationRehearsalInfo(
+                num_terms_required=self.num_terms_required,
+                device_scratch_workspace_required=max(self.device_scratch_workspace_required, other.device_scratch_workspace_required),
+                host_scratch_workspace_required=max(self.host_scratch_workspace_required, other.host_scratch_workspace_required),
+            )
+        return super().__or__(other)
 
 
 class PauliExpansion:
@@ -137,7 +240,6 @@ class PauliExpansion:
         if not is_contiguous(self._coefs.shape, self._coefs.strides):
             raise ValueError("coefs buffer must be contiguous")
         
-        #TODO: check dtype correctness
         if self._xz_bits.name != self._coefs.name:
             raise TypeError(f"xz_bits_buffer and coef_buffer must have the same package, got {self._xz_bits.name} and {self._coefs.name}")
         
@@ -338,7 +440,7 @@ class PauliExpansion:
         return cupp.pauli_expansion_is_deduplicated(int(self._library_handle), int(self))
 
     @property
-    def xz_bits(self): #TODO: fix array type hints
+    def xz_bits(self):
         """
         The XZ bits buffer.
         """
@@ -367,7 +469,7 @@ class PauliExpansion:
         return min(cap_xz, cap_coef)
     
     @property
-    def coeffs(self): #TODO: fix array type hints
+    def coeffs(self):
         """
         The coefficient buffer.
         """
@@ -691,7 +793,7 @@ class PauliExpansion:
         """
         return [0] * self.num_qubits
     
-    def trace_with_zero_state(self, rehearse: bool | None = None, stream=None) -> "RehearsalInfo | float | complex":
+    def trace_with_zero_state(self, rehearse: bool | None = None, stream=None) -> "RehearsalInfo | tuple[float | complex, float]":
         """
         Computes the trace of the Pauli expansion with the zero state ``|0...0>``.
 
@@ -711,22 +813,23 @@ class PauliExpansion:
 
         Returns:
             If rehearse=True: A :class:`RehearsalInfo` with the required workspace sizes.
-            If rehearse=False: The trace value (scalar). Type matches the data type of the expansion.
+            If rehearse=False: A tuple ``(trace_significand, trace_exponent)`` where
+            ``trace = trace_significand * pow(2, trace_exponent)``.
 
         Raises:
             RuntimeError: If the base expansion is a rehearsal expansion and rehearse=False.
         """
         return self.view().trace_with_zero_state(rehearse=rehearse, stream=stream)
 
-    def _trace_with_state(self, comp_basis_state: Sequence[int], rehearse: bool | None = None, stream=None) -> "RehearsalInfo | float | complex":
+    def _trace_with_basis_state(self, comp_basis_state: Sequence[int], rehearse: bool | None = None, stream=None) -> "RehearsalInfo | tuple[float | complex, float]":
         """
         Computes the trace of the Pauli expansion with a given quantum state
         expressed in the computational basis.
 
         This is a convenience method that creates a default view covering all terms
-        and delegates to :meth:`PauliExpansionView._trace_with_state`.
+        and delegates to :meth:`PauliExpansionView._trace_with_basis_state`.
 
-        Currently only the vacuum state ``|0...0>`` is supported.
+        Currently only the zero state ``|0...0>`` is supported.
 
         Args:
             comp_basis_state: Quantum state in computational basis (bit-string).
@@ -737,15 +840,16 @@ class PauliExpansion:
 
         Returns:
             If rehearse=True: A RehearsalInfo with the required resources.
-            If rehearse=False: The trace value (scalar). Type matches the data type of the expansion.
+            If rehearse=False: A tuple ``(trace_significand, trace_exponent)`` where
+            ``trace = trace_significand * pow(2, trace_exponent)``.
         """
-        return self.view()._trace_with_state(
+        return self.view()._trace_with_basis_state(
             comp_basis_state=comp_basis_state,
             rehearse=rehearse,
             stream=stream,
         )
 
-    def product_trace(self, other: "PauliExpansion | PauliExpansionView", adjoint: bool = False, rehearse: bool | None = None, stream=None) -> "RehearsalInfo | float | complex":
+    def product_trace(self, other: "PauliExpansion | PauliExpansionView", adjoint: bool = False, rehearse: bool | None = None, stream=None) -> "RehearsalInfo | tuple[float | complex, float]":
         """
         Computes the product trace Tr(self^† * other) or Tr(self * other) with another Pauli expansion.
 
@@ -762,7 +866,8 @@ class PauliExpansion:
 
         Returns:
             If rehearse=True: A RehearsalInfo with the required resources.
-            If rehearse=False: The trace value (scalar). Type matches the data type of the expansions.
+            If rehearse=False: A tuple ``(trace_significand, trace_exponent)`` where
+            ``trace = trace_significand * pow(2, trace_exponent)``.
         """
         other_view = other if isinstance(other, PauliExpansionView) else other.view()
         return self.view().product_trace(
@@ -869,6 +974,135 @@ class PauliExpansion:
         return self.view().truncate(
             expansion_out=expansion_out,
             truncation=truncation,
+            rehearse=rehearse,
+            stream=stream,
+        )
+
+    # ------------------------------------------------------------------
+    # Backward differentiation convenience methods
+    # ------------------------------------------------------------------
+
+    def trace_with_zero_state_backward_diff(
+        self,
+        cotangent_trace,
+        cotangent_trace_exponent,
+        /,
+        cotangent_expansion: "PauliExpansion | None" = None,
+        rehearse: bool | None = None,
+        stream=None,
+    ) -> "TraceBackwardRehearsalInfo | PauliExpansion":
+        """Backward pass for :meth:`trace_with_zero_state`.
+
+        Convenience method that creates a default view and delegates to
+        :meth:`PauliExpansionView.trace_with_zero_state_backward_diff`.
+
+        Args:
+            cotangent_trace: Scalar cotangent :math:`\\tilde{t} = dL/dt`.
+            cotangent_trace_exponent: Scalar cotangent for the trace-exponent
+                output.
+            cotangent_expansion: Pre-allocated expansion to receive coefficient
+                cotangents, or ``None`` to auto-allocate.
+            rehearse: If True, only rehearse.
+            stream: Stream object, pointer, or None.
+
+        Returns:
+            If ``rehearse=True``: a :class:`TraceBackwardRehearsalInfo`.
+            If ``rehearse=False``: the cotangent :class:`PauliExpansion`.
+        """
+        return self.view().trace_with_zero_state_backward_diff(
+            cotangent_trace,
+            cotangent_trace_exponent,
+            cotangent_expansion=cotangent_expansion,
+            rehearse=rehearse,
+            stream=stream,
+        )
+
+    def product_trace_backward_diff(
+        self,
+        other: "PauliExpansion | PauliExpansionView",
+        cotangent_trace,
+        cotangent_trace_exponent,
+        /,
+        cotangent_expansion1: "PauliExpansion | None" = None,
+        cotangent_expansion2: "PauliExpansion | None" = None,
+        adjoint: bool = False,
+        rehearse: bool | None = None,
+        stream=None,
+    ) -> "ProductTraceBackwardRehearsalInfo | tuple[PauliExpansion, PauliExpansion]":
+        """Backward pass for :meth:`product_trace`.
+
+        Convenience method that creates default views and delegates to
+        :meth:`PauliExpansionView.product_trace_backward_diff`.
+
+        Args:
+            other: The other Pauli expansion (or view).
+            cotangent_trace: Scalar cotangent.
+            cotangent_trace_exponent: Scalar cotangent for the trace-exponent
+                output.
+            cotangent_expansion1: Receives cotangents for ``self``, or ``None``
+                to auto-allocate.
+            cotangent_expansion2: Receives cotangents for ``other``, or ``None``
+                to auto-allocate.
+            adjoint: Must match the forward call.
+            rehearse: If True, only rehearse.
+            stream: Stream object, pointer, or None.
+
+        Returns:
+            If ``rehearse=True``: a :class:`ProductTraceBackwardRehearsalInfo`.
+            If ``rehearse=False``: a tuple ``(cotangent_expansion1, cotangent_expansion2)``.
+        """
+        other_view = other if isinstance(other, PauliExpansionView) else other.view()
+        return self.view().product_trace_backward_diff(
+            other_view,
+            cotangent_trace,
+            cotangent_trace_exponent,
+            cotangent_expansion1=cotangent_expansion1,
+            cotangent_expansion2=cotangent_expansion2,
+            adjoint=adjoint,
+            rehearse=rehearse,
+            stream=stream,
+        )
+
+    def apply_gate_backward_diff(
+        self,
+        gate: QuantumOperator,
+        cotangent_out: "PauliExpansionView",
+        truncation: Truncation | None = None,
+        cotangent_in: Optional["PauliExpansion"] = None,
+        adjoint: bool = False,
+        sort_order: "SortOrder | SortOrderLiteral" = None,
+        keep_duplicates: bool = False,
+        rehearse: bool | None = None,
+        stream=None,
+    ) -> "GateApplicationRehearsalInfo | PauliExpansion":
+        """Backward pass for :meth:`apply_gate`.
+
+        Convenience method that creates a default view and delegates to
+        :meth:`PauliExpansionView.apply_gate_backward_diff`.
+
+        Args:
+            gate: The quantum operator (must match the forward call).
+            cotangent_out: Cotangent of the forward output.
+            truncation: Must match the forward call.
+            cotangent_in: Pre-allocated expansion for the input cotangent, or None.
+            adjoint: Must match the forward call.
+            sort_order: Sort order for the cotangent expansion.
+            keep_duplicates: Whether duplicates are allowed.
+            rehearse: If True, only rehearse.
+            stream: Stream object, pointer, or None.
+
+        Returns:
+            If ``rehearse=True``: a :class:`GateApplicationRehearsalInfo`.
+            If ``rehearse=False``: the *cotangent_in* expansion.
+        """
+        return self.view().apply_gate_backward_diff(
+            gate=gate,
+            cotangent_out=cotangent_out,
+            truncation=truncation,
+            cotangent_in=cotangent_in,
+            adjoint=adjoint,
+            sort_order=sort_order,
+            keep_duplicates=keep_duplicates,
             rehearse=rehearse,
             stream=stream,
         )
@@ -1093,66 +1327,65 @@ class PauliExpansionView:
         stream_holder = nvmath_utils.get_or_create_stream(
             self._library_handle.device_id, stream, stream_package)
         
-        gate._maybe_initialize(self._library_handle)
-        
         truncation_strategies = create_truncation_strategies(truncation)
         cupp_sort_order = sort_order_to_cupp(sort_order)
         
-        # Prepare phase
-        self._logger.debug("Preparing operator application...")
-        xz_size, coef_size = cupp.pauli_expansion_view_prepare_operator_application(
-            int(self._library_handle),
-            int(self),
-            int(gate),
-            int(cupp_sort_order),
-            int(keep_duplicates),
-            len(truncation_strategies),
-            convert_truncation_strategies(truncation_strategies),
-            self._workspace.memory_limit,
-            int(self._workspace))
-        
-        device_ws, host_ws = self._workspace.get_required_sizes()
-        # Avoid accessing .coeffs for package="cuda" (buffers are intentionally not user-exposed).
-        num_terms = coef_size // self.base._coefs.itemsize
-        self._logger.debug(f"Prepare complete: required {num_terms} terms, device_ws={device_ws}, host_ws={host_ws}")
-        
-        if rehearse:
-            self._logger.info(f"Rehearsal complete: {num_terms} terms required")
-            return GateApplicationRehearsalInfo(device_ws, host_ws, num_terms)
-        
-        # Compute phase - allocate expansion_out if not provided
-        if expansion_out is None:
-            self._logger.debug(f"Allocating output expansion with capacity {num_terms}")
-            expansion_out = self._allocate_expansion(num_terms)
-        elif expansion_out.capacity < num_terms:
-            raise ValueError(f"Expansion out capacity is too small, required {num_terms} terms, got {expansion_out.capacity} terms")
-        
-        if host_ws > 0 and not self._blocking:
-            raise RuntimeError("Host workspace requires blocking execution.")
-        
-        timing = bool(self._logger.handlers)
-        with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
-            with nvmath_utils.cuda_call_ctx(stream_holder, self._blocking, timing) as (self._last_compute_event, elapsed):
-                cupp.pauli_expansion_view_compute_operator_application(
-                    int(self._library_handle),
-                    int(self),
-                    int(expansion_out),
-                    int(gate),
-                    int(adjoint),
-                    int(cupp_sort_order),
-                    int(keep_duplicates),
-                    len(truncation_strategies),
-                    convert_truncation_strategies(truncation_strategies),
-                    int(self._workspace),
-                    stream_holder.ptr
-                )
-            expansion_out._update_stamp += 1
-            if elapsed.data is not None:
-                self._logger.info(f"Gate application completed in {elapsed.data:.3f} ms, output has {expansion_out.num_terms} terms")
-            else:
-                self._logger.info(f"Gate application completed, output has {expansion_out.num_terms} terms")
+        with gate._as_c_operator(self._library_handle) as gate_ptr:
+            # Prepare phase
+            self._logger.debug("Preparing operator application...")
+            xz_size, coef_size = cupp.pauli_expansion_view_prepare_operator_application(
+                int(self._library_handle),
+                int(self),
+                gate_ptr,
+                int(cupp_sort_order),
+                int(keep_duplicates),
+                len(truncation_strategies),
+                convert_truncation_strategies(truncation_strategies),
+                self._workspace.memory_limit,
+                int(self._workspace))
             
-            return expansion_out
+            device_ws, host_ws = self._workspace.get_required_sizes()
+            # Avoid accessing .coeffs for package="cuda" (buffers are intentionally not user-exposed).
+            num_terms = coef_size // self.base._coefs.itemsize
+            self._logger.debug(f"Prepare complete: required {num_terms} terms, device_ws={device_ws}, host_ws={host_ws}")
+            
+            if rehearse:
+                self._logger.info(f"Rehearsal complete: {num_terms} terms required")
+                return GateApplicationRehearsalInfo(device_ws, host_ws, num_terms)
+            
+            # Compute phase - allocate expansion_out if not provided
+            if expansion_out is None:
+                self._logger.debug(f"Allocating output expansion with capacity {num_terms}")
+                expansion_out = self._allocate_expansion(num_terms)
+            elif expansion_out.capacity < num_terms:
+                raise ValueError(f"Expansion out capacity is too small, required {num_terms} terms, got {expansion_out.capacity} terms")
+            
+            if host_ws > 0 and not self._blocking:
+                raise RuntimeError("Host workspace requires blocking execution.")
+            
+            timing = bool(self._logger.handlers)
+            with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
+                with nvmath_utils.cuda_call_ctx(stream_holder, self._blocking, timing) as (self._last_compute_event, elapsed):
+                    cupp.pauli_expansion_view_compute_operator_application(
+                        int(self._library_handle),
+                        int(self),
+                        int(expansion_out),
+                        gate_ptr,
+                        int(adjoint),
+                        int(cupp_sort_order),
+                        int(keep_duplicates),
+                        len(truncation_strategies),
+                        convert_truncation_strategies(truncation_strategies),
+                        int(self._workspace),
+                        stream_holder.ptr
+                    )
+                expansion_out._update_stamp += 1
+                if elapsed.data is not None:
+                    self._logger.info(f"Gate application completed in {elapsed.data:.3f} ms, output has {expansion_out.num_terms} terms")
+                else:
+                    self._logger.info(f"Gate application completed, output has {expansion_out.num_terms} terms")
+                
+                return expansion_out
 
     def __int__(self) -> int:
         """
@@ -1168,7 +1401,7 @@ class PauliExpansionView:
         """
         The number of terms in the Pauli expansion view.
         """
-        cupp.pauli_expansion_view_get_num_terms(int(self._library_handle), self._ptr)
+        return cupp.pauli_expansion_view_get_num_terms(int(self._library_handle), self._ptr)
     
     @property
     def storage_location(self) -> Literal["cpu", "gpu"]:
@@ -1194,7 +1427,7 @@ class PauliExpansionView:
         """
         return self.base._zero_state
     
-    def trace_with_zero_state(self, rehearse: bool | None = None, stream = None) -> RehearsalInfo | float | complex:
+    def trace_with_zero_state(self, rehearse: bool | None = None, stream = None) -> RehearsalInfo | tuple[float | complex, float]:
         """
         Computes the trace of the Pauli expansion view with the zero state ``|0...0>``.
 
@@ -1211,26 +1444,27 @@ class PauliExpansionView:
 
         Returns:
             If rehearse=True: A :class:`RehearsalInfo` with the required workspace sizes.
-            If rehearse=False: The trace value (scalar). Type matches the data type of the view.
+            If rehearse=False: A tuple ``(trace_significand, trace_exponent)`` where
+            ``trace = trace_significand * pow(2, trace_exponent)``.
 
         Raises:
             RuntimeError: If the base expansion is a rehearsal expansion and rehearse=False.
         """
-        return self._trace_with_state(self._zero_state, rehearse=rehearse, stream=stream)
+        return self._trace_with_basis_state(self._zero_state, rehearse=rehearse, stream=stream)
 
-    def _trace_with_state(self, comp_basis_state: Sequence[int], rehearse: bool | None = None, stream = None) -> RehearsalInfo | float | complex:
+    def _trace_with_basis_state(self, comp_basis_state: Sequence[int], rehearse: bool | None = None, stream = None) -> RehearsalInfo | tuple[float | complex, float]:
         """
         Computes the trace of the Pauli expansion view with a given quantum state
         expressed in the computational basis.
         
-        Currently only the vacuum state ``|0...0>`` is supported. The computational basis
-        state can be None (to indicate the vacuum state) or an array of zeros.
+        Currently only the zero state ``|0...0>`` is supported. The computational basis
+        state can be None (to indicate the zero state) or an array of zeros.
         
         If ``rehearse=True``, only the prepare phase is executed to determine resource requirements.
         
         Args:
             comp_basis_state: Quantum state in computational basis (bit-string).
-                Can be None to indicate the vacuum state ``|0...0>``, or an array-like
+                Can be None to indicate the zero state ``|0...0>``, or an array-like
                 of uint32 values (must all be zeros for now). If provided, should be
                 on host memory.
             rehearse: If True, only rehearse the operation. If None (default), automatically
@@ -1240,15 +1474,18 @@ class PauliExpansionView:
         
         Returns:
             If rehearse=True: A RehearsalInfo with the required resources.
-            If rehearse=False: The trace value (scalar). Type matches the data type of the view.
+            If rehearse=False: A tuple ``(trace_significand, trace_exponent)`` where
+            ``trace = trace_significand * pow(2, trace_exponent)``.
         
         Raises:
-            ValueError: If a non-vacuum state is provided (not yet supported).
+            ValueError: If a state other than the zero state is provided (not yet supported).
             RuntimeError: If the base expansion is a rehearsal expansion and rehearse=False.
         """
         # Resolve rehearse default based on base expansion's rehearsal status
+        if comp_basis_state == None:
+            comp_basis_state = self._zero_state
         if comp_basis_state != self._zero_state:
-            raise ValueError("Only the vacuum state |0...0> is currently supported")
+            raise ValueError("Only the zero state |0...0> is currently supported")
         if rehearse is None:
             rehearse = self.base._is_rehearsal
         if self.base._is_rehearsal and not rehearse:
@@ -1289,15 +1526,17 @@ class PauliExpansionView:
         
         timing = bool(self._logger.handlers)
         with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
-            # Allocate output trace buffer (on host - C++ expects a host pointer)
-            trace_buffer = np.zeros(1, dtype=self.base.dtype)
+            # Allocate output buffers on host: trace significand and base-2 exponent.
+            trace_significand_buffer = np.zeros(1, dtype=self.base.dtype)
+            trace_exponent_buffer = np.zeros(1, dtype=np.float64)
             
             # Compute trace (C++ implementation copies result from device to host pointer)
             with nvmath_utils.cuda_call_ctx(stream_holder, self._blocking, timing) as (self._last_compute_event, elapsed):
                 cupp.pauli_expansion_view_compute_trace_with_zero_state(
                     int(self._library_handle),
                     int(self),
-                    trace_buffer.ctypes.data,
+                    trace_significand_buffer.ctypes.data,
+                    trace_exponent_buffer.ctypes.data,
                     int(self._workspace),
                     stream_holder.ptr)
         
@@ -1306,11 +1545,10 @@ class PauliExpansionView:
         else:
             self._logger.info("Trace computation completed")
         
-        # Return scalar value
-        return trace_buffer[0].item()
+        return (trace_significand_buffer[0].item(), float(trace_exponent_buffer[0]))
     
 
-    def product_trace(self, other: "PauliExpansionView", adjoint: bool = False, rehearse: bool | None = None, stream = None) -> RehearsalInfo | float | complex:
+    def product_trace(self, other: "PauliExpansionView", adjoint: bool = False, rehearse: bool | None = None, stream = None) -> RehearsalInfo | tuple[float | complex, float]:
         """
         Computes the product trace Tr(self^† * other) or Tr(self * other) of two Pauli expansion views.
         
@@ -1333,7 +1571,8 @@ class PauliExpansionView:
         
         Returns:
             If rehearse=True: A RehearsalInfo with the required resources.
-            If rehearse=False: The trace value (scalar). Type matches the data type of the views.
+            If rehearse=False: A tuple ``(trace_significand, trace_exponent)`` where
+            ``trace = trace_significand * pow(2, trace_exponent)``.
         
         Raises:
             ValueError: If the views have different numbers of qubits or data types.
@@ -1390,8 +1629,9 @@ class PauliExpansionView:
         
         timing = bool(self._logger.handlers)
         with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
-            # Allocate output trace buffer (on host - C++ expects a host pointer)
-            trace_buffer = np.zeros(1, dtype=self.base.dtype)
+            # Allocate output buffers on host: trace significand and base-2 exponent.
+            trace_significand_buffer = np.zeros(1, dtype=self.base.dtype)
+            trace_exponent_buffer = np.zeros(1, dtype=np.float64)
             
             # Compute product trace (C++ implementation copies result from device to host pointer)
             with nvmath_utils.cuda_call_ctx(stream_holder, self._blocking, timing) as (self._last_compute_event, elapsed):
@@ -1400,7 +1640,8 @@ class PauliExpansionView:
                     int(self),
                     int(other),
                     int(adjoint),  # takeAdjoint1: take adjoint of first view if requested
-                    trace_buffer.ctypes.data,
+                    trace_significand_buffer.ctypes.data,
+                    trace_exponent_buffer.ctypes.data,
                     int(self._workspace),
                     stream_holder.ptr)
             
@@ -1409,8 +1650,7 @@ class PauliExpansionView:
             else:
                 self._logger.info("Product trace completed")
             
-            # Return scalar value
-            return trace_buffer[0].item()
+            return (trace_significand_buffer[0].item(), float(trace_exponent_buffer[0]))
     
     def sort(self, expansion_out: Optional["PauliExpansion"] = None, sort_order: SortOrder | SortOrderLiteral = "internal", rehearse: bool | None = None, stream = None) -> RehearsalInfo | PauliExpansion:
         """
@@ -1685,5 +1925,367 @@ class PauliExpansionView:
                 self._logger.info(f"Truncate completed, {num_terms_in} -> {expansion_out.num_terms} terms")
             
             return expansion_out
-        
+
+    # ------------------------------------------------------------------
+    # Backward differentiation methods
+    # ------------------------------------------------------------------
+
+    def trace_with_zero_state_backward_diff(
+        self,
+        cotangent_trace,
+        cotangent_trace_exponent,
+        /,
+        cotangent_expansion: "PauliExpansion | None" = None,
+        rehearse: bool | None = None,
+        stream=None,
+    ) -> "TraceBackwardRehearsalInfo | PauliExpansion":
+        """Backward pass for :meth:`trace_with_zero_state`.
+
+        Propagates the scalar cotangent of the trace value back to coefficient
+        cotangents of this view.
+
+        Args:
+            cotangent_trace: Scalar cotangent :math:`\\tilde{t} = dL/dt` (same dtype
+                as the expansion coefficients).  Can be a Python scalar or a
+                1-element numpy array.
+            cotangent_trace_exponent: Scalar cotangent for the trace-exponent output.
+            cotangent_expansion: Pre-allocated :class:`PauliExpansion` to receive the
+                coefficient cotangents, or ``None`` to auto-allocate.
+            rehearse: If True, only the prepare phase runs (returns workspace
+                requirements).  If None (default), automatically set based on the
+                base expansion's rehearsal status.
+            stream: A stream object, stream pointer (int), or None.
+
+        Returns:
+            If ``rehearse=True``: a :class:`TraceBackwardRehearsalInfo`.
+            If ``rehearse=False``: the cotangent :class:`PauliExpansion`.
+        """
+        if rehearse is None:
+            rehearse = self.base._is_rehearsal
+        if self.base._is_rehearsal and not rehearse:
+            raise RuntimeError(
+                "Cannot perform computation on a rehearsal expansion. "
+                "Create a non-rehearsal expansion using rehearsal_expansion.from_empty(...) or use rehearse=True."
+            )
+
+        self._logger.info(f"Starting trace_with_zero_state_backward_diff, rehearse={rehearse}")
+
+        stream_package = self.base.package if self.base.package != "numpy" else "cuda"
+        maybe_register_package(stream_package)
+        stream_holder = nvmath_utils.get_or_create_stream(
+            self._library_handle.device_id, stream, stream_package)
+
+        # Prepare
+        self._logger.debug("Preparing backward trace with zero state...")
+        _, required_coef_bytes = cupp.pauli_expansion_view_prepare_trace_with_zero_state_backward_diff(
+            int(self._library_handle),
+            int(self),
+            self._workspace.memory_limit,
+            int(self._workspace))
+        required_terms = required_coef_bytes // self.base._coefs.itemsize if required_coef_bytes > 0 else 0
+
+        device_ws, host_ws = self._workspace.get_required_sizes()
+        self._logger.debug(
+            f"Prepare complete: required_terms={required_terms}, device_ws={device_ws}, host_ws={host_ws}"
+        )
+
+        if rehearse:
+            self._logger.info(f"Rehearsal complete: cotangent needs {required_terms} terms")
+            return TraceBackwardRehearsalInfo(device_ws, host_ws, required_terms)
+
+        # Auto-allocate cotangent expansion if not provided
+        if cotangent_expansion is None:
+            alloc_capacity = max(required_terms, 1)
+            self._logger.debug(f"Allocating cotangent_expansion with capacity {alloc_capacity}")
+            cotangent_expansion = self._allocate_expansion(alloc_capacity, stream=stream)
+        elif cotangent_expansion.capacity < required_terms:
+            raise ValueError(
+                f"cotangent_expansion capacity is too small, required {required_terms} terms, got {cotangent_expansion.capacity} terms"
+            )
+
+        # Compute
+        if host_ws > 0 and not self._blocking:
+            raise RuntimeError("Host workspace requires blocking execution.")
+
+        # Ensure cotangents are host buffers with correct dtype.
+        cotangent_trace_significand_buf = np.array([cotangent_trace], dtype=self.base.dtype).ravel()
+        cotangent_trace_exponent_buf = np.array([cotangent_trace_exponent], dtype=np.float64).ravel()
+
+        timing = bool(self._logger.handlers)
+        with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
+            with nvmath_utils.cuda_call_ctx(stream_holder, self._blocking, timing) as (self._last_compute_event, elapsed):
+                cupp.pauli_expansion_view_compute_trace_with_zero_state_backward_diff(
+                    int(self._library_handle),
+                    int(self),
+                    cotangent_trace_significand_buf.ctypes.data,
+                    cotangent_trace_exponent_buf.ctypes.data,
+                    int(cotangent_expansion),
+                    int(self._workspace),
+                    stream_holder.ptr)
+
+        if elapsed.data is not None:
+            self._logger.info(f"trace_with_zero_state_backward_diff completed in {elapsed.data:.3f} ms")
+        else:
+            self._logger.info("trace_with_zero_state_backward_diff completed")
+
+        return cotangent_expansion
+
+    def product_trace_backward_diff(
+        self,
+        other: "PauliExpansionView",
+        cotangent_trace,
+        cotangent_trace_exponent,
+        /,
+        cotangent_expansion1: "PauliExpansion | None" = None,
+        cotangent_expansion2: "PauliExpansion | None" = None,
+        adjoint: bool = False,
+        rehearse: bool | None = None,
+        stream=None,
+    ) -> "ProductTraceBackwardRehearsalInfo | tuple[PauliExpansion, PauliExpansion]":
+        """Backward pass for :meth:`product_trace`.
+
+        Propagates the scalar cotangent of the product-trace value back to
+        coefficient cotangents for both input views.
+
+        Args:
+            other: The other Pauli expansion view (same as in the forward
+                :meth:`product_trace` call).
+            cotangent_trace: Scalar cotangent :math:`\\tilde{t} = dL/dt`.
+            cotangent_trace_exponent: Scalar cotangent for the trace-exponent output.
+            cotangent_expansion1: Pre-allocated :class:`PauliExpansion` to receive
+                coefficient cotangents for ``self``, or ``None`` to auto-allocate.
+            cotangent_expansion2: Pre-allocated :class:`PauliExpansion` to receive
+                coefficient cotangents for ``other``, or ``None`` to auto-allocate.
+            adjoint: Must match the *adjoint* flag used in the forward
+                :meth:`product_trace` call.
+            rehearse: If True, only the prepare phase runs.
+            stream: A stream object, stream pointer (int), or None.
+
+        Returns:
+            If ``rehearse=True``: a :class:`ProductTraceBackwardRehearsalInfo`.
+            If ``rehearse=False``: a tuple ``(cotangent_expansion1, cotangent_expansion2)``.
+        """
+        if rehearse is None:
+            rehearse = self.base._is_rehearsal or other.base._is_rehearsal
+        if not rehearse:
+            if self.base._is_rehearsal:
+                raise RuntimeError(
+                    "Cannot perform computation on a rehearsal expansion. "
+                    "Create a non-rehearsal expansion using rehearsal_expansion.from_empty(...) or use rehearse=True."
+                )
+            if other.base._is_rehearsal:
+                raise RuntimeError(
+                    "Cannot perform computation with a rehearsal expansion. "
+                    "Create a non-rehearsal expansion using rehearsal_expansion.from_empty(...) or use rehearse=True."
+                )
+
+        self._logger.info(f"Starting product_trace_backward_diff, adjoint={adjoint}, rehearse={rehearse}")
+
+        stream_package = self.base.package if self.base.package != "numpy" else "cuda"
+        maybe_register_package(stream_package)
+        stream_holder = nvmath_utils.get_or_create_stream(
+            self._library_handle.device_id, stream, stream_package)
+
+        # Prepare
+        self._logger.debug("Preparing backward product trace...")
+        (_, required_coef_bytes1,
+         _, required_coef_bytes2) = cupp.pauli_expansion_view_prepare_trace_with_expansion_view_backward_diff(
+            int(self._library_handle),
+            int(self),
+            int(other),
+            self._workspace.memory_limit,
+            int(self._workspace))
+        required_terms1 = required_coef_bytes1 // self.base._coefs.itemsize if required_coef_bytes1 > 0 else 0
+        required_terms2 = required_coef_bytes2 // self.base._coefs.itemsize if required_coef_bytes2 > 0 else 0
+
+        device_ws, host_ws = self._workspace.get_required_sizes()
+        self._logger.debug(
+            f"Prepare complete: required_terms1={required_terms1}, required_terms2={required_terms2}, "
+            f"device_ws={device_ws}, host_ws={host_ws}"
+        )
+
+        if rehearse:
+            self._logger.info(
+                f"Rehearsal complete: cotangent1 needs {required_terms1} terms, "
+                f"cotangent2 needs {required_terms2} terms"
+            )
+            return ProductTraceBackwardRehearsalInfo(device_ws, host_ws, required_terms1, required_terms2)
+
+        # Auto-allocate cotangent expansions if not provided
+        if cotangent_expansion1 is None:
+            alloc_capacity = max(required_terms1, 1)
+            self._logger.debug(f"Allocating cotangent_expansion1 with capacity {alloc_capacity}")
+            cotangent_expansion1 = self._allocate_expansion(alloc_capacity, stream=stream)
+        elif cotangent_expansion1.capacity < required_terms1:
+            raise ValueError(
+                f"cotangent_expansion1 capacity is too small, required {required_terms1} terms, got {cotangent_expansion1.capacity} terms"
+            )
+        if cotangent_expansion2 is None:
+            alloc_capacity = max(required_terms2, 1)
+            self._logger.debug(f"Allocating cotangent_expansion2 with capacity {alloc_capacity}")
+            cotangent_expansion2 = other._allocate_expansion(alloc_capacity, stream=stream)
+        elif cotangent_expansion2.capacity < required_terms2:
+            raise ValueError(
+                f"cotangent_expansion2 capacity is too small, required {required_terms2} terms, got {cotangent_expansion2.capacity} terms"
+            )
+
+        # Compute
+        if host_ws > 0 and not self._blocking:
+            raise RuntimeError("Host workspace requires blocking execution.")
+
+        cotangent_trace_significand_buf = np.array([cotangent_trace], dtype=self.base.dtype).ravel()
+        cotangent_trace_exponent_buf = np.array([cotangent_trace_exponent], dtype=np.float64).ravel()
+
+        timing = bool(self._logger.handlers)
+        with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
+            with nvmath_utils.cuda_call_ctx(stream_holder, self._blocking, timing) as (self._last_compute_event, elapsed):
+                cupp.pauli_expansion_view_compute_trace_with_expansion_view_backward_diff(
+                    int(self._library_handle),
+                    int(self),
+                    int(other),
+                    int(adjoint),
+                    cotangent_trace_significand_buf.ctypes.data,
+                    cotangent_trace_exponent_buf.ctypes.data,
+                    int(cotangent_expansion1),
+                    int(cotangent_expansion2),
+                    int(self._workspace),
+                    stream_holder.ptr)
+
+        if elapsed.data is not None:
+            self._logger.info(f"product_trace_backward_diff completed in {elapsed.data:.3f} ms")
+        else:
+            self._logger.info("product_trace_backward_diff completed")
+
+        return cotangent_expansion1, cotangent_expansion2
+
+    def apply_gate_backward_diff(
+        self,
+        gate: QuantumOperator,
+        cotangent_out: "PauliExpansionView",
+        truncation: "Truncation | None" = None,
+        cotangent_in: "PauliExpansion | None" = None,
+        param_grads_out: "np.ndarray | None" = None,
+        adjoint: bool = False,
+        sort_order: "SortOrder | SortOrderLiteral" = None,
+        keep_duplicates: bool = False,
+        rehearse: bool | None = None,
+        stream=None,
+    ) -> "GateApplicationRehearsalInfo | tuple[PauliExpansion, np.ndarray | None]":
+        """Backward pass for :meth:`apply_gate`.
+
+        Computes the input cotangent (written to *cotangent_in*) and accumulates
+        parameter gradients into *param_grads_out* (or an auto-allocated buffer).
+
+        Args:
+            gate: The quantum operator (must match the forward :meth:`apply_gate` call).
+            cotangent_out: Cotangent of the forward output, as a
+                :class:`PauliExpansionView`.
+            truncation: Truncation strategy (must match the forward call).
+            cotangent_in: Pre-allocated :class:`PauliExpansion` for the input
+                cotangent.  If ``None``, one is allocated automatically.
+            param_grads_out: A numpy array to accumulate parameter gradients into.
+                Must have shape ``(gate.num_differentiable_params,)`` and dtype
+                matching the expansion coefficient type.  If ``None`` (default),
+                a zeroed numpy array of the correct shape/dtype is allocated
+                automatically.
+            adjoint: Must match the *adjoint* flag used in the forward call.
+            sort_order: Sort order for the output cotangent expansion.
+            keep_duplicates: Whether the output may contain duplicates.
+            rehearse: If True, only the prepare phase runs.
+            stream: A stream object, stream pointer (int), or None.
+
+        Returns:
+            If ``rehearse=True``: a :class:`GateApplicationRehearsalInfo`.
+            If ``rehearse=False``: a tuple ``(cotangent_in, param_grads)`` where
+            *cotangent_in* is the input cotangent :class:`PauliExpansion` and
+            *param_grads* is a numpy array of parameter gradients (or ``None``
+            for non-differentiable operators).
+        """
+        if rehearse is None:
+            rehearse = self.base._is_rehearsal
+        if self.base._is_rehearsal and not rehearse:
+            raise RuntimeError(
+                "Cannot perform computation on a rehearsal expansion. "
+                "Create a non-rehearsal expansion using rehearsal_expansion.from_empty(...) or use rehearse=True."
+            )
+
+        self._logger.info(
+            f"Starting apply_gate_backward_diff: gate={gate}, adjoint={adjoint}, "
+            f"sort_order={sort_order}, rehearse={rehearse}"
+        )
+
+        stream_package = self.base.package if self.base.package != "numpy" else "cuda"
+        maybe_register_package(stream_package)
+        stream_holder = nvmath_utils.get_or_create_stream(
+            self._library_handle.device_id, stream, stream_package)
+
+        truncation_strategies = create_truncation_strategies(truncation)
+        cupp_sort_order = sort_order_to_cupp(sort_order)
+
+        # Infer gradient dtype from the expansion's coefficient type
+        grad_dtype = str(self.base._coefs.dtype)
+
+        with gate._as_c_operator_with_grad(self._library_handle, param_grads_out, grad_dtype) as (gate_ptr, param_grads):
+            # Prepare: get required buffer sizes for cotangent_in and workspace
+            self._logger.debug("Preparing backward operator application...")
+            _, coef_size = cupp.pauli_expansion_view_prepare_operator_application_backward_diff(
+                int(self._library_handle),
+                int(self),                          # viewIn
+                int(cotangent_out),                 # cotangentOut
+                gate_ptr,                           # quantumOperator
+                int(cupp_sort_order),               # sortOrder
+                int(keep_duplicates),               # keepDuplicates
+                len(truncation_strategies) if truncation else 0,
+                convert_truncation_strategies(truncation_strategies),
+                self._workspace.memory_limit,
+                int(self._workspace))
+
+            device_ws, host_ws = self._workspace.get_required_sizes()
+            num_terms = coef_size // self.base._coefs.itemsize if coef_size > 0 else 0
+            self._logger.debug(
+                f"Prepare complete: cotangent_in needs {num_terms} terms, "
+                f"device_ws={device_ws}, host_ws={host_ws}"
+            )
+
+            if rehearse:
+                self._logger.info(f"Rehearsal complete: cotangent_in needs {num_terms} terms")
+                return GateApplicationRehearsalInfo(device_ws, host_ws, num_terms)
+
+            # Allocate cotangent_in if not provided (capacity >= 1 to avoid zero-sized buffers)
+            if cotangent_in is None:
+                alloc_capacity = max(num_terms, 1)
+                self._logger.debug(f"Allocating cotangent_in with capacity {alloc_capacity} (num_terms={num_terms})")
+                cotangent_in = self._allocate_expansion(alloc_capacity, stream=stream)
+            elif cotangent_in.capacity < num_terms:
+                raise ValueError(
+                    f"cotangent_in capacity too small: need {num_terms} terms, "
+                    f"got {cotangent_in.capacity}"
+                )
+
+            if host_ws > 0 and not self._blocking:
+                raise RuntimeError("Host workspace requires blocking execution.")
+
+            timing = bool(self._logger.handlers)
+            with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
+                with nvmath_utils.cuda_call_ctx(stream_holder, self._blocking, timing) as (self._last_compute_event, elapsed):
+                    cupp.pauli_expansion_view_compute_operator_application_backward_diff(
+                        int(self._library_handle),
+                        int(self),                      # viewIn
+                        int(cotangent_out),              # cotangentOut
+                        int(cotangent_in),               # cotangentIn
+                        gate_ptr,                        # quantumOperator
+                        int(adjoint),
+                        int(cupp_sort_order),
+                        int(keep_duplicates),
+                        len(truncation_strategies) if truncation else 0,
+                        convert_truncation_strategies(truncation_strategies),
+                        int(self._workspace),
+                        stream_holder.ptr)
+
+            if elapsed.data is not None:
+                self._logger.info(f"apply_gate_backward_diff completed in {elapsed.data:.3f} ms")
+            else:
+                self._logger.info("apply_gate_backward_diff completed")
+
+            return cotangent_in, param_grads
 

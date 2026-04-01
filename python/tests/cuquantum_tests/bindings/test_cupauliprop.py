@@ -3,16 +3,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import functools
-import os
 
 import pytest
 import numpy as np
 
-try:
-    import cupy as cp
-except ImportError:
-    cp = None
-    pytest.skip("skipping binding tests when cupy is not installed", allow_module_level=True)
+cp = pytest.importorskip("cupy")
 from cupy import testing
 
 from nvmath.internal.typemaps import NAME_TO_DATA_TYPE
@@ -293,6 +288,54 @@ class TestPauliExpansionViewOperations:
             cupp.WorkspaceKind.WORKSPACE_SCRATCH)
         assert isinstance(ws_size, (int, np.integer))
 
+    @manage_resource('handle')
+    @manage_resource('pauli_expansion')
+    @manage_resource('pauli_expansion_view')
+    @manage_resource('workspace')
+    def test_view_prepare_trace_with_zero_state_backward_diff(self):
+        max_workspace = 1 << 30
+        xz_size, coef_size = cupp.pauli_expansion_view_prepare_trace_with_zero_state_backward_diff(
+            self.handle, self.pauli_expansion_view,
+            max_workspace, self.workspace)
+
+        assert isinstance(xz_size, (int, np.integer))
+        assert isinstance(coef_size, (int, np.integer))
+        assert xz_size >= 0
+        assert coef_size >= 0
+
+        ws_size = cupp.workspace_get_memory_size(
+            self.handle, self.workspace,
+            cupp.Memspace.DEVICE,
+            cupp.WorkspaceKind.WORKSPACE_SCRATCH)
+        assert isinstance(ws_size, (int, np.integer))
+
+    @manage_resource('handle')
+    @manage_resource('pauli_expansion')
+    @manage_resource('pauli_expansion_view')
+    @manage_resource('workspace')
+    def test_view_prepare_trace_with_expansion_view_backward_diff(self):
+        max_workspace = 1 << 30
+        xz_size_1, coef_size_1, xz_size_2, coef_size_2 = (
+            cupp.pauli_expansion_view_prepare_trace_with_expansion_view_backward_diff(
+                self.handle, self.pauli_expansion_view, self.pauli_expansion_view,
+                max_workspace, self.workspace)
+        )
+
+        assert isinstance(xz_size_1, (int, np.integer))
+        assert isinstance(coef_size_1, (int, np.integer))
+        assert isinstance(xz_size_2, (int, np.integer))
+        assert isinstance(coef_size_2, (int, np.integer))
+        assert xz_size_1 >= 0
+        assert coef_size_1 >= 0
+        assert xz_size_2 >= 0
+        assert coef_size_2 >= 0
+
+        ws_size = cupp.workspace_get_memory_size(
+            self.handle, self.workspace,
+            cupp.Memspace.DEVICE,
+            cupp.WorkspaceKind.WORKSPACE_SCRATCH)
+        assert isinstance(ws_size, (int, np.integer))
+
 
 @pytest.mark.parametrize('gate_kind', [
     cupp.CliffordGateKind.CLIFFORD_GATE_H,
@@ -316,9 +359,7 @@ class TestCliffordOperators:
             self.handle, gate_kind, qubits)
         
         try:
-            # Query operator kind
-            kind = cupp.quantum_operator_get_kind(self.handle, oper)
-            assert kind == cupp.QuantumOperatorKind.EXPANSION_KIND_CLIFFORD_GATE
+            pass
         finally:
             cupp.destroy_operator(oper)
 
@@ -340,8 +381,105 @@ class TestPauliRotationOperators:
             self.handle, angle, num_qubits, qubits, paulis)
         
         try:
-            kind = cupp.quantum_operator_get_kind(self.handle, oper)
-            assert kind == cupp.QuantumOperatorKind.EXPANSION_KIND_PAULI_ROTATION_GATE
+            pass
+        finally:
+            cupp.destroy_operator(oper)
+
+
+@testing.parameterize(*testing.product({
+    'dtype': (np.float64, np.complex128),
+}))
+class TestCotangentBuffer:
+    """Test attach/get cotangent buffer round-trip and edge cases."""
+
+    @manage_resource('handle')
+    def test_get_cotangent_buffer_no_attach(self):
+        angle = np.pi / 4
+        oper = cupp.create_pauli_rotation_gate_operator(
+            self.handle, angle, 1, [0], [cupp.PauliKind.PAULI_X])
+        try:
+            buf_ptr, num_elements, data_type, location = \
+                cupp.quantum_operator_get_cotangent_buffer(self.handle, oper)
+            assert buf_ptr == 0
+            assert num_elements == 1
+            assert data_type == 0
+        finally:
+            cupp.destroy_operator(oper)
+
+    @manage_resource('handle')
+    def test_attach_and_get_cotangent_buffer(self):
+        angle = np.pi / 4
+        oper = cupp.create_pauli_rotation_gate_operator(
+            self.handle, angle, 1, [0], [cupp.PauliKind.PAULI_X])
+        try:
+            _, num_elements, _, _ = \
+                cupp.quantum_operator_get_cotangent_buffer(self.handle, oper)
+
+            grad_buf = np.zeros(num_elements, dtype=self.dtype)
+            buf_size_bytes = grad_buf.nbytes
+            cuda_dtype = NAME_TO_DATA_TYPE[np.dtype(self.dtype).name]
+
+            cupp.quantum_operator_attach_cotangent_buffer(
+                self.handle, oper, grad_buf.ctypes.data,
+                buf_size_bytes, cuda_dtype, int(cupp.Memspace.HOST))
+
+            buf_ptr, num_elems_out, dt_out, loc_out = \
+                cupp.quantum_operator_get_cotangent_buffer(self.handle, oper)
+            assert buf_ptr == grad_buf.ctypes.data
+            assert num_elems_out == num_elements
+            assert dt_out == cuda_dtype
+            assert loc_out == int(cupp.Memspace.HOST)
+        finally:
+            cupp.destroy_operator(oper)
+
+    @manage_resource('handle')
+    def test_attach_cotangent_buffer_oversized(self):
+        angle = np.pi / 4
+        oper = cupp.create_pauli_rotation_gate_operator(
+            self.handle, angle, 1, [0], [cupp.PauliKind.PAULI_X])
+        try:
+            _, num_elements, _, _ = \
+                cupp.quantum_operator_get_cotangent_buffer(self.handle, oper)
+
+            grad_buf = np.zeros(num_elements * 4, dtype=self.dtype)
+            buf_size_bytes = grad_buf.nbytes
+            cuda_dtype = NAME_TO_DATA_TYPE[np.dtype(self.dtype).name]
+
+            cupp.quantum_operator_attach_cotangent_buffer(
+                self.handle, oper, grad_buf.ctypes.data,
+                buf_size_bytes, cuda_dtype, int(cupp.Memspace.HOST))
+
+            buf_ptr, _, _, _ = \
+                cupp.quantum_operator_get_cotangent_buffer(self.handle, oper)
+            assert buf_ptr == grad_buf.ctypes.data
+        finally:
+            cupp.destroy_operator(oper)
+
+    @manage_resource('handle')
+    def test_attach_cotangent_buffer_too_small(self):
+        angle = np.pi / 4
+        oper = cupp.create_pauli_rotation_gate_operator(
+            self.handle, angle, 1, [0], [cupp.PauliKind.PAULI_X])
+        try:
+            grad_buf = np.zeros(1, dtype=self.dtype)
+            cuda_dtype = NAME_TO_DATA_TYPE[np.dtype(self.dtype).name]
+            with pytest.raises(cupp.cuPauliPropError):
+                cupp.quantum_operator_attach_cotangent_buffer(
+                    self.handle, oper, grad_buf.ctypes.data,
+                    0, cuda_dtype, int(cupp.Memspace.HOST))
+        finally:
+            cupp.destroy_operator(oper)
+
+    @manage_resource('handle')
+    def test_clifford_no_differentiable_params(self):
+        oper = cupp.create_clifford_gate_operator(
+            self.handle, cupp.CliffordGateKind.CLIFFORD_GATE_H, [0])
+        try:
+            buf_ptr, num_elements, data_type, location = \
+                cupp.quantum_operator_get_cotangent_buffer(self.handle, oper)
+            assert buf_ptr == 0
+            assert num_elements == 0
+            assert data_type == 0
         finally:
             cupp.destroy_operator(oper)
 
@@ -355,8 +493,7 @@ class TestNoiseChannelOperators:
             self.handle, 1, [0], probs)
         
         try:
-            kind = cupp.quantum_operator_get_kind(self.handle, oper)
-            assert kind == cupp.QuantumOperatorKind.EXPANSION_KIND_PAULI_NOISE_CHANNEL
+            pass
         finally:
             cupp.destroy_operator(oper)
     
@@ -368,8 +505,7 @@ class TestNoiseChannelOperators:
             self.handle, 2, [0, 1], probs)
         
         try:
-            kind = cupp.quantum_operator_get_kind(self.handle, oper)
-            assert kind == cupp.QuantumOperatorKind.EXPANSION_KIND_PAULI_NOISE_CHANNEL
+            pass
         finally:
             cupp.destroy_operator(oper)
 

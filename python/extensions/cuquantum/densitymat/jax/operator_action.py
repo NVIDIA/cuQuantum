@@ -3,65 +3,52 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import logging
-from typing import Sequence, List, Tuple
+from functools import partial
+from collections.abc import Sequence
 
 import jax
-import jax.numpy as jnp
+
+from cuquantum.lib.cudensitymat_jax import InputType, OutputType
 
 from .pysrc.context import CudensitymatContext
 from .pysrc.operator import Operator
 from .pysrc.operator_action_prim import (
     operator_action_prim,
     operator_action_backward_diff_prim,
-    OperatorActionPrimitive,
-    OperatorActionBackwardDiffPrimitive
 )
 from .utils import (
+    BufferMetadata,
     maybe_expand_dim,
     maybe_squeeze_dim,
     get_state_batch_size_and_purity,
     check_and_return_final_batch_size,
+    check_and_return_op_device,
+    check_and_return_state_device,
+    is_vmap_traced,
+    get_vmap_depth,
+    is_grad_inside_vmap,
 )
+
 
 logger = logging.getLogger("cudensitymat-jax.operator_action")
 
 
 def operator_action(op: Operator,
-                    t: float,
                     state_in_bufs: jax.Array | Sequence[jax.Array],
-                    params: jax.Array | None = None,
                     device: jax.Device | None = None,
-                    batch_size: int = 1,
-                    options: dict = {}
-                    ) -> jax.Array | List[jax.Array]:
+                    ) -> jax.Array | list[jax.Array]:
     """
     Compute the action of an operator on a state.
 
     Args:
         op: Operator to compute the action of.
-        t: The time to compute the operator action at.
         state_in_bufs: Buffers of the input state components.
-        params: Callback parameters used to construct the operator.
         device: Device to use for the operator action.
-        batch_size: Batch size of the operator action.
-        options: Dictionary of options for the operator action. Currently, the available options are names of the gradients attached to the callbacks. See ``example8_gradient_attachment.py`` for an example.
-
-            - ``"op_term_grad_attr"``: Name of the operator term coefficient gradient attached to the coefficient gradient callback. Default is ``"scalar_grad"``.
-            - ``"op_prod_grad_attr"``: Name of the operator product coefficient gradient attached to the coefficient gradient callback. Default is ``"scalar_grad"``.
-            - ``"base_op_grad_attr"``: Name of the tensor gradient attached to the tensor gradient callback. Default is ``"tensor_grad"``.
 
     Returns:
         Buffers of the output state components.
     """
-    logger.info(f"Calling operator_action")
-
-    # Check if GPU is available and set to GPU 0.
-    if device is None:
-        gpu_devices = jax.devices('gpu')
-        if gpu_devices == []:
-            raise RuntimeError("No GPU devices found.")
-        device = gpu_devices[0]
-        logger.info("Running a single-GPU version of the library and setting device to GPU 0.")
+    logger.info("Calling operator_action")
 
     # Process input arguments.
     if isinstance(state_in_bufs, jax.Array):
@@ -69,108 +56,194 @@ def operator_action(op: Operator,
     else:
         state_in_bufs = tuple(state_in_bufs)
 
+    # Guard against nested vmap transformations, which are not supported.
+    if get_vmap_depth(state_in_bufs[0]) > 1:
+        raise NotImplementedError("operator_action does not support nested vmap transformations.")
+
+    # Guard against grad applied inside vmap, which is not supported.
+    if is_grad_inside_vmap(state_in_bufs[0]):
+        raise NotImplementedError("operator_action does not support grad transformations inside vmap.")
+
+    # Check and set device from op and state.
+    op_device = check_and_return_op_device(op)
+    state_device = check_and_return_state_device(state_in_bufs)
+    if op_device is not None and state_device is not None:
+        if op_device != state_device:
+            raise ValueError("Operator and state buffers must be on the same device.")
+        device = op_device  # set device to the common device
+    else:  # if one of them is None, set device to the one that is not None
+        devices = {op_device, state_device}
+        devices.remove(None)
+        if len(devices) > 0:  # set device only when one of them is not None
+            device = devices.pop()
+
+    # If device is still None, as in the case of tracing, set it to the first GPU device.
+    if device is None:
+        devices = jax.devices('gpu')
+        if len(devices) == 0:
+            raise ValueError("No GPU devices found.")
+        device = devices[0]
+        logger.info("No device specified, using the first GPU device.")
+
     # Check state shape and maybe expand to a leading batch dimension.
-    state_batch_size, purity = get_state_batch_size_and_purity(state_in_bufs, len(op.dims), batch_size)
-    batch_size = check_and_return_final_batch_size(state_in_bufs, state_batch_size, op.batch_size, batch_size)
+    state_batch_size, purity = get_state_batch_size_and_purity(state_in_bufs, len(op.dims))
+    batch_size = check_and_return_final_batch_size(state_in_bufs, state_batch_size, op.batch_size)
 
     state_in_bufs = maybe_expand_dim(state_in_bufs, len(op.dims))
 
     # Prepare library context for forward operator action.
-    CudensitymatContext.maybe_create_context(op, device, batch_size, purity)
-    
-    # Store only the pointer to avoid leaking JAX tracers during transformations
-    OperatorActionPrimitive.operator_ptr = op._ptr
+    # NOTE: Assuming a single state component.
+    if len(state_in_bufs) > 1:
+        raise NotImplementedError("More than one state component is not implemented.")
 
-    # Obtain the operator action context and assign corresponding attributes.
-    op_act_ctx = CudensitymatContext.get_context(op)
-    op_act_ctx.num_state_components = len(state_in_bufs)
+    if is_vmap_traced(state_in_bufs[0]):
+        state_shape = state_in_bufs[0].val.shape
+    else:
+        state_shape = state_in_bufs[0].shape
 
-    # Create lists for other_out attributes.
-    other_out_types = []
-    other_out_ptrs = []
-    other_out_shape_dtypes = []
+    CudensitymatContext.maybe_create_operator_context(op)
+    CudensitymatContext.maybe_create_state_context(purity, state_shape, batch_size, state_in_bufs[0].dtype)
 
-    other_in_types = []
-    other_in_ptrs = []
-    
-    op_term_coeffs_indices = []
-    op_prod_coeffs_indices = []
-    base_op_indices = []
+    # Create metadata objects for the other inputs.
+    op_term_coeff_metadata = BufferMetadata()
+    op_prod_coeff_metadata = BufferMetadata()
+    base_op_metadata = BufferMetadata()
+
+    # Create metadata objects for the gradient outputs.
+    op_term_coeff_grad_metadata = BufferMetadata()
+    op_prod_coeff_grad_metadata = BufferMetadata()
+    base_op_grad_metadata = BufferMetadata()
 
     # Extract temporary batched coefficient buffers for operator terms.
-    count = 0
-    for ptr, buf in zip(op.static_coeffs_ptrs, op.static_coeffs):
-        if buf is not None and ptr is not None and ptr not in other_in_ptrs:
-            other_in_types.append(4)
-            other_in_ptrs.append(ptr)
-            op_term_coeffs_indices.append(count)
-        count += 1
-    for ptr, buf in zip(op.total_coeffs_ptrs, op.total_coeffs):
-        if buf is not None and ptr is not None and ptr not in other_out_ptrs:
-            other_out_types.append(4)
-            other_out_ptrs.append(ptr)
-            other_out_shape_dtypes.append(buf)
+    for i, (
+        op_term,
+        op_term_coeff,
+        op_term_coeff_ptr,
+        op_term_coeff_grad_ptr,
+        op_term_total_coeffs_ptr,
+    ) in enumerate(zip(
+        op.op_terms,
+        op.coeffs,
+        op._coeff_ptrs,
+        op._coeff_grad_ptrs,
+        op._total_coeffs_ptrs,
+        strict=True
+    )):
+        is_op_term_coeff_batched = is_vmap_traced(op_term_coeff) or len(op_term_coeff) > 1
+        if is_op_term_coeff_batched:
+            dynamic_ptr = op_term_total_coeffs_ptr
+            dynamic_type = InputType.OPERATOR_TERM_BATCHED_COEFFS.value
+            if dynamic_ptr == 0:
+                raise RuntimeError("Missing total coefficient pointer for batched operator term coefficient.")
+        else:
+            dynamic_ptr = op_term_coeff_ptr
+            dynamic_type = InputType.NON_BATCHED_COEFFS.value
 
-    # Extract temporary batched coefficient buffers for operator products.
-    count = 0
-    static_coeffs = [x for op_term in op.op_terms for x in op_term.static_coeffs]
-    total_coeffs = [x for op_term in op.op_terms for x in op_term.total_coeffs]
-    static_coeffs_ptrs = [x for op_term in op.op_terms for x in op_term.static_coeffs_ptrs]
-    total_coeffs_ptrs = [x for op_term in op.op_terms for x in op_term.total_coeffs_ptrs]
-    for ptr, buf in zip(static_coeffs_ptrs, static_coeffs):
-        if buf is not None and ptr is not None and ptr not in other_in_ptrs:
-            other_in_types.append(3)
-            other_in_ptrs.append(ptr)
-            op_prod_coeffs_indices.append(count)
-        count += 1
-    for ptr, buf in zip(total_coeffs_ptrs, total_coeffs):
-        if buf is not None and ptr is not None and ptr not in other_out_ptrs:
-            other_out_types.append(3)
-            other_out_ptrs.append(ptr)
-            other_out_shape_dtypes.append(buf)
+        if dynamic_ptr not in op_term_coeff_metadata.ptrs:
+            op_term_coeff_metadata.indices.append(i)
+            op_term_coeff_metadata.types.append(dynamic_type)
+            op_term_coeff_metadata.ptrs.append(dynamic_ptr)
 
-    # Assign certain static attributes to the operator action context.
-    base_ops = [base_op for op_term in op.op_terms for op_prod in op_term.op_prods for base_op in op_prod]
-    count = 0
-    for base_op in base_ops:
-        # Use callback being None or not to detect whether data is user-provided or to be allocated.
-        if not base_op._to_be_allocated and base_op._ptr is not None:
-            other_in_types.append(2 - base_op._is_elementary)  # 1 -> 1, 0 -> 2
-            other_in_ptrs.append(base_op._ptr)
-            base_op_indices.append(count)
-        elif base_op._to_be_allocated and base_op._ptr is not None:
-            other_out_types.append(2 - base_op._is_elementary)  # 1 -> 1, 0 -> 2
-            other_out_ptrs.append(base_op._ptr)
-            shape_dtype = jax.ShapeDtypeStruct(base_op.data.shape, base_op.data.dtype)
-            other_out_shape_dtypes.append(shape_dtype)
-        count += 1
+        if op_term_coeff_grad_ptr != 0:
+            op_term_coeff_grad_metadata.indices.append(i)
+            op_term_coeff_grad_metadata.types.append(OutputType.GRADIENT.value)
+            op_term_coeff_grad_metadata.ptrs.append(op_term_coeff_grad_ptr)
+            if is_vmap_traced(op_term_coeff):
+                shape_dtype = jax.ShapeDtypeStruct(op_term_coeff.val.shape, op_term_coeff.val.dtype)
+            else:
+                shape_dtype = jax.ShapeDtypeStruct(op_term_coeff.shape, op_term_coeff.dtype)
+            op_term_coeff_grad_metadata.shape_dtypes.append(shape_dtype)
 
-    # Assign other output attributes to the operator action context.
-    op_act_ctx.other_out_shape_dtypes = other_out_shape_dtypes
-    op_act_ctx.other_out_types = other_out_types
-    op_act_ctx.other_out_ptrs = other_out_ptrs
+        # Extract temporary batched coefficient buffers for operator products.
+        for j, (
+            op_prod,
+            op_prod_coeff,
+            op_prod_coeff_ptr,
+            op_prod_coeff_grad_ptr,
+            op_prod_total_coeffs_ptr,
+        ) in enumerate(zip(
+            op_term.op_prods,
+            op_term.coeffs,
+            op_term._coeff_ptrs,
+            op_term._coeff_grad_ptrs,
+            op_term._total_coeffs_ptrs,
+            strict=True,
+        )):
+            is_op_prod_coeff_batched = is_vmap_traced(op_prod_coeff) or len(op_prod_coeff) > 1
+            if is_op_prod_coeff_batched:
+                dynamic_ptr = op_prod_total_coeffs_ptr
+                dynamic_type = InputType.OPERATOR_PRODUCT_BATCHED_COEFFS.value
+                if dynamic_ptr == 0:
+                    raise RuntimeError("Missing total coefficient pointer for batched operator product coefficient.")
+            else:
+                dynamic_ptr = op_prod_coeff_ptr
+                dynamic_type = InputType.NON_BATCHED_COEFFS.value
 
-    op_act_ctx.other_in_types = other_in_types
-    op_act_ctx.other_in_ptrs = other_in_ptrs
+            if dynamic_ptr not in op_prod_coeff_metadata.ptrs:
+                op_prod_coeff_metadata.indices.append((i, j))
+                op_prod_coeff_metadata.types.append(dynamic_type)
+                op_prod_coeff_metadata.ptrs.append(dynamic_ptr)
 
-    op_act_ctx.op_term_coeffs_indices = op_term_coeffs_indices
-    op_act_ctx.op_prod_coeffs_indices = op_prod_coeffs_indices
-    op_act_ctx.base_op_indices = base_op_indices
+            if op_prod_coeff_grad_ptr != 0:
+                op_prod_coeff_grad_metadata.indices.append((i, j))
+                op_prod_coeff_grad_metadata.types.append(OutputType.GRADIENT.value)
+                op_prod_coeff_grad_metadata.ptrs.append(op_prod_coeff_grad_ptr)
+                if is_vmap_traced(op_prod_coeff):
+                    shape_dtype = jax.ShapeDtypeStruct(op_prod_coeff.val.shape, op_prod_coeff.val.dtype)
+                else:
+                    shape_dtype = jax.ShapeDtypeStruct(op_prod_coeff.shape, op_prod_coeff.dtype)
+                op_prod_coeff_grad_metadata.shape_dtypes.append(shape_dtype)
 
-    if params is None or params.shape == (0,):
-        # Empty params causes a problem when reconstructing params from pointer 
-        # in the bindings. We're providing a value here to guard against that.
-        params = jnp.array([[0.0]])
-    elif params.ndim == 1:
-        params = jnp.array([params])
-    else:
-        if params.dtype != jnp.float64:
-            raise ValueError("params must be a float64 array")
-        
-    op_act_ctx.options = options
+            # Assign certain static attributes to the operator action context.
+            for k, base_op in enumerate(op_prod):
+                # Checking whether base_op._ptr is None since only the unique base operators need
+                # to be buffer-attached.
+                if base_op._ptr is not None and base_op._ptr not in base_op_metadata.ptrs:
+                    base_op_metadata.indices.append((i, j, k))
+                    base_op_metadata.types.append(
+                        InputType.ELEMENTARY_OPERATOR.value if base_op._is_elementary
+                        else InputType.MATRIX_OPERATOR.value
+                    )
+                    base_op_metadata.ptrs.append(base_op._ptr)
+
+                if base_op._grad_ptr != 0 and base_op._grad_ptr not in base_op_grad_metadata.ptrs:
+                    base_op_grad_metadata.indices.append((i, j, k))
+                    base_op_grad_metadata.types.append(OutputType.GRADIENT.value)
+                    base_op_grad_metadata.ptrs.append(base_op._grad_ptr)
+                    if is_vmap_traced(base_op.data):
+                        shape_dtype = jax.ShapeDtypeStruct(base_op.data.val.shape, base_op.data.val.dtype)
+                    else:
+                        shape_dtype = jax.ShapeDtypeStruct(base_op.data.shape, base_op.data.dtype)
+                    base_op_grad_metadata.shape_dtypes.append(shape_dtype)
+
+    # Combine types and pointers in the same order as they are unpacked in primitive wrappers.
+    other_in_metadata = op_term_coeff_metadata + op_prod_coeff_metadata + base_op_metadata
+    other_out_metadata = op_term_coeff_grad_metadata + op_prod_coeff_grad_metadata + base_op_grad_metadata
+
+    num_state_components = len(state_in_bufs)
 
     # Invoke operator action.
-    state_out_bufs = _operator_action(op, t, state_in_bufs, params)
+    state_out_bufs = _operator_action(
+        op,
+        state_in_bufs,
+        device,
+        batch_size,
+        num_state_components,
+        purity,
+        tuple(other_in_metadata.types),
+        tuple(other_in_metadata.ptrs),
+        tuple(other_out_metadata.shape_dtypes),
+        tuple(other_out_metadata.types),
+        tuple(other_out_metadata.ptrs),
+        tuple(op_term_coeff_metadata.indices),
+        tuple(op_prod_coeff_metadata.indices),
+        tuple(base_op_metadata.indices),
+        tuple(op_term_coeff_grad_metadata.indices),
+        tuple(op_prod_coeff_grad_metadata.indices),
+        tuple(base_op_grad_metadata.indices),
+    )
+
+    # Undo the leading batch dim when it was added by maybe_expand_dim (single-state, non-vmap).
     state_out_bufs = maybe_squeeze_dim(state_out_bufs, len(op.dims))
 
     # Process output argument.
@@ -180,49 +253,139 @@ def operator_action(op: Operator,
     return state_out_bufs
 
 
-@jax.custom_vjp
+@partial(jax.custom_vjp, nondiff_argnums=(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16))
 def _operator_action(op: Operator,
-                     t: float,
-                     state_in_bufs: Tuple[jax.Array, ...],
-                     params: jax.Array,
-                     ) -> List[jax.Array]:
+                     state_in_bufs: tuple[jax.Array, ...],
+                     device: jax.Device,
+                     batch_size: int,
+                     num_state_components: int,
+                     purity,
+                     other_in_types: tuple[int, ...],
+                     other_in_ptrs: tuple[int, ...],
+                     other_out_shape_dtypes: tuple[jax.ShapeDtypeStruct, ...],
+                     other_out_types: tuple[int, ...],
+                     other_out_ptrs: tuple[int, ...],
+                     op_term_coeffs_indices: tuple[int, ...],
+                     op_prod_coeffs_indices: tuple[int, ...],
+                     base_op_indices: tuple[int, ...],
+                     op_term_coeff_grad_indices: tuple[int, ...],
+                     op_prod_coeff_grad_indices: tuple[tuple[int, int], ...],
+                     base_op_grad_indices: tuple[tuple[int, int, int], ...],
+                     ) -> list[jax.Array]:
     """
     Custom VJP rule for operator_action.
     """
-    logger.info(f"Calling _operator_action")
-    state_out_bufs, _ = _operator_action_fwd(op, t, state_in_bufs, params)
+    logger.info("Calling _operator_action")
+    state_out_bufs, _ = _operator_action_fwd(
+        op,
+        state_in_bufs,
+        device,
+        batch_size,
+        num_state_components,
+        purity,
+        other_in_types,
+        other_in_ptrs,
+        other_out_shape_dtypes,
+        other_out_types,
+        other_out_ptrs,
+        op_term_coeffs_indices,
+        op_prod_coeffs_indices,
+        base_op_indices,
+        op_term_coeff_grad_indices,
+        op_prod_coeff_grad_indices,
+        base_op_grad_indices,
+    )
     return state_out_bufs
 
 
 def _operator_action_fwd(op: Operator,
-                         t: float,
-                         state_in_bufs: Tuple[jax.Array, ...],
-                         params: jax.Array,
-                         ) -> Tuple[List[jax.Array], tuple]:
+                         state_in_bufs: tuple[jax.Array, ...],
+                         device: jax.Device,
+                         batch_size: int,
+                         num_state_components: int,
+                         purity,
+                         other_in_types: tuple[int, ...],
+                         other_in_ptrs: tuple[int, ...],
+                         other_out_shape_dtypes: tuple[jax.ShapeDtypeStruct, ...],
+                         other_out_types: tuple[int, ...],
+                         other_out_ptrs: tuple[int, ...],
+                         op_term_coeffs_indices: tuple[int, ...],
+                         op_prod_coeffs_indices: tuple[int, ...],
+                         base_op_indices: tuple[int, ...],
+                         op_term_coeff_grad_indices: tuple[int, ...],
+                         op_prod_coeff_grad_indices: tuple[tuple[int, int], ...],
+                         base_op_grad_indices: tuple[tuple[int, int, int], ...],
+                         ) -> tuple[list[jax.Array], tuple[Operator, tuple[jax.Array, ...]]]:
     """
     Forward rule for operator_action.
     """
-    logger.info(f"Calling _operator_action_fwd")
-    state_out_bufs = operator_action_prim(op, t, state_in_bufs, params)
-    return state_out_bufs, (op, t, state_in_bufs, params)
+    logger.info("Calling _operator_action_fwd")
+    state_out_bufs = operator_action_prim(
+        op,
+        state_in_bufs,
+        device,
+        batch_size,
+        num_state_components,
+        purity,
+        other_in_types,
+        other_in_ptrs,
+        other_out_shape_dtypes,
+        other_out_types,
+        other_out_ptrs,
+        op_term_coeffs_indices,
+        op_prod_coeffs_indices,
+        base_op_indices,
+    )
+    return state_out_bufs, (op, state_in_bufs)
 
 
-def _operator_action_bwd(res: tuple, state_out_adj_bufs: jax.Array | Sequence[jax.Array]) -> tuple:
+def _operator_action_bwd(device: jax.Device,
+                         batch_size: int,
+                         num_state_components: int,
+                         purity,
+                         other_in_types: tuple[int, ...],
+                         other_in_ptrs: tuple[int, ...],
+                         other_out_shape_dtypes: tuple[jax.ShapeDtypeStruct, ...],
+                         other_out_types: tuple[int, ...],
+                         other_out_ptrs: tuple[int, ...],
+                         op_term_coeffs_indices: tuple[int, ...],
+                         op_prod_coeffs_indices: tuple[int, ...],
+                         base_op_indices: tuple[int, ...],
+                         op_term_coeff_grad_indices: tuple[int, ...],
+                         op_prod_coeff_grad_indices: tuple[tuple[int, int], ...],
+                         base_op_grad_indices: tuple[tuple[int, int, int], ...],
+                         res: tuple[Operator, tuple[jax.Array, ...]],
+                         state_out_adj_bufs: jax.Array | Sequence[jax.Array]
+                         ) -> tuple[Operator, tuple[jax.Array, ...]]:
     """
     Backward rule for operator_action.
 
     Args:
+        device: Device for the operator action.
+        batch_size: Batch size of the operator action.
+        num_state_components: Number of state components.
+        other_in_types: Non-differentiable argument from forward.
+        other_in_ptrs: Non-differentiable argument from forward.
+        op_term_coeffs_indices: Non-differentiable argument from forward.
+        op_prod_coeffs_indices: Non-differentiable argument from forward.
+        base_op_indices: Non-differentiable argument from forward.
+        op_term_coeff_grad_indices: Non-differentiable argument from forward.
+        op_prod_coeff_grad_indices: Non-differentiable argument from forward.
+        base_op_grad_indices: Non-differentiable argument from forward.
+        res: Residuals from forward pass.
         state_out_adj_bufs: Data buffers of the output state adjoint.
     """
-    logger.info(f"Calling _operator_action_bwd")
+    logger.info("Calling _operator_action_bwd")
 
-    op, t, state_in_bufs, params = res
-    
+    op, state_in_bufs = res
+
     # Prepare library context for backward operator action
-    # Store only the pointer to avoid leaking JAX tracers during transformations
-    OperatorActionBackwardDiffPrimitive.operator_ptr = op._ptr
-    op_act_ctx = CudensitymatContext.get_context(op)
-    op_act_ctx.create_adjoint_buffers()
+    if is_vmap_traced(state_in_bufs[0]):
+        state_shape = state_in_bufs[0].val.shape
+    else:
+        state_shape = state_in_bufs[0].shape
+    state_ctx = CudensitymatContext.get_state_context(purity, state_shape, batch_size, state_in_bufs[0].dtype)
+    state_ctx.create_adjoint_buffers()
 
     # Process input argument.
     if isinstance(state_out_adj_bufs, jax.Array):
@@ -233,91 +396,32 @@ def _operator_action_bwd(res: tuple, state_out_adj_bufs: jax.Array | Sequence[ja
     if len(state_in_bufs) != len(state_out_adj_bufs):
         raise ValueError("state_in_bufs and state_out_adj_bufs must have the same number of components.")
 
-    params_grad, *state_in_adj_bufs = operator_action_backward_diff_prim(
-        op, t, state_in_bufs, state_out_adj_bufs, params)
-    
+    op_grad, state_in_adj_bufs = operator_action_backward_diff_prim(
+        op,
+        state_in_bufs,
+        state_out_adj_bufs,
+        device,
+        batch_size,
+        num_state_components,
+        state_shape,
+        purity,
+        other_in_types,
+        other_in_ptrs,
+        other_out_shape_dtypes,
+        other_out_types,
+        other_out_ptrs,
+        op_term_coeffs_indices,
+        op_prod_coeffs_indices,
+        base_op_indices,
+        op_term_coeff_grad_indices,
+        op_prod_coeff_grad_indices,
+        base_op_grad_indices,
+    )
+
     if len(state_in_adj_bufs) == 1:
         state_in_adj_bufs = state_in_adj_bufs[0]
-    
-    # Lists used to store pointers to the different quantities, so that we know which gradient
-    # has been set already.
-    op_term_ptrs = []
-    op_prod_ptrs = []
-    base_op_ptrs = []
 
-    options = op_act_ctx.options
-    op_term_grad_attr = options.get("op_term_grad_attr", "scalar_grad")
-    op_prod_grad_attr = options.get("op_prod_grad_attr", "scalar_grad")
-    base_op_grad_attr = options.get("base_op_grad_attr", "tensor_grad")
-
-    op_grad = op.copy()
-    for i, (op_term, coeff_grad_callback) in enumerate(zip(op_grad.op_terms, op_grad.coeff_grad_callbacks)):
-        # We need to set gradient for operator term coefficients only when there is coefficient
-        # gradient callback, the coefficient gradient callback has a scalar_grad field, and gradient
-        # on this operator term has not been set.
-        set_op_term_coeffs_grad = (
-            coeff_grad_callback is not None and
-            hasattr(coeff_grad_callback.callback, op_term_grad_attr) and
-            op_term._ptr not in op_term_ptrs
-        )
-
-        if op.static_coeffs[i] is None:  # non-batched
-            if set_op_term_coeffs_grad:
-                op_grad.coeffs[i] = getattr(coeff_grad_callback.callback, op_term_grad_attr)
-                op_term_ptrs.append(op_term._ptr)
-            # else:
-            #     op_grad.coeffs[i] = 0.0j
-        else:  # batched
-            if set_op_term_coeffs_grad:
-                op_grad.static_coeffs[i] = getattr(coeff_grad_callback.callback, op_term_grad_attr)
-                op_term_ptrs.append(op_term._ptr)
-            else:
-                op_grad.static_coeffs[i] = jnp.zeros(op_grad.static_coeffs[i].shape, dtype=op_grad.static_coeffs[i].dtype)
-
-        for j, (op_prod, coeff_grad_callback_) in enumerate(zip(op_term.op_prods, op_term.coeff_grad_callbacks)):
-            # We need to set gradient for operator product coefficients only when there is coefficient
-            # gradient callback, the coefficient gradient callback has a scalar_grad field, and gradient
-            # on this operator product has not been set.
-            op_prod_ptr = tuple([base_op._ptr for base_op in op_prod])
-            set_op_prod_coeffs_grad = (
-                coeff_grad_callback_ is not None and
-                hasattr(coeff_grad_callback_.callback, op_prod_grad_attr) and
-                op_prod_ptr not in op_prod_ptrs
-            )
-
-            if op_term.static_coeffs[j] is None:  # non-batched
-                if set_op_prod_coeffs_grad:
-                    op_grad.coeffs[j] = getattr(coeff_grad_callback_.callback, op_prod_grad_attr)
-                    op_prod_ptrs.append(op_prod_ptr)
-                # else:
-                #     op_grad.coeffs[j] = 0.0j
-            else:  # batched
-                if set_op_prod_coeffs_grad:
-                    op_prod_ptrs.append(op_prod_ptr)
-                    op_term.static_coeffs[j] = getattr(coeff_grad_callback_.callback, op_prod_grad_attr)
-                else:
-                    op_term.static_coeffs[j] = jnp.zeros(
-                        op_term.static_coeffs[j].shape,
-                        dtype=op_term.static_coeffs[j].dtype
-                    )
-
-            for base_op in op_prod:
-                # We need to set gradient for base operator data only when there is tensor
-                # gradient callback, the tensor gradient callback has a tensor_grad field,
-                # and gradient on this base operator has not been set.
-                set_base_op_data_grad = (
-                    base_op.grad_callback is not None and
-                    hasattr(base_op.grad_callback.callback, base_op_grad_attr) and
-                    base_op._ptr not in base_op_ptrs
-                )
-
-                if set_base_op_data_grad:
-                    base_op.data = getattr(base_op.grad_callback.callback, base_op_grad_attr)
-                    base_op_ptrs.append(base_op._ptr)
-                else:
-                    base_op.data = jnp.zeros(base_op.data.shape, dtype=base_op.dtype)
-
-    return op_grad, 0.0, state_in_adj_bufs, params_grad
+    return op_grad, state_in_adj_bufs
 
 
 _operator_action.defvjp(_operator_action_fwd, _operator_action_bwd)

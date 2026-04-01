@@ -10,20 +10,20 @@ Please visit the [NVIDIA cuQuantum Python documentation](https://docs.nvidia.com
 
 ### Requirements
 
-The install-time dependencies of the cuQuantum Python JAX package include:
+The build-time dependencies of the cuQuantum Python JAX package include:
 
-* cuquantum-python-cu12~=26.1.0 for CUDA 12 or cuquantum-python-cu13~=26.1.0 for CUDA 13
 * jax[cuda12-local]>=0.5,<0.7 for CUDA 12 or jax[cuda13-local]>=0.8,<0.9 for CUDA 13
 * pybind11
+* wheel
 * setuptools>=77.0.3
 
-Note: 
-1. cuQuantum Python JAX is only supported with CUDA 12 and CUDA 13.
-2. cuQuantum Python JAX installation does not support build isolation. The user needs to pass in `--no-build-isolation` to `pip` when installing cuQuantum Python JAX.
+Note:
+- cuQuantum Python JAX is only supported with CUDA 12 and CUDA 13.
+- cuQuantum Python JAX wheels are CUDA-versioned: `cuquantum-python-jax-cu12` for CUDA 12 and `cuquantum-python-jax-cu13` for CUDA 13.
 
 #### Installation using `jax[cudaXX-local]`
 
-`cuquantum-python-jax` depends explicitly on `jax[cudaXX-local]`. `pip install cuquantum-python-jax` will install `jax[cudaXX-local]`.
+`cuquantum-python-jax-cu12` (or `cuquantum-python-jax-cu13`) depends explicitly on `jax[cudaXX-local]`. Installing the package will also install `jax[cudaXX-local]`.
 
 Using `jax[cudaXX-local]` assumes the user provides both cuDNN and the CUDA Toolkit. cuDNN is not a part of the CUDA Toolkit and requires an additional installation. The user must also specify `LD_LIBRARY_PATH`, including the library folders containing `libcudnn.so` and `libcupti.so`.
 
@@ -38,46 +38,44 @@ pip install nvidia-cudnn-cu12
 pip install nvidia-cuda-cupti-cu12
 ```
 
-After installing cuDNN and cuPTI, the user may install `cuquantum-python-jax` with `pip` using either:
+After installing cuDNN and cuPTI, the user may install cuQuantum Python JAX with `pip` using either:
 
 ```
-pip install --no-build-isolation cuquantum-python-jax
+pip install cuquantum-python-jax-cu12   # for CUDA 12
+pip install cuquantum-python-jax-cu13   # for CUDA 13
 ```
 
-in which case the CUDA version will be detected, or one of
+or one of
 
 ```
-pip install --no-build-isolation cuquantum-python-cu12[jax]
-pip install --no-build-isolation cuquantum-python-cu13[jax]
+pip install cuquantum-python-cu12[jax]
+pip install cuquantum-python-cu13[jax]
 ```
 
 where the CUDA version is explicitly specified on cuquantum-python.
 
 Note:
-1. If cuDNN and cuPTI are installed with `pip`, the user does not need to specify library folders in `LD_LIBRARY_PATH`.
-2. When the latter command `pip install --no-build-isolation cuquantum-python-cu12[jax]`/`pip install --no-build-isolation cuquantum-python-cu13[jax]` is used, `--no-build-isolation` applies to both cuquantum-python and cuquantum-python-jax. The user needs to ensure cuquantum-python's build dependencies are installed before the installation.
+- If cuDNN and cuPTI are installed with `pip`, the user does not need to specify library folders in `LD_LIBRARY_PATH`.
 
 #### Installing from source
 
-To install cuQuantum Python JAX from source, first compile cuQuantum Python from source using the [instructions on GitHub](https://github.com/NVIDIA/cuQuantum/blob/main/python/README.md). Once complete, navigate to `python/extensions`, then:
+To install cuQuantum Python JAX from source, first compile cuQuantum Python from source using the [instructions on GitHub](https://github.com/NVIDIA/cuQuantum/blob/main/python/README.md). Once complete, navigate to `python/extensions`, run `./configure.sh` to generate a CUDA version-specific `pyproject.toml` from the template, and then:
 
 ```
-export CUDENSITYMAT_ROOT=...
 pip install .
 ```
 
-Where `CUDENSITYMAT_ROOT` is the path to the libraries parent directory. For example, if `CUDENSITYMAT_ROOT=/usr/local`, `libcudensitymat.so` would be found under `/usr/local/lib` or `/usr/local/lib64`.
+The CUDA version is detected automatically from `$CUDA_PATH` and the wheel will be named accordingly (`cuquantum-python-jax-cu12` or `cuquantum-python-jax-cu13`).
 
 ## Running
 
 ### Requirements
 
-Runtime dependencies of the cuQuantum Python package include:
+Runtime dependencies of the cuQuantum Python JAX package include:
 
 * An NVIDIA GPU with compute capability 7.5+
-* cuquantum-python-cu12~=26.1.0 for CUDA 12 or cuquantum-python-cu13~=26.1.0 for CUDA 13
-* jax[cuda12-local]>=0.5,<0.7 for CUDA 12 or jax[cuda13-local]>=0.8,<0.9 for CUDA 13 
-* pybind11
+* cuquantum-python-cu12~=26.3.0 for CUDA 12 or cuquantum-python-cu13~=26.3.0 for CUDA 13
+* jax[cuda12-local]>=0.5,<0.7 for CUDA 12 or jax[cuda13-local]>=0.8,<0.9 for CUDA 13
 
 ## Developer Notes
 

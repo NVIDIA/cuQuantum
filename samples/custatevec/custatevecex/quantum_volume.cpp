@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -274,6 +274,8 @@ int main(int argc, char* argv[])
     // Finalize multi-process environment
     finalizeMultiProcessEnvironment();
 
-    printf("PASSED\n");
+    // Root process unconditionally prints success status
+    if (getMultiProcessRank() == 0)
+        printf("PASSED\n");
     return EXIT_SUCCESS;
 }

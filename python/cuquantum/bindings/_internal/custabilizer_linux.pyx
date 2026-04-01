@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 25.11.0. Do not modify it directly.
+# This code was automatically generated across versions from 25.11.0 to 26.02.0, generator version 0.3.1.dev1380+g6ceff55cb.d20260311. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -47,6 +47,11 @@ cdef void* __custabilizerDestroyCircuit = NULL
 cdef void* __custabilizerCreateFrameSimulator = NULL
 cdef void* __custabilizerDestroyFrameSimulator = NULL
 cdef void* __custabilizerFrameSimulatorApplyCircuit = NULL
+cdef void* __custabilizerSampleProbArray = NULL
+cdef void* __custabilizerSampleProbArraySparsePrepare = NULL
+cdef void* __custabilizerSampleProbArraySparseCompute = NULL
+cdef void* __custabilizerGF2SparseDenseMatrixMultiply = NULL
+cdef void* __custabilizerGF2SparseSparseMatrixMultiply = NULL
 
 
 cdef void* load_library() except* nogil:
@@ -137,6 +142,41 @@ cdef int _check_or_init_custabilizer() except -1 nogil:
             if handle == NULL:
                 handle = load_library()
             __custabilizerFrameSimulatorApplyCircuit = dlsym(handle, 'custabilizerFrameSimulatorApplyCircuit')
+
+        global __custabilizerSampleProbArray
+        __custabilizerSampleProbArray = dlsym(RTLD_DEFAULT, 'custabilizerSampleProbArray')
+        if __custabilizerSampleProbArray == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __custabilizerSampleProbArray = dlsym(handle, 'custabilizerSampleProbArray')
+
+        global __custabilizerSampleProbArraySparsePrepare
+        __custabilizerSampleProbArraySparsePrepare = dlsym(RTLD_DEFAULT, 'custabilizerSampleProbArraySparsePrepare')
+        if __custabilizerSampleProbArraySparsePrepare == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __custabilizerSampleProbArraySparsePrepare = dlsym(handle, 'custabilizerSampleProbArraySparsePrepare')
+
+        global __custabilizerSampleProbArraySparseCompute
+        __custabilizerSampleProbArraySparseCompute = dlsym(RTLD_DEFAULT, 'custabilizerSampleProbArraySparseCompute')
+        if __custabilizerSampleProbArraySparseCompute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __custabilizerSampleProbArraySparseCompute = dlsym(handle, 'custabilizerSampleProbArraySparseCompute')
+
+        global __custabilizerGF2SparseDenseMatrixMultiply
+        __custabilizerGF2SparseDenseMatrixMultiply = dlsym(RTLD_DEFAULT, 'custabilizerGF2SparseDenseMatrixMultiply')
+        if __custabilizerGF2SparseDenseMatrixMultiply == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __custabilizerGF2SparseDenseMatrixMultiply = dlsym(handle, 'custabilizerGF2SparseDenseMatrixMultiply')
+
+        global __custabilizerGF2SparseSparseMatrixMultiply
+        __custabilizerGF2SparseSparseMatrixMultiply = dlsym(RTLD_DEFAULT, 'custabilizerGF2SparseSparseMatrixMultiply')
+        if __custabilizerGF2SparseSparseMatrixMultiply == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __custabilizerGF2SparseSparseMatrixMultiply = dlsym(handle, 'custabilizerGF2SparseSparseMatrixMultiply')
         __py_custabilizer_init = True
         return 0
 
@@ -174,6 +214,21 @@ cpdef dict _inspect_function_pointers():
 
     global __custabilizerFrameSimulatorApplyCircuit
     data["__custabilizerFrameSimulatorApplyCircuit"] = <intptr_t>__custabilizerFrameSimulatorApplyCircuit
+
+    global __custabilizerSampleProbArray
+    data["__custabilizerSampleProbArray"] = <intptr_t>__custabilizerSampleProbArray
+
+    global __custabilizerSampleProbArraySparsePrepare
+    data["__custabilizerSampleProbArraySparsePrepare"] = <intptr_t>__custabilizerSampleProbArraySparsePrepare
+
+    global __custabilizerSampleProbArraySparseCompute
+    data["__custabilizerSampleProbArraySparseCompute"] = <intptr_t>__custabilizerSampleProbArraySparseCompute
+
+    global __custabilizerGF2SparseDenseMatrixMultiply
+    data["__custabilizerGF2SparseDenseMatrixMultiply"] = <intptr_t>__custabilizerGF2SparseDenseMatrixMultiply
+
+    global __custabilizerGF2SparseSparseMatrixMultiply
+    data["__custabilizerGF2SparseSparseMatrixMultiply"] = <intptr_t>__custabilizerGF2SparseSparseMatrixMultiply
 
     return data
 
@@ -280,3 +335,53 @@ cdef custabilizerStatus_t _custabilizerFrameSimulatorApplyCircuit(const custabil
             raise FunctionNotFoundError("function custabilizerFrameSimulatorApplyCircuit is not found")
     return (<custabilizerStatus_t (*)(const custabilizerHandle_t, custabilizerFrameSimulator_t, const custabilizerCircuit_t, int, uint64_t, custabilizerBitInt_t*, custabilizerBitInt_t*, custabilizerBitInt_t*, cudaStream_t) noexcept nogil>__custabilizerFrameSimulatorApplyCircuit)(
         handle, frameSimulator, circuit, randomizeFrameAfterMeasurement, seed, xTableDevice, zTableDevice, mTableDevice, stream)
+
+
+cdef custabilizerStatus_t _custabilizerSampleProbArray(custabilizerHandle_t handle, int64_t numSamples, int64_t numProbs, const double* probs, uint64_t seed, custabilizerBitInt_t* samples, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __custabilizerSampleProbArray
+    _check_or_init_custabilizer()
+    if __custabilizerSampleProbArray == NULL:
+        with gil:
+            raise FunctionNotFoundError("function custabilizerSampleProbArray is not found")
+    return (<custabilizerStatus_t (*)(custabilizerHandle_t, int64_t, int64_t, const double*, uint64_t, custabilizerBitInt_t*, cudaStream_t) noexcept nogil>__custabilizerSampleProbArray)(
+        handle, numSamples, numProbs, probs, seed, samples, stream)
+
+
+cdef custabilizerStatus_t _custabilizerSampleProbArraySparsePrepare(custabilizerHandle_t handle, int64_t numSamples, int64_t numProbs, size_t* workspaceSize) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __custabilizerSampleProbArraySparsePrepare
+    _check_or_init_custabilizer()
+    if __custabilizerSampleProbArraySparsePrepare == NULL:
+        with gil:
+            raise FunctionNotFoundError("function custabilizerSampleProbArraySparsePrepare is not found")
+    return (<custabilizerStatus_t (*)(custabilizerHandle_t, int64_t, int64_t, size_t*) noexcept nogil>__custabilizerSampleProbArraySparsePrepare)(
+        handle, numSamples, numProbs, workspaceSize)
+
+
+cdef custabilizerStatus_t _custabilizerSampleProbArraySparseCompute(custabilizerHandle_t handle, int64_t numSamples, int64_t numProbs, const double* probs, uint64_t seed, uint64_t* nnz, uint64_t* columnIndices, uint64_t* rowOffsets, void* workspace, size_t workspaceSize, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __custabilizerSampleProbArraySparseCompute
+    _check_or_init_custabilizer()
+    if __custabilizerSampleProbArraySparseCompute == NULL:
+        with gil:
+            raise FunctionNotFoundError("function custabilizerSampleProbArraySparseCompute is not found")
+    return (<custabilizerStatus_t (*)(custabilizerHandle_t, int64_t, int64_t, const double*, uint64_t, uint64_t*, uint64_t*, uint64_t*, void*, size_t, cudaStream_t) noexcept nogil>__custabilizerSampleProbArraySparseCompute)(
+        handle, numSamples, numProbs, probs, seed, nnz, columnIndices, rowOffsets, workspace, workspaceSize, stream)
+
+
+cdef custabilizerStatus_t _custabilizerGF2SparseDenseMatrixMultiply(custabilizerHandle_t handle, uint64_t m, uint64_t n, uint64_t k, uint64_t nnz, const uint64_t* columnIndices, const uint64_t* rowOffsets, const custabilizerBitInt_t* B, int32_t beta, custabilizerBitInt_t* C, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __custabilizerGF2SparseDenseMatrixMultiply
+    _check_or_init_custabilizer()
+    if __custabilizerGF2SparseDenseMatrixMultiply == NULL:
+        with gil:
+            raise FunctionNotFoundError("function custabilizerGF2SparseDenseMatrixMultiply is not found")
+    return (<custabilizerStatus_t (*)(custabilizerHandle_t, uint64_t, uint64_t, uint64_t, uint64_t, const uint64_t*, const uint64_t*, const custabilizerBitInt_t*, int32_t, custabilizerBitInt_t*, cudaStream_t) noexcept nogil>__custabilizerGF2SparseDenseMatrixMultiply)(
+        handle, m, n, k, nnz, columnIndices, rowOffsets, B, beta, C, stream)
+
+
+cdef custabilizerStatus_t _custabilizerGF2SparseSparseMatrixMultiply(custabilizerHandle_t handle, uint64_t m, uint64_t n, uint64_t k, const uint64_t* aColumnIndices, const uint64_t* aRowOffsets, uint64_t bNNZ, const uint64_t* bColumnIndices, const uint64_t* bRowOffsets, int32_t beta, custabilizerBitInt_t* C, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __custabilizerGF2SparseSparseMatrixMultiply
+    _check_or_init_custabilizer()
+    if __custabilizerGF2SparseSparseMatrixMultiply == NULL:
+        with gil:
+            raise FunctionNotFoundError("function custabilizerGF2SparseSparseMatrixMultiply is not found")
+    return (<custabilizerStatus_t (*)(custabilizerHandle_t, uint64_t, uint64_t, uint64_t, const uint64_t*, const uint64_t*, uint64_t, const uint64_t*, const uint64_t*, int32_t, custabilizerBitInt_t*, cudaStream_t) noexcept nogil>__custabilizerGF2SparseSparseMatrixMultiply)(
+        handle, m, n, k, aColumnIndices, aRowOffsets, bNNZ, bColumnIndices, bRowOffsets, beta, C, stream)

@@ -1,4 +1,7 @@
+include pyproject.toml.template
+include configure.sh
 include cuquantum/densitymat/jax/cppsrc/CMakeLists.txt
+include cuquantum/densitymat/jax/cppsrc/cudensitymat.h
 include cuquantum/densitymat/jax/cppsrc/cudensitymat_jax.cpp
 include cuquantum/densitymat/jax/cppsrc/cudensitymat_jax.h
 include cuquantum/densitymat/jax/cppsrc/pybind.cpp

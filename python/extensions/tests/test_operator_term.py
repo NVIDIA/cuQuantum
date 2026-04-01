@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Test the OperatorTerm class in cuQuantum Python JAX.
+Tests for the OperatorTerm class.
 """
 
 import pytest
@@ -78,15 +78,13 @@ class TestOperatorTerm:
         assert len(op_term.modes) == 1
         assert len(op_term.duals) == 1
         assert len(op_term.coeffs) == 1
-        assert len(op_term.coeff_callbacks) == 1
-        assert len(op_term.coeff_grad_callbacks) == 1
+        assert len(op_term._coeff_requires_grads) == 1
 
         assert op_term.op_prods[0] == (base_op1, base_op2)
         assert op_term.modes[0] == (0, 1)
         assert op_term.duals[0] == (False, True)
         assert op_term.coeffs[0] == 1.0
-        assert op_term.coeff_callbacks[0] is None
-        assert op_term.coeff_grad_callbacks[0] is None
+        assert op_term._coeff_requires_grads[0] is None
 
     @pytest.mark.parametrize(
         "data",
@@ -118,15 +116,13 @@ class TestOperatorTerm:
         assert len(op_term.conjs) == 1
         assert len(op_term.duals) == 1
         assert len(op_term.coeffs) == 1
-        assert len(op_term.coeff_callbacks) == 1
-        assert len(op_term.coeff_grad_callbacks) == 1
+        assert len(op_term._coeff_requires_grads) == 1
 
         assert op_term.op_prods[0] == (base_op1, base_op2)
         assert op_term.conjs[0] == (False, True)
         assert op_term.duals[0] == (False, True)
         assert op_term.coeffs[0] == 1.0
-        assert op_term.coeff_callbacks[0] is None
-        assert op_term.coeff_grad_callbacks[0] is None
+        assert op_term._coeff_requires_grads[0] is None
 
     @pytest.mark.parametrize(
         "data",
@@ -159,22 +155,19 @@ class TestOperatorTerm:
         assert len(op_term.modes) == 2
         assert len(op_term.duals) == 2
         assert len(op_term.coeffs) == 2
-        assert len(op_term.coeff_callbacks) == 2
-        assert len(op_term.coeff_grad_callbacks) == 2
+        assert len(op_term._coeff_requires_grads) == 2
 
         assert op_term.op_prods[0] == (base_op1,)
         assert op_term.modes[0] == (0,)
         assert op_term.duals[0] == (False,)
         assert op_term.coeffs[0] == 1.0
-        assert op_term.coeff_callbacks[0] is None
-        assert op_term.coeff_grad_callbacks[0] is None
+        assert op_term._coeff_requires_grads[0] is None
 
         assert op_term.op_prods[1] == (base_op2,)
         assert op_term.modes[1] == (1,)
         assert op_term.duals[1] == (True,)
         assert op_term.coeffs[1] == 1.0
-        assert op_term.coeff_callbacks[1] is None
-        assert op_term.coeff_grad_callbacks[1] is None
+        assert op_term._coeff_requires_grads[1] is None
 
     @pytest.mark.parametrize(
         "data",
@@ -207,22 +200,19 @@ class TestOperatorTerm:
         assert len(op_term.conjs) == 2
         assert len(op_term.duals) == 2
         assert len(op_term.coeffs) == 2
-        assert len(op_term.coeff_callbacks) == 2
-        assert len(op_term.coeff_grad_callbacks) == 2
+        assert len(op_term._coeff_requires_grads) == 2
 
         assert op_term.op_prods[0] == (base_op1,)
         assert op_term.conjs[0] == (False,)
         assert op_term.duals[0] == (False,)
         assert op_term.coeffs[0] == 1.0
-        assert op_term.coeff_callbacks[0] is None
-        assert op_term.coeff_grad_callbacks[0] is None
+        assert op_term._coeff_requires_grads[0] is None
 
         assert op_term.op_prods[1] == (base_op2,)
         assert op_term.conjs[1] == (True,)
         assert op_term.duals[1] == (True,)
         assert op_term.coeffs[1] == 1.0
-        assert op_term.coeff_callbacks[1] is None
-        assert op_term.coeff_grad_callbacks[1] is None
+        assert op_term._coeff_requires_grads[1] is None
 
 
     @pytest.mark.parametrize(
@@ -257,24 +247,21 @@ class TestOperatorTerm:
         assert len(op_term.conjs) == 2
         assert len(op_term.duals) == 2
         assert len(op_term.coeffs) == 2
-        assert len(op_term.coeff_callbacks) == 2
-        assert len(op_term.coeff_grad_callbacks) == 2
+        assert len(op_term._coeff_requires_grads) == 2
 
         assert op_term.op_prods[0] == (base_op1,)
         assert op_term.modes[0] == (0,)
         assert op_term.conjs[0] == ()
         assert op_term.duals[0] == (False,)
         assert op_term.coeffs[0] == 1.0
-        assert op_term.coeff_callbacks[0] is None
-        assert op_term.coeff_grad_callbacks[0] is None
+        assert op_term._coeff_requires_grads[0] is None
 
         assert op_term.op_prods[1] == (base_op2,)
         assert op_term.modes[1] == (0, 1, 2)
         assert op_term.conjs[1] == (True,)
         assert op_term.duals[1] == (True,)
         assert op_term.coeffs[1] == 1.0
-        assert op_term.coeff_callbacks[1] is None
-        assert op_term.coeff_grad_callbacks[1] is None
+        assert op_term._coeff_requires_grads[1] is None
 
     @pytest.mark.parametrize(
         "data",
@@ -455,23 +442,6 @@ class TestOperatorTerm:
 
         with pytest.raises(ValueError):
             op_term.append([elem_op, matrix_op])
-
-    @pytest.mark.parametrize(
-        "data",
-        [
-            ((3, 3), jnp.complex128),
-        ],
-        indirect=True,
-    )
-    def test_append_fail_coeff_callback_without_total_coeffs(self, data):
-        """
-        Test appending operator products with a coefficient callback without total coefficients fails.
-        """
-        base_op = ElementaryOperator(data)
-        op_term = OperatorTerm(self.dims)
-        static_coeffs = jnp.array([1.0])
-        with pytest.raises(RuntimeError):
-            op_term.append([base_op], static_coeffs=static_coeffs, coeff_callback=lambda x: x)
 
     @pytest.mark.parametrize(
         "data",

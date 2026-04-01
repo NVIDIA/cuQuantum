@@ -69,7 +69,7 @@ sample_files = list(filter(lambda f: not re.search(mpi_re, f), sample_files))
 class TestcuTensorNetSamples:
 
     def test_sample(self, sample):
-        run_sample(samples_path, sample)
+        run_sample(samples_path, sample, use_subprocess=True)
 
 
 @pytest.mark.parametrize(

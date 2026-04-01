@@ -8,22 +8,44 @@ from nvmath.internal.typemaps import *
 __all__ = ["PAULI_MAP", "PAULI_MAP_INV", "CLIFFORD_MAP", "COMPUTE_TYPE_TO_NAME", "DATA_TYPE_TO_NAME", "NAME_TO_DATA_TYPE", "NAME_TO_COMPUTE_TYPE", "NAME_TO_DATA_WIDTH"]
 
 class CaseInsensitiveDict(dict):
-    """A dictionary that automatically converts string keys to uppercase for case-insensitive lookups."""
-    
+    """A dictionary that normalizes string keys to uppercase for case-insensitive lookups.
+
+    Keys are stored in uppercase internally, so ``.keys()`` returns uppercase strings.
+    """
+
+    def __init__(self, data=None, **kwargs):
+        super().__init__()
+        if data:
+            items = data.items() if isinstance(data, dict) else data
+            for k, v in items:
+                self[k] = v
+        for k, v in kwargs.items():
+            self[k] = v
+
+    def __setitem__(self, key, value):
+        if isinstance(key, str):
+            key = key.upper()
+        super().__setitem__(key, value)
+
     def __getitem__(self, key):
         if isinstance(key, str):
             key = key.upper()
         return super().__getitem__(key)
-    
+
     def __contains__(self, key):
         if isinstance(key, str):
             key = key.upper()
         return super().__contains__(key)
-    
+
     def get(self, key, default=None):
         if isinstance(key, str):
             key = key.upper()
         return super().get(key, default)
+
+    def __delitem__(self, key):
+        if isinstance(key, str):
+            key = key.upper()
+        super().__delitem__(key)
 
 
 PAULI_MAP = CaseInsensitiveDict({

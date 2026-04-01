@@ -1,8 +1,8 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.11.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 26.03.0, generator version 0.3.1.dev1330+g54fed9448.d20260303. Do not modify it directly.
 
 cimport cython  # NOQA
 cimport cpython
@@ -22,7 +22,12 @@ import numpy as _numpy
 ###############################################################################
 
 class Status(_IntEnum):
-    """See `custatevecStatus_t`."""
+    """
+    Contains the library status. Each cuStateVec API returns this
+    enumerator.
+
+    See `custatevecStatus_t`.
+    """
     SUCCESS = CUSTATEVEC_STATUS_SUCCESS
     NOT_INITIALIZED = CUSTATEVEC_STATUS_NOT_INITIALIZED
     ALLOC_FAILED = CUSTATEVEC_STATUS_ALLOC_FAILED
@@ -43,76 +48,127 @@ class Status(_IntEnum):
     SYSTEM_ERROR = CUSTATEVEC_STATUS_SYSTEM_ERROR
     CUDA_ERROR = CUSTATEVEC_STATUS_CUDA_ERROR
     NUMERICAL_ERROR = CUSTATEVEC_STATUS_NUMERICAL_ERROR
+    RESOURCES_NOT_ACCESSIBLE = CUSTATEVEC_STATUS_RESOURCES_NOT_ACCESSIBLE
     MAX_VALUE = CUSTATEVEC_STATUS_MAX_VALUE
 
 class Pauli(_IntEnum):
-    """See `custatevecPauli_t`."""
+    """
+    Constants to specify Pauli basis:
+
+    See `custatevecPauli_t`.
+    """
     I = CUSTATEVEC_PAULI_I
     X = CUSTATEVEC_PAULI_X
     Y = CUSTATEVEC_PAULI_Y
     Z = CUSTATEVEC_PAULI_Z
 
 class MatrixLayout(_IntEnum):
-    """See `custatevecMatrixLayout_t`."""
+    """
+    Constants to specify a matrix's memory layout.
+
+    See `custatevecMatrixLayout_t`.
+    """
     COL = CUSTATEVEC_MATRIX_LAYOUT_COL
     ROW = CUSTATEVEC_MATRIX_LAYOUT_ROW
 
 class MatrixType(_IntEnum):
-    """See `custatevecMatrixType_t`."""
+    """
+    Constants to specify the matrix type.
+
+    See `custatevecMatrixType_t`.
+    """
     GENERAL = CUSTATEVEC_MATRIX_TYPE_GENERAL
     UNITARY = CUSTATEVEC_MATRIX_TYPE_UNITARY
     HERMITIAN = CUSTATEVEC_MATRIX_TYPE_HERMITIAN
 
 class CollapseOp(_IntEnum):
-    """See `custatevecCollapseOp_t`."""
+    """
+    Constants to specify collapse operations.
+
+    See `custatevecCollapseOp_t`.
+    """
     NONE = CUSTATEVEC_COLLAPSE_NONE
     NORMALIZE_AND_ZERO = CUSTATEVEC_COLLAPSE_NORMALIZE_AND_ZERO
     RESET = CUSTATEVEC_COLLAPSE_RESET
 
 class ComputeType(_IntEnum):
-    """See `custatevecComputeType_t`."""
+    """
+    Constants to specify the minimal accuracy for arithmetic operations.
+
+    See `custatevecComputeType_t`.
+    """
     COMPUTE_DEFAULT = CUSTATEVEC_COMPUTE_DEFAULT
     COMPUTE_32F = CUSTATEVEC_COMPUTE_32F
     COMPUTE_64F = CUSTATEVEC_COMPUTE_64F
     COMPUTE_TF32 = CUSTATEVEC_COMPUTE_TF32
 
 class SamplerOutput(_IntEnum):
-    """See `custatevecSamplerOutput_t`."""
+    """
+    Constants to specify the order of bit strings in sampling outputs.
+
+    See `custatevecSamplerOutput_t`.
+    """
     RANDNUM_ORDER = CUSTATEVEC_SAMPLER_OUTPUT_RANDNUM_ORDER
     ASCENDING_ORDER = CUSTATEVEC_SAMPLER_OUTPUT_ASCENDING_ORDER
 
 class DeviceNetworkType(_IntEnum):
-    """See `custatevecDeviceNetworkType_t`."""
+    """
+    Constants to specify the device network topology.
+
+    See `custatevecDeviceNetworkType_t`.
+    """
     SWITCH = CUSTATEVEC_DEVICE_NETWORK_TYPE_SWITCH
     FULLMESH = CUSTATEVEC_DEVICE_NETWORK_TYPE_FULLMESH
 
 class CommunicatorType(_IntEnum):
-    """See `custatevecCommunicatorType_t`."""
+    """
+    Constant to specify the communicator used in inter-process
+    communications.
+
+    See `custatevecCommunicatorType_t`.
+    """
     EXTERNAL = CUSTATEVEC_COMMUNICATOR_TYPE_EXTERNAL
     OPENMPI = CUSTATEVEC_COMMUNICATOR_TYPE_OPENMPI
     MPICH = CUSTATEVEC_COMMUNICATOR_TYPE_MPICH
 
 class DataTransferType(_IntEnum):
-    """See `custatevecDataTransferType_t`."""
+    """
+    Constant to specify the data transfer direction in point-to-point
+    communication.
+
+    See `custatevecDataTransferType_t`.
+    """
     NONE = CUSTATEVEC_DATA_TRANSFER_TYPE_NONE
     SEND = CUSTATEVEC_DATA_TRANSFER_TYPE_SEND
     RECV = CUSTATEVEC_DATA_TRANSFER_TYPE_RECV
     SEND_RECV = CUSTATEVEC_DATA_TRANSFER_TYPE_SEND_RECV
 
 class MatrixMapType(_IntEnum):
-    """See `custatevecMatrixMapType_t`."""
+    """
+    Constants to specify how to assign matrices to batched state vectors.
+
+    See `custatevecMatrixMapType_t`.
+    """
     BROADCAST = CUSTATEVEC_MATRIX_MAP_TYPE_BROADCAST
     MATRIX_INDEXED = CUSTATEVEC_MATRIX_MAP_TYPE_MATRIX_INDEXED
 
 class StateVectorType(_IntEnum):
-    """See `custatevecStateVectorType_t`."""
+    """
+    Constants to specify the quantum state.
+
+    See `custatevecStateVectorType_t`.
+    """
     ZERO = CUSTATEVEC_STATE_VECTOR_TYPE_ZERO
     UNIFORM = CUSTATEVEC_STATE_VECTOR_TYPE_UNIFORM
     GHZ = CUSTATEVEC_STATE_VECTOR_TYPE_GHZ
     W = CUSTATEVEC_STATE_VECTOR_TYPE_W
 
 class MathMode(_IntEnum):
-    """See `custatevecMathMode_t`."""
+    """
+    Constants to specify the compute precision mode.
+
+    See `custatevecMathMode_t`.
+    """
     DEFAULT = CUSTATEVEC_MATH_MODE_DEFAULT
     ALLOW_FP32_EMULATED_BF16X9 = CUSTATEVEC_MATH_MODE_ALLOW_FP32_EMULATED_BF16X9
     DISALLOW_FP32_EMULATED_BF16X9 = CUSTATEVEC_MATH_MODE_DISALLOW_FP32_EMULATED_BF16X9

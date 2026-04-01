@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 26.01.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 26.03.0, generator version 0.3.1.dev1371+g460d49f4f.d20260309. Do not modify it directly.
 
 from ._internal cimport cutensornet as _cutensornet
 
@@ -581,3 +581,23 @@ cdef cutensornetStatus_t cutensornetNetworkComputeGradientsBackward(const cutens
 
 cdef cutensornetStatus_t cutensornetStateApplyDiagonalTensorOperator(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, int64_t* tensorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cutensornet._cutensornetStateApplyDiagonalTensorOperator(handle, tensorNetworkState, numStateModes, stateModes, tensorData, tensorModeStrides, immutable, adjoint, unitary, tensorId)
+
+
+cdef cutensornetStatus_t cutensornetStateApplyTensorOperatorWithGradient(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, void* gradientData, const int64_t* gradientModeStrides, int64_t* tensorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetStateApplyTensorOperatorWithGradient(handle, tensorNetworkState, numStateModes, stateModes, tensorData, tensorModeStrides, immutable, adjoint, unitary, gradientData, gradientModeStrides, tensorId)
+
+
+cdef cutensornetStatus_t cutensornetStateUpdateTensorOperatorGradient(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int64_t tensorId, void* gradientData) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetStateUpdateTensorOperatorGradient(handle, tensorNetworkState, tensorId, gradientData)
+
+
+cdef cutensornetStatus_t cutensornetExpectationComputeWithGradientsBackward(const cutensornetHandle_t handle, cutensornetStateExpectation_t tensorNetworkExpectation, int32_t accumulateGradients, const void* expectationValueAdjoint, const void* stateNormAdjoint, cutensornetWorkspaceDescriptor_t workDesc, void* expectationValue, void* stateNorm, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetExpectationComputeWithGradientsBackward(handle, tensorNetworkExpectation, accumulateGradients, expectationValueAdjoint, stateNormAdjoint, workDesc, expectationValue, stateNorm, cudaStream)
+
+
+cdef cutensornetStatus_t cutensornetStateProjectionMPSUpdateCoefficients(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, int32_t numCoeffs, const cuDoubleComplex coeffs[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetStateProjectionMPSUpdateCoefficients(handle, tensorNetworkProjection, numCoeffs, coeffs)
+
+
+cdef cutensornetStatus_t cutensornetStateProjectionMPSUpdateDualTensors(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, const int64_t* maxExtents[], const int64_t* validExtents[], const int64_t* strides[], void* dualTensorsData[], const cutensornetMPSEnvBounds_t* orthoSpec, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cutensornet._cutensornetStateProjectionMPSUpdateDualTensors(handle, tensorNetworkProjection, maxExtents, validExtents, strides, dualTensorsData, orthoSpec, cudaStream)

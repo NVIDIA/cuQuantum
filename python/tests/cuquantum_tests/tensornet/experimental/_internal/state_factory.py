@@ -12,6 +12,36 @@ from cuquantum.tensornet.experimental._internal.network_state_utils import get_p
 from ...utils.data import ARRAY_BACKENDS
 from ...utils.helpers import TensorBackend, get_dtype_name
 
+
+def _random_unitary(backend, shape, dtype, rng):
+    """Return a random unitary tensor of the given shape (2D or 4D). Uses QR of a random matrix."""
+    xp = backend.module
+    if len(shape) == 2:
+        size = shape[0]
+        A = backend.random((size, size), dtype, rng)
+        Q, _ = xp.linalg.qr(A)
+        return Q
+    # 4D gate (d1, d2, d1, d2): matrix view is (d1*d2, d1*d2)
+    size = shape[0] * shape[1]
+    A = backend.random((size, size), dtype, rng)
+    Q, _ = xp.linalg.qr(A)
+    return Q.reshape(shape)
+
+
+def _random_hermitian(backend, shape, dtype, rng):
+    """Return a random Hermitian tensor of the given 2D shape. So ⟨ψ|H|ψ⟩ is real; gradient formula matches cutn."""
+    assert len(shape) == 2 and shape[0] == shape[1]
+    xp = backend.module
+    size = shape[0]
+    A = backend.random((size, size), dtype, rng)
+    # H = A + A† so H is Hermitian
+    if hasattr(A, "conj"):
+        H = A + A.conj().T
+    else:
+        H = A + xp.conj(A).T
+    return H
+
+
 def get_random_network_operator(state_dims, rng, backend, *, num_repeats=2, dtype='complex128', options=None):
     if isinstance(options, dict):
         device_id = options.get('device_id', None)
@@ -65,6 +95,7 @@ def get_random_network_operator(state_dims, rng, backend, *, num_repeats=2, dtyp
             bond_prev = bond_next
         operator_obj.append_mpo(coefficient, mpo_modes, mpo_tensors)
     return operator_obj
+
 
 def create_vqc_states(config, backend, *, with_control=False):
     # specify the dimensions of the tensor network state
@@ -142,6 +173,11 @@ def apply_factory_sequence(network_state, sequence):
             else:
                 # GATE
                 tensor_id = network_state.apply_tensor_operator(modes, op)
+        elif 'gradient' in gate_info:
+                # GATE (plain tensor from S/D layers; unitary=True required for gradient support in C API)
+                tensor_id = network_state.apply_tensor_operator(
+                    modes, op, gradient=gate_info['gradient'], unitary=True
+                )
         else:
             if 'diagonal_gate' in gate_info:
                 tensor_id = network_state.apply_tensor_operator(modes, op, diagonal=True, unitary=False)
@@ -176,7 +212,10 @@ class StateFactory:
         mpo_geometry="adjacent-ordered",
         ct_target_place="last", # Controlled-Tensor: ct
         initial_mps_dim=None,
+        mark_gradients=False,
     ):
+        self.mark_gradients = bool(mark_gradients)
+        self.gradient_indices = []
         if isinstance(qudits, (int, np.integer)):
             self.num_qudits = qudits
             self.state_dims = (2, ) * self.num_qudits
@@ -245,6 +284,41 @@ class StateFactory:
             self._generate_raw_sequence()
         return self._sequence
 
+    def get_gate_sequence_for_reference(self):
+        """
+        Return a gate sequence suitable for TorchRef.compute_expectation_with_gradients: list of (modes, gate_tensor, requires_grad).
+        Only plain tensor gates are supported (gate_info may contain only "gradient"). I nthis way we make sure all gates are unitary for now.
+        MPO, controlled, diagonal, and channel gates raise NotImplementedError.
+        """
+        out = []
+        for op, modes, gate_info in self.sequence:
+           
+            # Only support plain gates: single tensor and at most "gradient" in gate_info
+            if isinstance(op, (list, tuple)):
+                raise NotImplementedError(
+                    "get_gate_sequence_for_reference does not support MPO gates; "
+                    "use a sequence with only S/D layers (plain tensor gates) for reference."
+                )
+            if "control_modes" in gate_info or "control_values" in gate_info:
+                raise NotImplementedError(
+                    "get_gate_sequence_for_reference does not support controlled gates; "
+                    "use a sequence without C layer for reference."
+                )
+            if "diagonal_gate" in gate_info:
+                raise NotImplementedError(
+                    "get_gate_sequence_for_reference does not support diagonal gates; "
+                    "use a sequence without A layer for reference."
+                )
+            if "probabilities" in gate_info:
+                raise NotImplementedError(
+                    "get_gate_sequence_for_reference does not support channel gates "
+                    "(Kraus operators); use a sequence without U/G layers for reference."
+                )
+            requires_grad = gate_info.get("gradient", False)
+            gate_np = TensorBackend.to_numpy(op)
+            out.append((tuple(modes), gate_np, requires_grad))
+        return out
+
     def _generate_raw_sequence(self):
         double_layer_offset = 0
         for layer in self.layers:
@@ -311,7 +385,7 @@ class StateFactory:
         qudits = list(range(self.num_qudits))
         self.rng.shuffle(qudits)
         if dense:
-            g0, g1 = self.rng.random(2)
+            g0, g1 = float(self.rng.random()), float(self.rng.random())
             dampling_channel = [
                 self.backend.asarray([[1, 0], [0, np.sqrt(1 - g0)]], dtype=self.dtype),
                 self.backend.asarray([[0, np.sqrt(g0)], [0, 0]], dtype=self.dtype)
@@ -336,7 +410,7 @@ class StateFactory:
         
         if (dense and self.num_qudits >= 4) or (not dense):
             target_qudits = qudits[2:4] if dense else qudits[:2]
-            g = self.rng.random()
+            g = float(self.rng.random())
             if is_complex:
                 operands = [
                     (1 - g) **.5 * pauli_map['XY'], 
@@ -353,25 +427,45 @@ class StateFactory:
             self._sequence.append((operands, target_qudits, gate_info))
         return   
     
+    def _create_random_unitary(self, shape):
+        return _random_unitary(self.backend, shape, self.dtype, self.rng)
+
     def _append_single_qudit_layer(self):
         for i in range(self.num_qudits):
-            shape = (self.state_dims[i], ) * 2
-            t = self.backend.random(shape, self.dtype, self.rng)
-            t = t + t.conj().T
-            t /= self.backend.norm(t)
-            self._sequence.append((t, (i,), None))
-    
+            shape = (self.state_dims[i],) * 2
+            if self.mark_gradients:
+                # Gradient path requires unitary gates
+                t = self._create_random_unitary(shape)
+                gradient = self.mark_gradients and bool(self.rng.choice([True, False]))
+                self._sequence.append((t, (i,), {"gradient": gradient}))
+                if gradient:
+                    self.gradient_indices.append(len(self._sequence) - 1)
+            else:
+                t = self.backend.random(shape, self.dtype, self.rng)
+                t = t + t.conj().T
+                t /= self.backend.norm(t)
+                self._sequence.append((t, (i,), None))
+
     def _append_double_qudit_layer(self, offset=0):
-        for i in range(offset, self.num_qudits-1, 2):
-            j = i + 1 if self.adjacent_double_layer else self.rng.integers(i+1, self.num_qudits)
-            shape = (self.state_dims[i], self.state_dims[j])* 2
-            t = self.backend.random(shape, self.dtype, self.rng)
-            try:
-                t = t + t.conj().transpose(2,3,0,1)
-            except TypeError:
-                t = t + t.conj().permute(2,3,0,1)
-            t /= self.backend.norm(t)
-            self._sequence.append((t, (i, j), None))
+        for i in range(offset, self.num_qudits - 1, 2):
+            j = i + 1 if self.adjacent_double_layer else self.rng.integers(i + 1, self.num_qudits)
+            shape = (self.state_dims[i], self.state_dims[j]) * 2
+            if self.mark_gradients:
+                # Gradient path requires unitary gates
+                t = self._create_random_unitary(shape)
+                gradient = self.mark_gradients and bool(self.rng.choice([True, False]))
+                self._sequence.append((t, (i, j), {"gradient": gradient}))
+                if gradient:
+                    self.gradient_indices.append(len(self._sequence) - 1)
+            else:
+                t = self.backend.random(shape, self.dtype, self.rng)
+                try:
+                    t = t + t.conj().transpose(2, 3, 0, 1)
+                except TypeError:
+                    t = t + t.conj().permute(2, 3, 0, 1)
+                t /= self.backend.norm(t)
+                self._sequence.append((t, (i, j), None))
+            
     
     def _create_unitary_diagonal_gate(self, shape):
         if 'complex' in self.dtype:

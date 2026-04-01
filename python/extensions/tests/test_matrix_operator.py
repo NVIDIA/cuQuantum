@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Test the MatrixOperator class in cuQuantum Python JAX.
+Tests for the MatrixOperator class.
 """
 
 from itertools import product

@@ -8,10 +8,17 @@ from typing import Union
 import numpy as np
 
 Array = Union[np.ndarray, "cupy.ndarray", "torch.Tensor"] #noqa: F821
-Stream = Union[int, "cupy.cuda.Stream", "torch.cuda.Stream", "cuda.core.experimental.Stream"] #noqa: F821
+Stream = Union[int, "cupy.cuda.Stream", "torch.cuda.Stream", "cuda.core.Stream"] #noqa: F821
 
-from .simulator import FrameSimulator, Circuit, Options
+from ._options import Options
+from .simulator import FrameSimulator, Circuit
 from .pauli_table import PauliTable, PauliFrame
+from .bit_matrix import BitMatrixCSR
+from .dem_sampling import (
+    DEMSampler,
+    BitMatrixSampler,
+    BitMatrixSparseSampler,
+)
 
 __all__ = [
     "FrameSimulator",
@@ -19,4 +26,8 @@ __all__ = [
     "Options",
     "PauliTable",
     "PauliFrame",
+    "BitMatrixCSR",
+    "BitMatrixSampler",
+    "BitMatrixSparseSampler",
+    "DEMSampler",
 ]
