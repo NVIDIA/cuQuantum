@@ -5,7 +5,10 @@
 
 from logging import Logger, getLogger
 
-import cuda.core.experimental as ccx
+try:
+    from cuda.core import Device
+except ImportError:
+    from cuda.core.experimental import Device
 import nvmath.internal.utils as nvmath_utils
 
 import cuquantum.bindings.cupauliprop as cupp
@@ -18,7 +21,7 @@ class LibraryHandle:
     def __init__(self,
                 device_id : int | None = None,
                 logger : Logger | None = None):
-        self._device_id = device_id if device_id is not None else ccx.Device().device_id
+        self._device_id = device_id if device_id is not None else Device().device_id
         self._logger = getLogger() if logger is None else logger
         self._ptr: None | int = None
         with nvmath_utils.device_ctx(self._device_id):

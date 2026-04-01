@@ -6,7 +6,7 @@ src="https://developer.nvidia.com/sites/default/files/akamai/nvidia-cuquantum-ic
 
 This public repository contains a few sets of files related to the [NVIDIA cuQuantum SDK](https://developer.nvidia.com/cuquantum-sdk):
 
-- `benchmarks`: NVIDIA Quantum Performance Benchmark Suite (v0.5.0), see [README](./benchmarks/README.md) for detail.
+- `benchmarks`: NVIDIA Quantum Performance Benchmark Suite, see [README](./benchmarks/README.md) for detail.
 - `extra`: Files to help utilize the cuQuantum SDK and the cuQuantum Appliance container.
 - `python`: The open-sourced cuQuantum Python project.
   - Available for download on
@@ -45,7 +45,9 @@ the [cuQuantum documentation](https://docs.nvidia.com/cuda/cuquantum/latest/inde
 
 ## License
 
-All files hosted in this repository are subject to the [BSD-3-Clause](./LICENSE) license.
+This repository primarily contains software licensed under the [BSD 3-Clause License](./LICENSE). However, certain files are subject to separate proprietary licensing terms. These files are clearly marked in their file headers and/or reside in directories containing their own LICENSE file. Please review applicable file headers before redistribution.
+
+**Licensing Exceptions:** `cudensitymat.h` is subject to [NVIDIA Proprietary License](./NV.LICENSE).
 
 ## Citing cuQuantum
 

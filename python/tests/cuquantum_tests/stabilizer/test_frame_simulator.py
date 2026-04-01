@@ -4,7 +4,10 @@
 
 """FrameSimulator functionality test of cuStabilizer python bindings."""
 
+import pytest
 import cupy as cp
+
+pytestmark = pytest.mark.custabilizer
 import numpy as np
 from cuquantum.bindings import custabilizer as cust
 

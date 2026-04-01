@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -27,6 +27,7 @@
 #include <cmath>                       // std::abs, M_PI
 #include <cstring>                     // strcmp
 #include <cstdarg>                     // va_list, va_start, va_end
+#include <cassert>                     // assert
 #include <numeric>                     // std::iota
 #include <random>                      // std::random_device, std::mt19937, std::shuffle
 #include <algorithm>                   // std::shuffle
@@ -86,28 +87,33 @@ void applyRotationByZ(ExStateVector stateVector, int numWires, float theta)
 }
 
 //
-// Compute dot product using cuBLAS
+// Compute dot product using cuBLAS.
+// This requires both devicePtrs are in the same device (specified by deviceId)
 //
 ComplexType
-computeDotProductCublas(int deviceId, const void* devicePtr1, cudaStream_t stream1,
-                        const void* devicePtr2, cudaStream_t stream2, size_t numElements)
+computeDotProductCublas(int deviceId, 
+                        const void* devicePtr1, cudaStream_t stream1,
+                        const void* devicePtr2, cudaStream_t stream2, 
+                        size_t numElements)
 {
     ERRCHK_CUDA(cudaSetDevice(deviceId));
-    // Synchronize on stream2
+    
+    // Synchronize on stream2, so that devicePtr2 is ready for cuBLAS
     ERRCHK_CUDA(cudaStreamSynchronize(stream2));
 
-    // Create cuBLAS handle and compute dot product
+    // Create cuBLAS handle and set to stream 1, enqueueing cuBLAS dot below
     cublasHandle_t cublasHandle;
     ERRCHK_CUBLAS(cublasCreate(&cublasHandle));
-    // Use stream 1
     ERRCHK_CUBLAS(cublasSetStream(cublasHandle, stream1));
 
-    // Use single precision cuBLAS routine
+    // Use single precision cuBLAS routine when devicePtr1 is ready, and wait for it to finish
     cuFloatComplex result;
     ERRCHK_CUBLAS(cublasCdotc(cublasHandle, static_cast<int>(numElements),
-                              reinterpret_cast<const cuFloatComplex*>(devicePtr1), 1,
-                              reinterpret_cast<const cuFloatComplex*>(devicePtr2), 1, &result));
+                              reinterpret_cast<const cuFloatComplex*>(devicePtr1), /*stride1=*/1,
+                              reinterpret_cast<const cuFloatComplex*>(devicePtr2), /*stride2=*/1, 
+                              &result));
     ERRCHK_CUDA(cudaStreamSynchronize(stream1));
+
     // cleanup
     ERRCHK_CUBLAS(cublasDestroy(cublasHandle));
 
@@ -121,25 +127,29 @@ computeDotProductCublas(int deviceId, const void* devicePtr1, cudaStream_t strea
 //
 ComplexType computeDotProductSingleDevice(ExStateVector sv1, ExStateVector sv2, int numWires)
 {
-    output("Compute dot product for single-device state vector");
+    output("Compute dot product for single-device state vector\n");
 
-    // Extract resources from both state vectors
+    // Resources to extract from both state vectors
     int32_t deviceId1, deviceId2;
-    void* devicePtr1;
-    void* devicePtr2;
+    void *devicePtr1;
+    void *devicePtr2;
     cudaStream_t stream1, stream2;
     custatevecHandle_t handle1, handle2;
 
-    // Retrieve computing resource from state vectors
-    // Single device state vector has one sub state vector.
-    // The sub state vector index is 0.
-    ERRCHK(custatevecExStateVectorGetResourcesFromDeviceSubSV(sv1, /*subSVIndex=*/0, &deviceId1,
+    // In single-device mode, there is only one sub state vector (of index 0)
+    const int subSVIndex = 0;
+
+    // Retrieve computing resources from state vectors
+    ERRCHK(custatevecExStateVectorGetResourcesFromDeviceSubSV(sv1, subSVIndex, &deviceId1,
                                                               &devicePtr1, &stream1, &handle1));
-    ERRCHK(custatevecExStateVectorGetResourcesFromDeviceSubSV(sv2, /*subSVIndex=*/0, &deviceId2,
+    ERRCHK(custatevecExStateVectorGetResourcesFromDeviceSubSV(sv2, subSVIndex, &deviceId2,
                                                               &devicePtr2, &stream2, &handle2));
-    size_t numElements = 1LL << numWires;
+
+    // In single-device mode, both state vectors reside in the same device
+    assert(deviceId1 == deviceId2);
+
     // Use the cuBLAS to compute the dot product
-    // deviceId1 == deviceId2
+    size_t numElements = 1LL << numWires;
     auto dotProduct =
         computeDotProductCublas(deviceId1, devicePtr1, stream1, devicePtr2, stream2, numElements);
 
@@ -152,6 +162,8 @@ ComplexType computeDotProductSingleDevice(ExStateVector sv1, ExStateVector sv2, 
 //
 ComplexType computeDotProductMultiDevice(ExStateVector sv1, ExStateVector sv2, int numWires)
 {
+    output("Compute dot product for multi-device state vector\n");
+
     // Multi-device state vector has multiple sub state vectors corresponding the number of
     // devices where the state vector is allocated.
     // Get the number of device sub-state vectors
@@ -160,7 +172,7 @@ ComplexType computeDotProductMultiDevice(ExStateVector sv1, ExStateVector sv2, i
                                               &numDeviceSubSVs, sizeof(numDeviceSubSVs)));
     output("Number of device sub-state vectors: %d\n", numDeviceSubSVs);
 
-    // Get the indices of device sub-state vectors
+    // Get the indices of device sub-state vectors (of sv1; identical to that of sv2)
     std::vector<int32_t> deviceSubSVIndices(numDeviceSubSVs);
     ERRCHK(custatevecExStateVectorGetProperty(sv1, CUSTATEVEC_EX_SV_PROP_DEVICE_SUBSV_INDICES,
                                               deviceSubSVIndices.data(),
@@ -186,6 +198,10 @@ ComplexType computeDotProductMultiDevice(ExStateVector sv1, ExStateVector sv2, i
         ERRCHK(custatevecExStateVectorGetResourcesFromDeviceSubSV(sv2, subSVIndex, &deviceId2,
                                                                   &devicePtr2, &stream2, &handle2));
 
+        // Caller guarantees the distribution of sub-state vectors between devices is identical
+        // between the two given state vectors, so that subSVIndex resides in the same device
+        assert(deviceId1 == deviceId2);
+
         // Calculate number of elements for this sub-state vector
         // Each device holds a portion of the full state vector
         size_t numLocalElements = (1LL << numWires) / numDeviceSubSVs;
@@ -198,6 +214,7 @@ ComplexType computeDotProductMultiDevice(ExStateVector sv1, ExStateVector sv2, i
             deviceId1, devicePtr1, stream1, devicePtr2, stream2, numLocalElements);
         output("Partial dot product %d: (%.6f, %.6f)\n", i, partialDotProduct.real(),
                partialDotProduct.imag());
+    
         // Add to total dot product
         totalDotProduct += partialDotProduct;
     }
@@ -208,23 +225,98 @@ ComplexType computeDotProductMultiDevice(ExStateVector sv1, ExStateVector sv2, i
 }
 
 //
+// Compute dot product for single-process migration configuration
+//
+ComplexType computeDotProductSingleProcessMigration(ExStateVector sv1, ExStateVector sv2, int /*numWires*/)
+{
+    output("Compute dot product for single-device migration-enabled state vector\n");
+
+    // Prepare state for subsequent sub-SV staging  
+    ERRCHK(custatevecExStateVectorExposeResources(sv1, CUSTATEVEC_EX_EXPOSE_RESOURCES_ACCESSIBLE));
+    ERRCHK(custatevecExStateVectorExposeResources(sv2, CUSTATEVEC_EX_EXPOSE_RESOURCES_ACCESSIBLE));
+
+    // Get the number and indices of sub-SVs (one is in device and the rest are in host)
+    int32_t numSubSVs;
+    ERRCHK(custatevecExStateVectorGetProperty(sv1, CUSTATEVEC_EX_SV_PROP_NUM_SUBSVS, &numSubSVs,
+                                              sizeof(numSubSVs)));
+    std::vector<int32_t> subSVIndices(numSubSVs);
+    ERRCHK(custatevecExStateVectorGetProperty(sv1, CUSTATEVEC_EX_SV_PROP_SUBSV_INDICES,
+                                              subSVIndices.data(), numSubSVs * sizeof(int32_t)));
+    output("Number of sub-state vectors: %d\n", numSubSVs);
+
+    // Get the size of each sub-SV
+    int32_t numLocalWires;
+    ERRCHK(custatevecExStateVectorGetProperty(sv1, CUSTATEVEC_EX_SV_PROP_NUM_LOCAL_WIRES,
+                                              &numLocalWires, sizeof(numLocalWires)));
+    const size_t numLocalElements = 1ULL << numLocalWires;
+
+    // Initialize the total dot product
+    ComplexType totalDotProduct(0.0f, 0.0f);
+
+    // Compute partial dot products for each sub-state vector
+    for (int i = 0; i < numSubSVs; ++i)
+    {
+        int32_t subSVIndex = subSVIndices[i];
+
+        // Stage both statevector's sub-SV into the device
+        ERRCHK(custatevecExStateVectorStageSubSV(sv1, subSVIndex));
+        ERRCHK(custatevecExStateVectorStageSubSV(sv2, subSVIndex));
+
+        // Extract resources from both state vectors for this sub-SV
+        int32_t deviceId1, deviceId2;
+        void* devicePtr1;
+        void* devicePtr2;
+        cudaStream_t stream1, stream2;
+        custatevecHandle_t handle1, handle2;
+        ERRCHK(custatevecExStateVectorGetResourcesFromDeviceSubSV(sv1, subSVIndex, &deviceId1,
+                                                                  &devicePtr1, &stream1, &handle1));
+        ERRCHK(custatevecExStateVectorGetResourcesFromDeviceSubSV(sv2, subSVIndex, &deviceId2,
+                                                                  &devicePtr2, &stream2, &handle2));
+
+        // Only one device is supported in single-process + migration mode
+        assert(deviceId1 == deviceId2);
+
+        output("Sub-SV %d: deviceId1=%d, deviceId2=%d, numLocalElements=%zu\n", subSVIndex,
+               deviceId1, deviceId2, numLocalElements);
+
+        // Compute partial dot product using cuBLAS
+        ComplexType partialDotProduct = computeDotProductCublas(
+            deviceId1, devicePtr1, stream1, devicePtr2, stream2, numLocalElements);
+        totalDotProduct += partialDotProduct;
+
+        output("Partial dot product %d: (%.6f, %.6f)\n", i, partialDotProduct.real(),
+               partialDotProduct.imag());
+    }
+
+    output("Migration dot product: (%.6f, %.6f)\n", totalDotProduct.real(), totalDotProduct.imag());
+    return totalDotProduct;
+}
+
+//
 // Compute dot product for multi-process configuration
 //
 ComplexType computeDotProductMultiProcess(ExStateVector sv1, ExStateVector sv2, int /*numWires*/)
 {
+    output("Compute dot product for multi-process state vector\n");
+
     // Get the number of device sub-state vectors (should be 1 for multi-process)
     int32_t numDeviceSubSVs;
     ERRCHK(custatevecExStateVectorGetProperty(sv1, CUSTATEVEC_EX_SV_PROP_NUM_DEVICE_SUBSVS,
                                               &numDeviceSubSVs, sizeof(numDeviceSubSVs)));
+    assert(numDeviceSubSVs == 1);
 
-    // Get the sub-state vector index for this process
+    // Get the single sub-state vector index (of sv1) for this process...
     std::vector<int32_t> deviceSubSVIndices(numDeviceSubSVs);
     ERRCHK(custatevecExStateVectorGetProperty(sv1, CUSTATEVEC_EX_SV_PROP_DEVICE_SUBSV_INDICES,
                                               deviceSubSVIndices.data(),
                                               numDeviceSubSVs * sizeof(int32_t)));
-
-    // For multi-process, each process should have exactly one sub-state vector
     int32_t subSVIndex = deviceSubSVIndices[0];
+
+    // ... which the caller guarantees agrees with that of sv2 (they are identically distributed)
+    ERRCHK(custatevecExStateVectorGetProperty(sv2, CUSTATEVEC_EX_SV_PROP_DEVICE_SUBSV_INDICES,
+                                              deviceSubSVIndices.data(),
+                                              numDeviceSubSVs * sizeof(int32_t)));
+    assert(subSVIndex == deviceSubSVIndices[0]);
 
     // Extract resources from both state vectors for this process's sub-SV
     int32_t deviceId1, deviceId2;
@@ -237,6 +329,10 @@ ComplexType computeDotProductMultiProcess(ExStateVector sv1, ExStateVector sv2, 
                                                               &devicePtr1, &stream1, &handle1));
     ERRCHK(custatevecExStateVectorGetResourcesFromDeviceSubSV(sv2, subSVIndex, &deviceId2,
                                                               &devicePtr2, &stream2, &handle2));
+
+    // Only a single device per process is permitted in multi-process mode; so subSVs of
+    // different state vectors in the same process must reside in the same device
+    assert(deviceId1 == deviceId2);
 
     // Get number of local wires to calculate local elements
     int32_t numLocalWires;
@@ -262,7 +358,9 @@ ComplexType computeDotProductMultiProcess(ExStateVector sv1, ExStateVector sv2, 
 }
 
 //
-// Compute dot product with configuration-based dispatching
+// Compute dot product with configuration-based dispatching.
+// This involves first permuting qubits so that state vectors become identically distributed,
+// such that their corresponding amplitudes reside within the same device(s).
 //
 ComplexType computeDotProduct(ExStateVector sv1, ExStateVector sv2, int numWires)
 {
@@ -275,17 +373,9 @@ ComplexType computeDotProduct(ExStateVector sv1, ExStateVector sv2, int numWires
     ERRCHK(custatevecExStateVectorGetProperty(sv2, CUSTATEVEC_EX_SV_PROP_WIRE_ORDERING,
                                               wireOrdering2.data(), numWires * sizeof(int32_t)));
 
-    auto dumpVector = [](const char* label, const std::vector<int32_t>& wireOrdering)
-    {
-        output("%s: [", label);
-        for (size_t i = 0; i < wireOrdering.size(); ++i)
-            output("%d%s", wireOrdering[i], (i < wireOrdering.size() - 1) ? " " : "");
-        output("]\n");
-    };
-
     output("Current wire orderings\n");
-    dumpVector("sv1", wireOrdering1);
-    dumpVector("sv2", wireOrdering2);
+    outputVectorDump("sv1", wireOrdering1);
+    outputVectorDump("sv2", wireOrdering2);
 
     // Step 2: Permute wires of sv2 to match the wire ordering of sv1
     std::vector<int> permutation(numWires);
@@ -297,7 +387,7 @@ ComplexType computeDotProduct(ExStateVector sv1, ExStateVector sv2, int numWires
     }
     ERRCHK(custatevecExStateVectorPermuteIndexBits(sv2, permutation.data(), numWires,
                                                    CUSTATEVEC_EX_PERMUTATION_SCATTER));
-    dumpVector("permutation", permutation);
+    outputVectorDump("permutation", permutation);
 
     // Validate wire orderings are identical.
     ERRCHK(custatevecExStateVectorGetProperty(sv1, CUSTATEVEC_EX_SV_PROP_WIRE_ORDERING,
@@ -306,23 +396,26 @@ ComplexType computeDotProduct(ExStateVector sv1, ExStateVector sv2, int numWires
                                               wireOrdering2.data(), numWires * sizeof(int32_t)));
 
     output("Permuted wire orderings\n");
-    dumpVector("sv1", wireOrdering1);
-    dumpVector("sv2", wireOrdering2);
+    outputVectorDump("sv1", wireOrdering1);
+    outputVectorDump("sv2", wireOrdering2);
 
-    // Get the state vector distribution type
+    // Get the state vector distribution type, and whether host memory is being used
     custatevecExStateVectorDistributionType_t distributionType;
     ERRCHK(custatevecExStateVectorGetProperty(sv1, CUSTATEVEC_EX_SV_PROP_DISTRIBUTION_TYPE,
                                               &distributionType, sizeof(distributionType)));
+    int32_t numMigrationWires;
+    ERRCHK( custatevecExStateVectorGetProperty(
+        sv1, CUSTATEVEC_EX_SV_PROP_NUM_MIGRATION_WIRES, &numMigrationWires, sizeof(numMigrationWires)));
 
     // Dispatch to appropriate dot product computation
     switch (distributionType)
     {
     case CUSTATEVEC_EX_SV_DISTRIBUTION_SINGLE_DEVICE:
-        return computeDotProductSingleDevice(sv1, sv2, numWires);
-
+        return (numMigrationWires == 0)?
+            computeDotProductSingleDevice(sv1, sv2, numWires):
+            computeDotProductSingleProcessMigration(sv1, sv2, numWires);
     case CUSTATEVEC_EX_SV_DISTRIBUTION_MULTI_DEVICE:
         return computeDotProductMultiDevice(sv1, sv2, numWires);
-
     case CUSTATEVEC_EX_SV_DISTRIBUTION_MULTI_PROCESS:
         return computeDotProductMultiProcess(sv1, sv2, numWires);
     default:
@@ -407,7 +500,7 @@ int main(int argc, char* argv[])
     auto dotProduct = computeDotProduct(stateVector1, stateVector2, numWires);
     pass &= validateDotProduct(dotProduct, numWires, 0.);
 
-    const float theta = (15.0f / 180.0f) * M_PI; // 15 degrees in radian
+    const float theta = (15.0f / 180.0f) * M_PI; // 15 degrees in radians
     // Apply RZ(θ) for all wires in stateVector2
     applyRotationByZ(stateVector2, numWires, theta);
     // Compute the dot product and validate result: <++++|RZ(θ)^⊗n|++++> = cos^n(θ)
@@ -421,6 +514,8 @@ int main(int argc, char* argv[])
     // Finalize multi-process environment
     finalizeMultiProcessEnvironment();
 
-    printf("%s\n", pass ? "PASSED" : "FAILED");
+    // Root process unconditionally prints success status
+    if (getMultiProcessRank() == 0)
+        printf("%s\n", pass ? "PASSED" : "FAILED");
     return pass ? EXIT_SUCCESS : EXIT_FAILURE;
 }

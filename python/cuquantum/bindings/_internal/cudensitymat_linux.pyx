@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.01.0. Do not modify it directly.
+# This code was automatically generated with version 26.03.0, generator version 0.3.1.dev1332+g03874867a.d20260311. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -45,6 +45,7 @@ cdef void* __cudensitymatGetNumRanks = NULL
 cdef void* __cudensitymatGetProcRank = NULL
 cdef void* __cudensitymatResetRandomSeed = NULL
 cdef void* __cudensitymatCreateState = NULL
+cdef void* __cudensitymatCreateStateMPS = NULL
 cdef void* __cudensitymatDestroyState = NULL
 cdef void* __cudensitymatStateGetNumComponents = NULL
 cdef void* __cudensitymatStateGetComponentStorageSize = NULL
@@ -63,17 +64,21 @@ cdef void* __cudensitymatDestroyElementaryOperator = NULL
 cdef void* __cudensitymatCreateMatrixOperatorDenseLocal = NULL
 cdef void* __cudensitymatCreateMatrixOperatorDenseLocalBatch = NULL
 cdef void* __cudensitymatDestroyMatrixOperator = NULL
+cdef void* __cudensitymatCreateMatrixProductOperator = NULL
+cdef void* __cudensitymatDestroyMatrixProductOperator = NULL
 cdef void* __cudensitymatCreateOperatorTerm = NULL
 cdef void* __cudensitymatDestroyOperatorTerm = NULL
 cdef void* __cudensitymatOperatorTermAppendElementaryProduct = NULL
 cdef void* __cudensitymatOperatorTermAppendElementaryProductBatch = NULL
 cdef void* __cudensitymatOperatorTermAppendMatrixProduct = NULL
 cdef void* __cudensitymatOperatorTermAppendMatrixProductBatch = NULL
+cdef void* __cudensitymatOperatorTermAppendMPOProduct = NULL
 cdef void* __cudensitymatCreateOperator = NULL
 cdef void* __cudensitymatDestroyOperator = NULL
 cdef void* __cudensitymatOperatorAppendTerm = NULL
 cdef void* __cudensitymatOperatorAppendTermBatch = NULL
 cdef void* __cudensitymatAttachBatchedCoefficients = NULL
+cdef void* __cudensitymatOperatorConfigureAction = NULL
 cdef void* __cudensitymatOperatorPrepareAction = NULL
 cdef void* __cudensitymatOperatorComputeAction = NULL
 cdef void* __cudensitymatOperatorPrepareActionBackwardDiff = NULL
@@ -91,6 +96,19 @@ cdef void* __cudensitymatDestroyOperatorSpectrum = NULL
 cdef void* __cudensitymatOperatorSpectrumConfigure = NULL
 cdef void* __cudensitymatOperatorSpectrumPrepare = NULL
 cdef void* __cudensitymatOperatorSpectrumCompute = NULL
+cdef void* __cudensitymatCreateTimePropagationScopeSplitTDVPConfig = NULL
+cdef void* __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig = NULL
+cdef void* __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute = NULL
+cdef void* __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute = NULL
+cdef void* __cudensitymatCreateTimePropagationApproachKrylovConfig = NULL
+cdef void* __cudensitymatDestroyTimePropagationApproachKrylovConfig = NULL
+cdef void* __cudensitymatTimePropagationApproachKrylovConfigSetAttribute = NULL
+cdef void* __cudensitymatTimePropagationApproachKrylovConfigGetAttribute = NULL
+cdef void* __cudensitymatCreateTimePropagation = NULL
+cdef void* __cudensitymatDestroyTimePropagation = NULL
+cdef void* __cudensitymatTimePropagationConfigure = NULL
+cdef void* __cudensitymatTimePropagationPrepare = NULL
+cdef void* __cudensitymatTimePropagationCompute = NULL
 cdef void* __cudensitymatCreateWorkspace = NULL
 cdef void* __cudensitymatDestroyWorkspace = NULL
 cdef void* __cudensitymatWorkspaceGetMemorySize = NULL
@@ -178,6 +196,13 @@ cdef int _check_or_init_cudensitymat() except -1 nogil:
             if handle == NULL:
                 handle = load_library()
             __cudensitymatCreateState = dlsym(handle, 'cudensitymatCreateState')
+
+        global __cudensitymatCreateStateMPS
+        __cudensitymatCreateStateMPS = dlsym(RTLD_DEFAULT, 'cudensitymatCreateStateMPS')
+        if __cudensitymatCreateStateMPS == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatCreateStateMPS = dlsym(handle, 'cudensitymatCreateStateMPS')
 
         global __cudensitymatDestroyState
         __cudensitymatDestroyState = dlsym(RTLD_DEFAULT, 'cudensitymatDestroyState')
@@ -305,6 +330,20 @@ cdef int _check_or_init_cudensitymat() except -1 nogil:
                 handle = load_library()
             __cudensitymatDestroyMatrixOperator = dlsym(handle, 'cudensitymatDestroyMatrixOperator')
 
+        global __cudensitymatCreateMatrixProductOperator
+        __cudensitymatCreateMatrixProductOperator = dlsym(RTLD_DEFAULT, 'cudensitymatCreateMatrixProductOperator')
+        if __cudensitymatCreateMatrixProductOperator == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatCreateMatrixProductOperator = dlsym(handle, 'cudensitymatCreateMatrixProductOperator')
+
+        global __cudensitymatDestroyMatrixProductOperator
+        __cudensitymatDestroyMatrixProductOperator = dlsym(RTLD_DEFAULT, 'cudensitymatDestroyMatrixProductOperator')
+        if __cudensitymatDestroyMatrixProductOperator == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatDestroyMatrixProductOperator = dlsym(handle, 'cudensitymatDestroyMatrixProductOperator')
+
         global __cudensitymatCreateOperatorTerm
         __cudensitymatCreateOperatorTerm = dlsym(RTLD_DEFAULT, 'cudensitymatCreateOperatorTerm')
         if __cudensitymatCreateOperatorTerm == NULL:
@@ -347,6 +386,13 @@ cdef int _check_or_init_cudensitymat() except -1 nogil:
                 handle = load_library()
             __cudensitymatOperatorTermAppendMatrixProductBatch = dlsym(handle, 'cudensitymatOperatorTermAppendMatrixProductBatch')
 
+        global __cudensitymatOperatorTermAppendMPOProduct
+        __cudensitymatOperatorTermAppendMPOProduct = dlsym(RTLD_DEFAULT, 'cudensitymatOperatorTermAppendMPOProduct')
+        if __cudensitymatOperatorTermAppendMPOProduct == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatOperatorTermAppendMPOProduct = dlsym(handle, 'cudensitymatOperatorTermAppendMPOProduct')
+
         global __cudensitymatCreateOperator
         __cudensitymatCreateOperator = dlsym(RTLD_DEFAULT, 'cudensitymatCreateOperator')
         if __cudensitymatCreateOperator == NULL:
@@ -381,6 +427,13 @@ cdef int _check_or_init_cudensitymat() except -1 nogil:
             if handle == NULL:
                 handle = load_library()
             __cudensitymatAttachBatchedCoefficients = dlsym(handle, 'cudensitymatAttachBatchedCoefficients')
+
+        global __cudensitymatOperatorConfigureAction
+        __cudensitymatOperatorConfigureAction = dlsym(RTLD_DEFAULT, 'cudensitymatOperatorConfigureAction')
+        if __cudensitymatOperatorConfigureAction == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatOperatorConfigureAction = dlsym(handle, 'cudensitymatOperatorConfigureAction')
 
         global __cudensitymatOperatorPrepareAction
         __cudensitymatOperatorPrepareAction = dlsym(RTLD_DEFAULT, 'cudensitymatOperatorPrepareAction')
@@ -501,6 +554,97 @@ cdef int _check_or_init_cudensitymat() except -1 nogil:
                 handle = load_library()
             __cudensitymatOperatorSpectrumCompute = dlsym(handle, 'cudensitymatOperatorSpectrumCompute')
 
+        global __cudensitymatCreateTimePropagationScopeSplitTDVPConfig
+        __cudensitymatCreateTimePropagationScopeSplitTDVPConfig = dlsym(RTLD_DEFAULT, 'cudensitymatCreateTimePropagationScopeSplitTDVPConfig')
+        if __cudensitymatCreateTimePropagationScopeSplitTDVPConfig == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatCreateTimePropagationScopeSplitTDVPConfig = dlsym(handle, 'cudensitymatCreateTimePropagationScopeSplitTDVPConfig')
+
+        global __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig
+        __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig = dlsym(RTLD_DEFAULT, 'cudensitymatDestroyTimePropagationScopeSplitTDVPConfig')
+        if __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig = dlsym(handle, 'cudensitymatDestroyTimePropagationScopeSplitTDVPConfig')
+
+        global __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute
+        __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute = dlsym(RTLD_DEFAULT, 'cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute')
+        if __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute = dlsym(handle, 'cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute')
+
+        global __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute
+        __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute = dlsym(RTLD_DEFAULT, 'cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute')
+        if __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute = dlsym(handle, 'cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute')
+
+        global __cudensitymatCreateTimePropagationApproachKrylovConfig
+        __cudensitymatCreateTimePropagationApproachKrylovConfig = dlsym(RTLD_DEFAULT, 'cudensitymatCreateTimePropagationApproachKrylovConfig')
+        if __cudensitymatCreateTimePropagationApproachKrylovConfig == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatCreateTimePropagationApproachKrylovConfig = dlsym(handle, 'cudensitymatCreateTimePropagationApproachKrylovConfig')
+
+        global __cudensitymatDestroyTimePropagationApproachKrylovConfig
+        __cudensitymatDestroyTimePropagationApproachKrylovConfig = dlsym(RTLD_DEFAULT, 'cudensitymatDestroyTimePropagationApproachKrylovConfig')
+        if __cudensitymatDestroyTimePropagationApproachKrylovConfig == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatDestroyTimePropagationApproachKrylovConfig = dlsym(handle, 'cudensitymatDestroyTimePropagationApproachKrylovConfig')
+
+        global __cudensitymatTimePropagationApproachKrylovConfigSetAttribute
+        __cudensitymatTimePropagationApproachKrylovConfigSetAttribute = dlsym(RTLD_DEFAULT, 'cudensitymatTimePropagationApproachKrylovConfigSetAttribute')
+        if __cudensitymatTimePropagationApproachKrylovConfigSetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatTimePropagationApproachKrylovConfigSetAttribute = dlsym(handle, 'cudensitymatTimePropagationApproachKrylovConfigSetAttribute')
+
+        global __cudensitymatTimePropagationApproachKrylovConfigGetAttribute
+        __cudensitymatTimePropagationApproachKrylovConfigGetAttribute = dlsym(RTLD_DEFAULT, 'cudensitymatTimePropagationApproachKrylovConfigGetAttribute')
+        if __cudensitymatTimePropagationApproachKrylovConfigGetAttribute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatTimePropagationApproachKrylovConfigGetAttribute = dlsym(handle, 'cudensitymatTimePropagationApproachKrylovConfigGetAttribute')
+
+        global __cudensitymatCreateTimePropagation
+        __cudensitymatCreateTimePropagation = dlsym(RTLD_DEFAULT, 'cudensitymatCreateTimePropagation')
+        if __cudensitymatCreateTimePropagation == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatCreateTimePropagation = dlsym(handle, 'cudensitymatCreateTimePropagation')
+
+        global __cudensitymatDestroyTimePropagation
+        __cudensitymatDestroyTimePropagation = dlsym(RTLD_DEFAULT, 'cudensitymatDestroyTimePropagation')
+        if __cudensitymatDestroyTimePropagation == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatDestroyTimePropagation = dlsym(handle, 'cudensitymatDestroyTimePropagation')
+
+        global __cudensitymatTimePropagationConfigure
+        __cudensitymatTimePropagationConfigure = dlsym(RTLD_DEFAULT, 'cudensitymatTimePropagationConfigure')
+        if __cudensitymatTimePropagationConfigure == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatTimePropagationConfigure = dlsym(handle, 'cudensitymatTimePropagationConfigure')
+
+        global __cudensitymatTimePropagationPrepare
+        __cudensitymatTimePropagationPrepare = dlsym(RTLD_DEFAULT, 'cudensitymatTimePropagationPrepare')
+        if __cudensitymatTimePropagationPrepare == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatTimePropagationPrepare = dlsym(handle, 'cudensitymatTimePropagationPrepare')
+
+        global __cudensitymatTimePropagationCompute
+        __cudensitymatTimePropagationCompute = dlsym(RTLD_DEFAULT, 'cudensitymatTimePropagationCompute')
+        if __cudensitymatTimePropagationCompute == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cudensitymatTimePropagationCompute = dlsym(handle, 'cudensitymatTimePropagationCompute')
+
         global __cudensitymatCreateWorkspace
         __cudensitymatCreateWorkspace = dlsym(RTLD_DEFAULT, 'cudensitymatCreateWorkspace')
         if __cudensitymatCreateWorkspace == NULL:
@@ -581,6 +725,9 @@ cpdef dict _inspect_function_pointers():
     global __cudensitymatCreateState
     data["__cudensitymatCreateState"] = <intptr_t>__cudensitymatCreateState
 
+    global __cudensitymatCreateStateMPS
+    data["__cudensitymatCreateStateMPS"] = <intptr_t>__cudensitymatCreateStateMPS
+
     global __cudensitymatDestroyState
     data["__cudensitymatDestroyState"] = <intptr_t>__cudensitymatDestroyState
 
@@ -635,6 +782,12 @@ cpdef dict _inspect_function_pointers():
     global __cudensitymatDestroyMatrixOperator
     data["__cudensitymatDestroyMatrixOperator"] = <intptr_t>__cudensitymatDestroyMatrixOperator
 
+    global __cudensitymatCreateMatrixProductOperator
+    data["__cudensitymatCreateMatrixProductOperator"] = <intptr_t>__cudensitymatCreateMatrixProductOperator
+
+    global __cudensitymatDestroyMatrixProductOperator
+    data["__cudensitymatDestroyMatrixProductOperator"] = <intptr_t>__cudensitymatDestroyMatrixProductOperator
+
     global __cudensitymatCreateOperatorTerm
     data["__cudensitymatCreateOperatorTerm"] = <intptr_t>__cudensitymatCreateOperatorTerm
 
@@ -653,6 +806,9 @@ cpdef dict _inspect_function_pointers():
     global __cudensitymatOperatorTermAppendMatrixProductBatch
     data["__cudensitymatOperatorTermAppendMatrixProductBatch"] = <intptr_t>__cudensitymatOperatorTermAppendMatrixProductBatch
 
+    global __cudensitymatOperatorTermAppendMPOProduct
+    data["__cudensitymatOperatorTermAppendMPOProduct"] = <intptr_t>__cudensitymatOperatorTermAppendMPOProduct
+
     global __cudensitymatCreateOperator
     data["__cudensitymatCreateOperator"] = <intptr_t>__cudensitymatCreateOperator
 
@@ -667,6 +823,9 @@ cpdef dict _inspect_function_pointers():
 
     global __cudensitymatAttachBatchedCoefficients
     data["__cudensitymatAttachBatchedCoefficients"] = <intptr_t>__cudensitymatAttachBatchedCoefficients
+
+    global __cudensitymatOperatorConfigureAction
+    data["__cudensitymatOperatorConfigureAction"] = <intptr_t>__cudensitymatOperatorConfigureAction
 
     global __cudensitymatOperatorPrepareAction
     data["__cudensitymatOperatorPrepareAction"] = <intptr_t>__cudensitymatOperatorPrepareAction
@@ -718,6 +877,45 @@ cpdef dict _inspect_function_pointers():
 
     global __cudensitymatOperatorSpectrumCompute
     data["__cudensitymatOperatorSpectrumCompute"] = <intptr_t>__cudensitymatOperatorSpectrumCompute
+
+    global __cudensitymatCreateTimePropagationScopeSplitTDVPConfig
+    data["__cudensitymatCreateTimePropagationScopeSplitTDVPConfig"] = <intptr_t>__cudensitymatCreateTimePropagationScopeSplitTDVPConfig
+
+    global __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig
+    data["__cudensitymatDestroyTimePropagationScopeSplitTDVPConfig"] = <intptr_t>__cudensitymatDestroyTimePropagationScopeSplitTDVPConfig
+
+    global __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute
+    data["__cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute"] = <intptr_t>__cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute
+
+    global __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute
+    data["__cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute"] = <intptr_t>__cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute
+
+    global __cudensitymatCreateTimePropagationApproachKrylovConfig
+    data["__cudensitymatCreateTimePropagationApproachKrylovConfig"] = <intptr_t>__cudensitymatCreateTimePropagationApproachKrylovConfig
+
+    global __cudensitymatDestroyTimePropagationApproachKrylovConfig
+    data["__cudensitymatDestroyTimePropagationApproachKrylovConfig"] = <intptr_t>__cudensitymatDestroyTimePropagationApproachKrylovConfig
+
+    global __cudensitymatTimePropagationApproachKrylovConfigSetAttribute
+    data["__cudensitymatTimePropagationApproachKrylovConfigSetAttribute"] = <intptr_t>__cudensitymatTimePropagationApproachKrylovConfigSetAttribute
+
+    global __cudensitymatTimePropagationApproachKrylovConfigGetAttribute
+    data["__cudensitymatTimePropagationApproachKrylovConfigGetAttribute"] = <intptr_t>__cudensitymatTimePropagationApproachKrylovConfigGetAttribute
+
+    global __cudensitymatCreateTimePropagation
+    data["__cudensitymatCreateTimePropagation"] = <intptr_t>__cudensitymatCreateTimePropagation
+
+    global __cudensitymatDestroyTimePropagation
+    data["__cudensitymatDestroyTimePropagation"] = <intptr_t>__cudensitymatDestroyTimePropagation
+
+    global __cudensitymatTimePropagationConfigure
+    data["__cudensitymatTimePropagationConfigure"] = <intptr_t>__cudensitymatTimePropagationConfigure
+
+    global __cudensitymatTimePropagationPrepare
+    data["__cudensitymatTimePropagationPrepare"] = <intptr_t>__cudensitymatTimePropagationPrepare
+
+    global __cudensitymatTimePropagationCompute
+    data["__cudensitymatTimePropagationCompute"] = <intptr_t>__cudensitymatTimePropagationCompute
 
     global __cudensitymatCreateWorkspace
     data["__cudensitymatCreateWorkspace"] = <intptr_t>__cudensitymatCreateWorkspace
@@ -825,6 +1023,16 @@ cdef cudensitymatStatus_t _cudensitymatCreateState(const cudensitymatHandle_t ha
             raise FunctionNotFoundError("function cudensitymatCreateState is not found")
     return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatStatePurity_t, int32_t, const int64_t*, int64_t, cudaDataType_t, cudensitymatState_t*) noexcept nogil>__cudensitymatCreateState)(
         handle, purity, numSpaceModes, spaceModeExtents, batchSize, dataType, state)
+
+
+cdef cudensitymatStatus_t _cudensitymatCreateStateMPS(const cudensitymatHandle_t handle, cudensitymatStatePurity_t purity, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatBoundaryCondition_t boundaryCondition, const int64_t bondExtents[], cudaDataType_t dataType, int64_t batchSize, cudensitymatState_t* state) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatCreateStateMPS
+    _check_or_init_cudensitymat()
+    if __cudensitymatCreateStateMPS == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatCreateStateMPS is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatStatePurity_t, int32_t, const int64_t*, cudensitymatBoundaryCondition_t, const int64_t*, cudaDataType_t, int64_t, cudensitymatState_t*) noexcept nogil>__cudensitymatCreateStateMPS)(
+        handle, purity, numSpaceModes, spaceModeExtents, boundaryCondition, bondExtents, dataType, batchSize, state)
 
 
 cdef cudensitymatStatus_t _cudensitymatDestroyState(cudensitymatState_t state) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
@@ -1007,6 +1215,26 @@ cdef cudensitymatStatus_t _cudensitymatDestroyMatrixOperator(cudensitymatMatrixO
         matrixOperator)
 
 
+cdef cudensitymatStatus_t _cudensitymatCreateMatrixProductOperator(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatBoundaryCondition_t boundaryCondition, const int64_t bondExtents[], cudaDataType_t dataType, void* tensorData[], cudensitymatWrappedTensorCallback_t tensorCallbacks[], cudensitymatWrappedTensorGradientCallback_t tensorGradientCallbacks[], cudensitymatMatrixProductOperator_t* matrixProductOperator) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatCreateMatrixProductOperator
+    _check_or_init_cudensitymat()
+    if __cudensitymatCreateMatrixProductOperator == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatCreateMatrixProductOperator is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, int32_t, const int64_t*, cudensitymatBoundaryCondition_t, const int64_t*, cudaDataType_t, void**, cudensitymatWrappedTensorCallback_t*, cudensitymatWrappedTensorGradientCallback_t*, cudensitymatMatrixProductOperator_t*) noexcept nogil>__cudensitymatCreateMatrixProductOperator)(
+        handle, numSpaceModes, spaceModeExtents, boundaryCondition, bondExtents, dataType, tensorData, tensorCallbacks, tensorGradientCallbacks, matrixProductOperator)
+
+
+cdef cudensitymatStatus_t _cudensitymatDestroyMatrixProductOperator(cudensitymatMatrixProductOperator_t matrixProductOperator) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatDestroyMatrixProductOperator
+    _check_or_init_cudensitymat()
+    if __cudensitymatDestroyMatrixProductOperator == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatDestroyMatrixProductOperator is not found")
+    return (<cudensitymatStatus_t (*)(cudensitymatMatrixProductOperator_t) noexcept nogil>__cudensitymatDestroyMatrixProductOperator)(
+        matrixProductOperator)
+
+
 cdef cudensitymatStatus_t _cudensitymatCreateOperatorTerm(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatOperatorTerm_t* operatorTerm) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cudensitymatCreateOperatorTerm
     _check_or_init_cudensitymat()
@@ -1067,6 +1295,16 @@ cdef cudensitymatStatus_t _cudensitymatOperatorTermAppendMatrixProductBatch(cons
         handle, operatorTerm, numMatrixOperators, matrixOperators, matrixConjugation, actionDuality, batchSize, staticCoefficients, totalCoefficients, coefficientCallback, coefficientGradientCallback)
 
 
+cdef cudensitymatStatus_t _cudensitymatOperatorTermAppendMPOProduct(const cudensitymatHandle_t handle, cudensitymatOperatorTerm_t operatorTerm, int32_t numMPOOperators, const cudensitymatMatrixProductOperator_t mpoOperators[], const int32_t mpoConjugation[], const int32_t stateModesActedOn[], const int32_t modeActionDuality[], cuDoubleComplex coefficient, cudensitymatWrappedScalarCallback_t coefficientCallback, cudensitymatWrappedScalarGradientCallback_t coefficientGradientCallback) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatOperatorTermAppendMPOProduct
+    _check_or_init_cudensitymat()
+    if __cudensitymatOperatorTermAppendMPOProduct == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatOperatorTermAppendMPOProduct is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatOperatorTerm_t, int32_t, const cudensitymatMatrixProductOperator_t*, const int32_t*, const int32_t*, const int32_t*, cuDoubleComplex, cudensitymatWrappedScalarCallback_t, cudensitymatWrappedScalarGradientCallback_t) noexcept nogil>__cudensitymatOperatorTermAppendMPOProduct)(
+        handle, operatorTerm, numMPOOperators, mpoOperators, mpoConjugation, stateModesActedOn, modeActionDuality, coefficient, coefficientCallback, coefficientGradientCallback)
+
+
 cdef cudensitymatStatus_t _cudensitymatCreateOperator(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatOperator_t* superoperator) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     global __cudensitymatCreateOperator
     _check_or_init_cudensitymat()
@@ -1115,6 +1353,16 @@ cdef cudensitymatStatus_t _cudensitymatAttachBatchedCoefficients(const cudensity
             raise FunctionNotFoundError("function cudensitymatAttachBatchedCoefficients is not found")
     return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatOperator_t, int32_t, void**, void**, int32_t, void**, void**) noexcept nogil>__cudensitymatAttachBatchedCoefficients)(
         handle, superoperator, numOperatorTermBatchedCoeffs, operatorTermBatchedCoeffsTmp, operatorTermBatchedCoeffs, numOperatorProductBatchedCoeffs, operatorProductBatchedCoeffsTmp, operatorProductBatchedCoeffs)
+
+
+cdef cudensitymatStatus_t _cudensitymatOperatorConfigureAction(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, const cudensitymatState_t stateIn, const cudensitymatState_t stateOut, const void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatOperatorConfigureAction
+    _check_or_init_cudensitymat()
+    if __cudensitymatOperatorConfigureAction == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatOperatorConfigureAction is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatOperator_t, const cudensitymatState_t, const cudensitymatState_t, const void*, size_t) noexcept nogil>__cudensitymatOperatorConfigureAction)(
+        handle, superoperator, stateIn, stateOut, attributeValue, attributeSize)
 
 
 cdef cudensitymatStatus_t _cudensitymatOperatorPrepareAction(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, const cudensitymatState_t stateIn, const cudensitymatState_t stateOut, cudensitymatComputeType_t computeType, size_t workspaceSizeLimit, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
@@ -1285,6 +1533,136 @@ cdef cudensitymatStatus_t _cudensitymatOperatorSpectrumCompute(const cudensityma
             raise FunctionNotFoundError("function cudensitymatOperatorSpectrumCompute is not found")
     return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatOperatorSpectrum_t, double, int64_t, int32_t, const double*, int32_t, cudensitymatState_t*, void*, double*, cudensitymatWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cudensitymatOperatorSpectrumCompute)(
         handle, spectrum, time, batchSize, numParams, params, numEigenStates, eigenstates, eigenvalues, tolerances, workspace, stream)
+
+
+cdef cudensitymatStatus_t _cudensitymatCreateTimePropagationScopeSplitTDVPConfig(const cudensitymatHandle_t handle, cudensitymatTimePropagationScopeSplitTDVPConfig_t* config) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatCreateTimePropagationScopeSplitTDVPConfig
+    _check_or_init_cudensitymat()
+    if __cudensitymatCreateTimePropagationScopeSplitTDVPConfig == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatCreateTimePropagationScopeSplitTDVPConfig is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatTimePropagationScopeSplitTDVPConfig_t*) noexcept nogil>__cudensitymatCreateTimePropagationScopeSplitTDVPConfig)(
+        handle, config)
+
+
+cdef cudensitymatStatus_t _cudensitymatDestroyTimePropagationScopeSplitTDVPConfig(cudensitymatTimePropagationScopeSplitTDVPConfig_t config) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig
+    _check_or_init_cudensitymat()
+    if __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatDestroyTimePropagationScopeSplitTDVPConfig is not found")
+    return (<cudensitymatStatus_t (*)(cudensitymatTimePropagationScopeSplitTDVPConfig_t) noexcept nogil>__cudensitymatDestroyTimePropagationScopeSplitTDVPConfig)(
+        config)
+
+
+cdef cudensitymatStatus_t _cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute(const cudensitymatHandle_t handle, cudensitymatTimePropagationScopeSplitTDVPConfig_t config, cudensitymatTimePropagationScopeSplitTDVPConfigAttribute_t attribute, const void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute
+    _check_or_init_cudensitymat()
+    if __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatTimePropagationScopeSplitTDVPConfig_t, cudensitymatTimePropagationScopeSplitTDVPConfigAttribute_t, const void*, size_t) noexcept nogil>__cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute)(
+        handle, config, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t _cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute(const cudensitymatHandle_t handle, const cudensitymatTimePropagationScopeSplitTDVPConfig_t config, cudensitymatTimePropagationScopeSplitTDVPConfigAttribute_t attribute, void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute
+    _check_or_init_cudensitymat()
+    if __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, const cudensitymatTimePropagationScopeSplitTDVPConfig_t, cudensitymatTimePropagationScopeSplitTDVPConfigAttribute_t, void*, size_t) noexcept nogil>__cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute)(
+        handle, config, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t _cudensitymatCreateTimePropagationApproachKrylovConfig(const cudensitymatHandle_t handle, cudensitymatTimePropagationApproachKrylovConfig_t* config) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatCreateTimePropagationApproachKrylovConfig
+    _check_or_init_cudensitymat()
+    if __cudensitymatCreateTimePropagationApproachKrylovConfig == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatCreateTimePropagationApproachKrylovConfig is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatTimePropagationApproachKrylovConfig_t*) noexcept nogil>__cudensitymatCreateTimePropagationApproachKrylovConfig)(
+        handle, config)
+
+
+cdef cudensitymatStatus_t _cudensitymatDestroyTimePropagationApproachKrylovConfig(cudensitymatTimePropagationApproachKrylovConfig_t config) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatDestroyTimePropagationApproachKrylovConfig
+    _check_or_init_cudensitymat()
+    if __cudensitymatDestroyTimePropagationApproachKrylovConfig == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatDestroyTimePropagationApproachKrylovConfig is not found")
+    return (<cudensitymatStatus_t (*)(cudensitymatTimePropagationApproachKrylovConfig_t) noexcept nogil>__cudensitymatDestroyTimePropagationApproachKrylovConfig)(
+        config)
+
+
+cdef cudensitymatStatus_t _cudensitymatTimePropagationApproachKrylovConfigSetAttribute(const cudensitymatHandle_t handle, cudensitymatTimePropagationApproachKrylovConfig_t config, cudensitymatTimePropagationApproachKrylovConfigAttribute_t attribute, const void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatTimePropagationApproachKrylovConfigSetAttribute
+    _check_or_init_cudensitymat()
+    if __cudensitymatTimePropagationApproachKrylovConfigSetAttribute == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatTimePropagationApproachKrylovConfigSetAttribute is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatTimePropagationApproachKrylovConfig_t, cudensitymatTimePropagationApproachKrylovConfigAttribute_t, const void*, size_t) noexcept nogil>__cudensitymatTimePropagationApproachKrylovConfigSetAttribute)(
+        handle, config, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t _cudensitymatTimePropagationApproachKrylovConfigGetAttribute(const cudensitymatHandle_t handle, const cudensitymatTimePropagationApproachKrylovConfig_t config, cudensitymatTimePropagationApproachKrylovConfigAttribute_t attribute, void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatTimePropagationApproachKrylovConfigGetAttribute
+    _check_or_init_cudensitymat()
+    if __cudensitymatTimePropagationApproachKrylovConfigGetAttribute == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatTimePropagationApproachKrylovConfigGetAttribute is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, const cudensitymatTimePropagationApproachKrylovConfig_t, cudensitymatTimePropagationApproachKrylovConfigAttribute_t, void*, size_t) noexcept nogil>__cudensitymatTimePropagationApproachKrylovConfigGetAttribute)(
+        handle, config, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t _cudensitymatCreateTimePropagation(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, int32_t isHermitian, cudensitymatTimePropagationScopeKind_t scopeKind, cudensitymatTimePropagationApproachKind_t approachKind, cudensitymatTimePropagation_t* timePropagation) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatCreateTimePropagation
+    _check_or_init_cudensitymat()
+    if __cudensitymatCreateTimePropagation == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatCreateTimePropagation is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatOperator_t, int32_t, cudensitymatTimePropagationScopeKind_t, cudensitymatTimePropagationApproachKind_t, cudensitymatTimePropagation_t*) noexcept nogil>__cudensitymatCreateTimePropagation)(
+        handle, superoperator, isHermitian, scopeKind, approachKind, timePropagation)
+
+
+cdef cudensitymatStatus_t _cudensitymatDestroyTimePropagation(cudensitymatTimePropagation_t timePropagation) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatDestroyTimePropagation
+    _check_or_init_cudensitymat()
+    if __cudensitymatDestroyTimePropagation == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatDestroyTimePropagation is not found")
+    return (<cudensitymatStatus_t (*)(cudensitymatTimePropagation_t) noexcept nogil>__cudensitymatDestroyTimePropagation)(
+        timePropagation)
+
+
+cdef cudensitymatStatus_t _cudensitymatTimePropagationConfigure(const cudensitymatHandle_t handle, cudensitymatTimePropagation_t timePropagation, cudensitymatTimePropagationAttribute_t attribute, const void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatTimePropagationConfigure
+    _check_or_init_cudensitymat()
+    if __cudensitymatTimePropagationConfigure == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatTimePropagationConfigure is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatTimePropagation_t, cudensitymatTimePropagationAttribute_t, const void*, size_t) noexcept nogil>__cudensitymatTimePropagationConfigure)(
+        handle, timePropagation, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t _cudensitymatTimePropagationPrepare(const cudensitymatHandle_t handle, cudensitymatTimePropagation_t timePropagation, const cudensitymatState_t stateIn, const cudensitymatState_t stateOut, cudensitymatComputeType_t computeType, size_t workspaceSizeLimit, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatTimePropagationPrepare
+    _check_or_init_cudensitymat()
+    if __cudensitymatTimePropagationPrepare == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatTimePropagationPrepare is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatTimePropagation_t, const cudensitymatState_t, const cudensitymatState_t, cudensitymatComputeType_t, size_t, cudensitymatWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cudensitymatTimePropagationPrepare)(
+        handle, timePropagation, stateIn, stateOut, computeType, workspaceSizeLimit, workspace, stream)
+
+
+cdef cudensitymatStatus_t _cudensitymatTimePropagationCompute(const cudensitymatHandle_t handle, cudensitymatTimePropagation_t timePropagation, double timeStepReal, double timeStepImag, double time, int64_t batchSize, int32_t numParams, const double* params, const cudensitymatState_t stateIn, cudensitymatState_t stateOut, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cudensitymatTimePropagationCompute
+    _check_or_init_cudensitymat()
+    if __cudensitymatTimePropagationCompute == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cudensitymatTimePropagationCompute is not found")
+    return (<cudensitymatStatus_t (*)(const cudensitymatHandle_t, cudensitymatTimePropagation_t, double, double, double, int64_t, int32_t, const double*, const cudensitymatState_t, cudensitymatState_t, cudensitymatWorkspaceDescriptor_t, cudaStream_t) noexcept nogil>__cudensitymatTimePropagationCompute)(
+        handle, timePropagation, timeStepReal, timeStepImag, time, batchSize, numParams, params, stateIn, stateOut, workspace, stream)
 
 
 cdef cudensitymatStatus_t _cudensitymatCreateWorkspace(const cudensitymatHandle_t handle, cudensitymatWorkspaceDescriptor_t* workspaceDescr) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:

@@ -21,12 +21,12 @@ from ._internal import utils
 from ._internal.utils import InvalidObjectState
 
 
-__all__ = ["DensePureState", "DenseMixedState"]
+__all__ = ["DensePureState", "DenseMixedState", "MPSPureState"]
 
 
 class State(ABC):
     """
-    An base class on which all concrete state representations are based.
+    A base class on which all concrete state representations are based.
     This class mirrors the C-API more closely than its subclasses.
 
     Args:
@@ -35,7 +35,7 @@ class State(ABC):
         hilbert_space_dims: Tuple[int]
             A tuple of the local Hilbert space dimensions.
         purity: str
-            The states purity, either "PURE" or "MIXED".
+            The state's purity, either "PURE" or "MIXED".
         batch_size: int
             The batch dimension of the state.
         dtype: str
@@ -199,8 +199,13 @@ class State(ABC):
             An array of squared Frobenius norm(s) of length ``batch_size``.
         """
         # Translate complex datatypes to real datatypes
+        storage = self.storage
         if self.dtype.startswith("complex"):
-            dtype = self.storage.real.dtype.name
+
+            if isinstance(storage, Sequence):
+                dtype = storage[0].real.dtype.name
+            else:
+                dtype = storage.real.dtype.name
         else:
             dtype = self.dtype
 
@@ -532,6 +537,205 @@ class DenseState(State):
                 )
         new_instance.attach_storage(buf)
         return new_instance
+
+
+class FactorizedState(State):
+    """
+    A state in factorized (multi-component) representation.
+    """
+
+    def __init__(
+        self,
+        ctx: WorkStream,
+        hilbert_space_dims: Tuple[int],
+        bond_dims: Tuple[int],
+        batch_size: int,
+        dtype: str,
+    ) -> None:
+        super().__init__(ctx, hilbert_space_dims, batch_size, dtype)
+        self.bond_dims = tuple(bond_dims)
+
+    def _check_state_compatibility(self, other):
+        super()._check_state_compatibility(other)
+        try:
+            assert self.bond_dims == other.bond_dims
+        except AssertionError as e:
+            raise ValueError(
+                "`other` argument in State.inner(other) is incompatible with instance."
+            ) from e
+
+    def _instantiate(self, ctx: WorkStream):
+        assert ctx is not None
+        if self._valid_state:
+            assert self._ctx == ctx
+        else:
+            self._ctx = ctx
+            self._ptr = cudm.create_state_mps(
+                self._ctx._handle._validated_ptr,
+                self._purity,
+                len(self.hilbert_space_dims),
+                self.hilbert_space_dims,
+                0,  # CUDENSITYMAT_BOUNDARY_CONDITION_OPEN
+                self.bond_dims,
+                typemaps.NAME_TO_DATA_TYPE[self.dtype],
+                self.batch_size,
+            )
+            self._finalizer = weakref.finalize(
+                self,
+                utils.generic_finalizer,
+                self._ctx.logger,
+                self._upstream_finalizers,
+                (cudm.destroy_state, self._ptr),
+                msg=f"Destroying State instance {self}, ptr: {self._ptr}.",
+            )
+            utils.register_with(self, self._ctx, self._ctx.logger)
+
+    @property
+    def storage(self) -> List[cp.ndarray]:
+        """
+        The state's local storage buffers, one per MPS component tensor.
+
+        Returns:
+            List[cp.ndarray]:
+                A list of the state's local storage buffers.
+        """
+        data = self._component_storage
+        if data is not None:
+            return [buf.tensor for buf in data]
+
+    @property
+    def storage_sizes(self) -> List[int]:
+        """
+        Storage buffer sizes in number of elements of data type ``dtype``, one per component.
+
+        Returns:
+            List[int]: Storage buffer sizes in number of elements of data type ``dtype``.
+        """
+        itemsize = np.dtype(self.dtype).itemsize
+        return [size // itemsize for size in self._component_storage_size]
+
+    @property
+    def local_info(self) -> List[Tuple[Tuple[int], Tuple[int]]]:
+        """
+        Local storage buffer dimensions and mode offsets for each component.
+
+        Returns:
+            List[Tuple[Tuple[int], Tuple[int]]]:
+                A list of (mode_extents, mode_offsets) tuples, one per component.
+        """
+        return self._local_info
+
+    def attach_storage(self, data: List[cp.ndarray]) -> None:
+        """
+        Attach data buffers to the state, one per component.
+
+        Args:
+            data: A list of data buffers, one per MPS component tensor.
+
+        .. note::
+            Each data buffer needs to match the corresponding component's expected size and data type.
+            All buffers need to be Fortran contiguous and located on the same device as the
+            :class:`WorkStream` passed to the ``__init__`` function.
+        """
+        self._attach_component_storage(data)
+
+    def allocate_storage(self) -> None:
+        """
+        Allocate appropriately sized data buffers and attach them to the state.
+        """
+        with cp.cuda.Device(self._ctx.device_id):
+            bufs = [cp.zeros((size,), dtype=self.dtype) for size in self.storage_sizes]
+            self.attach_storage(bufs)
+
+    def clone(self, bufs: List[cp.ndarray]) -> "FactorizedState":
+        """Clone the state with new data buffers.
+
+        Args:
+            bufs: A list of data buffers, one per MPS component tensor.
+
+        Returns:
+            A state with same metadata as the original state and new data buffers.
+        """
+        if len(bufs) != self._num_components:
+            raise ValueError(
+                f"Expected {self._num_components} buffers, got {len(bufs)}."
+            )
+        expected_sizes = self.storage_sizes
+        for i, buf in enumerate(bufs):
+            if buf.dtype != self.dtype:
+                raise ValueError(
+                    f"Buffer {i} data type {buf.dtype} does not match the state's data type {self.dtype}."
+                )
+            if not buf.flags.f_contiguous:
+                raise ValueError(f"Buffer {i} is not Fortran ordered and contiguous.")
+            if np.prod(buf.shape) != expected_sizes[i]:
+                raise ValueError(
+                    f"Buffer {i} size {buf.size} does not match expected size {expected_sizes[i]}."
+                )
+        new_instance = type(self)(
+            self._ctx, self.hilbert_space_dims, self.bond_dims, self.batch_size, self.dtype
+        )
+        new_instance.attach_storage(bufs)
+        return new_instance
+
+
+class MPSPureState(FactorizedState):
+    """
+    MPSPureState(ctx, hilbert_space_dims, bond_dims, batch_size, dtype)
+
+    Pure state in MPS (Matrix Product State) factorized representation.
+
+    Each site tensor has up to 3 modes with the following ordering (Fortran contiguous):
+
+    - Leftmost site (i=0): ``(phys, bond_right)``
+    - Interior sites: ``(bond_left, phys, bond_right)``
+    - Rightmost site (i=N-1): ``(bond_left, phys)``
+
+    Here ``phys`` has the extent of the local Hilbert space dimension at that site,
+    while ``bond_left`` and ``bond_right`` have the extents of the corresponding bond dimensions.
+
+    A storage buffer needs to be attached via the :meth:`attach_storage` method or allocated via
+    the :meth:`allocate_storage` method. The appropriate sizes for the storage buffers as well as
+    information on the storage layout are available in the :attr:`local_info` attribute.
+
+    Args:
+        ctx: The execution context, which contains information on device ID, logging and blocking/non-blocking execution.
+        hilbert_space_dims: A tuple of the local Hilbert space dimensions.
+        bond_dims: A tuple of the bond dimensions. For open boundary conditions, the length must be
+            equal to the number of space modes minus one.
+        batch_size: Batch dimension of the state.
+        dtype: Numeric data type of the state's coefficients.
+
+    Examples:
+        >>> import cupy as cp
+        >>> from cuquantum.densitymat import WorkStream, MPSPureState
+
+        To create an ``MPSPureState`` of batch size 1 and double-precision complex data type
+
+        >>> ctx = WorkStream(stream=cp.cuda.Stream())
+        >>> hilbert_space_dims = (2, 2, 2)
+        >>> bond_dims = (4, 4)
+        >>> psi = MPSPureState(ctx, hilbert_space_dims, bond_dims, 1, "complex128")
+        >>> psi.allocate_storage()
+    """
+
+    def __init__(
+        self,
+        ctx: WorkStream,
+        hilbert_space_dims: Sequence[int],
+        bond_dims: Sequence[int],
+        batch_size: int,
+        dtype: str,
+    ) -> None:
+        """
+        Initialize a pure state in MPS factorized representation.
+        """
+        super().__init__(ctx, hilbert_space_dims, bond_dims, batch_size, dtype)
+        self._instantiate(ctx)
+
+    @property
+    def _purity(self):
+        return cudm.StatePurity.PURE
 
 
 class DensePureState(DenseState):

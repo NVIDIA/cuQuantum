@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Test the cuDensityMat context manager.
+Tests for context manager.
 """
 
 import pytest
@@ -15,7 +15,8 @@ jax.config.update("jax_enable_x64", True)
 
 from cuquantum.bindings import cudensitymat as cudm
 from cuquantum.densitymat.jax import ElementaryOperator, OperatorTerm, Operator
-from cuquantum.densitymat.jax.pysrc.context import CudensitymatContext, OperatorActionContext
+from cuquantum.densitymat.jax.pysrc.context import CudensitymatContext, OperatorContext, StateContext
+
 
 def generate_operator(dims, dtype):
     """
@@ -37,128 +38,181 @@ class TestCudensitymatContext:
     Test the CudensitymatContext class.
     """
 
-    def test_maybe_create_context(self):
+    def test_maybe_create_operator_context(self):
         """
-        Test the create_context method of CudensitymatContext.
+        Test the maybe_create_operator_context method of CudensitymatContext.
         """
         assert CudensitymatContext._handle is None
         assert CudensitymatContext._workspace_desc is None
-        assert CudensitymatContext._operator_ptrs == set()
-        assert CudensitymatContext._contexts == {}
+        assert CudensitymatContext._operator_contexts == {}
 
         op = generate_operator((3, 4, 5), jnp.float32)
-        CudensitymatContext.maybe_create_context(op, jax.devices('gpu')[0], 1, cudm.StatePurity.MIXED)
+        CudensitymatContext.maybe_create_operator_context(op)
 
         # After creating the context, the attributes should be set.
         assert CudensitymatContext._handle is not None
         assert CudensitymatContext._workspace_desc is not None
-        assert CudensitymatContext._operator_ptrs == {op._ptr}
-        assert CudensitymatContext._contexts[op._ptr] is not None
-        ctx = CudensitymatContext._contexts[op._ptr]
+        assert op._ptr in CudensitymatContext._operator_contexts
+        op_ctx = CudensitymatContext._operator_contexts[op._ptr]
 
         # Creating the context on the same operator again has no effect.
-        CudensitymatContext.maybe_create_context(op, jax.devices('gpu')[0], 1, cudm.StatePurity.MIXED)
-        assert CudensitymatContext._operator_ptrs == {op._ptr}
-        assert CudensitymatContext._contexts[op._ptr] is ctx
+        CudensitymatContext.maybe_create_operator_context(op)
+        assert CudensitymatContext._operator_contexts[op._ptr] is op_ctx
 
         # Creating the context on a different operator creates a new context.
         op_ = generate_operator((3, 4, 5), jnp.float64)
-        CudensitymatContext.maybe_create_context(op_, jax.devices('gpu')[0], 1, cudm.StatePurity.MIXED)
-        assert CudensitymatContext._operator_ptrs == {op._ptr, op_._ptr}
-        assert CudensitymatContext._contexts[op_._ptr] is not None
+        CudensitymatContext.maybe_create_operator_context(op_)
+        assert op_._ptr in CudensitymatContext._operator_contexts
+        assert CudensitymatContext._operator_contexts[op_._ptr] is not op_ctx
 
-    def test_get_context(self):
+    def test_maybe_create_state_context(self):
         """
-        Test the get_context method of CudensitymatContext.
+        Test the maybe_create_state_context method of CudensitymatContext.
+        """
+        assert CudensitymatContext._state_contexts == {}
+
+        state_shape = (1, 3, 4, 5, 3, 4, 5)
+        batch_size = 1
+        dtype = jnp.float32
+        purity = cudm.StatePurity.MIXED
+
+        state_ctx = CudensitymatContext.maybe_create_state_context(purity, state_shape, batch_size, dtype)
+
+        state_key = (purity, state_shape, batch_size, jnp.dtype(dtype).name)
+        assert state_key in CudensitymatContext._state_contexts
+        assert CudensitymatContext._state_contexts[state_key] is state_ctx
+
+        # Creating with the same key again returns the same context.
+        state_ctx2 = CudensitymatContext.maybe_create_state_context(purity, state_shape, batch_size, dtype)
+        assert state_ctx2 is state_ctx
+
+        # Creating with a different key creates a new context.
+        state_ctx3 = CudensitymatContext.maybe_create_state_context(purity, (2, 3, 4, 5, 3, 4, 5), 2, dtype)
+        assert state_ctx3 is not state_ctx
+
+    def test_get_operator_context(self):
+        """
+        Test the get_operator_context method of CudensitymatContext.
         """
         op = generate_operator((3, 4, 5), jnp.float32)
-        op_ = generate_operator((3, 4, 5), jnp.float32)
-        CudensitymatContext.maybe_create_context(op, jax.devices('gpu')[0], 1, cudm.StatePurity.MIXED)
+        CudensitymatContext.maybe_create_operator_context(op)
 
-        CudensitymatContext.get_context(op)
+        CudensitymatContext.get_operator_context(op._ptr)
 
-        with pytest.raises(KeyError):
-            CudensitymatContext.get_context(op_)
+        with pytest.raises(RuntimeError):
+            CudensitymatContext.get_operator_context(-1)
+
+    def test_get_state_context(self):
+        """
+        Test the get_state_context method of CudensitymatContext.
+        """
+        state_shape = (1, 3, 4, 5, 3, 4, 5)
+        batch_size = 1
+        dtype = jnp.float32
+        purity = cudm.StatePurity.MIXED
+
+        CudensitymatContext.maybe_create_state_context(purity, state_shape, batch_size, dtype)
+        CudensitymatContext.get_state_context(purity, state_shape, batch_size, dtype)
+
+        with pytest.raises(RuntimeError):
+            CudensitymatContext.get_state_context(cudm.StatePurity.PURE, state_shape, batch_size, dtype)
 
     def test_free(self):
         """
         Test the free method of CudensitymatContext.
         """
         op = generate_operator((3, 4, 5), jnp.float32)
-        CudensitymatContext.maybe_create_context(op, jax.devices('gpu')[0], 1, cudm.StatePurity.MIXED)
+        state_shape = (1, 3, 4, 5, 3, 4, 5)
+        batch_size = 1
+        dtype = jnp.float32
+        purity = cudm.StatePurity.MIXED
 
-        for ctx in CudensitymatContext._contexts.values():
-            assert ctx._operator is not None
-            assert ctx._state_in is not None
-            assert ctx._state_out is not None
-            assert ctx._state_in_adj is None
-            assert ctx._state_out_adj is None
+        CudensitymatContext.maybe_create_operator_context(op)
+        state_ctx = CudensitymatContext.maybe_create_state_context(purity, state_shape, batch_size, dtype)
+
+        assert state_ctx._state_in is not None
+        assert state_ctx._state_out is not None
+        assert state_ctx._state_in_adj is None
+        assert state_ctx._state_out_adj is None
 
         CudensitymatContext.free()
 
         assert CudensitymatContext._handle is None
         assert CudensitymatContext._workspace_desc is None
-        for ctx in CudensitymatContext._contexts.values():
-            assert ctx._operator is None
-            assert ctx._state_in is None
-            assert ctx._state_out is None
-            assert ctx._state_in_adj is None
-            assert ctx._state_out_adj is None
+        assert CudensitymatContext._operator_contexts == {}
+        assert CudensitymatContext._state_contexts == {}
+        assert state_ctx._state_in is None
+        assert state_ctx._state_out is None
+        assert state_ctx._state_in_adj is None
+        assert state_ctx._state_out_adj is None
 
 
-class TestOperatorActionContext:
+class TestOperatorContext:
     """
-    Test the OperatorActionContext class.
+    Test the OperatorContext class.
     """
 
-    def test_init_regular(self):
+    def test_init(self):
         """
-        Test OperatorActionContext.__init__ in regular workflow.
+        Test OperatorContext.__init__.
         """
         op = generate_operator((3, 4, 5), jnp.float32)
         CudensitymatContext._maybe_create_handle_and_workspace()
 
-        ctx = OperatorActionContext(op, jax.devices('gpu')[0], 1, cudm.StatePurity.MIXED)
-        assert ctx.device == jax.devices('gpu')[0] # TODO: Test with multiple GPUs.
-        assert ctx.batch_size == 1
-        assert ctx.state_purity == cudm.StatePurity.MIXED
+        op_ctx = OperatorContext(op)
+        assert isinstance(op_ctx._operator, int)
+        assert op_ctx._space_mode_extents == op.dims
+        assert op_ctx._data_type is not None
+        assert op_ctx._compute_type is not None
 
-        assert isinstance(ctx._operator, int)
-        assert isinstance(ctx._state_in, int)
-        assert isinstance(ctx._state_out, int)
-        assert ctx._state_in_adj is None
-        assert ctx._state_out_adj is None
+
+class TestStateContext:
+    """
+    Test the StateContext class.
+    """
+
+    def test_init(self):
+        """
+        Test StateContext.__init__.
+        """
+        CudensitymatContext._maybe_create_handle_and_workspace()
+
+        state_ctx = StateContext(cudm.StatePurity.MIXED, (3, 4, 5), 1, jnp.float32)
+        assert state_ctx.state_purity == cudm.StatePurity.MIXED
+        assert state_ctx.batch_size == 1
+        assert isinstance(state_ctx._state_in, int)
+        assert isinstance(state_ctx._state_out, int)
+        assert state_ctx._state_in_adj is None
+        assert state_ctx._state_out_adj is None
 
     def test_create_adjoint_buffers(self):
         """
-        Test OperatorActionContext.create_adjoint_buffers.
+        Test StateContext.create_adjoint_buffers.
         """
-        op = generate_operator((3, 4, 5), jnp.float32)
         CudensitymatContext._maybe_create_handle_and_workspace()
 
-        op_act_ctx = OperatorActionContext(op, jax.devices('gpu')[0], 1, cudm.StatePurity.MIXED)
+        state_ctx = StateContext(cudm.StatePurity.MIXED, (3, 4, 5), 1, jnp.float32)
 
-        assert op_act_ctx._state_in_adj is None
-        assert op_act_ctx._state_out_adj is None
+        assert state_ctx._state_in_adj is None
+        assert state_ctx._state_out_adj is None
 
-        op_act_ctx.create_adjoint_buffers()
+        state_ctx.create_adjoint_buffers()
 
-        assert isinstance(op_act_ctx._state_in_adj, int)
-        assert isinstance(op_act_ctx._state_out_adj, int)
+        assert isinstance(state_ctx._state_in_adj, int)
+        assert isinstance(state_ctx._state_out_adj, int)
 
     def test_free(self):
         """
-        Test OperatorActionContext.free.
+        Test StateContext.free.
         """
-        op = generate_operator((3, 4, 5), jnp.float32)
         CudensitymatContext._maybe_create_handle_and_workspace()
 
-        op_act_ctx = OperatorActionContext(op, jax.devices('gpu')[0], 1, cudm.StatePurity.MIXED)
-        op_act_ctx.create_adjoint_buffers()
+        state_ctx = StateContext(cudm.StatePurity.MIXED, (3, 4, 5), 1, jnp.float32)
+        state_ctx.create_adjoint_buffers()
 
-        op_act_ctx.free()
+        state_ctx.free()
 
-        assert op_act_ctx._state_in is None
-        assert op_act_ctx._state_out is None
-        assert op_act_ctx._state_in_adj is None
-        assert op_act_ctx._state_out_adj is None
+        assert state_ctx._state_in is None
+        assert state_ctx._state_out is None
+        assert state_ctx._state_in_adj is None
+        assert state_ctx._state_out_adj is None

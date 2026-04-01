@@ -24,6 +24,7 @@ else:
 import nbformat
 from nbconvert import PythonExporter
 import pytest
+import subprocess
 
 
 class cuQuantumSampleTestError(Exception):
@@ -44,13 +45,22 @@ def parse_python_script(filepath):
     return script
 
 
-def run_sample(samples_path, filename):
+def run_sample(samples_path, filename, use_subprocess=False):
     fullpath = os.path.join(samples_path, filename)
     script = parse_python_script(fullpath)
     try:
         old_argv = sys.argv
         sys.argv = [fullpath]
-        exec(script, {})
+        if use_subprocess:
+            cmd = [sys.executable, fullpath]
+            result = subprocess.run(cmd, capture_output=True, text=True, env=os.environ)
+            if result.returncode != 0:
+                if "ModuleNotFoundError" in result.stderr:
+                    raise ModuleNotFoundError(result.stderr)
+                else:
+                    raise RuntimeError(f"Subprocess failed: {result.stderr}")
+        else:
+            exec(script, {})
     except ImportError as e:
         # for samples/notebooks requiring any of optional dependencies
         for m in ('torch', 'cupy', 'qiskit', 'cirq'):

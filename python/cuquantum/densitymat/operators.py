@@ -18,6 +18,7 @@ from nvmath.internal.tensor_wrapper import wrap_operand
 from cuquantum.bindings import cudensitymat as cudm
 from .elementary_operator import ElementaryOperator, DenseOperator, MultidiagonalOperator
 from .matrix_operator import MatrixOperator, LocalDenseMatrixOperator
+from .matrix_product_operator import MatrixProductOperator
 from .state import State
 from .work_stream import WorkStream
 from ._internal.callbacks import CallbackCoefficient
@@ -28,6 +29,7 @@ from ._internal.typemaps import CUDENSITYMAT_COMPUTE_TYPE_MAP
 
 __all__ = [
     "full_matrix_product",
+    "mpo_product",
     "tensor_product",
     "OperatorTerm",
     "Operator",
@@ -81,7 +83,7 @@ class OperatorTerm:
         self._ptr = None
         self._ctx: "WorkStream" = None
         self._last_compute_event = None
-        self._using_ops: set[ElementaryOperator | MatrixOperator] = set()
+        self._using_ops: set[ElementaryOperator | MatrixOperator | MatrixProductOperator] = set()
         self._upstream_finalizers = collections.OrderedDict()
 
     def _check_valid_state(self, *args, **kwargs):
@@ -161,9 +163,35 @@ class OperatorTerm:
         coeff = CallbackCoefficient.create(coeff, batch_size)
         self._append(matrix_ops, None, conjugations, duals, coeff)
 
+    def append_mpo_product(
+        self,
+        mpo_ops: Iterable[MatrixProductOperator],
+        modes: Iterable[Sequence[int]],
+        conjugations: Iterable[bool],
+        duals: Iterable[Sequence[bool]],
+        coeff: CoefficientType = complex(1),
+        batch_size: int = 1,
+    ) -> None:
+        """
+        Append a product of matrix product operators (MPOs) to this operator term.
+
+        Args:
+            mpo_ops: An iterable of matrix product operators.
+            modes: An iterable of mode index sequences, one per MPO, specifying which state modes
+                each MPO acts on. The length of each sequence must equal the number of sites in
+                the corresponding MPO.
+            conjugations: An iterable of whether each MPO is conjugated.
+            duals: An iterable of mode duality sequences, one per MPO. Each inner sequence specifies
+                whether the action on each mode applies to a ket mode (``False``) or a bra mode (``True``).
+            coeff: Coefficient associated with this product of MPOs.
+            batch_size: Batch size associated with this product of MPOs.
+        """
+        coeff = CallbackCoefficient.create(coeff, batch_size)
+        self._append(mpo_ops, modes, conjugations, duals, coeff)
+
     def _append(
         self,
-        ops: Iterable[ElementaryOperator] | Iterable[MatrixOperator],
+        ops: Iterable[ElementaryOperator] | Iterable[MatrixOperator] | Iterable[MatrixProductOperator],
         modes: Iterable[Sequence[int]] | None,
         conjugations: None | Iterable[bool],
         duals: Iterable[Sequence[bool]] | Iterable[bool],
@@ -171,22 +199,42 @@ class OperatorTerm:
     ):
         if self._valid_state:
             raise RuntimeError("Cannot append to OperatorTerm after its instantiate method has been called.")
+        ops = list(ops)
+        num_ops = len(ops)
         elementary_only = None
         matrix_only = None
+        mpo_only = None
         is_scalar_op = True
         # check pureness of operator product early
         for op in ops:
             is_scalar_op = False
             if isinstance(op, ElementaryOperator):
-                if matrix_only is None:
-                    elementary_only = True
-                else:
-                    raise ValueError("Mixed products between elementary and matrix operators are not currently supported.")
+                if matrix_only is not None or mpo_only is not None:
+                    raise ValueError("Mixed products between elementary, matrix, and MPO operators are not currently supported.")
+                elementary_only = True
+            elif isinstance(op, MatrixProductOperator):
+                if elementary_only is not None or matrix_only is not None:
+                    raise ValueError("Mixed products between elementary, matrix, and MPO operators are not currently supported.")
+                mpo_only = True
             elif isinstance(op, MatrixOperator):
-                if elementary_only is None:
-                    matrix_only = True
-                else:
-                    raise ValueError("Mixed products between elementary and matrix operators are not currently supported.")
+                if elementary_only is not None or mpo_only is not None:
+                    raise ValueError("Mixed products between elementary, matrix, and MPO operators are not currently supported.")
+                matrix_only = True 
+        if not is_scalar_op:
+            if len(duals) != num_ops:
+                raise ValueError(
+                    f"len(duals) ({len(duals)}) must equal the number of operands ({num_ops})."
+                )
+            if conjugations is not None and len(conjugations) != num_ops:
+                raise ValueError(
+                    f"len(conjugations) ({len(conjugations)}) must equal the number of operands ({num_ops})."
+                )
+            if modes is not None:
+                if len(modes) != num_ops:
+                    raise ValueError(
+                        f"len(modes) ({len(modes)}) must equal the number of operands ({num_ops})."
+                    )
+
         self._check_dtype(ops)
         if elementary_only or is_scalar_op:
             product_of = ElementaryOperator
@@ -197,6 +245,14 @@ class OperatorTerm:
             elementary_only = True
         elif matrix_only:
             product_of = MatrixOperator
+        elif mpo_only:
+            product_of = MatrixProductOperator
+            # check mode counts match number of sites
+            for operand, operand_modes in zip(ops, modes):
+                if len(operand_modes) != operand.num_sites:
+                    raise ValueError(
+                        f"Number of modes ({len(operand_modes)}) does not match number of sites ({operand.num_sites}) of the MatrixProductOperator."
+                    )
         # check batch sizes
         _batch_size = self._batch_size
         for operand in ops:
@@ -221,6 +277,9 @@ class OperatorTerm:
                 ]
                 * len(ops)
             )
+            self._conjugations.append(conjugations)
+        if mpo_only:
+            self.modes.append(modes)
             self._conjugations.append(conjugations)
         self._coefficients.append(coeff)
         self._term_types.append(product_of)
@@ -366,6 +425,52 @@ class OperatorTerm:
                     coeff.gradient_wrapper,
                 )
 
+    def _append_mpo_product(
+        self,
+        mpo_ops: Sequence[MatrixProductOperator],
+        modes: Sequence[Sequence[int]],
+        conjugations: Sequence[bool],
+        duals: Sequence[Sequence[bool]],
+        coeff: CallbackCoefficient,
+        hilbert_space_dims: Optional[Sequence[int]] = None,
+    ):
+        """
+        Appends an MPO product to C-API counterpart of this OperatorTerm.
+        Before appending, the creation of the C-API counterpart for any MatrixProductOperator is triggered if necessary.
+        """
+        ptrs = []
+        flattened_modes = []
+        flattened_duals = []
+
+        with nvmath_utils.device_ctx(self._ctx.device_id):
+            for mpo_op, _modes, _duals in zip(mpo_ops, modes, duals):
+                mpo_op._maybe_instantiate(self._ctx)
+                if hilbert_space_dims is not None:
+                    if not all(
+                        hilbert_space_dims[m] == mpo_op.hilbert_space_dims[j]
+                        for j, m in enumerate(_modes)
+                    ):
+                        raise RuntimeError(
+                            "Hilbert space dimensions of MPO operators in product are inconsistent with Hilbert space dimensions of an Operator which contains this OperatorTerm."
+                        )
+                self._using_ops.add(mpo_op)
+                utils.register_with(self, mpo_op, self._ctx.logger)
+                ptrs.append(mpo_op._validated_ptr)
+                flattened_modes.extend(_modes)
+                flattened_duals.extend(map(lambda i: int(i), _duals))
+            cudm.operator_term_append_mpo_product(
+                self._ctx._handle._validated_ptr,
+                self._ptr,
+                len(mpo_ops),
+                ptrs,
+                conjugations,
+                flattened_modes,
+                flattened_duals,
+                coeff.static_coeff,
+                coeff.wrapper,
+                coeff.gradient_wrapper,
+            )
+
     def _maybe_instantiate(self, ctx: "WorkStream", hilbert_space_dims: Tuple[int]) -> None:
         """
         Create C-API equivalent of this instance (and potentially of its downstream dependencies) and store pointer as attribute.
@@ -407,6 +512,8 @@ class OperatorTerm:
                     self._append_elementary_product(term, modes, duals, coeff)
                 elif term_type == MatrixOperator:
                     self._append_matrix_product(term, conjugations, duals, coeff, hilbert_space_dims)
+                elif term_type == MatrixProductOperator:
+                    self._append_mpo_product(term, modes, conjugations, duals, coeff, hilbert_space_dims)
 
         else:
             try:
@@ -553,6 +660,14 @@ class OperatorTerm:
                     duals[::-1],
                     coeff.conjugate(),
                 )
+            elif term_type is MatrixProductOperator:
+                new_opterm._append(
+                    [op for op in term[::-1]],
+                    modes[::-1],
+                    [not conjugation for conjugation in conjugations[::-1]],
+                    duals[::-1],
+                    coeff.conjugate(),
+                )
         return new_opterm
 
     def dual(self) -> "OperatorTerm":
@@ -613,7 +728,7 @@ class Operator:
         self._finalizer = weakref.finalize(self, lambda: None)
         self._finalizer.detach()
         self._using_terms: Set[OperatorTerm] = set()
-        self._using_ops: Set[ElementaryOperator | MatrixOperator] = set()
+        self._using_ops: Set[ElementaryOperator | MatrixOperator | MatrixProductOperator] = set()
         self._ctx = None
 
         self._hilbert_space_dims: Tuple[int] = tuple(hilbert_space_dims)
@@ -1627,6 +1742,88 @@ def full_matrix_product(
 
     term = OperatorTerm(dtype=dtype)
     term.append_matrix_product(matrices, conjugations, duals, coeff=coeff, batch_size=batch_size)
+    return term
+
+
+def mpo_product(
+    *operands: Tuple[MatrixProductOperator, Sequence[int], Optional[bool], Optional[Sequence[bool]]],
+    coeff: CoefficientType = 1.0,
+    batch_size: int = 1,
+) -> OperatorTerm:
+    """
+    Return an :class:`OperatorTerm` from a product of matrix product operators (MPOs).
+
+    Args:
+        operands: Operands in the product. Each operand is a tuple of length 2 to 4 of the form ``(mpo, modes, conjugation, duals)``, where ``conjugation`` and ``duals`` are optional.
+
+            - ``mpo`` is an instance of :class:`MatrixProductOperator`.
+            - ``modes`` is a sequence of state mode indices specifying which modes of the quantum state the MPO acts on.
+              Its length must equal the number of sites in the MPO.
+            - ``conjugation=True`` implies that the complex conjugate transpose of the MPO is applied. Defaults to ``False``.
+            - ``duals`` is a sequence of booleans specifying mode duality: ``False`` (default) for ket modes, ``True`` for bra modes.
+              Its length must equal the number of sites in the MPO.
+
+        coeff: Coefficient(s) associated with this :class:`OperatorTerm`.
+        batch_size: Batch size of coefficient ``coeff``, needs to be specified only if ``coeff`` is a :class:`Callback`.
+
+    Returns:
+        An :class:`OperatorTerm` constructed from the product of :class:`MatrixProductOperator` instances.
+    """
+    mpos = []
+    modes = []
+    conjugations = []
+    duals = []
+    dtype = None
+    _batch_size = 1
+
+    if len(operands) == 0:
+        raise ValueError(
+            "Empty MPO product is not supported."
+        )
+    if not isinstance(coeff, _CoefficientTypeRuntimeCheckable):
+        raise TypeError(f"Unsupported input type, {type(coeff)}, for ``coeff``.")
+
+    for op in operands:
+        if not isinstance(op, tuple) or len(op) < 2 or len(op) > 4:
+            raise ValueError(
+                "`mpo_product` expects 2-tuple, 3-tuple, or 4-tuple as inputs for operands: (mpo, modes[, conjugation[, duals]])."
+            )
+        mpo = op[0]
+        _modes = op[1]
+        if not isinstance(mpo, MatrixProductOperator):
+            raise TypeError(f"First element of each operand must be a MatrixProductOperator, got {type(mpo)}.")
+        if len(_modes) != mpo.num_sites:
+            raise ValueError(
+                f"Number of modes ({len(_modes)}) does not match number of sites ({mpo.num_sites}) of the MatrixProductOperator."
+            )
+
+        mpos.append(mpo)
+        modes.append(tuple(_modes))
+        _batch_size = check_and_get_batchsize(_batch_size, mpo.batch_size)
+
+        if dtype is None:
+            dtype = mpo.dtype
+        elif dtype != mpo.dtype:
+            raise ValueError("MPOs in product have inconsistent numerical data types.")
+
+        if len(op) > 2:
+            conjugations.append(op[2])
+        else:
+            conjugations.append(False)
+
+        if len(op) > 3:
+            _duals = op[3]
+            if len(_duals) != mpo.num_sites:
+                raise ValueError(
+                    f"Number of duality flags ({len(_duals)}) does not match number of sites ({mpo.num_sites}) of the MatrixProductOperator."
+                )
+            duals.append(tuple(_duals))
+        else:
+            duals.append(tuple(False for _ in range(mpo.num_sites)))
+
+    check_and_get_batchsize(_batch_size, batch_size)
+    term = OperatorTerm(dtype=dtype)
+    term.append_mpo_product(mpos, modes, conjugations, duals, coeff=coeff, batch_size=batch_size)
     return term
 
 

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 26.01.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 26.03.0, generator version 0.3.1.dev1371+g460d49f4f.d20260309. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -201,6 +201,11 @@ cdef void* __cutensornetNetworkContract = NULL
 cdef void* __cutensornetNetworkPrepareGradientsBackward = NULL
 cdef void* __cutensornetNetworkComputeGradientsBackward = NULL
 cdef void* __cutensornetStateApplyDiagonalTensorOperator = NULL
+cdef void* __cutensornetStateApplyTensorOperatorWithGradient = NULL
+cdef void* __cutensornetStateUpdateTensorOperatorGradient = NULL
+cdef void* __cutensornetExpectationComputeWithGradientsBackward = NULL
+cdef void* __cutensornetStateProjectionMPSUpdateCoefficients = NULL
+cdef void* __cutensornetStateProjectionMPSUpdateDualTensors = NULL
 
 
 cdef void* load_library() except* nogil:
@@ -1223,6 +1228,41 @@ cdef int _init_cutensornet() except -1 nogil:
             if handle == NULL:
                 handle = load_library()
             __cutensornetStateApplyDiagonalTensorOperator = dlsym(handle, 'cutensornetStateApplyDiagonalTensorOperator')
+
+        global __cutensornetStateApplyTensorOperatorWithGradient
+        __cutensornetStateApplyTensorOperatorWithGradient = dlsym(RTLD_DEFAULT, 'cutensornetStateApplyTensorOperatorWithGradient')
+        if __cutensornetStateApplyTensorOperatorWithGradient == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateApplyTensorOperatorWithGradient = dlsym(handle, 'cutensornetStateApplyTensorOperatorWithGradient')
+
+        global __cutensornetStateUpdateTensorOperatorGradient
+        __cutensornetStateUpdateTensorOperatorGradient = dlsym(RTLD_DEFAULT, 'cutensornetStateUpdateTensorOperatorGradient')
+        if __cutensornetStateUpdateTensorOperatorGradient == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateUpdateTensorOperatorGradient = dlsym(handle, 'cutensornetStateUpdateTensorOperatorGradient')
+
+        global __cutensornetExpectationComputeWithGradientsBackward
+        __cutensornetExpectationComputeWithGradientsBackward = dlsym(RTLD_DEFAULT, 'cutensornetExpectationComputeWithGradientsBackward')
+        if __cutensornetExpectationComputeWithGradientsBackward == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetExpectationComputeWithGradientsBackward = dlsym(handle, 'cutensornetExpectationComputeWithGradientsBackward')
+
+        global __cutensornetStateProjectionMPSUpdateCoefficients
+        __cutensornetStateProjectionMPSUpdateCoefficients = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSUpdateCoefficients')
+        if __cutensornetStateProjectionMPSUpdateCoefficients == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateProjectionMPSUpdateCoefficients = dlsym(handle, 'cutensornetStateProjectionMPSUpdateCoefficients')
+
+        global __cutensornetStateProjectionMPSUpdateDualTensors
+        __cutensornetStateProjectionMPSUpdateDualTensors = dlsym(RTLD_DEFAULT, 'cutensornetStateProjectionMPSUpdateDualTensors')
+        if __cutensornetStateProjectionMPSUpdateDualTensors == NULL:
+            if handle == NULL:
+                handle = load_library()
+            __cutensornetStateProjectionMPSUpdateDualTensors = dlsym(handle, 'cutensornetStateProjectionMPSUpdateDualTensors')
         __py_cutensornet_init = True
         return 0
 
@@ -1666,6 +1706,21 @@ cpdef dict _inspect_function_pointers():
 
     global __cutensornetStateApplyDiagonalTensorOperator
     data["__cutensornetStateApplyDiagonalTensorOperator"] = <intptr_t>__cutensornetStateApplyDiagonalTensorOperator
+
+    global __cutensornetStateApplyTensorOperatorWithGradient
+    data["__cutensornetStateApplyTensorOperatorWithGradient"] = <intptr_t>__cutensornetStateApplyTensorOperatorWithGradient
+
+    global __cutensornetStateUpdateTensorOperatorGradient
+    data["__cutensornetStateUpdateTensorOperatorGradient"] = <intptr_t>__cutensornetStateUpdateTensorOperatorGradient
+
+    global __cutensornetExpectationComputeWithGradientsBackward
+    data["__cutensornetExpectationComputeWithGradientsBackward"] = <intptr_t>__cutensornetExpectationComputeWithGradientsBackward
+
+    global __cutensornetStateProjectionMPSUpdateCoefficients
+    data["__cutensornetStateProjectionMPSUpdateCoefficients"] = <intptr_t>__cutensornetStateProjectionMPSUpdateCoefficients
+
+    global __cutensornetStateProjectionMPSUpdateDualTensors
+    data["__cutensornetStateProjectionMPSUpdateDualTensors"] = <intptr_t>__cutensornetStateProjectionMPSUpdateDualTensors
 
     return data
 
@@ -3102,3 +3157,53 @@ cdef cutensornetStatus_t _cutensornetStateApplyDiagonalTensorOperator(const cute
             raise FunctionNotFoundError("function cutensornetStateApplyDiagonalTensorOperator is not found")
     return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, void*, const int64_t*, const int32_t, const int32_t, const int32_t, int64_t*) noexcept nogil>__cutensornetStateApplyDiagonalTensorOperator)(
         handle, tensorNetworkState, numStateModes, stateModes, tensorData, tensorModeStrides, immutable, adjoint, unitary, tensorId)
+
+
+cdef cutensornetStatus_t _cutensornetStateApplyTensorOperatorWithGradient(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int32_t numStateModes, const int32_t* stateModes, void* tensorData, const int64_t* tensorModeStrides, const int32_t immutable, const int32_t adjoint, const int32_t unitary, void* gradientData, const int64_t* gradientModeStrides, int64_t* tensorId) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateApplyTensorOperatorWithGradient
+    _check_or_init_cutensornet()
+    if __cutensornetStateApplyTensorOperatorWithGradient == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateApplyTensorOperatorWithGradient is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int32_t, const int32_t*, void*, const int64_t*, const int32_t, const int32_t, const int32_t, void*, const int64_t*, int64_t*) noexcept nogil>__cutensornetStateApplyTensorOperatorWithGradient)(
+        handle, tensorNetworkState, numStateModes, stateModes, tensorData, tensorModeStrides, immutable, adjoint, unitary, gradientData, gradientModeStrides, tensorId)
+
+
+cdef cutensornetStatus_t _cutensornetStateUpdateTensorOperatorGradient(const cutensornetHandle_t handle, cutensornetState_t tensorNetworkState, int64_t tensorId, void* gradientData) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateUpdateTensorOperatorGradient
+    _check_or_init_cutensornet()
+    if __cutensornetStateUpdateTensorOperatorGradient == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateUpdateTensorOperatorGradient is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetState_t, int64_t, void*) noexcept nogil>__cutensornetStateUpdateTensorOperatorGradient)(
+        handle, tensorNetworkState, tensorId, gradientData)
+
+
+cdef cutensornetStatus_t _cutensornetExpectationComputeWithGradientsBackward(const cutensornetHandle_t handle, cutensornetStateExpectation_t tensorNetworkExpectation, int32_t accumulateGradients, const void* expectationValueAdjoint, const void* stateNormAdjoint, cutensornetWorkspaceDescriptor_t workDesc, void* expectationValue, void* stateNorm, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetExpectationComputeWithGradientsBackward
+    _check_or_init_cutensornet()
+    if __cutensornetExpectationComputeWithGradientsBackward == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetExpectationComputeWithGradientsBackward is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateExpectation_t, int32_t, const void*, const void*, cutensornetWorkspaceDescriptor_t, void*, void*, cudaStream_t) noexcept nogil>__cutensornetExpectationComputeWithGradientsBackward)(
+        handle, tensorNetworkExpectation, accumulateGradients, expectationValueAdjoint, stateNormAdjoint, workDesc, expectationValue, stateNorm, cudaStream)
+
+
+cdef cutensornetStatus_t _cutensornetStateProjectionMPSUpdateCoefficients(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, int32_t numCoeffs, const cuDoubleComplex coeffs[]) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateProjectionMPSUpdateCoefficients
+    _check_or_init_cutensornet()
+    if __cutensornetStateProjectionMPSUpdateCoefficients == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateProjectionMPSUpdateCoefficients is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateProjectionMPS_t, int32_t, const cuDoubleComplex*) noexcept nogil>__cutensornetStateProjectionMPSUpdateCoefficients)(
+        handle, tensorNetworkProjection, numCoeffs, coeffs)
+
+
+cdef cutensornetStatus_t _cutensornetStateProjectionMPSUpdateDualTensors(const cutensornetHandle_t handle, cutensornetStateProjectionMPS_t tensorNetworkProjection, const int64_t* maxExtents[], const int64_t* validExtents[], const int64_t* strides[], void* dualTensorsData[], const cutensornetMPSEnvBounds_t* orthoSpec, cudaStream_t cudaStream) except?_CUTENSORNETSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    global __cutensornetStateProjectionMPSUpdateDualTensors
+    _check_or_init_cutensornet()
+    if __cutensornetStateProjectionMPSUpdateDualTensors == NULL:
+        with gil:
+            raise FunctionNotFoundError("function cutensornetStateProjectionMPSUpdateDualTensors is not found")
+    return (<cutensornetStatus_t (*)(const cutensornetHandle_t, cutensornetStateProjectionMPS_t, const int64_t**, const int64_t**, const int64_t**, void**, const cutensornetMPSEnvBounds_t*, cudaStream_t) noexcept nogil>__cutensornetStateProjectionMPSUpdateDualTensors)(
+        handle, tensorNetworkProjection, maxExtents, validExtents, strides, dualTensorsData, orthoSpec, cudaStream)

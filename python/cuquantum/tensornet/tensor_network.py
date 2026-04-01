@@ -8,7 +8,10 @@ Tensor network contraction with the standard einsum interface using cutensornet.
 
 __all__ = ['contract', 'contract_path', 'einsum', 'einsum_path', 'Network', 'tensor_qualifiers_dtype']
 
-from cuda.core.experimental import system
+try:
+    from cuda.core import system
+except ImportError:
+    from cuda.core.experimental import system
 import collections
 import dataclasses
 import logging
@@ -249,14 +252,36 @@ class Network:
             self.device_id = options.device_id
 
         self.cpu_only = False
+        stream_holder = None
+        ndev = 0
         try:
-            ndev = system.num_devices
-            if ndev == 0:
-                self.cpu_only = True
-                self.device_id = 'cpu'
-        except:
+            if hasattr(system, "get_num_devices"):
+                # cuda.core >= 0.5.0
+                ndev = system.get_num_devices()
+            else:
+                # cuda.core < 0.5.0
+                ndev = system.num_devices
+        except Exception:
+            pass  # Failed to query device count; treat as no devices
+
+        if ndev == 0:
             self.cpu_only = True
             self.device_id = 'cpu'
+        else:
+            # Device count can be > 0 while no device is actually usable (e.g. CI with
+            # driver but no GPU). Probe via the same path we use later (get_or_create_stream).
+            try:
+                stream_holder = nvmath_utils.get_or_create_stream(
+                    self.device_id, stream, self.package
+                )
+            except Exception as e:
+                err_msg = str(e)
+                if "CUDA_ERROR_NO_DEVICE" in err_msg or "no CUDA-capable" in err_msg.lower():
+                    self.cpu_only = True
+                    self.device_id = 'cpu'
+                else:
+                    raise  
+
         if not allow_cpu_pathfinder and self.cpu_only:
             raise RuntimeError(f"No GPU device detected, operation aborted")
 
@@ -264,10 +289,10 @@ class Network:
             raise RuntimeError(f"options.memory_limit must be specified for CPU only runs in the form of int representing the number of bytes")
 
         # Allocate device memory (in stream context) if needed.
-        if not self.cpu_only:
-            stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.package)
-        else:
-            stream_holder = None
+        if not self.cpu_only and stream_holder is None:
+            stream_holder = nvmath_utils.get_or_create_stream(
+                self.device_id, stream, self.package
+            )
 
         # Copy operands to device if needed.
         if self.network_location == 'cpu' and not self.cpu_only:

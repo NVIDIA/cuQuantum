@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -52,17 +52,12 @@ void finalizeMultiProcessEnvironment();
  * @return custatevecExDictionaryDescriptor_t Configuration dictionary from cuStateVec Ex API
  *
  * @details Parses command line arguments and creates appropriate state vector configuration.
- * Automatically detects single-device, multi-device, or multi-process configuration based on
- * environment detected by bootstrapMultiProcessEnvironment().
+ * The command line arguments, together with the detected environment, inform whether the
+ * state vector configuration is single-device, single-device with host-memory, multi-device,
+ * or multi-process.
  *
- * Command Line Options:
- *   -h          : Show help message and exit
- *   -q          : Quiet mode (suppress output)
- *   -d <num>    : Number of devices for multi-device (default: auto-detect)
- *   -t <type>   : Data type - 'f'/'float' or 'd'/'double' (default: float)
- *   -k <net>    : Network topology
- *                 For multi-device: 1=SWITCH (default), 2=FULLMESH
- *                 For multi-process: 3=SuperPOD (default), 4=GB200NVL, 5=SwitchTree
+ * See the accompanying README.md for a list of the recognised arguments, or alternatively
+ * use argument -h to show the help message and exit.
  */
 custatevecExDictionaryDescriptor_t configureStateVector(int argc, char* argv[], int numWires);
 
@@ -81,6 +76,17 @@ custatevecExStateVectorDescriptor_t createStateVector(custatevecExDictionaryDesc
  * multi-process mode
  */
 custatevecExCommunicatorDescriptor_t getMultiProcessCommunicator();
+
+/**
+ * @brief Get this process's rank in the multi-process communicator (0 for single-process).
+ *
+ * If called before bootstrapMultiProcessEnvironment(), returns 0.
+ * If called after bootstrapMultiProcessEnvironment(), returns the process rank.
+ * If called after finalizeMultiProcessEnvironment(), returns the process rank before finalization.
+ *
+ * @return int The process rank, an integer between 0 and the number of processes (exclusive)
+ */
+int getMultiProcessRank();
 
 /**
  * @brief Get the configured state vector data type

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 26.01.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 26.03.0, generator version 0.3.1.dev1371+g460d49f4f.d20260309. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -242,3 +242,8 @@ cpdef network_contract(intptr_t handle, intptr_t network_desc, int32_t accumulat
 cpdef network_prepare_gradients_backward(intptr_t handle, intptr_t network_desc, intptr_t work_desc)
 cpdef network_compute_gradients_backward(intptr_t handle, intptr_t network_desc, int32_t accumulate_output, intptr_t work_desc, intptr_t slice_group, intptr_t stream)
 cpdef int64_t state_apply_diagonal_tensor_operator(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, intptr_t tensor_data, tensor_mode_strides, int32_t immutable, int32_t adjoint, int32_t unitary) except? -1
+cpdef int64_t state_apply_tensor_operator_with_gradient(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, intptr_t tensor_data, tensor_mode_strides, int32_t immutable, int32_t adjoint, int32_t unitary, intptr_t gradient_data, gradient_mode_strides) except? -1
+cpdef state_update_tensor_operator_gradient(intptr_t handle, intptr_t tensor_network_state, int64_t tensor_id, intptr_t gradient_data)
+cpdef expectation_compute_with_gradients_backward(intptr_t handle, intptr_t tensor_network_expectation, int32_t accumulate_gradients, intptr_t expectation_value_adjoint, intptr_t state_norm_adjoint, intptr_t work_desc, intptr_t expectation_value, intptr_t state_norm, intptr_t cuda_stream)
+cpdef state_projection_mps_update_coefficients(intptr_t handle, intptr_t tensor_network_projection, int32_t num_coeffs, intptr_t coeffs)
+cpdef state_projection_mps_update_dual_tensors(intptr_t handle, intptr_t tensor_network_projection, max_extents, valid_extents, strides, dual_tensors_data, intptr_t ortho_spec, intptr_t cuda_stream)

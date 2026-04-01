@@ -2,9 +2,13 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import os
 import pytest
-
 import numpy as np
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from nvmath.internal.utils import infer_object_package
 from nvmath.internal.tensor_wrapper import wrap_operand
@@ -13,12 +17,26 @@ from cuquantum.tensornet import CircuitToEinsum
 from cuquantum.tensornet.experimental import NetworkState, MPSConfig, TNConfig, NetworkOperator
 
 from ..utils.data import ARRAY_BACKENDS
-from ..utils.helpers import TensorBackend, _BaseTester, get_contraction_tolerance
+from ..utils.helpers import (
+    TensorBackend,
+    TorchRef,
+    _BaseTester,
+    assert_gradients_match,
+    expectation_as_real,
+    get_contraction_tolerance,
+)
 from ..utils.circuit_ifc import CircuitHelper, QuantumStateTestHelper, PropertyComputeHelper
 from ..utils.circuit_matrix import CircuitMatrix
 
 from ._internal.mps_utils import MPS, trim_mps_config, verify_mps_canonicalization, get_mps_tolerance
-from ._internal.state_matrix import CircuitStateMatrix, GenericStateMatrix, SimulationConfigMatrix, MPSConfigMatrix
+from ._internal.state_matrix import (
+    CircuitStateMatrix,
+    ExpectationGradientConfig,
+    GenericStateMatrix,
+    MPSConfigMatrix,
+    NetworkOperatorFactory,
+    SimulationConfigMatrix,
+)
 from ._internal.state_tester import BaseCircuitStateTester, BaseGenericStateTester
 from ._internal.state_factory import apply_factory_sequence, create_vqc_states, get_random_network_operator, StateFactory
 
@@ -210,10 +228,7 @@ class TestNetworkStateBasicFunctionality(_BaseTester):
     def test_large_circuit_sampling(self):
         backend = self._get_array_framework("test_large_circuit_sampling")
 
-        try:
-            import qiskit
-        except ImportError:
-            pytest.skip("qiskit not installed")
+        qiskit = pytest.importorskip("qiskit")
         
         # a special case with large number of qubits and 16 non-zero bitstring output in the final state
         qubit_count = 20
@@ -243,10 +258,7 @@ class TestNetworkStateBasicFunctionality(_BaseTester):
         """
         backend = self._get_array_framework("test_ghz_sampling_large")
 
-        try:
-            import qiskit
-        except ImportError:
-            pytest.skip("qiskit not installed")
+        qiskit = pytest.importorskip("qiskit")
 
         n_qubits = 26
         circuit = qiskit.QuantumCircuit(n_qubits)
@@ -280,6 +292,85 @@ class TestNetworkStateBasicFunctionality(_BaseTester):
         assert abs(p_ones - 0.5) < 0.01, \
             f"GHZ |1...1⟩ probability {p_ones:.3f} deviates >1% from expected 0.5"
     
+    @pytest.mark.parametrize(
+        "gauge_option", ('free', 'simple')
+    )
+    @pytest.mark.parametrize(
+        "max_extent", (None, 2)
+    )
+    def test_mps_output_state_layout_contract(self, gauge_option, max_extent):
+        num_qubits = 4
+        dtype = 'complex128'
+        config = MPSConfig(gauge_option=gauge_option, max_extent=max_extent)
+
+        with NetworkState((2,) * num_qubits, dtype=dtype, config=config) as state:
+            rng = np.random.default_rng(42)
+            for i in range(num_qubits):
+                u = np.linalg.qr(rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2)))[0]
+                state.apply_tensor_operator((i,), u.astype(np.complex128))
+            for i in range(num_qubits - 1):
+                u = np.linalg.qr(rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4)))[0]
+                state.apply_tensor_operator((i, i + 1), u.reshape(2, 2, 2, 2).astype(np.complex128))
+
+            mps_tensors = state.compute_output_state()
+
+            for i, t in enumerate(mps_tensors):
+                if i == 0:
+                    assert t.ndim == 2, f"Site {i}: expected 2 modes, got {t.ndim}"
+                elif i == num_qubits - 1:
+                    assert t.ndim == 2, f"Site {i}: expected 2 modes, got {t.ndim}"
+                else:
+                    assert t.ndim == 3, f"Site {i}: expected 3 modes, got {t.ndim}"
+
+                if max_extent is not None:
+                    for d in range(t.ndim):
+                        assert t.shape[d] <= max(2, max_extent), \
+                            f"Site {i} mode {d}: extent {t.shape[d]} exceeds max_extent={max_extent}"
+
+            sv = state.compute_state_vector()
+            assert sv.shape == (2,) * num_qubits
+
+    @pytest.mark.parametrize("gauge_option", ('free', 'simple'))
+    def test_mps_simple_gauge_correctness(self, gauge_option):
+        """Verify MPS output tensors are numerically correct by contracting them
+        and comparing against an exact TN state vector.
+
+        Uses a nearest-neighbor circuit on 4 qubits with no truncation, so the
+        MPS is exact and we can use tight tolerances.
+        """
+        num_qubits = 4
+        dtype = 'complex128'
+        rng = np.random.default_rng(123)
+
+        gates = []
+        for i in range(num_qubits):
+            u = np.linalg.qr(rng.standard_normal((2, 2)) + 1j * rng.standard_normal((2, 2)))[0].astype(np.complex128)
+            gates.append(((i,), u))
+        for i in range(num_qubits - 1):
+            u = np.linalg.qr(rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4)))[0].reshape(2, 2, 2, 2).astype(np.complex128)
+            gates.append(((i, i + 1), u))
+
+        with NetworkState((2,) * num_qubits, dtype=dtype, config=TNConfig()) as exact_state:
+            for modes, gate in gates:
+                exact_state.apply_tensor_operator(modes, gate)
+            sv_ref = exact_state.compute_state_vector()
+
+        mps_config = MPSConfig(gauge_option=gauge_option)
+        with NetworkState((2,) * num_qubits, dtype=dtype, config=mps_config) as mps_state:
+            for modes, gate in gates:
+                mps_state.apply_tensor_operator(modes, gate)
+            mps_tensors = mps_state.compute_output_state()
+
+            # Contract MPS tensors: T0[k,n] T1[p,k,n] ... TN[p,k]
+            result = np.asarray(mps_tensors[0])
+            for t in mps_tensors[1:]:
+                t_np = np.asarray(t)
+                result = np.tensordot(result, t_np, axes=([-1], [0]))
+            assert result.shape == (2,) * num_qubits
+
+            tol = get_contraction_tolerance(dtype)
+            np.testing.assert_allclose(result, np.asarray(sv_ref), **tol)
+
     @pytest.mark.parametrize("factory", GenericStateMatrix.L1())
     def test_mps_release_operators(self, factory):
         mps_config = MPSConfig(max_extent=4, rel_cutoff=1e-1, gauge_option='free')
@@ -640,3 +731,246 @@ class TestApproxGenericState(BaseGenericStateTester):
     
     def test_sampling(self, factory_L2, approx_mps_config, factory_approx_sv_L2):
         super().test_sampling(factory_L2, approx_mps_config, factory_approx_sv_L2, NUM_TESTS_PER_CONFIG)
+
+
+class TestExpectationGradient:
+    """Test compute_expectation_with_gradients against the TorchRef implementation."""
+
+    def test_expectation_gradient_requires_at_least_one_gradient(self):
+        """compute_expectation_with_gradients raises if no operator has gradient=True."""
+        state_dims = (2, 2)
+        dtype = "complex128"
+        state = NetworkState(state_dims, dtype=dtype, config=TNConfig())
+        state.apply_tensor_operator((0,), np.eye(2, dtype=dtype), unitary=True)
+        state.apply_tensor_operator((1,), np.eye(2, dtype=dtype), unitary=True)
+        with state:
+            with pytest.raises(ValueError, match=r"at least one tensor operator applied with gradient=True"):
+                state.compute_expectation_with_gradients("ZI", 1.0)
+
+    def test_expectation_gradient_requires_all_gates_unitary(self):
+        """compute_expectation_with_gradients raises if any gate is non-unitary (C++ allGatesUnitary check)."""
+        from cuquantum.bindings import cutensornet as cutn
+        state_dims = (2, 2)
+        dtype = "complex128"
+        state = NetworkState(state_dims, dtype=dtype, config=TNConfig())
+        state.apply_tensor_operator((0,), np.eye(2, dtype=dtype), unitary=True, gradient=True)
+        non_unitary = np.array([[1.0, 0.5], [0.5, 1.0]], dtype=dtype)  # not unitary
+        state.apply_tensor_operator((1,), non_unitary, unitary=False, gradient=False)
+        state.__enter__()
+        try:
+            with pytest.raises(cutn.cuTensorNetError, match=r"NOT_SUPPORTED"):
+                state.compute_expectation_with_gradients("ZI", 1.0)
+        finally:
+            try:
+                state.__exit__(None, None, None)
+            except AttributeError:
+                pass  # free() may hit workspace_stream is None when prepare failed
+
+    def test_expectation_gradient_state_norm_adjoint_must_be_none(self):
+        """compute_expectation_with_gradients raises if state_norm_adjoint is not None (C++ expects null in this release)."""
+        state_dims = (2, 2)
+        dtype = "complex128"
+        state = NetworkState(state_dims, dtype=dtype, config=TNConfig())
+        state.apply_tensor_operator((0,), np.eye(2, dtype=dtype), unitary=True, gradient=True)
+        state.apply_tensor_operator((1,), np.eye(2, dtype=dtype), unitary=True)
+        with state:
+            with pytest.raises(NotImplementedError, match=r"state_norm_adjoint.*not supported|pass None"):
+                state.compute_expectation_with_gradients("ZI", 1.0, state_norm_adjoint=1.0)
+
+    def test_expectation_gradient_return_norm_must_be_false(self):
+        """compute_expectation_with_gradients raises if return_norm is not False (norm pointer must be null in this release)."""
+        state_dims = (2, 2)
+        dtype = "complex128"
+        state = NetworkState(state_dims, dtype=dtype, config=TNConfig())
+        state.apply_tensor_operator((0,), np.eye(2, dtype=dtype), unitary=True, gradient=True)
+        state.apply_tensor_operator((1,), np.eye(2, dtype=dtype), unitary=True)
+        with state:
+            with pytest.raises(NotImplementedError, match=r"return_norm.*not supported|pass None"):
+                state.compute_expectation_with_gradients("ZI", 1.0, return_norm=True)
+
+    @pytest.mark.parametrize(
+        "config",
+        (
+            ExpectationGradientConfig.L0()
+            + ExpectationGradientConfig.L1()
+            + ExpectationGradientConfig.L2()
+        ),
+    )
+    def test_expectation_gradient_vs_reference(self, config):
+        """Build state from config, compare cutn vs TorchRef. Hamiltonian is either Pauli dict or NetworkOperator."""
+        if torch is None:
+            pytest.skip("torch is required for expectation gradient reference tests")
+        factory = config["factory"]
+        state_dims = factory.state_dims
+        gate_sequence = factory.get_gate_sequence_for_reference()
+        expectation_value_adjoint = config.get("expectation_value_adjoint", 1.0)
+        hamiltonian = config.get("hamiltonian")
+        if hamiltonian is not None:
+            if not isinstance(hamiltonian, (dict, NetworkOperatorFactory)):
+                raise TypeError(
+                    "config['hamiltonian'] must be a Pauli string dict or a NetworkOperatorFactory, "
+                    f"got {type(hamiltonian).__name__}"
+                )
+            if isinstance(hamiltonian, NetworkOperatorFactory):
+                hamiltonian = hamiltonian.build()
+        dtype = config["dtype"]
+        remove_identity = config.get("remove_identity", None)
+        if remove_identity is not None and isinstance(hamiltonian, dict):
+            hamiltonian = NetworkOperator.from_pauli_strings(
+                hamiltonian, dtype=dtype, backend="numpy", remove_identity=remove_identity,
+            )
+
+        state = NetworkState(state_dims, dtype=dtype, config=TNConfig())
+        gradient_tensor_ids = []
+        for modes, gate_tensor, requires_grad in gate_sequence:
+            tensor_id = state.apply_tensor_operator(modes, gate_tensor, unitary=True, gradient=requires_grad)
+            if requires_grad:
+                gradient_tensor_ids.append(tensor_id)
+        with state:
+            exp_cutn, _, gradients_cutn = state.compute_expectation_with_gradients(
+                hamiltonian, expectation_value_adjoint
+            )
+
+        exp_ref, gradients_ref_list = TorchRef().compute_expectation_with_gradients(
+            state_dims,
+            gate_sequence,
+            hamiltonian,
+            dtype=dtype,
+            expectation_value_adjoint=expectation_value_adjoint,
+        )
+        
+        tol = get_contraction_tolerance(dtype)
+        # Looser tolerance when float64 (cutn vs torch ref can differ in float accumulation)
+        exp_cutn_real = expectation_as_real(exp_cutn, dtype)
+        exp_ref_arr = expectation_as_real(exp_ref, dtype)
+        assert np.allclose(exp_cutn_real, exp_ref_arr, **tol), (exp_cutn_real, exp_ref_arr)
+        assert_gradients_match(gate_sequence, gradients_cutn, gradients_ref_list, tol, gradient_tensor_ids=gradient_tensor_ids)
+
+    def test_accumulate_and_update_gradient(self):
+        """cutn bindings: 3 backward calls. 
+        Same buffer twice (accumulate=0 then 1) -> 2*first; 
+        update_tensor_operator_gradient to new buffer; third call -> new buffer has first."""
+        import cuquantum
+        from cuquantum.bindings import cutensornet as cutn
+        import cupy as cp
+        import cmath
+        import math
+
+        dtype = np.complex128
+        data_type = cuquantum.cudaDataType.CUDA_C_64F
+        num_qubits = 4
+        state_dims = (2,) * num_qubits
+        theta = math.pi / 4.0
+        inv_sqrt2 = 1.0 / (2.0 ** 0.5)
+        H_h = np.array([[1, 1], [1, -1]], dtype=dtype) * inv_sqrt2
+        cy, sy = math.cos(theta / 2), math.sin(theta / 2)
+        Ry_h = np.array([[cy, -sy], [sy, cy]], dtype=dtype)
+        c, s = math.cos(theta / 2), -1j * math.sin(theta / 2)
+        Rx_h = np.array([[c, s], [s, c]], dtype=dtype)
+        pauli_z_h = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=dtype)
+        pauli_y_h = np.array([[0.0, -1.0j], [1.0j, 0.0]], dtype=dtype)
+
+        handle = cutn.create()
+        stream = 0
+        try:
+            state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits, state_dims, data_type)
+            d_H = cp.asarray(H_h)
+            d_Ry = cp.asarray(Ry_h)
+            d_Rx = cp.asarray(Rx_h)
+            d_Z = cp.asarray(pauli_z_h)
+            d_Y = cp.asarray(pauli_y_h)
+            d_grad_ry = cp.zeros(4, dtype=dtype)
+            d_grad_rx = cp.zeros(4, dtype=dtype)
+            d_grad_ry_2 = cp.zeros(4, dtype=dtype)
+            d_grad_rx_2 = cp.zeros(4, dtype=dtype)
+
+            cutn.state_apply_tensor_operator(handle, state, 1, (0,), d_H.data.ptr, 0, immutable=0, adjoint=0, unitary=1)
+            ry_id = cutn.state_apply_tensor_operator_with_gradient(
+                handle, state, 1, (0,), d_Ry.data.ptr, 0, 0, 0, 1, d_grad_ry.data.ptr, 0
+            )
+            cutn.state_apply_tensor_operator(handle, state, 1, (1,), d_H.data.ptr, 0, immutable=0, adjoint=0, unitary=1)
+            rx_id = cutn.state_apply_tensor_operator_with_gradient(
+                handle, state, 1, (1,), d_Rx.data.ptr, 0, 0, 0, 1, d_grad_rx.data.ptr, 0
+            )
+
+            hamiltonian = cutn.create_network_operator(handle, num_qubits, state_dims, data_type)
+            num_modes_2 = (1, 1)
+            state_modes_yy = [(0,), (1,)]
+            cutn.network_operator_append_product(
+                handle, hamiltonian, np.complex128(2.0), 2, num_modes_2, state_modes_yy, 0, [d_Y.data.ptr, d_Y.data.ptr]) #YYII
+            cutn.network_operator_append_product(
+                handle, hamiltonian, np.complex128(3.0), 1, (1,), [(1,)], 0, [d_Z.data.ptr]) #IZII
+            cutn.network_operator_append_product(
+                handle, hamiltonian, np.complex128(5.0), 1, (1,), [(0,)], 0, [d_Z.data.ptr]) #ZIII  
+
+            expectation = cutn.create_expectation(handle, state, hamiltonian)
+            num_hyper = np.array(1, dtype=np.int32)
+            cutn.expectation_configure(
+                handle, expectation,
+                cutn.ExpectationAttribute.CONFIG_NUM_HYPER_SAMPLES,
+                num_hyper.ctypes.data, num_hyper.nbytes,
+            )
+            work_desc = cutn.create_workspace_descriptor(handle)
+            max_workspace = (1 << 30)
+            cutn.expectation_prepare(handle, expectation, max_workspace, work_desc, stream)
+            scratch_size = cutn.workspace_get_memory_size(
+                handle, work_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH
+            )
+            cache_size = cutn.workspace_get_memory_size(
+                handle, work_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.CACHE
+            )
+            d_scratch = cp.cuda.alloc(int(scratch_size)) if scratch_size > 0 else None
+            d_cache = cp.cuda.alloc(int(cache_size)) if cache_size > 0 else None
+            if scratch_size > 0:
+                cutn.workspace_set_memory(handle, work_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, d_scratch.ptr, scratch_size)
+            if cache_size > 0:
+                cutn.workspace_set_memory(handle, work_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.CACHE, d_cache.ptr, cache_size)
+
+            exp_val = np.zeros(1, dtype=dtype)
+            exp_adjoint = np.array(1.0 + 0.0j, dtype=dtype)
+
+            cutn.expectation_compute_with_gradients_backward(
+                handle, expectation, 0, exp_adjoint.ctypes.data, 0, work_desc, exp_val.ctypes.data, 0, stream
+            )
+            cp.cuda.Stream.null.synchronize()
+            grad_ry_first = cp.asnumpy(d_grad_ry.copy()).reshape(2, 2)
+            grad_rx_first = cp.asnumpy(d_grad_rx.copy()).reshape(2, 2)
+
+            cutn.expectation_compute_with_gradients_backward(
+                handle, expectation, 1, exp_adjoint.ctypes.data, 0, work_desc, exp_val.ctypes.data, 0, stream
+            )
+            cp.cuda.Stream.null.synchronize()
+            grad_ry_twice = cp.asnumpy(d_grad_ry.copy()).reshape(2, 2)
+            grad_rx_twice = cp.asnumpy(d_grad_rx.copy()).reshape(2, 2)
+
+            cutn.state_update_tensor_operator_gradient(handle, state, ry_id, d_grad_ry_2.data.ptr)
+            cutn.state_update_tensor_operator_gradient(handle, state, rx_id, d_grad_rx_2.data.ptr)
+
+            cutn.expectation_compute_with_gradients_backward(
+                handle, expectation, 0, exp_adjoint.ctypes.data, 0, work_desc, exp_val.ctypes.data, 0, stream
+            )
+            cp.cuda.Stream.null.synchronize()
+            grad_ry_after_update = cp.asnumpy(d_grad_ry_2.copy()).reshape(2, 2)
+            grad_rx_after_update = cp.asnumpy(d_grad_rx_2.copy()).reshape(2, 2)
+
+            cutn.destroy_workspace_descriptor(work_desc)
+            cutn.destroy_expectation(expectation)
+            cutn.destroy_network_operator(hamiltonian)
+            cutn.destroy_state(state)
+        finally:
+            cutn.destroy(handle)
+
+        tol = get_contraction_tolerance("complex128")
+        assert np.allclose(grad_ry_twice, 2.0 * grad_ry_first, **tol), (
+            "Ry gradient after 2nd backward (same buffer, accumulate=1): expected 2*first"
+        )
+        assert np.allclose(grad_rx_twice, 2.0 * grad_rx_first, **tol), (
+            "Rx gradient after 2nd backward (same buffer, accumulate=1): expected 2*first"
+        )
+        assert np.allclose(grad_ry_after_update, grad_ry_first, **tol), (
+            "Ry gradient after update + 3rd backward: expected first (update_tensor_operator_gradient redirected output)"
+        )
+        assert np.allclose(grad_rx_after_update, grad_rx_first, **tol), (
+            "Rx gradient after update + 3rd backward: expected first (update_tensor_operator_gradient redirected output)"
+        )
+        

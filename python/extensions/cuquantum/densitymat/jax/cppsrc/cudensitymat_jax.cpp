@@ -11,16 +11,14 @@
 #include <cuda_runtime.h>
 #include <xla/ffi/api/c_api.h>
 #include <xla/ffi/api/ffi.h>
-#include <cudensitymat.h>
+#include "cudensitymat.h"
 
 #include "cudensitymat_jax.h"
 #include "utils.h"
 
 
 xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
-                                   xla::ffi::Buffer<xla::ffi::F64> timeBuf,
-                                   xla::ffi::Buffer<xla::ffi::F64> paramsBuf,
-                                   xla::ffi::RemainingArgs otherInBufs,
+                                   xla::ffi::RemainingArgs inBufs,
                                    xla::ffi::Result<xla::ffi::AnyBuffer> workspaceBuf,
                                    xla::ffi::RemainingRets otherOutBufs,
                                    xla::ffi::Span<const int64_t> otherInTypes,
@@ -47,39 +45,65 @@ xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
         std::vector<void*> operatorTermBatchedCoeffsPtrs;
         std::vector<void*> operatorTermBatchedCoeffs;
 
+        // Stream synchronization is needed to ensure JAX has put scalar coefficients buffers on GPU,
+        // and copying to the intermediate slots is completed.
+        bool needStreamSynchronize = false;
+        for (int i = 0; i < otherInTypes.size(); ++i) {
+            if (otherInTypes[i] == static_cast<int64_t>(InputType::NonBatchedCoeffs)) {
+                needStreamSynchronize = true;
+                break;
+            }
+        }
+
+        if (needStreamSynchronize) {
+            FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
+        }
+
         // Attach storage to input state.
         std::vector<void*> stateInComponentBufs;
         std::vector<size_t> stateInComponentSizes;
-        for (int i = 0; i < otherInBufs.size(); ++i) {
-            xla::ffi::AnyBuffer buf = otherInBufs.get<xla::ffi::AnyBuffer>(i).value();
+        for (int i = 0; i < inBufs.size(); ++i) {
+            xla::ffi::AnyBuffer buf = inBufs.get<xla::ffi::AnyBuffer>(i).value();
             int j = i - numStateComponents;
 
             if (i < numStateComponents) {
                 stateInComponentBufs.push_back(buf.untyped_data());
                 stateInComponentSizes.push_back(buf.size_bytes());
-            } else if (otherInTypes[j] == 1) {
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::ElementaryOperator)) {
                 cudensitymatElementaryOperator_t elemOp = reinterpret_cast<cudensitymatElementaryOperator_t>(otherInPtrs[j]);
                 FFI_CUDM_ERROR_CHECK(cudensitymatElementaryOperatorAttachBuffer(handle,
                                                                                 elemOp,
                                                                                 buf.untyped_data(),
                                                                                 buf.size_bytes()));
-            } else if (otherInTypes[j] == 2) {
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::MatrixOperator)) {
                 cudensitymatMatrixOperator_t matrixOp = reinterpret_cast<cudensitymatMatrixOperator_t>(otherInPtrs[j]);
                 FFI_CUDM_ERROR_CHECK(cudensitymatMatrixOperatorDenseLocalAttachBuffer(handle,
                                                                                       matrixOp,
                                                                                       buf.untyped_data(),
                                                                                       buf.size_bytes()));
-            } else if (otherInTypes[j] == 3) {
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::OperatorProductBatchedCoeffs)) {
                 void* coeffsPtrs = reinterpret_cast<void*>(otherInPtrs[j]);
                 operatorProductBatchedCoeffsPtrs.push_back(coeffsPtrs);
                 operatorProductBatchedCoeffs.push_back(buf.untyped_data());
-            } else if (otherInTypes[j] == 4) {
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::OperatorTermBatchedCoeffs)) {
                 void* coeffsPtrs = reinterpret_cast<void*>(otherInPtrs[j]);
                 operatorTermBatchedCoeffsPtrs.push_back(coeffsPtrs);
                 operatorTermBatchedCoeffs.push_back(buf.untyped_data());
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::NonBatchedCoeffs)) {
+                // Non-batched coefficients.
+                void* coeffsPtr = reinterpret_cast<void*>(otherInPtrs[j]);
+                FFI_CUDA_ERROR_CHECK(cudaMemcpyAsync(coeffsPtr,
+                                                     buf.untyped_data(),
+                                                     buf.size_bytes(),
+                                                     cudaMemcpyDeviceToDevice,
+                                                     stream));
             } else {
-                return xla::ffi::Error(xla::ffi::ErrorCode::kInternal, "Invalid other input type.");
+                return xla::ffi::Error(xla::ffi::ErrorCode::kInternal, "Invalid input type.");
             }
+        }
+
+        if (needStreamSynchronize) {
+            FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
         }
 
         FFI_CUDM_ERROR_CHECK(cudensitymatStateAttachComponentStorage(handle,
@@ -109,34 +133,10 @@ xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
         std::vector<void*> stateOutComponentBufs;
         std::vector<size_t> stateOutComponentSizes;
 
-        for (int i = 0; i < otherOutBufs.size(); ++i) {
+        for (int i = 0; i < numStateComponents; ++i) {
             xla::ffi::Result<xla::ffi::AnyBuffer> resBuf = otherOutBufs.get<xla::ffi::AnyBuffer>(i).value();
-            int j = i - numStateComponents;
-
-            if (i < numStateComponents) {
-                stateOutComponentBufs.push_back(resBuf->untyped_data());
-                stateOutComponentSizes.push_back(resBuf->size_bytes());
-            } else if (otherOutTypes[j] == 1) {
-                cudensitymatElementaryOperator_t elemOp = reinterpret_cast<cudensitymatElementaryOperator_t>(otherOutPtrs[j]);
-                FFI_CUDM_ERROR_CHECK(cudensitymatElementaryOperatorAttachBuffer(handle,
-                                                                                elemOp,
-                                                                                resBuf->untyped_data(),
-                                                                                resBuf->size_bytes()));
-            } else if (otherOutTypes[j] == 2) {
-                cudensitymatMatrixOperator_t matrixOp = reinterpret_cast<cudensitymatMatrixOperator_t>(otherOutPtrs[j]);
-                FFI_CUDM_ERROR_CHECK(cudensitymatMatrixOperatorDenseLocalAttachBuffer(handle,
-                                                                                      matrixOp,
-                                                                                      resBuf->untyped_data(),
-                                                                                      resBuf->size_bytes()));
-            } else if (otherOutTypes[j] == 3) {
-                void* coeffsPtr = reinterpret_cast<void*>(otherOutPtrs[j]);
-                operatorProductBatchedCoeffsPtrs.push_back(coeffsPtr);
-                operatorProductBatchedCoeffs.push_back(resBuf->untyped_data());
-            } else if (otherOutTypes[j] == 4) {
-                void* coeffsPtr = reinterpret_cast<void*>(otherOutPtrs[j]);
-                operatorTermBatchedCoeffsPtrs.push_back(coeffsPtr);
-                operatorTermBatchedCoeffs.push_back(resBuf->untyped_data());
-            }
+            stateOutComponentBufs.push_back(resBuf->untyped_data());
+            stateOutComponentSizes.push_back(resBuf->size_bytes());
         }
 
         FFI_CUDM_ERROR_CHECK(cudensitymatStateAttachComponentStorage(
@@ -149,9 +149,6 @@ xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
 
 
         // Execute operator action.
-        // TODO: time needs to be copied from device to host. Is there a better way to handle this?
-        double time;
-        FFI_CUDA_ERROR_CHECK(cudaMemcpyAsync(&time, timeBuf.typed_data(), sizeof(double), cudaMemcpyDeviceToHost, stream));
 
         // Attach batched coefficients if needed.
         if (operatorTermBatchedCoeffsPtrs.size() > 0 || operatorProductBatchedCoeffsPtrs.size() > 0) {
@@ -173,10 +170,10 @@ xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
 
         FFI_CUDM_ERROR_CHECK(cudensitymatOperatorComputeAction(handle,
                                                                superoperator,
-                                                               time,
+                                                               0.0, // time
                                                                batchSize,
-                                                               paramsBuf.dimensions()[1], // numParams
-                                                               paramsBuf.typed_data(),
+                                                               0, // numParams
+                                                               nullptr, // params
                                                                stateIn,
                                                                stateOut,
                                                                workspaceDesc,
@@ -196,9 +193,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     OperatorActionImpl,
     xla::ffi::Ffi::Bind()
         .Ctx<xla::ffi::PlatformStream<cudaStream_t>>()
-        .Arg<xla::ffi::Buffer<xla::ffi::F64>>() // time
-        .Arg<xla::ffi::Buffer<xla::ffi::F64>>() // params
-        .RemainingArgs() // other input buffers
+        .RemainingArgs() // all input buffers
         .Ret<xla::ffi::AnyBuffer>() // workspace
         .RemainingRets() // other output buffers
         .Attr<xla::ffi::Span<const int64_t>>("other_in_types")
@@ -215,11 +210,8 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 
 
 xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
-                                               xla::ffi::Buffer<xla::ffi::F64> timeBuf,
-                                               xla::ffi::Buffer<xla::ffi::F64> paramsBuf,
-                                               xla::ffi::RemainingArgs otherInBufs,
+                                               xla::ffi::RemainingArgs inBufs,
                                                xla::ffi::Result<xla::ffi::AnyBuffer> workspaceBuf,
-                                               xla::ffi::Result<xla::ffi::Buffer<xla::ffi::F64>> paramsGradBuf,
                                                xla::ffi::RemainingRets otherOutBufs,
                                                xla::ffi::Span<const int64_t> otherInTypes,
                                                xla::ffi::Span<const int64_t> otherInPtrs,
@@ -251,8 +243,22 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
         std::vector<void*> stateOutAdjComponentBufs;
         std::vector<size_t> stateOutAdjComponentSizes;
 
-        for (int i = 0; i < otherInBufs.size(); ++i) {
-            xla::ffi::AnyBuffer buf = otherInBufs.get<xla::ffi::AnyBuffer>(i).value();
+        // Stream synchronization is needed to ensure JAX has put scalar coefficients buffers on GPU,
+        // and copying to the intermediate slots is completed.
+        bool needStreamSynchronize = false;
+        for (int i = 0; i < otherInTypes.size(); ++i) {
+            if (otherInTypes[i] == static_cast<int64_t>(InputType::NonBatchedCoeffs)) {
+                needStreamSynchronize = true;
+                break;
+            }
+        }
+
+        if (needStreamSynchronize) {
+            FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
+        }
+
+        for (int i = 0; i < inBufs.size(); ++i) {
+            xla::ffi::AnyBuffer buf = inBufs.get<xla::ffi::AnyBuffer>(i).value();
 
             int j = i - 2 * numStateComponents;
             
@@ -264,29 +270,41 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
                 // State output adjoint buffer
                 stateOutAdjComponentBufs.push_back(buf.untyped_data());
                 stateOutAdjComponentSizes.push_back(buf.size_bytes());
-            } else if (otherInTypes[j] == 1) {
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::ElementaryOperator)) {
                 cudensitymatElementaryOperator_t elemOp = reinterpret_cast<cudensitymatElementaryOperator_t>(otherInPtrs[j]);
                 FFI_CUDM_ERROR_CHECK(cudensitymatElementaryOperatorAttachBuffer(handle,
                                                                                 elemOp,
                                                                                 buf.untyped_data(),
                                                                                 buf.size_bytes()));
-            } else if (otherInTypes[j] == 2) {
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::MatrixOperator)) {
                 cudensitymatMatrixOperator_t matrixOp = reinterpret_cast<cudensitymatMatrixOperator_t>(otherInPtrs[j]);
                 FFI_CUDM_ERROR_CHECK(cudensitymatMatrixOperatorDenseLocalAttachBuffer(handle,
                                                                                       matrixOp,
                                                                                       buf.untyped_data(),
                                                                                       buf.size_bytes()));
-            } else if (otherInTypes[j] == 3) {
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::OperatorProductBatchedCoeffs)) {
                 void* coeffsPtrs = reinterpret_cast<void*>(otherInPtrs[j]);
                 operatorProductBatchedCoeffsPtrs.push_back(coeffsPtrs);
                 operatorProductBatchedCoeffs.push_back(buf.untyped_data());
-            } else if (otherInTypes[j] == 4) {
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::OperatorTermBatchedCoeffs)) {
                 void* coeffsPtrs = reinterpret_cast<void*>(otherInPtrs[j]);
                 operatorTermBatchedCoeffsPtrs.push_back(coeffsPtrs);
                 operatorTermBatchedCoeffs.push_back(buf.untyped_data());
+            } else if (otherInTypes[j] == static_cast<int64_t>(InputType::NonBatchedCoeffs)) {
+                // Non-batched coefficients.
+                void* coeffsPtr = reinterpret_cast<void*>(otherInPtrs[j]);
+                FFI_CUDA_ERROR_CHECK(cudaMemcpyAsync(coeffsPtr,
+                                                     buf.untyped_data(),
+                                                     buf.size_bytes(),
+                                                     cudaMemcpyDeviceToDevice,
+                                                     stream));
             } else {
                 return xla::ffi::Error(xla::ffi::ErrorCode::kInternal, "Invalid other input type.");
             }
+        }
+
+        if (needStreamSynchronize) {
+            FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
         }
 
         // FIXME: Do we still need to attach storage to input state since they have been attached in forward execution?
@@ -306,35 +324,10 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
         std::vector<void*> stateInAdjComponentBufs;
         std::vector<size_t> stateInAdjComponentSizes;
 
-        for (int i = 0; i < otherOutBufs.size(); ++i) {
+        for (int i = 0; i < numStateComponents; ++i) {
             xla::ffi::Result<xla::ffi::AnyBuffer> resBuf = otherOutBufs.get<xla::ffi::AnyBuffer>(i).value();
-
-            int j = i - numStateComponents;
-
-            if (i < numStateComponents) {
-                stateInAdjComponentBufs.push_back(resBuf->untyped_data());
-                stateInAdjComponentSizes.push_back(resBuf->size_bytes());
-            } else if (otherOutTypes[j] == 1) {
-                cudensitymatElementaryOperator_t elemOp = reinterpret_cast<cudensitymatElementaryOperator_t>(otherOutPtrs[j]);
-                FFI_CUDM_ERROR_CHECK(cudensitymatElementaryOperatorAttachBuffer(handle,
-                                                                                elemOp,
-                                                                                resBuf->untyped_data(),
-                                                                                resBuf->size_bytes()));
-            } else if (otherOutTypes[j] == 2) {
-                cudensitymatMatrixOperator_t matrixOp = reinterpret_cast<cudensitymatMatrixOperator_t>(otherOutPtrs[j]);
-                FFI_CUDM_ERROR_CHECK(cudensitymatMatrixOperatorDenseLocalAttachBuffer(handle,
-                                                                                      matrixOp,
-                                                                                      resBuf->untyped_data(),
-                                                                                      resBuf->size_bytes()));
-            } else if (otherOutTypes[j] == 3) {
-                void* coeffsPtr = reinterpret_cast<void*>(otherOutPtrs[j]);
-                operatorProductBatchedCoeffsPtrs.push_back(coeffsPtr);
-                operatorProductBatchedCoeffs.push_back(resBuf->untyped_data());
-            } else if (otherOutTypes[j] == 4) {
-                void* coeffsPtr = reinterpret_cast<void*>(otherOutPtrs[j]);
-                operatorTermBatchedCoeffsPtrs.push_back(coeffsPtr);
-                operatorTermBatchedCoeffs.push_back(resBuf->untyped_data());
-            }
+            stateInAdjComponentBufs.push_back(resBuf->untyped_data());
+            stateInAdjComponentSizes.push_back(resBuf->size_bytes());
         }
 
         FFI_CUDM_ERROR_CHECK(cudensitymatStateAttachComponentStorage(
@@ -366,9 +359,6 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
         FFI_CUDM_ERROR_CHECK(cudensitymatStateInitializeZero(handle, stateInAdj, stream));
 
         // Execute operator action backward differentiation.
-        // TODO: time needs to be copied from device to host. Is there a better way to handle this?
-        double time;
-        FFI_CUDA_ERROR_CHECK(cudaMemcpyAsync(&time, timeBuf.typed_data(), sizeof(double), cudaMemcpyDeviceToHost, stream));
 
         // Attach batched coefficients if needed.
         if (operatorTermBatchedCoeffsPtrs.size() > 0 || operatorProductBatchedCoeffsPtrs.size() > 0) {
@@ -383,23 +373,38 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
                 operatorProductBatchedCoeffs.data()));
         }
 
-        // NOTE: Sometimes the paramsGradBuf allocated by JAX is not all zero. We need to explicitly set it to zero
-        // here since paramsGradBuf is accumulated.
-        FFI_CUDA_ERROR_CHECK(cudaMemsetAsync(paramsGradBuf->typed_data(), 0, paramsGradBuf->size_bytes(), stream));
-        FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
-
         FFI_CUDM_ERROR_CHECK(cudensitymatOperatorComputeActionBackwardDiff(handle,
                                                                            superoperator,
-                                                                           time,
+                                                                           0.0, // time
                                                                            batchSize,
-                                                                           paramsBuf.dimensions()[1], // numParams
-                                                                           paramsBuf.typed_data(),
+                                                                           0, // numParams
+                                                                           nullptr, // params
                                                                            stateIn,
                                                                            stateOutAdj,
                                                                            stateInAdj,
-                                                                           paramsGradBuf->typed_data(),
+                                                                           nullptr, // paramsGrad
                                                                            workspaceDesc,
                                                                            stream));
+
+        // The Python gradient callbacks (for both scalar and tensor operators) dispatch
+        // their += accumulation operations on CuPy's default CUDA stream, which may differ
+        // from the XLA FFI stream used here. Synchronize the default stream before copying
+        // so that all callback writes are guaranteed to be visible to the memcpy below.
+        FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(cudaStreamDefault));
+
+        // otherOutBufs layout (after numStateComponents state adj bufs): [grad bufs].
+        for (int i = 0; i < otherOutTypes.size(); ++i) {
+            xla::ffi::Result<xla::ffi::AnyBuffer> resBuf =
+                otherOutBufs.get<xla::ffi::AnyBuffer>(i + numStateComponents).value();
+            void* coeffsGradPtr = reinterpret_cast<void*>(otherOutPtrs[i]);
+            FFI_CUDA_ERROR_CHECK(cudaMemcpyAsync(resBuf->untyped_data(),
+                                                 coeffsGradPtr,
+                                                 resBuf->size_bytes(),
+                                                 cudaMemcpyDeviceToDevice,
+                                                 stream));
+        }
+
+        FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
 
         FFI_CUDM_ERROR_CHECK(cudensitymatDestroyWorkspace(workspaceDesc));
 
@@ -415,11 +420,8 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     OperatorActionBackwardDiffImpl,
     xla::ffi::Ffi::Bind()
         .Ctx<xla::ffi::PlatformStream<cudaStream_t>>()
-        .Arg<xla::ffi::Buffer<xla::ffi::F64>>() // time
-        .Arg<xla::ffi::Buffer<xla::ffi::F64>>() // params
-        .RemainingArgs() // other input buffers
+        .RemainingArgs() // all input buffers
         .Ret<xla::ffi::AnyBuffer>() // workspace
-        .Ret<xla::ffi::Buffer<xla::ffi::F64>>() // paramsGrad
         .RemainingRets() // other output buffers
         .Attr<xla::ffi::Span<const int64_t>>("other_in_types")
         .Attr<xla::ffi::Span<const int64_t>>("other_in_ptrs")

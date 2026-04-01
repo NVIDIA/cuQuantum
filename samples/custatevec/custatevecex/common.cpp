@@ -1,10 +1,11 @@
 /*
- * Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.
+ * Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include "common.hpp"
+#include <vector>     // std::vector<>
 
 // Global variable for output control - can be set by applications to disable output
 // Default is true (output enabled)
@@ -37,4 +38,15 @@ void outputChar(char c)
         return;
     putchar(c);
     fflush(stdout);
+}
+
+// Output a full integer vector, respecting outputEnabled_ flag
+void outputVectorDump(const char* label, const std::vector<int32_t>& vec)
+{
+    if (!outputEnabled_)
+        return;
+    output("%s: [", label);
+    for (size_t i = 0; i < vec.size(); ++i)
+        output("%d%s", vec[i], (i < vec.size() - 1) ? " " : "");
+    output("]\n");
 }

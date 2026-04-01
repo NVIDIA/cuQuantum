@@ -6,27 +6,16 @@
 
 import pytest
 import numpy as np
-from typing import TYPE_CHECKING
+import importlib
 
-if TYPE_CHECKING:
-    import cupy as cp
-
-try:
-    import cupy as cp
-
-    HAS_CUPY = True
-except ImportError:
-    HAS_CUPY = False
-
-from cuquantum.stabilizer import Circuit, FrameSimulator, Options
+from cuquantum.stabilizer import Circuit, FrameSimulator
 
 packages = ["numpy", "cupy"]
 
 
 @pytest.fixture(params=packages)
 def package(request):
-    if not HAS_CUPY and request.param == "cupy":
-        pytest.skip("CuPy not available")
+    pytest.importorskip(request.param)
     return request.param
 
 
@@ -68,7 +57,7 @@ def test_odd_shots_unpacked(num_shots, package):
 
     x, z = sim.get_pauli_xz_bits(bit_packed=False)
     m = sim.get_measurement_bits(bit_packed=False)
-    cls_ = cp.ndarray if package == "cupy" else np.ndarray
+    cls_ = importlib.import_module(package).ndarray
     assert isinstance(x, cls_)
     assert isinstance(z, cls_)
     assert isinstance(m, cls_)
@@ -89,7 +78,7 @@ def test_package_semantics_no_inputs_kwarg(package):
     sim.apply(circ)
     x, z = sim.get_pauli_xz_bits(bit_packed=False)
     m = sim.get_measurement_bits(bit_packed=True)
-    cls_ = cp.ndarray if package == "cupy" else np.ndarray
+    cls_ = importlib.import_module(package).ndarray
     assert isinstance(x, cls_)
     assert isinstance(z, cls_)
     assert isinstance(m, cls_)
@@ -100,7 +89,7 @@ def test_package_semantics_no_inputs_kwarg(package):
 
 def test_simulator_input_tables_packed(package):
     """Test package semantics: numpy input -> numpy output."""
-    xp_ = cp if package == "cupy" else np
+    xp_ = importlib.import_module(package)
     num_qubits = 2
     num_shots = 64
     stride = ((num_shots + 31) // 32) * 4
@@ -138,7 +127,7 @@ def test_simulator_input_tables_unpacked(package):
     num_shots = 1025
     num_measurements = 1
 
-    xp_ = cp if package == "cupy" else np
+    xp_ = importlib.import_module(package)
     x_table = xp_.zeros((num_qubits, num_shots), dtype=xp_.uint8)
     x_table[1, :] = 1
     z_table = xp_.zeros((num_qubits, num_shots), dtype=xp_.uint8)
@@ -174,6 +163,36 @@ def test_simulator_input_tables_unpacked(package):
     assert m.shape == (num_measurements, num_shots)
 
 
+def test_simulator_constructor_measurement_table_packed(package):
+    """Test creating simulator with a pre-allocated measurement table."""
+    xp_ = importlib.import_module(package)
+
+    num_qubits = 2
+    num_shots = 64
+    num_measurements = 2
+    stride = ((num_shots + 31) // 32) * 4
+    measurement_table = xp_.zeros((num_measurements, stride), dtype=xp_.uint8)
+
+    sim = FrameSimulator(
+        num_qubits,
+        num_shots,
+        num_measurements=num_measurements,
+        measurement_table=measurement_table,
+        bit_packed=True,
+        package=package,
+    )
+
+    circ = Circuit("X_ERROR(1) 0\nZ_ERROR(1) 1\nM 0 1")
+    sim.apply(circ)
+
+    m = sim.get_measurement_bits(bit_packed=True)
+
+    assert isinstance(m, xp_.ndarray)
+    assert m.shape == (num_measurements, stride)
+    if package == "cupy":
+        assert m.data.ptr == measurement_table.data.ptr, "M table should be attached to simulator"
+
+
 def test_simulator_set_input_tables_packed(package):
     """Test set_input_tables with numpy arrays."""
     num_qubits = 2
@@ -182,7 +201,7 @@ def test_simulator_set_input_tables_packed(package):
 
     sim = FrameSimulator(num_qubits, num_shots, num_measurements=num_measurements)
 
-    xp_ = cp if package == "cupy" else np
+    xp_ = importlib.import_module(package)
     stride = ((num_shots + 31) // 32) * 4
     x_table = xp_.zeros((num_qubits, stride), dtype=xp_.uint8)
     z_table = xp_.zeros((num_qubits, stride), dtype=xp_.uint8)
@@ -208,6 +227,29 @@ def test_simulator_set_input_tables_packed(package):
         assert z.data.ptr == z_table.data.ptr, "Z table should be attached to simulator"
         assert x.data.ptr == x_table.data.ptr, "X table should be attached to simulator"
         assert m.data.ptr == m_table.data.ptr, "M table should be attached to simulator"
+
+
+def test_simulator_get_pauli_xz_bits_uses_exact_memory_size():
+    """Test get_pauli_xz_bits reports the exact backing allocation size."""
+    cp = pytest.importorskip("cupy")
+
+    num_qubits = 3
+    num_shots = 65
+    stride = ((num_shots + 31) // 32) * 4
+    expected_bytes = num_qubits * stride
+
+    sim = FrameSimulator(num_qubits, num_shots, package="cupy")
+
+    x, z = sim.get_pauli_xz_bits(bit_packed=True)
+
+    assert isinstance(x, cp.ndarray)
+    assert isinstance(z, cp.ndarray)
+    assert x.shape == (num_qubits, stride)
+    assert z.shape == (num_qubits, stride)
+    assert x.nbytes == expected_bytes
+    assert z.nbytes == expected_bytes
+    assert x.data.mem.size == expected_bytes
+    assert z.data.mem.size == expected_bytes
 
 
 if __name__ == "__main__":

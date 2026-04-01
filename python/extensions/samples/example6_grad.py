@@ -2,6 +2,10 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+"""
+Operator action gradient example.
+"""
+
 import jax
 import jax.numpy as jnp
 
@@ -15,26 +19,43 @@ from cuquantum.densitymat.jax import (
     operator_action,
 )
 
-import logging
+# Toggle logging from the cuQuantum Python JAX API.
+ENABLE_LOGGING = False
 
-# Enable logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(name)s [%(levelname)s] %(message)s'
-)
+if ENABLE_LOGGING:
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,  # logging level can be modified as well
+        format='%(name)s [%(levelname)s] %(message)s'
+    )
+
+
+def print_device_info():
+    """
+    Print the information of the current device.
+    """
+    from cuda.bindings import runtime as cudart
+
+    err, dev_id = cudart.cudaGetDevice()
+    if err != cudart.cudaError_t.cudaSuccess:
+        raise RuntimeError(f"cudaGetDevice failed with error code {err}")
+
+    err, props = cudart.cudaGetDeviceProperties(dev_id)
+    if err != cudart.cudaError_t.cudaSuccess:
+        raise RuntimeError(f"cudaGetDeviceProperties failed with error code {err}")
+
+    print("===== device info ======")
+    print("GPU-local-id:", dev_id)
+    print("GPU-name:", props.name.decode())
+    print("GPU-nSM:", props.multiProcessorCount)
+    print("GPU-major:", props.major)
+    print("GPU-minor:", props.minor)
+    print("========================")
+
 
 def coherent_state(n_levels, alpha):
     """
-    Create a coherent state |alpha⟩ using JAX numpy via displacement operator.
-    
-    |alpha⟩ = D(alpha)|0⟩ where D(alpha) = exp(alpha a† - alpha* a)
-    
-    Args:
-        n_levels: Dimension of the Fock space (number of levels)
-        alpha: Complex amplitude of the coherent state
-    
-    Returns:
-        Complex array of shape (n_levels,) representing the coherent state
+    Create a coherent state |alpha⟩ via the displacement operator.
     """
     # Create annihilation operator a
     a = jnp.diag(jnp.sqrt(jnp.arange(1, n_levels, dtype=jnp.complex128)), k=1)
@@ -56,28 +77,6 @@ def coherent_state(n_levels, alpha):
     return coherent
 
 
-def build_cuqnt_elementary_operator(arr: jax.Array) -> ElementaryOperator:
-    """
-    Construct the elementary operator for cuQuantum Python JAX.
-
-    Args:
-        arr: The array to construct the elementary operator from.
-
-    Returns:
-        The elementary operator.
-    """
-    def f_grad_callback(t, args, tensor_grad, params_grad):
-        # xyz is the random name we assign to the gradient of the elementary operator.
-        # NOTE: Latest JAX does not support from_dlpack(..., copy=True). Solution from https://github.com/jax-ml/jax/issues/33790.
-        tensor_grad_copy = jax.dlpack.from_dlpack(tensor_grad[:, :, 0], copy=False)
-        f_grad_callback.xyz += jnp.array(tensor_grad_copy, copy=True)
-    f_grad_callback.xyz = jnp.expand_dims(jnp.zeros_like(arr), 0)
-    grad_callback = cudm.WrappedTensorGradientCallback(f_grad_callback, cudm.CallbackDevice.GPU)
-
-    elem_op = ElementaryOperator(arr, grad_callback=grad_callback)
-    return elem_op
-
-
 def main(omega, kappa, alpha0):
     """
     Compute oscillator population using cuQuantum Python JAX.
@@ -86,44 +85,51 @@ def main(omega, kappa, alpha0):
     h_key = jax.random.key(41)
     h_data = jax.random.normal(h_key, (dims[0], dims[0]), dtype=jnp.complex128)
     h_data = omega * (h_data + h_data.conj().T) / 2
+    jax.debug.print("Defined Hamiltonian elementary operator data buffer.", ordered=True)
 
-    h = build_cuqnt_elementary_operator(h_data)
+    h = ElementaryOperator(h_data)
+    jax.debug.print("Created Hamiltonian elementary operator.", ordered=True)
 
     # Construct operator term for the Hamiltonian
-    H1j = OperatorTerm(dims)
-    Hm1j = OperatorTerm(dims)
-    H1j.append([h], modes=modes)
-    Hm1j.append([h], modes=modes)
+    H = OperatorTerm(dims)
+    H.append([h], modes=modes)
+    jax.debug.print("Constructed Hamiltonian operator term.", ordered=True)
 
     l_key = jax.random.key(42)
     l_data = jnp.sqrt(kappa) * jax.random.normal(l_key, (dims[0], dims[0]), dtype=jnp.complex128)
+    jax.debug.print("Defined dissipation elementary operator data buffers.", ordered=True)
 
     # extract elementary operators
-    l = build_cuqnt_elementary_operator(l_data)
-    ld = build_cuqnt_elementary_operator(l_data.conj().T)
+    l = ElementaryOperator(l_data)
+    ld = ElementaryOperator(l_data.conj().T)
+    jax.debug.print("Created dissipation elementary operators.", ordered=True)
 
     Ls = OperatorTerm(dims)
     Ls.append([l, ld], modes=(0, 0), duals=(False, True), coeff=1.0)
     Ls.append([l, ld], modes=(0, 0), duals=(False, False), coeff=-0.5)
     Ls.append([ld, l], modes=(0, 0), duals=(True, True), coeff=-0.5)
+    jax.debug.print("Constructed dissipator operator term.", ordered=True)
 
     psi0 = coherent_state(dims[0], alpha0)
     rho0 = jnp.outer(psi0, psi0.conj())
+    jax.debug.print("Created initial state data buffer.", ordered=True)
     
     liouvillian = Operator(dims)
-    liouvillian.append(Hm1j, dual=False, coeff=-1.0j)
-    liouvillian.append(H1j, dual=True, coeff=1.0j)
+    liouvillian.append(H, dual=False, coeff=-1.0j)
+    liouvillian.append(H, dual=True, coeff=1.0j)
     liouvillian.append(Ls, dual=False, coeff=1.0)
+    jax.debug.print("Constructed Liouvillian operator from operator terms.", ordered=True)
 
-    # xyz is the random name we assign to the gradient of the elementary operator.
-    options = {"base_op_grad_attr": "xyz"}
-    rho1 = operator_action(liouvillian, 0.0, rho0, options=options)
+    rho1 = operator_action(liouvillian, rho0)
+    jax.debug.print("Performed operator action on the input state.", ordered=True)
 
     number_op = jnp.diag(jnp.arange(dims[0], dtype=jnp.complex128))
     return (number_op @ rho1).trace().real
 
 
 if __name__ == "__main__":
+
+    print_device_info()
 
     # parameters
     dims = (5,)     # Hilbert space dimension
@@ -134,8 +140,4 @@ if __name__ == "__main__":
 
     # Compute gradient with respect to omega, kappa and alpha
     result = jax.grad(main, argnums=(0, 1, 2))(omega, kappa, alpha0)
-    
-    print(result[0])
-    print(result[1])
-    print(result[2])
-    print("Finished computing gradients.")
+    print("Finished computation and exit.")
