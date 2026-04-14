@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.03.0, generator version 0.3.1.dev1332+g03874867a.d20260311. Do not modify it directly.
+# This code was automatically generated with version 26.03.1, generator version 0.3.1.dev1508+g784d12dd6.d20260402. Do not modify it directly.
 
 cimport cython
 cimport cpython

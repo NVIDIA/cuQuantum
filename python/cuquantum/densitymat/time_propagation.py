@@ -76,13 +76,18 @@ class KrylovConfig:
     """Configuration for the Krylov subspace time propagation approach.
 
     Args:
-        tolerance: Convergence tolerance. Defaults to machine epsilon when ``None``.
+        tolerance: Convergence tolerance. Defaults to 0 when ``None``, resolved to
+            machine epsilon of the compute precision.
         max_dim: Maximum Krylov subspace dimension. Defaults to 30 when ``None``.
-        min_beta: Minimum beta to proceed with expansion. Defaults to 0 when ``None``.
+        min_beta: Minimum beta to proceed with expansion. Defaults to 0 when ``None``,
+            resolved to machine epsilon of the compute precision.
+        adaptive_step_size: Enable adaptive step size control (0=disabled, 1=enabled).
+            Defaults to 1 (enabled) when ``None``.
     """
     tolerance: Optional[float] = None
     max_dim: Optional[int] = None
     min_beta: Optional[float] = None
+    adaptive_step_size: Optional[int] = None
 
 
 @dataclass
@@ -248,6 +253,7 @@ class TimePropagation:
                         "tolerance": cudm.TimePropagationApproachKrylovConfigAttribute.PROPAGATION_APPROACH_KRYLOV_TOLERANCE,
                         "max_dim": cudm.TimePropagationApproachKrylovConfigAttribute.PROPAGATION_APPROACH_KRYLOV_MAX_DIM,
                         "min_beta": cudm.TimePropagationApproachKrylovConfigAttribute.PROPAGATION_APPROACH_KRYLOV_MIN_BETA,
+                        "adaptive_step_size": cudm.TimePropagationApproachKrylovConfigAttribute.PROPAGATION_APPROACH_KRYLOV_ADAPTIVE_STEP_SIZE,
                     }
                     for field_name, enum_val in _KRYLOV_FIELDS.items():
                         value = getattr(self._approach_config, field_name)

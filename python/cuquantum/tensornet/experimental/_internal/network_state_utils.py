@@ -6,7 +6,7 @@ import importlib
 
 from nvmath.internal import tensor_wrapper, utils
 from cuquantum.bindings import cutensornet as cutn
-from ..._internal.helpers import transpose_tensor
+from ..._internal.helpers import transpose_tensor, swap_bra_ket_tensor
 
 # constant parameters for MPS and tensor network simulation
 STATE_DEFAULT_DTYPE = 'complex128'
@@ -74,7 +74,7 @@ def state_labels_wrapper(*, marker_index=None, key=None, marker_type='seq'):
         return wrapper
     return decorator
 
-def state_operands_wrapper(operands_arg_index=1, is_single_operand=True, transpose=False):
+def state_operands_wrapper(operands_arg_index=1, is_single_operand=True, transpose=False, swap_bra_ket=False):
     assert operands_arg_index >= 1
     def decorator(func):
         @functools.wraps(func)
@@ -89,6 +89,8 @@ def state_operands_wrapper(operands_arg_index=1, is_single_operand=True, transpo
             operands = tensor_wrapper.wrap_operands(operands)
             if transpose:
                 operands = [transpose_tensor(o) for o in operands]
+            elif swap_bra_ket:
+                operands = [swap_bra_ket_tensor(o) for o in operands]
             if not obj.backend_setup:
                 obj._setup_backend(operands[0])
 

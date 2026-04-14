@@ -752,12 +752,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         if network_operator.dtype != self.dtype:
             raise ValueError(f"Input network operator data type ({network_operator.dtype}) different from network state ({self.dtype})")
         if not self.backend_setup:
-            if network_operator.tensor_products:
-                operand = network_operator.tensor_products
-            elif network_operator.mpos:
-                operand = network_operator.mpos[0][0][0]
-            else:
-                raise RuntimeError(f"Empty NetworkOperator can not be applied to a NetworkState")
+            operand = network_operator._get_representative_operand()
+            if operand is None:
+                raise RuntimeError("Empty NetworkOperator can not be applied to a NetworkState")
             self._setup_backend(operand)
         network_id = cutn.state_apply_network_operator(self.handle, 
             self.state, network_operator.network_operator, immutable, adjoint, unitary)
