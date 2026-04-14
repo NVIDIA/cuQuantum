@@ -124,6 +124,59 @@ class TestCircuitToEinsumFunctionality:
         assert expr == expr1
         for o1, o2 in zip(operands, operands1):
             assert np.allclose(o1, o2)
+
+    @pytest.mark.parametrize("circuit", CircuitMatrix.L1())
+    def test_forward_inverse_metadata_cache_reuses_identical_call(self, circuit):
+        converter = CircuitToEinsum(circuit, dtype='complex64', backend="numpy")
+        qubits = converter.qubits
+        if len(qubits) < 2:
+            pytest.skip("requires at least two qubits")
+
+        pauli_map = {qubits[0]: 'Z', qubits[1]: 'X'}
+        converter.expectation(pauli_map, lightcone=True)
+        assert len(converter._forward_inverse_metadata_cache) == 1
+
+        converter.expectation(pauli_map, lightcone=True)
+        assert len(converter._forward_inverse_metadata_cache) == 1
+
+    @pytest.mark.parametrize("circuit", CircuitMatrix.L1())
+    def test_forward_inverse_metadata_cache_normalizes_where_order(self, circuit):
+        converter = CircuitToEinsum(circuit, dtype='complex64', backend="numpy")
+        qubits = converter.qubits
+        if len(qubits) < 2:
+            pytest.skip("requires at least two qubits")
+
+        converter.reduced_density_matrix((qubits[0], qubits[1]), lightcone=True)
+        assert len(converter._forward_inverse_metadata_cache) == 1
+
+        converter.reduced_density_matrix((qubits[1], qubits[0]), lightcone=True)
+        assert len(converter._forward_inverse_metadata_cache) == 1
+
+    @pytest.mark.parametrize("circuit", CircuitMatrix.L1())
+    def test_forward_inverse_metadata_cache_separates_distinct_supports(self, circuit):
+        converter = CircuitToEinsum(circuit, dtype='complex64', backend="numpy")
+        qubits = converter.qubits
+        if len(qubits) < 2:
+            pytest.skip("requires at least two qubits")
+
+        converter.expectation({qubits[0]: 'Z'}, lightcone=True)
+        assert len(converter._forward_inverse_metadata_cache) == 1
+
+        converter.expectation({qubits[0]: 'Z', qubits[1]: 'Z'}, lightcone=True)
+        assert len(converter._forward_inverse_metadata_cache) == 2
+
+    @pytest.mark.parametrize("circuit", CircuitMatrix.L1())
+    def test_forward_inverse_metadata_cache_separates_lightcone_modes(self, circuit):
+        converter = CircuitToEinsum(circuit, dtype='complex64', backend="numpy")
+        qubits = converter.qubits
+        if len(qubits) < 1:
+            pytest.skip("requires at least one qubit")
+
+        converter.expectation({qubits[0]: 'Z'}, lightcone=True)
+        assert len(converter._forward_inverse_metadata_cache) == 1
+
+        converter.expectation({qubits[0]: 'Z'}, lightcone=False)
+        assert len(converter._forward_inverse_metadata_cache) == 2
     
     @pytest.mark.parametrize("backend", ARRAY_BACKENDS)
     @pytest.mark.parametrize("dtype", ("float32", "float64", "complex64", "complex128"))

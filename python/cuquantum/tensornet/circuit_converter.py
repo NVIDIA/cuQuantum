@@ -156,6 +156,7 @@ class CircuitToEinsum:
             circuit, self.backend_name, self.dtype, check_diagonal=self.check_diagonal, decompose_gates=self.decompose_gates)
         self.n_qubits = len(self.qubits)
         self._metadata = None
+        self._forward_inverse_metadata_cache = {}
     
     @property
     def qubits(self):
@@ -434,21 +435,55 @@ class CircuitToEinsum:
                 - ``next_frontier``: The next mode label to use.
                 - ``inverse_gates``: A sequence of (operand, qubits) for the inverse circuit.
         """
-        parser = self.parser
-        if lightcone:
-            circuit = parser.get_lightcone_circuit(self.circuit, coned_qubits)
-            _, gates, gates_are_diagonal = parser.unfold_circuit(circuit, self.backend_name, self.dtype, decompose_gates=self.decompose_gates, check_diagonal=self.check_diagonal)
-            # in cirq, the lightcone circuit may only contain a subset of the original qubits
-            # It's imperative to use qubits=self.qubits to generate the input tensors
-            input_mode_labels, input_operands, qubits_frontier = circ_utils.parse_inputs(self.qubits, gates, gates_are_diagonal, self.dtype, self.backend_name)
-        else:
-            circuit = self.circuit
-            input_mode_labels, input_operands, qubits_frontier = self._get_inputs()
-            # avoid inplace modification on metadata
-            qubits_frontier = qubits_frontier.copy()
-        
-        next_frontier = max(qubits_frontier.values()) + 1
-        # inverse circuit
-        inverse_circuit  = parser.get_inverse_circuit(circuit)
-        _, inverse_gates, inverse_gates_diagonals = parser.unfold_circuit(inverse_circuit, self.backend_name, self.dtype, decompose_gates=self.decompose_gates, check_diagonal=self.check_diagonal)
-        return input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates, inverse_gates_diagonals
+        coned_qubits = tuple(coned_qubits)
+        coned_qubits_set = set(coned_qubits)
+        coned_qubits_key = tuple(i for i, qubit in enumerate(self.qubits) if qubit in coned_qubits_set)
+        cache_key = (lightcone, coned_qubits_key, self.decompose_gates, self.check_diagonal)
+
+        cached_metadata = self._forward_inverse_metadata_cache.get(cache_key)
+        if cached_metadata is None:
+            parser = self.parser
+            if lightcone:
+                circuit = parser.get_lightcone_circuit(self.circuit, coned_qubits)
+                _, gates, gates_are_diagonal = parser.unfold_circuit(
+                    circuit,
+                    self.backend_name,
+                    self.dtype,
+                    decompose_gates=self.decompose_gates,
+                    check_diagonal=self.check_diagonal,
+                )
+                # in cirq, the lightcone circuit may only contain a subset of the original qubits
+                # It's imperative to use qubits=self.qubits to generate the input tensors
+                input_mode_labels, input_operands, qubits_frontier = circ_utils.parse_inputs(
+                    self.qubits,
+                    gates,
+                    gates_are_diagonal,
+                    self.dtype,
+                    self.backend_name,
+                )
+            else:
+                circuit = self.circuit
+                input_mode_labels, input_operands, qubits_frontier = self._get_inputs()
+
+            next_frontier = max(qubits_frontier.values()) + 1
+            # inverse circuit
+            inverse_circuit  = parser.get_inverse_circuit(circuit)
+            _, inverse_gates, inverse_gates_diagonals = parser.unfold_circuit(
+                inverse_circuit,
+                self.backend_name,
+                self.dtype,
+                decompose_gates=self.decompose_gates,
+                check_diagonal=self.check_diagonal,
+            )
+            cached_metadata = (
+                input_mode_labels,
+                input_operands,
+                qubits_frontier.copy(),
+                next_frontier,
+                inverse_gates,
+                inverse_gates_diagonals,
+            )
+            self._forward_inverse_metadata_cache[cache_key] = cached_metadata
+
+        input_mode_labels, input_operands, qubits_frontier, next_frontier, inverse_gates, inverse_gates_diagonals = cached_metadata
+        return input_mode_labels, input_operands, qubits_frontier.copy(), next_frontier, inverse_gates, inverse_gates_diagonals
