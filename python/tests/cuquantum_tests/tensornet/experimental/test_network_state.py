@@ -973,4 +973,189 @@ class TestExpectationGradient:
         assert np.allclose(grad_rx_after_update, grad_rx_first, **tol), (
             "Rx gradient after update + 3rd backward: expected first (update_tensor_operator_gradient redirected output)"
         )
-        
+
+
+class TestAdjointGateCancellation:
+    """G followed by G† must act as identity on a pure state."""
+
+    @staticmethod
+    def _random_unitary(dim, rng):
+        mat = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+        q, _ = np.linalg.qr(mat)
+        return q.astype(np.complex128)
+
+    def test_single_qubit_gate_adjoint_cancels(self):
+        num_qubits = 3
+        dtype = "complex128"
+        rng = np.random.default_rng(12345)
+
+        G = self._random_unitary(2, rng)
+        assert not np.allclose(G, G.T), "gate must be non-symmetric to distinguish G† from G*"
+
+        with NetworkState((2,) * num_qubits, dtype=dtype) as ref_state:
+            for q in range(num_qubits):
+                u = self._random_unitary(2, rng)
+                ref_state.apply_tensor_operator((q,), u, unitary=True)
+            sv_ref = ref_state.compute_state_vector()
+
+        rng = np.random.default_rng(12345)
+        G = self._random_unitary(2, rng)
+
+        with NetworkState((2,) * num_qubits, dtype=dtype) as test_state:
+            for q in range(num_qubits):
+                u = self._random_unitary(2, rng)
+                test_state.apply_tensor_operator((q,), u, unitary=True)
+            test_state.apply_tensor_operator((0,), G, unitary=True)
+            test_state.apply_tensor_operator((0,), G, adjoint=True, unitary=True)
+            sv_test = test_state.compute_state_vector()
+
+        tol = get_contraction_tolerance(dtype)
+        np.testing.assert_allclose(sv_test, sv_ref, **tol,
+            err_msg="G† G should cancel: statevectors must match")
+
+    def test_two_qubit_gate_adjoint_cancels(self):
+        num_qubits = 3
+        dtype = "complex128"
+        rng = np.random.default_rng(99)
+
+        G = self._random_unitary(4, rng).reshape(2, 2, 2, 2)
+
+        with NetworkState((2,) * num_qubits, dtype=dtype) as ref_state:
+            for q in range(num_qubits):
+                u = self._random_unitary(2, rng)
+                ref_state.apply_tensor_operator((q,), u, unitary=True)
+            sv_ref = ref_state.compute_state_vector()
+
+        rng = np.random.default_rng(99)
+        G = self._random_unitary(4, rng).reshape(2, 2, 2, 2)
+
+        with NetworkState((2,) * num_qubits, dtype=dtype) as test_state:
+            for q in range(num_qubits):
+                u = self._random_unitary(2, rng)
+                test_state.apply_tensor_operator((q,), u, unitary=True)
+            test_state.apply_tensor_operator((0, 1), G, unitary=True)
+            test_state.apply_tensor_operator((0, 1), G, adjoint=True, unitary=True)
+            sv_test = test_state.compute_state_vector()
+
+        tol = get_contraction_tolerance(dtype)
+        np.testing.assert_allclose(sv_test, sv_ref, **tol,
+            err_msg="G† G should cancel: statevectors must match for 2-qubit gate")
+
+    def test_controlled_gate_adjoint_cancels(self):
+        num_qubits = 4
+        dtype = "complex128"
+        rng = np.random.default_rng(777)
+
+        G = self._random_unitary(2, rng)
+        assert not np.allclose(G, G.T), "gate must be non-symmetric to distinguish G† from G*"
+
+        with NetworkState((2,) * num_qubits, dtype=dtype) as ref_state:
+            for q in range(num_qubits):
+                u = self._random_unitary(2, rng)
+                ref_state.apply_tensor_operator((q,), u, unitary=True)
+            sv_ref = ref_state.compute_state_vector()
+
+        rng = np.random.default_rng(777)
+        G = self._random_unitary(2, rng)
+
+        with NetworkState((2,) * num_qubits, dtype=dtype) as test_state:
+            for q in range(num_qubits):
+                u = self._random_unitary(2, rng)
+                test_state.apply_tensor_operator((q,), u, unitary=True)
+            test_state.apply_tensor_operator((0,), G, control_modes=(1, 2), unitary=True)
+            test_state.apply_tensor_operator((0,), G, control_modes=(1, 2), adjoint=True, unitary=True)
+            sv_test = test_state.compute_state_vector()
+
+        tol = get_contraction_tolerance(dtype)
+        np.testing.assert_allclose(sv_test, sv_ref, **tol,
+            err_msg="controlled G† G should cancel: statevectors must match")
+
+
+class TestNetworkOperator:
+    """Tests for NetworkOperator with append_product: mode conventions, backend setup, and correctness."""
+
+    @staticmethod
+    def _random_unitary(dim, rng):
+        mat = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+        q, _ = np.linalg.qr(mat)
+        return q.astype(np.complex128)
+
+    def _compare_direct_vs_product(self, n_qubits, gate_modes, gate_tensor, seed):
+        """Compare apply_tensor_operator vs append_product for the same gate."""
+        dtype = "complex128"
+        I2 = np.eye(2, dtype=np.complex128)
+
+        rng = np.random.default_rng(seed)
+        with NetworkState((2,) * n_qubits, dtype=dtype) as ref:
+            ref.apply_tensor_operator((0,), I2, immutable=True, unitary=True)
+            for q in range(n_qubits):
+                u = self._random_unitary(2, rng)
+                ref.apply_tensor_operator((q,), u, unitary=True)
+            ref.apply_tensor_operator(gate_modes, gate_tensor, unitary=True)
+            sv_ref = ref.compute_state_vector()
+
+        rng = np.random.default_rng(seed)
+        with NetworkState((2,) * n_qubits, dtype=dtype) as test:
+            test.apply_tensor_operator((0,), I2, immutable=True, unitary=True)
+            for q in range(n_qubits):
+                u = self._random_unitary(2, rng)
+                test.apply_tensor_operator((q,), u, unitary=True)
+            op = NetworkOperator((2,) * n_qubits, dtype=dtype, options=test.options)
+            op.append_product(1.0 + 0j, (gate_modes,), [gate_tensor])
+            test.apply_network_operator(op, unitary=True)
+            sv_test = test.compute_state_vector()
+
+        return sv_ref, sv_test
+
+    def test_single_qubit_product_matches_direct(self):
+        """Single-qubit factor: append_product matches apply_tensor_operator."""
+        rng = np.random.default_rng(42)
+        G = self._random_unitary(2, rng)
+        sv_ref, sv_test = self._compare_direct_vs_product(3, (1,), G, seed=100)
+        tol = get_contraction_tolerance("complex128")
+        np.testing.assert_allclose(sv_test, sv_ref, **tol,
+            err_msg="single-qubit: apply_tensor_operator and append_product should agree")
+
+    def test_multi_qubit_product_matches_direct(self):
+        """2-qubit factor: append_product matches apply_tensor_operator."""
+        rng = np.random.default_rng(42)
+        G = self._random_unitary(4, rng).reshape(2, 2, 2, 2)
+        assert not np.allclose(G, G.transpose(1, 0, 3, 2)), \
+            "gate must not be invariant under qubit swap"
+        sv_ref, sv_test = self._compare_direct_vs_product(3, (0, 1), G, seed=100)
+        tol = get_contraction_tolerance("complex128")
+        np.testing.assert_allclose(sv_test, sv_ref, **tol,
+            err_msg="2-qubit: append_product must match apply_tensor_operator")
+
+    def test_apply_without_prior_gate(self):
+        """apply_network_operator as the first operation must not crash during backend setup."""
+        rng = np.random.default_rng(2)
+        op1 = rng.random((2, 2, 2, 2))
+        operator = NetworkOperator((2, 2), dtype='float64')
+        operator.append_product(1.0, [(0, 1)], [op1])
+        with NetworkState((2, 2), dtype='float64') as state:
+            state.apply_network_operator(operator)
+            sv = state.compute_state_vector()
+        assert sv.shape == (2, 2)
+
+    def test_expectation_multi_qubit_product(self):
+        """Expectation with multi-qubit tensor product must match numpy reference."""
+        rng = np.random.default_rng(2)
+        op0 = rng.random((2, 2))
+        op1 = rng.random((2, 2, 2, 2))
+
+        operator = NetworkOperator((2, 2), dtype='float64')
+        operator.append_product(1.0, [(0, 1)], [op1])
+
+        vac = np.zeros((2, 2), dtype='float64')
+        vac[0, 0] = 1
+        sv = np.einsum('ij,Ii->Ij', vac, op0)
+        expec_ref = np.einsum('ij,IJij,IJ->', sv, op1, sv.conj())
+
+        with NetworkState((2, 2), dtype='float64') as state:
+            state.apply_tensor_operator((0,), op0)
+            expec_test = state.compute_expectation(operator)
+
+        np.testing.assert_allclose(expec_test, expec_ref,
+            atol=1e-12, rtol=1e-12,
+            err_msg="expectation with multi-qubit tensor product must match numpy reference")

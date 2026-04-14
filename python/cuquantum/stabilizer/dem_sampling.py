@@ -308,14 +308,17 @@ class BitMatrixSparseSampler:
 
     @property
     def n_errors(self) -> int:
+        """Number of independent error mechanisms (rows of the binary matrix)."""
         return self._spec.n_errors
 
     @property
     def n_outcomes(self) -> int:
+        """Number of outcomes (columns of the binary matrix)."""
         return self._spec.n_outcomes
 
     @property
     def operands_package(self) -> str:
+        """Array package used for returned results (``"numpy"`` or ``"cupy"``)."""
         return self._opts.package if self._opts.package != "cuda" else "numpy"
 
     def sample(self, num_shots: int, *, seed: Optional[int] = None, stream: Stream = None) -> None:
@@ -511,9 +514,16 @@ class DEMSampler:
         self._sampler.sample(num_shots, seed=seed, stream=stream)
 
     def get_outcomes(self, bit_packed: bool = True) -> Array:
+        """Retrieve detector outcomes from the last :meth:`sample` call.
+
+        Args:
+            bit_packed: If ``True``, return a bit-packed ``uint8`` array;
+                otherwise return an unpacked dense ``uint8`` array.
+        """
         return self._sampler.get_outcomes(bit_packed=bit_packed)
 
     get_detector_samples = get_outcomes
 
-    def get_errors(self, **kwargs):
+    def get_errors(self, **kwargs) -> BitMatrixCSR:
+        """Retrieve sampled errors as :class:`BitMatrixCSR` from the last :meth:`sample` call."""
         return self._sampler.get_errors(**kwargs)

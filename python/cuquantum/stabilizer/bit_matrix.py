@@ -27,15 +27,21 @@ class BitMatrixCSR:
 
     All nonzero entries are implicitly 1.  Storage-agnostic: holds
     numpy or cupy arrays depending on how it was constructed.
-
-    Attributes:
-        row_offsets: Row pointer array, shape ``(num_rows + 1,)``, dtype int64.
-        col_indices: Column index array, shape ``(nnz,)``, dtype int64.
-        nnz: Number of nonzero entries.
-        shape: ``(num_rows, num_cols)`` of the logical matrix.
     """
 
     __slots__ = ("row_offsets", "col_indices", "nnz", "shape")
+
+    row_offsets: Array
+    """Row pointer array, shape ``(num_rows + 1,)``, dtype int64."""
+
+    col_indices: Array
+    """Column index array, shape ``(nnz,)``, dtype int64."""
+
+    nnz: int
+    """Number of nonzero entries."""
+
+    shape: Tuple[int, int]
+    """``(num_rows, num_cols)`` of the logical matrix."""
 
     def __init__(
         self,

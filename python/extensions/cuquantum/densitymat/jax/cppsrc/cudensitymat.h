@@ -64,7 +64,7 @@
 
 #define CUDENSITYMAT_MAJOR 0 //!< cuDensityMat major version.
 #define CUDENSITYMAT_MINOR 5 //!< cuDensityMat minor version.
-#define CUDENSITYMAT_PATCH 0 //!< cuDensityMat patch version.
+#define CUDENSITYMAT_PATCH 1 //!< cuDensityMat patch version.
 #define CUDENSITYMAT_VERSION (CUDENSITYMAT_MAJOR * 10000 + CUDENSITYMAT_MINOR * 100 + CUDENSITYMAT_PATCH)
 
 
@@ -297,7 +297,7 @@ typedef enum
   CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_TOLERANCE = 0,         ///< double: Convergence tolerance (default: 0, resolved to machine epsilon of the compute precision)
   CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_MAX_DIM = 1,         ///< int32_t: Maximum Krylov subspace dimension (default: 30)
   CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_MIN_BETA = 2,          ///< double: Minimum threshold for off-diagonal Hessenberg element h_{m+1,m} to proceed with Krylov expansion; below this indicates linear dependence or numerical breakdown (default: 0, resolved to machine epsilon of the compute precision)
-  CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_ADAPTIVE_STEP_SIZE = 3 ///< int32_t: Enable adaptive step size control (0=disabled, 1=enabled, default: 0)
+  CUDENSITYMAT_PROPAGATION_APPROACH_KRYLOV_ADAPTIVE_STEP_SIZE = 3 ///< int32_t: Enable adaptive step size control (0=disabled, 1=enabled, default: 1)
 } cudensitymatTimePropagationApproachKrylovConfigAttribute_t;
 
 /**

@@ -169,6 +169,20 @@ class TestWorkspaceDescriptor:
         assert ptr == d_mem.ptr
         assert size == mem_size
 
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    def test_workspace_set_memory_misaligned(self):
+        mem_size = 1024 * 1024
+        d_mem = cp.cuda.alloc(mem_size)
+
+        misaligned_ptr = d_mem.ptr + 1
+        with pytest.raises(cupp.cuPauliPropError):
+            cupp.workspace_set_memory(
+                self.handle, self.workspace,
+                cupp.Memspace.DEVICE,
+                cupp.WorkspaceKind.WORKSPACE_SCRATCH,
+                misaligned_ptr, mem_size - 1)
+
 
 @testing.parameterize(*testing.product({
     'num_qubits': (4, 8, 16),

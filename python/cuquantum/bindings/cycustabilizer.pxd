@@ -1,8 +1,8 @@
-# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 25.11.0 to 26.02.0, generator version 0.3.1.dev1380+g6ceff55cb.d20260311. Do not modify it directly.
+# This code was automatically generated across versions from 25.11.0 to 26.03.1, generator version 0.3.1.dev1520+g79061d461. Do not modify it directly.
 
 from libc.stdint cimport int32_t, int64_t, uint32_t, uint64_t
 from libc.stdio cimport FILE
