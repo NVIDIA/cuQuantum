@@ -1,4 +1,4 @@
-# Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -10,11 +10,14 @@ When NumPy operands are used, the stream must be a pointer to a CUDA stream or a
 The decomposition results are also NumPy ndarrays.
 """
 import numpy as np
-import cuda.core.experimental as ccx
+try:
+    from cuda.core import Device
+except ImportError:
+    from cuda.core.experimental import Device
 
 from cuquantum.tensornet import tensor
 
-d0 = ccx.Device(0)
+d0 = Device(0)
 d0.set_current()
 s = d0.create_stream()
 

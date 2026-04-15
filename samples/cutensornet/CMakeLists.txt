@@ -139,6 +139,7 @@ add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.reus
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.amplitudes" high_level/amplitudes_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.amplitudes" high_level/amplitudes_mcg_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.expectation" high_level/expectation_example.cu)
+add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.expectation_gradient" high_level/expectation_gradient_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.marginal" high_level/marginal_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.sampler" high_level/sampling_example.cu)
 add_cutensornet_example(cutensornet_examples "cuTENSORNet.example.tensornet.mps_amplitudes" high_level/mps_amplitudes_example.cu)

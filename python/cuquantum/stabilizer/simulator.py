@@ -4,11 +4,8 @@
 
 """Pythonic API for cuStabilizer FrameSimulator."""
 
-import logging
-from logging import Logger
 import numpy as np
-from typing import Optional, Tuple, Union, Any, Literal, Sequence
-from dataclasses import dataclass
+from typing import Optional, Tuple, Union, Literal
 
 try:
     import cupy as cp
@@ -18,11 +15,8 @@ except ImportError:
     xp = np
 
 from cuquantum.bindings import custabilizer as custab
-import cuda.bindings.runtime as cudart
 from nvmath import memory
 from nvmath.internal import utils as nvmath_utils
-from nvmath.internal.tensor_wrapper import maybe_register_package
-from nvmath.memory import BaseCUDAMemoryManager, BaseCUDAMemoryManagerAsync
 
 from nvmath.internal import tensor_wrapper
 
@@ -34,150 +28,8 @@ from .utils import (
     _get_memptr,
     _ptr_as_cupy,
 )
+from ._options import Options, _ManagedOptions
 from .pauli_table import PauliTable
-
-
-
-@dataclass
-class Options:
-    """A data class for providing options to the Frame Simulator.
-
-    This class follows the design pattern used in cuTensorNet's NetworkOptions
-    for consistent user experience across the cuQuantum package.
-
-    Attributes:
-        device_id : int
-            CUDA device ordinal (default: 0). Device 0 will be used if not specified.
-        handle : Optional[Any]
-            cuStabilizer library handle. A handle will be created if one is not provided.
-        logger : Optional[Logger]
-            Python Logger object. The root logger will be used if not provided.
-        allocator : Optional[BaseCUDAMemoryManager]
-            An object that supports the BaseCUDAMemoryManager protocol,
-            used to draw device memory. If not provided, cupy.cuda.alloc will be used.
-    """
-
-    device_id: int = 0
-    handle: Optional[Any] = None
-    logger: Optional[Logger] = None
-    allocator: Optional[BaseCUDAMemoryManager] = None
-
-
-class _ManagedOptions:
-    """A class for managing options that objects own."""
-
-    options: Options
-
-    handle: Any
-    logger: Logger
-
-    allocator: Union[BaseCUDAMemoryManagerAsync, BaseCUDAMemoryManager]
-    # Inputs and outputs
-    operands_package: str
-    operands_device_id: Union[int, Literal["cpu"]]
-    # Internal state
-    device_id: int
-    package: str
-
-    _buffers: set[Union[memory.MemoryPointer, memory._UnmanagedMemoryPointer]]
-
-    _own_handle: bool = False
-
-    def __init__(
-        self,
-        options: Options,
-        package: str,
-    ):
-        self.options = options
-        self._buffers = set()
-        self.logger = (
-            options.logger if options.logger is not None else logging.getLogger()
-        )
-        self.device_id = options.device_id
-        self.set_package(package)
-
-        if options.handle is not None:
-            self._own_handle = False
-            self.handle = options.handle
-        else:
-            self._own_handle = True
-            self.handle = custab.create()
-
-    def set_package(self, package: str):
-        self.package = package if package != "numpy" else "cuda"
-        maybe_register_package(self.package)
-        # Initialize the cuda context for first call.
-        self.allocator = (
-            self.options.allocator
-            if self.options.allocator is not None
-            else memory._MEMORY_MANAGER[self.package](self.device_id, self.logger)
-        )
-
-    def on_new_operands(
-        self, operands_package: str, operands_device_id: Union[int, str]
-    ):
-        self.operands_package = operands_package
-        self.operands_device_id = operands_device_id
-        maybe_register_package(operands_package)
-        if isinstance(operands_device_id, str):
-            if operands_device_id != "cpu":
-                raise ValueError(f"Invalid operands_device_id: {operands_device_id}")
-        else:
-            if operands_device_id != self.device_id:
-                raise ValueError(
-                    f"Operands device ID({operands_device_id}) does"
-                    f" not match options.device_id({self.options.device_id})"
-                )
-        self.set_package(operands_package)
-
-    def allocate_memory(
-        self, num_bytes: int, stream: Stream = None, reset=False
-    ) -> memory.MemoryPointer:
-        stream_holder = nvmath_utils.get_or_create_stream(
-            self.device_id, stream, self.package
-        )
-        self.logger.debug(f"Allocating {num_bytes} bytes on device {self.device_id}")
-        with nvmath_utils.device_ctx(self.device_id), stream_holder.ctx:
-            if isinstance(self.allocator, memory.BaseCUDAMemoryManagerAsync):
-                ptr = self.allocator.memalloc_async(num_bytes, stream_holder.obj)
-            else:
-                ptr = self.allocator.memalloc(num_bytes)  # type: ignore[union-attr]
-            if reset:
-                cudart.cudaMemset(ptr.device_ptr, 0, num_bytes)
-            self._buffers.add(ptr)
-            return ptr
-
-    def allocate_tensor(
-        self, shape: Sequence[int], stream: Stream = None, reset=False
-    ) -> tensor_wrapper.TensorHolder:
-        stream_holder = nvmath_utils.get_or_create_stream(
-            self.device_id, stream, self.package
-        )
-        holderType = tensor_wrapper._TENSOR_TYPES[self.package]
-        tensor = holderType.empty(
-            shape, device_id=self.device_id, stream_holder=stream_holder
-        )
-        if reset:
-            if self.package == "numpy":
-                raise ValueError("Cannot reset numpy tensors")
-            cudart.cudaMemset(tensor.data_ptr, 0, tensor.size)
-        return tensor
-
-    def get_or_create_stream(self, stream: Stream = None) -> nvmath_utils.StreamHolder:
-        return nvmath_utils.get_or_create_stream(self.device_id, stream, self.package)
-
-    def __del__(self):
-        self.logger.debug("Options destructor called")
-        if self._own_handle:
-            custab.destroy(self.handle)
-        for ptr in self._buffers:
-            if isinstance(ptr, memory._UnmanagedMemoryPointer):
-                self.logger.debug(
-                    f"Freeing unmanaged memory pointer {ptr.device_ptr:x}"
-                )
-                ptr.free()
-            else:
-                continue
 
 
 class Circuit:
@@ -264,21 +116,6 @@ class FrameSimulator:
     This class simulates quantum circuits by tracking Pauli frame errors.
     It manages the X and Z bit tables, measurement table, and applies circuits.
 
-    Args:
-        num_qubits: Number of qubits in the simulation.
-        num_paulis: Number of Pauli frame samples (shots).
-        num_measurements: Number of measurements in the circuit (default: 0).
-        randomize_measurements: Whether to randomize frame after measurements (default: `True`).
-        x_table: Optional initial X bit table. If provided, memory is not owned by simulator.
-        z_table: Optional initial Z bit table. If provided, memory is not owned by simulator.
-        measurement_table: Optional initial measurement table.
-        bit_packed: Whether the input tables are in bit-packed format.
-        package: Package to use for the tables. ``"numpy"`` or ``"cupy"``. This has
-                    lower priority than the package of the input tables, if any.
-        random_seed: Random seed for the simulation (default: None).
-        stream: Optional CUDA stream.
-        options: Optional Options configuration.
-
     Attributes:
         num_qubits: Number of qubits.
         num_paulis: Number of Pauli samples.
@@ -318,13 +155,11 @@ class FrameSimulator:
         """Initialize a FrameSimulator.
 
         If input bit tables are not provided, the simulator will allocate internal memory and own it.
-        The simulator converts inputs and owns the converted tables if the input is
 
-        1. a :py:class:`numpy.ndarray` and ``bit_packed=False``
-        2. a :py:class:`cupy.ndarray` and ``bit_packed=False``
-
-        If input is a :py:class:`cupy.ndarray` and ``bit_packed=True``, the simulator will not allocate internal memory
-        and will use the provided tables.
+        If input is a :py:class:`cupy.ndarray` and ``bit_packed=True``, the simulator will not allocate
+        internal memory and will use the provided tables directly (zero-copy).
+        In all other cases (numpy input, or ``bit_packed=False``) the simulator
+        creates an internal copy and owns it.
 
         Args:
             num_qubits: Number of qubits to simulate.
@@ -332,14 +167,19 @@ class FrameSimulator:
             num_measurements: Number of measurements to track.
             num_detectors: Number of detector instructions.
             randomize_measurements: Randomize frame after measurement gates.
+                When enabled and no x/z input tables are provided, the initial Z frame
+                is randomized with Bernoulli(0.5) samples to model stabilizer
+                randomization.
+                When input tables are provided, no initial randomization is performed;
+                the caller is responsible for the initial frame state.
             x_table: Pre-allocated X bit table.
             z_table: Pre-allocated Z bit table.
             measurement_table: Pre-allocated measurement table.
             bit_packed: Whether the input tables are in bit-packed format.
             package: Package to use for the tables, either ``"numpy"`` or ``"cupy"``. This has
-                    lower priority than the package of the input tables, if any.
+                lower priority than the package of the input tables, if any.
             seed: Seed for a generator that will produce default seed for every
-                  call of :meth:`apply`.
+                call of :meth:`apply`.
             stream: Optional CUDA stream.
             options: Optional Options configuration.
         """
@@ -359,7 +199,6 @@ class FrameSimulator:
 
         # Calculate stride: must be multiple of 4 bytes (32 bits)
         self._table_stride_major = ((num_paulis + 31) // 32) * 4
-        # else:
         self._options = _ManagedOptions(options, package)
         if x_table is None and z_table is None:
             # No inputs
@@ -378,9 +217,8 @@ class FrameSimulator:
             self._options.logger.debug(
                 f"Allocated X({self._x_table_ptr.device_ptr:x}) and Z({self._z_table_ptr.device_ptr:x}) tables"
             )
-        else:
-            # Inputs provided
-            self.set_input_tables(x=x_table, z=z_table, bit_packed=bit_packed)
+            if randomize_measurements and num_qubits > 0:
+                self._randomize_z_table(stream)
         if measurement_table is None:
             mem_bytes = (num_measurements + num_detectors) * self._table_stride_major
             self._options.logger.debug(
@@ -389,6 +227,12 @@ class FrameSimulator:
             self._measurement_table_ptr = self._options.allocate_memory(
                 mem_bytes, stream
             )
+
+        # Attach user-provided tables (does not allocate, skips None args)
+        self.set_input_tables(
+            x=x_table, z=z_table, m=measurement_table,
+            bit_packed=bit_packed, stream=stream,
+        )
 
         # Create frame simulator handle
         self._frame_simulator = custab.create_frame_simulator(
@@ -427,6 +271,24 @@ class FrameSimulator:
         """Return the underlying C handle object."""
         return self._options.handle
 
+    def _randomize_z_table(self, stream: Stream = None):
+        """Randomize Z frame with Bernoulli(0.5) samples, matching stim's initial stabilizer randomization."""
+        num_samples_padded = ((self.num_paulis + 31) // 32) * 32
+        init_seed = int(self._rng.integers(0, 2**63, dtype=np.uint64))
+        stream_holder = self._options.get_or_create_stream(stream)
+        with nvmath_utils.device_ctx(self._options.device_id), stream_holder.ctx:
+            probs_d = xp.full(self.num_qubits, 0.5, dtype=np.float64)
+            custab.sample_prob_array(
+                self.handle,
+                num_samples_padded,
+                self.num_qubits,
+                probs_d.data.ptr,
+                init_seed,
+                _get_memptr(self._z_table_ptr),
+                stream_holder.ptr,
+            )
+        self._logger.debug("Randomized initial Z frame for stabilizer randomization")
+
     def apply(
         self,
         circuit: Circuit,
@@ -439,8 +301,7 @@ class FrameSimulator:
             circuit: Circuit object to apply.
             seed: Optional random seed for measurement randomization.
                         If provided, overrides the seed set during initialization.
-            randomize_measurements: Optional boolean to randomize measurements.
-                                   If provided, overrides the setting from initialization.
+            stream: Optional CUDA stream for the operation.
 
         Raises:
             ValueError: If circuit has more qubits than simulator.
@@ -540,7 +401,7 @@ class FrameSimulator:
             (2, 1024)
         """
         bit_shape = (self.num_qubits, self._table_stride_major)
-        bit_size = bit_shape[0] * bit_shape[1] * 4
+        bit_size = bit_shape[0] * bit_shape[1]
         x = _ptr_as_cupy(self._x_table_ptr, bit_size, shape=bit_shape, dtype="uint8")
         z = _ptr_as_cupy(self._z_table_ptr, bit_size, shape=bit_shape, dtype="uint8")
         self._logger.debug(
@@ -636,8 +497,7 @@ class FrameSimulator:
         num_bits = (xz_len, xz_len, m_len)
         new_operands = tuple(t for t in tables if t is not None)
         if len(new_operands) == 0:
-            operands_package = "numpy"
-            operands_device_id = "cpu"
+            return
         else:
             tables_wrap = tensor_wrapper.wrap_operands(new_operands)
             operands_package = nvmath_utils.get_operands_package(tables_wrap)

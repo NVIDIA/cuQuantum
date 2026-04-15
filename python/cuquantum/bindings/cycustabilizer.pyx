@@ -1,8 +1,8 @@
-# Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2024-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 25.11.0. Do not modify it directly.
+# This code was automatically generated across versions from 25.11.0 to 26.03.1, generator version 0.3.1.dev1520+g79061d461. Do not modify it directly.
 
 from ._internal cimport custabilizer as _custabilizer
 
@@ -49,3 +49,23 @@ cdef custabilizerStatus_t custabilizerDestroyFrameSimulator(custabilizerFrameSim
 
 cdef custabilizerStatus_t custabilizerFrameSimulatorApplyCircuit(const custabilizerHandle_t handle, custabilizerFrameSimulator_t frameSimulator, const custabilizerCircuit_t circuit, int randomizeFrameAfterMeasurement, uint64_t seed, custabilizerBitInt_t* xTableDevice, custabilizerBitInt_t* zTableDevice, custabilizerBitInt_t* mTableDevice, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _custabilizer._custabilizerFrameSimulatorApplyCircuit(handle, frameSimulator, circuit, randomizeFrameAfterMeasurement, seed, xTableDevice, zTableDevice, mTableDevice, stream)
+
+
+cdef custabilizerStatus_t custabilizerSampleProbArray(custabilizerHandle_t handle, int64_t numSamples, int64_t numProbs, const double* probs, uint64_t seed, custabilizerBitInt_t* samples, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _custabilizer._custabilizerSampleProbArray(handle, numSamples, numProbs, probs, seed, samples, stream)
+
+
+cdef custabilizerStatus_t custabilizerSampleProbArraySparsePrepare(custabilizerHandle_t handle, int64_t numSamples, int64_t numProbs, size_t* workspaceSize) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _custabilizer._custabilizerSampleProbArraySparsePrepare(handle, numSamples, numProbs, workspaceSize)
+
+
+cdef custabilizerStatus_t custabilizerSampleProbArraySparseCompute(custabilizerHandle_t handle, int64_t numSamples, int64_t numProbs, const double* probs, uint64_t seed, uint64_t* nnz, uint64_t* columnIndices, uint64_t* rowOffsets, void* workspace, size_t workspaceSize, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _custabilizer._custabilizerSampleProbArraySparseCompute(handle, numSamples, numProbs, probs, seed, nnz, columnIndices, rowOffsets, workspace, workspaceSize, stream)
+
+
+cdef custabilizerStatus_t custabilizerGF2SparseDenseMatrixMultiply(custabilizerHandle_t handle, uint64_t m, uint64_t n, uint64_t k, uint64_t nnz, const uint64_t* columnIndices, const uint64_t* rowOffsets, const custabilizerBitInt_t* B, int32_t beta, custabilizerBitInt_t* C, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _custabilizer._custabilizerGF2SparseDenseMatrixMultiply(handle, m, n, k, nnz, columnIndices, rowOffsets, B, beta, C, stream)
+
+
+cdef custabilizerStatus_t custabilizerGF2SparseSparseMatrixMultiply(custabilizerHandle_t handle, uint64_t m, uint64_t n, uint64_t k, const uint64_t* aColumnIndices, const uint64_t* aRowOffsets, uint64_t bNNZ, const uint64_t* bColumnIndices, const uint64_t* bRowOffsets, int32_t beta, custabilizerBitInt_t* C, cudaStream_t stream) except?_CUSTABILIZERSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _custabilizer._custabilizerGF2SparseSparseMatrixMultiply(handle, m, n, k, aColumnIndices, aRowOffsets, bNNZ, bColumnIndices, bRowOffsets, beta, C, stream)

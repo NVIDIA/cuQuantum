@@ -1,8 +1,8 @@
-# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 25.11.0 to 26.01.0. Do not modify it directly.
+# This code was automatically generated across versions from 25.11.0 to 26.03.1, generator version 0.3.1.dev1477+g125b4cb42. Do not modify it directly.
 
 from ._internal cimport cupauliprop as _cupauliprop
 
@@ -119,16 +119,16 @@ cdef cupaulipropStatus_t cupaulipropPauliExpansionViewPrepareTraceWithExpansionV
     return _cupauliprop._cupaulipropPauliExpansionViewPrepareTraceWithExpansionView(handle, view1, view2, maxWorkspaceSize, workspace)
 
 
-cdef cupaulipropStatus_t cupaulipropPauliExpansionViewComputeTraceWithExpansionView(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view1, const cupaulipropPauliExpansionView_t view2, int32_t takeAdjoint1, void* trace, cupaulipropWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
-    return _cupauliprop._cupaulipropPauliExpansionViewComputeTraceWithExpansionView(handle, view1, view2, takeAdjoint1, trace, workspace, stream)
+cdef cupaulipropStatus_t cupaulipropPauliExpansionViewComputeTraceWithExpansionView(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view1, const cupaulipropPauliExpansionView_t view2, int32_t takeAdjoint1, void* traceSignificand, double* traceExponent, cupaulipropWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropPauliExpansionViewComputeTraceWithExpansionView(handle, view1, view2, takeAdjoint1, traceSignificand, traceExponent, workspace, stream)
 
 
 cdef cupaulipropStatus_t cupaulipropPauliExpansionViewPrepareTraceWithZeroState(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view, int64_t maxWorkspaceSize, cupaulipropWorkspaceDescriptor_t workspace) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cupauliprop._cupaulipropPauliExpansionViewPrepareTraceWithZeroState(handle, view, maxWorkspaceSize, workspace)
 
 
-cdef cupaulipropStatus_t cupaulipropPauliExpansionViewComputeTraceWithZeroState(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view, void* trace, cupaulipropWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
-    return _cupauliprop._cupaulipropPauliExpansionViewComputeTraceWithZeroState(handle, view, trace, workspace, stream)
+cdef cupaulipropStatus_t cupaulipropPauliExpansionViewComputeTraceWithZeroState(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view, void* traceSignificand, double* traceExponent, cupaulipropWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropPauliExpansionViewComputeTraceWithZeroState(handle, view, traceSignificand, traceExponent, workspace, stream)
 
 
 cdef cupaulipropStatus_t cupaulipropPauliExpansionViewPrepareOperatorApplication(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t viewIn, const cupaulipropQuantumOperator_t quantumOperator, cupaulipropSortOrder_t sortOrder, int32_t keepDuplicates, int32_t numTruncationStrategies, const cupaulipropTruncationStrategy_t truncationStrategies[], int64_t maxWorkspaceSize, int64_t* requiredXZBitsBufferSize, int64_t* requiredCoefBufferSize, cupaulipropWorkspaceDescriptor_t workspace) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
@@ -159,10 +159,6 @@ cdef cupaulipropStatus_t cupaulipropCreatePauliNoiseChannelOperator(const cupaul
     return _cupauliprop._cupaulipropCreatePauliNoiseChannelOperator(handle, numQubits, qubitIndices, probabilities, oper)
 
 
-cdef cupaulipropStatus_t cupaulipropQuantumOperatorGetKind(const cupaulipropHandle_t handle, const cupaulipropQuantumOperator_t oper, cupaulipropQuantumOperatorKind_t* kind) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
-    return _cupauliprop._cupaulipropQuantumOperatorGetKind(handle, oper, kind)
-
-
 cdef cupaulipropStatus_t cupaulipropDestroyOperator(cupaulipropQuantumOperator_t oper) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cupauliprop._cupaulipropDestroyOperator(oper)
 
@@ -181,3 +177,35 @@ cdef cupaulipropStatus_t cupaulipropPauliExpansionViewExecuteSort(const cupaulip
 
 cdef cupaulipropStatus_t cupaulipropCreateAmplitudeDampingChannelOperator(const cupaulipropHandle_t handle, int32_t qubitIndex, double dampingProb, double exciteProb, cupaulipropQuantumOperator_t* oper) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cupauliprop._cupaulipropCreateAmplitudeDampingChannelOperator(handle, qubitIndex, dampingProb, exciteProb, oper)
+
+
+cdef cupaulipropStatus_t cupaulipropPauliExpansionViewPrepareTraceWithExpansionViewBackwardDiff(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view1, const cupaulipropPauliExpansionView_t view2, int64_t maxWorkspaceSize, int64_t* requiredXZBitsBufferSize1, int64_t* requiredCoefBufferSize1, int64_t* requiredXZBitsBufferSize2, int64_t* requiredCoefBufferSize2, cupaulipropWorkspaceDescriptor_t workspace) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropPauliExpansionViewPrepareTraceWithExpansionViewBackwardDiff(handle, view1, view2, maxWorkspaceSize, requiredXZBitsBufferSize1, requiredCoefBufferSize1, requiredXZBitsBufferSize2, requiredCoefBufferSize2, workspace)
+
+
+cdef cupaulipropStatus_t cupaulipropPauliExpansionViewComputeTraceWithExpansionViewBackwardDiff(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view1, const cupaulipropPauliExpansionView_t view2, int32_t takeAdjoint1, const void* cotangentTraceSignificand, const double* cotangentTraceExponent, cupaulipropPauliExpansion_t cotangentExpansion1, cupaulipropPauliExpansion_t cotangentExpansion2, cupaulipropWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropPauliExpansionViewComputeTraceWithExpansionViewBackwardDiff(handle, view1, view2, takeAdjoint1, cotangentTraceSignificand, cotangentTraceExponent, cotangentExpansion1, cotangentExpansion2, workspace, stream)
+
+
+cdef cupaulipropStatus_t cupaulipropPauliExpansionViewPrepareTraceWithZeroStateBackwardDiff(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view, int64_t maxWorkspaceSize, int64_t* requiredXZBitsBufferSize, int64_t* requiredCoefBufferSize, cupaulipropWorkspaceDescriptor_t workspace) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropPauliExpansionViewPrepareTraceWithZeroStateBackwardDiff(handle, view, maxWorkspaceSize, requiredXZBitsBufferSize, requiredCoefBufferSize, workspace)
+
+
+cdef cupaulipropStatus_t cupaulipropPauliExpansionViewComputeTraceWithZeroStateBackwardDiff(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t view, const void* cotangentTraceSignificand, const double* cotangentTraceExponent, cupaulipropPauliExpansion_t cotangentExpansion, cupaulipropWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropPauliExpansionViewComputeTraceWithZeroStateBackwardDiff(handle, view, cotangentTraceSignificand, cotangentTraceExponent, cotangentExpansion, workspace, stream)
+
+
+cdef cupaulipropStatus_t cupaulipropPauliExpansionViewPrepareOperatorApplicationBackwardDiff(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t viewIn, const cupaulipropPauliExpansionView_t cotangentOut, const cupaulipropQuantumOperator_t quantumOperator, cupaulipropSortOrder_t sortOrder, int32_t keepDuplicates, int32_t numTruncationStrategies, const cupaulipropTruncationStrategy_t truncationStrategies[], int64_t maxWorkspaceSize, int64_t* requiredXZBitsBufferSize, int64_t* requiredCoefBufferSize, cupaulipropWorkspaceDescriptor_t workspace) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropPauliExpansionViewPrepareOperatorApplicationBackwardDiff(handle, viewIn, cotangentOut, quantumOperator, sortOrder, keepDuplicates, numTruncationStrategies, truncationStrategies, maxWorkspaceSize, requiredXZBitsBufferSize, requiredCoefBufferSize, workspace)
+
+
+cdef cupaulipropStatus_t cupaulipropPauliExpansionViewComputeOperatorApplicationBackwardDiff(const cupaulipropHandle_t handle, const cupaulipropPauliExpansionView_t viewIn, const cupaulipropPauliExpansionView_t cotangentOut, cupaulipropPauliExpansion_t cotangentIn, cupaulipropQuantumOperator_t quantumOperator, int32_t adjoint, cupaulipropSortOrder_t sortOrder, int32_t keepDuplicates, int32_t numTruncationStrategies, const cupaulipropTruncationStrategy_t truncationStrategies[], cupaulipropWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropPauliExpansionViewComputeOperatorApplicationBackwardDiff(handle, viewIn, cotangentOut, cotangentIn, quantumOperator, adjoint, sortOrder, keepDuplicates, numTruncationStrategies, truncationStrategies, workspace, stream)
+
+
+cdef cupaulipropStatus_t cupaulipropQuantumOperatorAttachCotangentBuffer(const cupaulipropHandle_t handle, cupaulipropQuantumOperator_t oper, void* cotangentBuffer, int64_t cotangentBufferSize, cudaDataType_t dataType, cupaulipropMemspace_t location) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropQuantumOperatorAttachCotangentBuffer(handle, oper, cotangentBuffer, cotangentBufferSize, dataType, location)
+
+
+cdef cupaulipropStatus_t cupaulipropQuantumOperatorGetCotangentBuffer(const cupaulipropHandle_t handle, const cupaulipropQuantumOperator_t oper, void** cotangentBuffer, int64_t* cotangentBufferNumElements, cudaDataType_t* dataType, cupaulipropMemspace_t* location) except?_CUPAULIPROPSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cupauliprop._cupaulipropQuantumOperatorGetCotangentBuffer(handle, oper, cotangentBuffer, cotangentBufferNumElements, dataType, location)

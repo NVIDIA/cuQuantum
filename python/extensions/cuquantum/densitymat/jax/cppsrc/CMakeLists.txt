@@ -41,22 +41,6 @@ endif()
 set(pybind11_DIR ${pybind11_INCLUDE_DIR}/../share/cmake/pybind11)
 find_package(pybind11 REQUIRED)
 
-# FIXME: This should be made more robust and moved to setup.py.
-execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import os; import cuquantum; print(os.path.dirname(cuquantum.__file__))"
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    OUTPUT_VARIABLE CUQUANTUM_PYTHON_ROOT
-)
-
-if(DEFINED ENV{CUDENSITYMAT_ROOT})
-    set(CUDENSITYMAT_ROOT $ENV{CUDENSITYMAT_ROOT})
-else()
-    set(CUDENSITYMAT_ROOT ${CUQUANTUM_PYTHON_ROOT})
-endif()
-
-message(STATUS "cuQuantum Python directory: ${CUQUANTUM_PYTHON_ROOT}")
-message(STATUS "cuDensityMat directory: ${CUDENSITYMAT_ROOT}")
-
 pybind11_add_module(
     ${PROJECT_NAME}
     cudensitymat_jax.cpp
@@ -68,22 +52,8 @@ target_include_directories(
     ${CUDAToolkit_INCLUDE_DIRS}
     ${XLA_DIR}
     ${pybind11_INCLUDE_DIR}
-    ${CUDENSITYMAT_ROOT}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
-
-find_library(
-    CUDENSITYMAT_LIBRARY
-    NAMES libcudensitymat.so
-          libcudensitymat.so.0
-    HINTS ${CUDENSITYMAT_ROOT}/lib64
-          ${CUDENSITYMAT_ROOT}/lib
-)
-
-if(NOT CUDENSITYMAT_LIBRARY)
-    message(FATAL_ERROR "cuDensityMat library not found")
-else()
-    message(STATUS "cuDensityMat library: ${CUDENSITYMAT_LIBRARY}")
-endif()
 
 set_target_properties(
     ${PROJECT_NAME}
@@ -95,5 +65,4 @@ target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
     CUDA::cudart_static
-    ${CUDENSITYMAT_LIBRARY}
 )

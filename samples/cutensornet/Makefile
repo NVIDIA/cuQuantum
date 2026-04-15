@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -41,6 +41,7 @@ all: check-env
 	${CUDA_PATH}/bin/nvcc high_level/amplitudes_example.cu -o amplitudes_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/amplitudes_mcg_example.cu -o amplitudes_mcg_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/expectation_example.cu -o expectation_example ${CXX_FLAGS}
+	${CUDA_PATH}/bin/nvcc high_level/expectation_gradient_example.cu -o expectation_gradient_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/marginal_example.cu -o marginal_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/sampling_example.cu -o sampling_example ${CXX_FLAGS}
 	${CUDA_PATH}/bin/nvcc high_level/mps_amplitudes_example.cu -o mps_amplitudes_example ${CXX_FLAGS}
@@ -90,6 +91,7 @@ clean:
 	rm -f amplitudes_example amplitudes_example.o
 	rm -f amplitudes_mcg_example amplitudes_mcg_example.o
 	rm -f expectation_example expectation_example.o
+	rm -f expectation_gradient_example expectation_gradient_example.o
 	rm -f marginal_example marginal_example.o
 	rm -f sampling_example sampling_example.o
 	rm -f mps_amplitudes_example mps_amplitudes_example.o

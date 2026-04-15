@@ -1,8 +1,8 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.11.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 26.03.1, generator version 0.3.1.dev1503+gab711511a.d20260402. Do not modify it directly.
 # This layer exposes the C header to Cython as-is.
 
 from libc.stdint cimport int32_t, int64_t, uint32_t, uint64_t
@@ -35,7 +35,8 @@ ctypedef enum custatevecStatus_t "custatevecStatus_t":
     CUSTATEVEC_STATUS_SYSTEM_ERROR "CUSTATEVEC_STATUS_SYSTEM_ERROR" = 17
     CUSTATEVEC_STATUS_CUDA_ERROR "CUSTATEVEC_STATUS_CUDA_ERROR" = 18
     CUSTATEVEC_STATUS_NUMERICAL_ERROR "CUSTATEVEC_STATUS_NUMERICAL_ERROR" = 19
-    CUSTATEVEC_STATUS_MAX_VALUE "CUSTATEVEC_STATUS_MAX_VALUE" = 20
+    CUSTATEVEC_STATUS_RESOURCES_NOT_ACCESSIBLE "CUSTATEVEC_STATUS_RESOURCES_NOT_ACCESSIBLE" = 20
+    CUSTATEVEC_STATUS_MAX_VALUE "CUSTATEVEC_STATUS_MAX_VALUE" = 21
     _CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR "_CUSTATEVECSTATUS_T_INTERNAL_LOADING_ERROR" = -42
 
 ctypedef enum custatevecPauli_t "custatevecPauli_t":
@@ -137,6 +138,7 @@ ctypedef struct custatevecDeviceMemHandler_t 'custatevecDeviceMemHandler_t':
     int (*device_alloc)(void*, void**, size_t, cudaStream_t)
     int (*device_free)(void*, void*, size_t, cudaStream_t)
     char name[64]
+
 ctypedef void (*custatevecLoggerCallback_t 'custatevecLoggerCallback_t')(
     int32_t logLevel,
     const char* functionName,
@@ -159,6 +161,7 @@ ctypedef struct custatevecSVSwapParameters_t 'custatevecSVSwapParameters_t':
     uint32_t nSegmentBits
     custatevecDataTransferType_t dataTransferType
     custatevecIndex_t transferSize
+
 
 
 ###############################################################################

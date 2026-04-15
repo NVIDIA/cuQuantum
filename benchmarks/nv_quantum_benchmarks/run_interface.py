@@ -61,6 +61,7 @@ class BenchCircuitRunner:
         self.nwarmups = kwargs.pop("nwarmups")
         self.nrepeats = kwargs.pop("nrepeats")
         self.new_circ = kwargs.pop("new")
+        self.reuse_artifacts = kwargs.pop("reuse")
 
         self.cpu_only = self.backend in CPU_BACKENDS
 
@@ -70,8 +71,8 @@ class BenchCircuitRunner:
             self.pauli = list(''.join(kwargs.pop("pauli_string").upper().split()))
             if len(set(self.pauli) - set(['I', 'X', 'Y', 'Z'])) > 0:
                 raise ValueError('Invalid Pauli string')
-            # Warn that these should not have been specified
-            if kwargs.pop("pauli_seed") is not None:
+            # Warn only if they explicitly passed a non-default seed with pauli_string
+            if kwargs.pop("pauli_seed") != 0:
                 logger.warning('Warning: pauli_seed should not be specified with pauli_string; ignoring seed')
             if kwargs.pop("pauli_identity_fraction") is not None:
                 logger.warning('Warning: pauli_identity_fraction should not be specified with pauli_string; ignoring identity fraction')
@@ -97,7 +98,8 @@ class BenchCircuitRunner:
                 # Pauli identity fraction is invalid is an actual error
                 if isinstance(e, ValueError):
                     raise(e) from None
-                # Priority 3: Default behavior if pauli_seed or pauli_identity_fraction is missing
+                # Priority 3: Fallback (e.g. kwargs missing pauli_seed); use default seed for reproducibility
+                random.seed(0)
                 self.pauli = random.choices(('I', 'X', 'Y', 'Z'), k=self._nqubits)
                 random.shuffle(self.pauli)
 
@@ -361,7 +363,11 @@ class BenchCircuitRunner:
             self.benchmark_data[k] = preprocess_data[k]
 
         # run benchmark
-        perf_time, cuda_time, post_time, post_process = self.timer(backend, circuit, self.nshots) # nsamples -> nshots
+        if self.reuse_artifacts and self.frontend == "cudaq" and "0.14.0" in self.extract_frontend_version():
+            with cudaq.cudaq_runtime.reuse_compiler_artifacts():
+                perf_time, cuda_time, post_time, post_process = self.timer(backend, circuit, self.nshots) # nsamples -> nshots
+        else:
+            perf_time, cuda_time, post_time, post_process = self.timer(backend, circuit, self.nshots) # nsamples -> nshots
 
         # report the result
         run_env = gen_run_env(gpu_device_properties, self.cpu_only)
@@ -386,6 +392,7 @@ class BenchCircuitRunner:
                      |_ frontend (part of sim_config)
                          |_ name
                          |_ version
+                         |_ ... (all frontend-specific options go here)
                      |_ backend (part of sim_config)
                          |_ name
                          |_ version
@@ -439,6 +446,9 @@ class BenchCircuitRunner:
         })
 
         # frontend-specific options
+        if self.frontend == "cudaq":
+            sim_config["frontend"]["reuse_compiler_artifacts"] = self.reuse_artifacts
+
         # TODO: record "measure"?
 
         if self.compute_mode == 'expectation':

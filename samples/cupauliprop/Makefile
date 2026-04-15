@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES.
+# Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -27,11 +27,13 @@ endif
 
 CXX_FLAGS = -std=c++17 $(INCLUDE_DIRS) $(LIBRARY_DIRS) $(ARCH_FLAGS)
 
-all: check-env
-	${CUDA_PATH}/bin/nvcc kicked_ising_example.cpp ${CXX_FLAGS} -o kicked_ising_example
+all: check-env kicked_ising_example kicked_ising_backward_diff_example
 
 kicked_ising_example:
 	${CUDA_PATH}/bin/nvcc kicked_ising_example.cpp ${CXX_FLAGS} -o kicked_ising_example
+
+kicked_ising_backward_diff_example:
+	${CUDA_PATH}/bin/nvcc kicked_ising_backward_diff_example.cpp ${CXX_FLAGS} -o kicked_ising_backward_diff_example
 
 check-env:
 	@ echo "" && \
@@ -47,4 +49,5 @@ check-env:
 
 clean:
 	rm -f \
-		kicked_ising_example kicked_ising_example.o
+		kicked_ising_example kicked_ising_example.o \
+		kicked_ising_backward_diff_example kicked_ising_backward_diff_example.o

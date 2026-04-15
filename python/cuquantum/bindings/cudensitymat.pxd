@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.01.0. Do not modify it directly.
+# This code was automatically generated with version 26.03.1, generator version 0.3.1.dev1508+g784d12dd6.d20260402. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -17,12 +17,16 @@ ctypedef cudensitymatHandle_t Handle
 ctypedef cudensitymatState_t State
 ctypedef cudensitymatElementaryOperator_t ElementaryOperator
 ctypedef cudensitymatMatrixOperator_t MatrixOperator
+ctypedef cudensitymatMatrixProductOperator_t MatrixProductOperator
 ctypedef cudensitymatOperatorTerm_t OperatorTerm
 ctypedef cudensitymatOperator_t Operator
 ctypedef cudensitymatOperatorAction_t OperatorAction
 ctypedef cudensitymatExpectation_t Expectation
 ctypedef cudensitymatOperatorSpectrum_t OperatorSpectrum
 ctypedef cudensitymatWorkspaceDescriptor_t WorkspaceDescriptor
+ctypedef cudensitymatTimePropagation_t TimePropagation
+ctypedef cudensitymatTimePropagationApproachKrylovConfig_t TimePropagationApproachKrylovConfig
+ctypedef cudensitymatTimePropagationScopeSplitTDVPConfig_t TimePropagationScopeSplitTDVPConfig
 ctypedef cudensitymatDistributedRequest_t DistributedRequest
 ctypedef cudensitymatTimeRange_t TimeRange
 ctypedef cudensitymatDistributedCommunicator_t DistributedCommunicator
@@ -76,6 +80,13 @@ ctypedef cudensitymatStatePurity_t _StatePurity
 ctypedef cudensitymatElementaryOperatorSparsity_t _ElementaryOperatorSparsity
 ctypedef cudensitymatOperatorSpectrumKind_t _OperatorSpectrumKind
 ctypedef cudensitymatOperatorSpectrumConfig_t _OperatorSpectrumConfig
+ctypedef cudensitymatBoundaryCondition_t _BoundaryCondition
+ctypedef cudensitymatTimePropagationScopeKind_t _TimePropagationScopeKind
+ctypedef cudensitymatTimePropagationScopeSplitKind_t _TimePropagationScopeSplitKind
+ctypedef cudensitymatTimePropagationApproachKind_t _TimePropagationApproachKind
+ctypedef cudensitymatTimePropagationAttribute_t _TimePropagationAttribute
+ctypedef cudensitymatTimePropagationApproachKrylovConfigAttribute_t _TimePropagationApproachKrylovConfigAttribute
+ctypedef cudensitymatTimePropagationScopeSplitTDVPConfigAttribute_t _TimePropagationScopeSplitTDVPConfigAttribute
 ctypedef cudensitymatMemspace_t _Memspace
 ctypedef cudensitymatWorkspaceKind_t _WorkspaceKind
 
@@ -92,6 +103,7 @@ cpdef int32_t get_num_ranks(intptr_t handle) except? -1
 cpdef int32_t get_proc_rank(intptr_t handle) except? -1
 cpdef reset_random_seed(intptr_t handle, int32_t random_seed)
 cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int data_type) except? 0
+cpdef intptr_t create_state_mps(intptr_t handle, int purity, int32_t num_space_modes, space_mode_extents, int boundary_condition, bond_extents, int data_type, int64_t batch_size) except? 0
 cpdef destroy_state(intptr_t state)
 cpdef int32_t state_get_num_components(intptr_t handle, intptr_t state) except? -1
 cpdef state_attach_component_storage(intptr_t handle, intptr_t state, int32_t num_state_components, component_buffer, component_buffer_size)
@@ -109,17 +121,21 @@ cpdef destroy_elementary_operator(intptr_t elem_operator)
 cpdef intptr_t create_matrix_operator_dense_local(intptr_t handle, int32_t num_space_modes, space_mode_extents, int data_type, intptr_t matrix_data, matrix_callback, matrix_gradient_callback) except? 0
 cpdef intptr_t create_matrix_operator_dense_local_batch(intptr_t handle, int32_t num_space_modes, space_mode_extents, int64_t batch_size, int data_type, intptr_t matrix_data, matrix_callback, matrix_gradient_callback) except? 0
 cpdef destroy_matrix_operator(intptr_t matrix_operator)
+cpdef intptr_t create_matrix_product_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents, int boundary_condition, bond_extents, int data_type, tensor_data, tensor_callbacks, tensor_gradient_callbacks) except? 0
+cpdef destroy_matrix_product_operator(intptr_t matrix_product_operator)
 cpdef intptr_t create_operator_term(intptr_t handle, int32_t num_space_modes, space_mode_extents) except? 0
 cpdef destroy_operator_term(intptr_t operator_term)
 cpdef operator_term_append_elementary_product(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, complex coefficient, coefficient_callback, coefficient_gradient_callback)
 cpdef operator_term_append_elementary_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_elem_operators, elem_operators, state_modes_acted_on, mode_action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback)
 cpdef operator_term_append_matrix_product(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, complex coefficient, coefficient_callback, coefficient_gradient_callback)
 cpdef operator_term_append_matrix_product_batch(intptr_t handle, intptr_t operator_term, int32_t num_matrix_operators, matrix_operators, matrix_conjugation, action_duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback)
+cpdef operator_term_append_mpo_product(intptr_t handle, intptr_t operator_term, int32_t num_mpo_operators, mpo_operators, mpo_conjugation, state_modes_acted_on, mode_action_duality, complex coefficient, coefficient_callback, coefficient_gradient_callback)
 cpdef intptr_t create_operator(intptr_t handle, int32_t num_space_modes, space_mode_extents) except? 0
 cpdef destroy_operator(intptr_t superoperator)
 cpdef operator_append_term(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, complex coefficient, coefficient_callback, coefficient_gradient_callback)
 cpdef operator_append_term_batch(intptr_t handle, intptr_t superoperator, intptr_t operator_term, int32_t duality, int64_t batch_size, intptr_t static_coefficients, intptr_t total_coefficients, coefficient_callback, coefficient_gradient_callback)
 cpdef attach_batched_coefficients(intptr_t handle, intptr_t superoperator, int32_t num_operator_term_batched_coeffs, operator_term_batched_coeffs_tmp, operator_term_batched_coeffs, int32_t num_operator_product_batched_coeffs, operator_product_batched_coeffs_tmp, operator_product_batched_coeffs)
+cpdef operator_configure_action(intptr_t handle, intptr_t superoperator, intptr_t state_in, intptr_t state_out, intptr_t attribute_value, size_t attribute_size)
 cpdef operator_prepare_action(intptr_t handle, intptr_t superoperator, intptr_t state_in, intptr_t state_out, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
 cpdef operator_compute_action(intptr_t handle, intptr_t superoperator, double time, int64_t batch_size, int32_t num_params, intptr_t params, intptr_t state_in, intptr_t state_out, intptr_t workspace, intptr_t stream)
 cpdef operator_prepare_action_backward_diff(intptr_t handle, intptr_t superoperator, intptr_t state_in, intptr_t state_out_adj, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
@@ -138,6 +154,22 @@ cpdef get_operator_spectrum_config_dtype(int attr)
 cpdef operator_spectrum_configure(intptr_t handle, intptr_t spectrum, int attribute, intptr_t attribute_value, size_t attribute_value_size)
 cpdef operator_spectrum_prepare(intptr_t handle, intptr_t spectrum, int32_t max_eigen_states, intptr_t state, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
 cpdef operator_spectrum_compute(intptr_t handle, intptr_t spectrum, double time, int64_t batch_size, int32_t num_params, intptr_t params, int32_t num_eigen_states, eigenstates, intptr_t eigenvalues, intptr_t tolerances, intptr_t workspace, intptr_t stream)
+cpdef intptr_t create_time_propagation_scope_split_tdvp_config(intptr_t handle) except? 0
+cpdef destroy_time_propagation_scope_split_tdvp_config(intptr_t config)
+cpdef get_time_propagation_scope_split_tdvp_config_attribute_dtype(int attr)
+cpdef time_propagation_scope_split_tdvp_config_set_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size)
+cpdef time_propagation_scope_split_tdvp_config_get_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size)
+cpdef intptr_t create_time_propagation_approach_krylov_config(intptr_t handle) except? 0
+cpdef destroy_time_propagation_approach_krylov_config(intptr_t config)
+cpdef get_time_propagation_approach_krylov_config_attribute_dtype(int attr)
+cpdef time_propagation_approach_krylov_config_set_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size)
+cpdef time_propagation_approach_krylov_config_get_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size)
+cpdef intptr_t create_time_propagation(intptr_t handle, intptr_t superoperator, int32_t is_hermitian, int scope_kind, int approach_kind) except? 0
+cpdef destroy_time_propagation(intptr_t time_propagation)
+cpdef get_time_propagation_attribute_dtype(int attr)
+cpdef time_propagation_configure(intptr_t handle, intptr_t time_propagation, int attribute, intptr_t attribute_value, size_t attribute_size)
+cpdef time_propagation_prepare(intptr_t handle, intptr_t time_propagation, intptr_t state_in, intptr_t state_out, int compute_type, size_t workspace_size_limit, intptr_t workspace, intptr_t stream)
+cpdef time_propagation_compute(intptr_t handle, intptr_t time_propagation, double time_step_real, double time_step_imag, double time, int64_t batch_size, int32_t num_params, intptr_t params, intptr_t state_in, intptr_t state_out, intptr_t workspace, intptr_t stream)
 cpdef intptr_t create_workspace(intptr_t handle) except? 0
 cpdef destroy_workspace(intptr_t workspace_descr)
 cpdef size_t workspace_get_memory_size(intptr_t handle, intptr_t workspace_descr, int mem_space, int workspace_kind) except? -1

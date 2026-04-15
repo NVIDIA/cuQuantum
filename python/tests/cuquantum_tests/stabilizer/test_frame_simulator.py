@@ -1,10 +1,13 @@
-# Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
 """FrameSimulator functionality test of cuStabilizer python bindings."""
 
+import pytest
 import cupy as cp
+
+pytestmark = pytest.mark.custabilizer
 import numpy as np
 from cuquantum.bindings import custabilizer as cust
 

@@ -7,13 +7,19 @@ Matrix operator class in cuDensityMat.
 """
 
 import logging
-from typing import Tuple
 
 import jax
 import jax.numpy as jnp
 
 from cuquantum.bindings import cudensitymat as cudm
 from nvmath.internal import typemaps
+
+from ..utils import (
+    get_empty_tensor_callback,
+    get_tensor_gradient_attachment_callback,
+    detect_ad_traced_object,
+    is_vmap_traced,
+)
 
 
 @jax.tree_util.register_pytree_node_class
@@ -24,55 +30,30 @@ class MatrixOperator:
 
     logger = logging.getLogger("cudensitymat-jax.MatrixOperator")
 
-    def __init__(self,
-                 data: jax.Array | jax.ShapeDtypeStruct,
-                 callback: cudm.WrappedTensorCallback | None = None,
-                 grad_callback: cudm.WrappedTensorGradientCallback | None = None
-                 ) -> None:
+    def __init__(self, data: jax.Array) -> None:
         """
         Initialize a MatrixOperator object.
 
         Args:
-            data: Data specification of the matrix operator. If ``callback`` is ``None``, ``data``
-                should be a ``jax.Array``; otherwise, ``data`` should be a ``jax.ShapeDtypeStruct``.
-            callback: Forward callback for the matrix operator.
-            grad_callback: Gradient callback for the matrix operator.
+            data: Data buffer of the matrix operator.
         """
-        if type(data) is object:
-            # TODO: data becomes object() during AD tracing. tree_unflatten should be written properly
-            # to handle this case.
-            pass
-        elif callback is not None and not isinstance(data, jax.ShapeDtypeStruct):
-            raise RuntimeError("data must be a jax.ShapeDtypeStruct when the data buffer "
-                               "is dynamically constructed from a callback.")
-
-        if isinstance(data, (jax.Array, jax.ShapeDtypeStruct)):
+        if isinstance(data, jax.Array):
 
             # Set data and batch size.
             if data.ndim % 2 == 0:
                 # Expanding to a leading dimension 1 is necessary since we are taking 0 as the batch
                 # dimension when passing to ffi_lowering.
-                if isinstance(data, jax.Array):
-                    self.data = jnp.expand_dims(data, 0)
-                    self._to_be_allocated = False
-                else:
-                    self.data = jnp.zeros((1, *data.shape), dtype=data.dtype)
-                    self._to_be_allocated = True
+                self.data = jnp.expand_dims(data, 0)
                 self.batch_size = 1
             else:  # batched
-                if isinstance(data, jax.Array):
-                    self.data = data
-                    self._to_be_allocated = False
-                else:
-                    self.data = jnp.zeros(data.shape, dtype=data.dtype)
-                    self._to_be_allocated = True
+                self.data = data
                 self.batch_size = data.shape[0]
 
             # Set other attributes derived from data.
             self.num_modes: int = len(self.data.shape) // 2
             if self.data.shape[-2 * self.num_modes:-self.num_modes] != self.data.shape[-self.num_modes:]:
                 raise ValueError("Data must have the same shape on the bra and ket modes.")
-            self.mode_extents: Tuple[int, ...] = self.data.shape[-self.num_modes:]
+            self.mode_extents: tuple[int, ...] = self.data.shape[-self.num_modes:]
             self.dtype: jnp.dtype = self.data.dtype
 
         elif type(data) is object:  # data is object() during AD tracing.
@@ -80,42 +61,35 @@ class MatrixOperator:
             self.data: object = data
             self.batch_size: int = 1
             self.num_modes: int = 0
-            self.mode_extents: Tuple[int, ...] = ()
+            self.mode_extents: tuple[int, ...] = ()
             self.dtype: jnp.dtype = jnp.dtype(float)
-            self._to_be_allocated: bool = False
-        else:
-            # We don't put object() in the error message (like data can also be object())
-            # because that case is in internal JAX implementation.
-            raise TypeError("data must be a jax.Array or jax.ShapeDtypeStruct.")
 
-        # Callbacks.
-        self.callback: cudm.WrappedTensorCallback | None = callback
-        self.grad_callback: cudm.WrappedTensorGradientCallback | None = grad_callback
+        # Callbacks and requires_grad are set in _create() when AD tracing is detected.
+        self.requires_grad = None
+        self._callback = None
+        self._grad_callback = None
+        self._grad_ptr: int = 0
 
         self._ptr: int | None = None
-        self._is_elementary: int | None = None
-
-    def copy(self) -> "MatrixOperator":
-        """
-        Copy the matrix operator.
-        """
-        if self._to_be_allocated and type(self.data) is not object:
-            data = jax.ShapeDtypeStruct(self.data.shape, self.data.dtype)
-        else:
-            data = jnp.copy(self.data)
-
-        mat_op = MatrixOperator(data, self.callback, self.grad_callback)
-        mat_op._ptr = self._ptr
-        mat_op._is_elementary = self._is_elementary
-        mat_op._to_be_allocated = self._to_be_allocated
-        return mat_op
+        self._is_elementary: bool = False
 
     def tree_flatten(self):
         """
         Flatten the matrix operator PyTree.
         """
-        children = (self.data, self._ptr, self._is_elementary)
-        aux_data = (self.callback, self.grad_callback, self._to_be_allocated)
+        children = (self.data,)
+        aux_data = (
+            self.batch_size,
+            self.num_modes,
+            self.mode_extents,
+            self.dtype,
+            self.requires_grad,
+            self._callback,
+            self._grad_callback,
+            self._grad_ptr,
+            self._is_elementary,
+            self._ptr,
+        )
         return children, aux_data
 
     @classmethod
@@ -123,33 +97,69 @@ class MatrixOperator:
         """
         Unflatten the matrix operator PyTree.
         """
-        data, _ptr, _is_elementary = children
-        callback, grad_callback, _to_be_allocated = aux_data
-
-        if _to_be_allocated and type(data) is not object:
-            data = jax.ShapeDtypeStruct(data.shape, data.dtype)
-
-        inst = cls(data, callback, grad_callback)
-        inst._ptr = _ptr
-        inst._is_elementary = _is_elementary
-        inst._to_be_allocated = _to_be_allocated
+        inst = cls.__new__(cls)
+        inst.data = children[0]
+        (
+            inst.batch_size,
+            inst.num_modes,
+            inst.mode_extents,
+            inst.dtype,
+            inst.requires_grad,
+            inst._callback,
+            inst._grad_callback,
+            inst._grad_ptr,
+            inst._is_elementary,
+            inst._ptr,
+        ) = aux_data
         return inst
+
+    @property
+    def in_axes(self) -> "MatrixOperator":
+        """
+        Return the in_axes PyTree spec for vmapping over the batch dimension (axis 0 of data).
+        """
+        _, aux_data = self.tree_flatten()
+        if is_vmap_traced(self.data) or self.batch_size > 1:
+            in_axes_data = 0
+        else:
+            in_axes_data = None
+        return type(self).tree_unflatten(aux_data, (in_axes_data,))
+
+    def _copy(self) -> "MatrixOperator":
+        """
+        Copy the matrix operator.
+        """
+        mat_op = type(self).__new__(type(self))
+
+        mat_op.data = jnp.copy(self.data)
+
+        mat_op.batch_size = self.batch_size
+        mat_op.num_modes = self.num_modes
+        mat_op.mode_extents = self.mode_extents
+        mat_op.dtype = self.dtype
+        mat_op.requires_grad = self.requires_grad
+        mat_op._callback = self._callback
+        mat_op._grad_callback = self._grad_callback
+        mat_op._grad_ptr = self._grad_ptr
+        mat_op._is_elementary = self._is_elementary
+        mat_op._ptr = self._ptr
+
+        return mat_op
 
     def _create(self, handle):
         """
         Create opaque handle to the matrix operator.
         """
-        # NOTE: This is to catch the gradient attachment case where grad_callback is provided
-        # but callback is not.
-        if self.callback is None and self.grad_callback is not None:
-            def f(t, args, storage):
-                pass
-            callback = cudm.WrappedTensorCallback(f, cudm.CallbackDevice.GPU)
-        else:
-            callback = self.callback
-
         # Create opaque handle to the matrix operator.
         if self._ptr is None:
+
+            # Detect if data requires gradient and assign callback, gradient callback.
+            self.requires_grad = detect_ad_traced_object(self.data)
+            if self.requires_grad:
+                self._callback = get_empty_tensor_callback()
+                self._grad_callback = get_tensor_gradient_attachment_callback(self.data)
+                self._grad_ptr = self._grad_callback.callback.tensor_grad.data.ptr
+
             if self.batch_size == 1:
                 self._ptr = cudm.create_matrix_operator_dense_local(
                     handle,
@@ -157,8 +167,8 @@ class MatrixOperator:
                     self.mode_extents,
                     typemaps.NAME_TO_DATA_TYPE[self.dtype.name],
                     0,  # buffer pointer to be attached in the XLA layer
-                    callback,
-                    self.grad_callback,
+                    self._callback,
+                    self._grad_callback,
                 )
             else:
                 self._ptr = cudm.create_matrix_operator_dense_local_batch(
@@ -168,15 +178,11 @@ class MatrixOperator:
                     self.batch_size,
                     typemaps.NAME_TO_DATA_TYPE[self.dtype.name],
                     0,  # buffer pointer to be attached in the XLA layer
-                    callback,
-                    self.grad_callback,
+                    self._callback,
+                    self._grad_callback,
                 )
 
             self.logger.debug(f"Created matrix operator at {hex(self._ptr)}")
-
-        # Set in _create to prevent tracing.
-        if self._is_elementary is None:
-            self._is_elementary = 0
 
     def _destroy(self):
         """

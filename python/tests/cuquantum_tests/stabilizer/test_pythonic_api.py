@@ -1,4 +1,4 @@
-# Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -24,6 +24,8 @@ except ImportError:
     cp = np
 from cuquantum.stabilizer import Circuit, FrameSimulator, Options
 
+pytestmark = pytest.mark.custabilizer
+
 
 def test_circuit_smoke():
     """Test creating a circuit."""
@@ -45,7 +47,7 @@ def test_simulation_basic():
     """Test creating a circuit."""
     circ = Circuit("X_ERROR(1) 0\nZ_ERROR(1) 1\nH 0 1\nCNOT 1 2\n M 2 3\n")
     possible = ("ZXY.", "ZXX.", "ZXYZ", "ZXXZ")
-    sim = FrameSimulator(len(possible[0]), 1024, num_measurements=2)
+    sim = FrameSimulator(len(possible[0]), 1024, num_measurements=2, randomize_measurements=False)
     sim.apply(circ)
     table = sim.get_pauli_table()
     assert table[0].to_string() in possible
@@ -223,6 +225,56 @@ def test_statistical_wrt_stim(d, r, p, nshots, circuit_name, randomize_measureme
         np.set_printoptions(**original_printoptions)
 
 
+@pytest.mark.parametrize("disable_frame_randomization", [True, False])
+@pytest.mark.parametrize("h_layer", [True, False])
+def test_h_layer_measure_all(disable_frame_randomization, h_layer):
+    """Optional H on all 5 qubits then measure all. Compare measurement statistics against stim."""
+    num_qubits = 5
+    nshots = 1024 * 50
+    qubits_str = " ".join(str(i) for i in range(num_qubits))
+    circuit_str = ("H " + qubits_str + "\n" if h_layer else "") + "M " + qubits_str
+
+    stim_circuit = stim.Circuit(circuit_str)
+    cuda_circuit = Circuit(circuit_str)
+    randomize_measurements = not disable_frame_randomization
+
+    sim = FrameSimulator(
+        num_qubits,
+        nshots,
+        num_measurements=num_qubits,
+        randomize_measurements=randomize_measurements,
+        seed=0,
+    )
+    sim.apply(cuda_circuit)
+    mbits = sim.get_measurement_bits(bit_packed=False)
+    xbits, zbits = sim.get_pauli_xz_bits(bit_packed=False)
+
+    sim_ref = stim.FlipSimulator(
+        num_qubits=num_qubits,
+        batch_size=nshots,
+        seed=0,
+        disable_stabilizer_randomization=disable_frame_randomization,
+    )
+    sim_ref.do(stim_circuit)
+    xref, zref, mref, _, _ = sim_ref.to_numpy(
+        bit_packed=False, output_xs=True, output_zs=True, output_measure_flips=True
+    )
+
+    if disable_frame_randomization:
+        assert np.array_equal(xbits, xref), "X table mismatch"
+        assert np.array_equal(zbits, zref), "Z table mismatch"
+        assert np.array_equal(mbits, mref), "M table mismatch"
+    else:
+        probs = calculate_table_population(xbits, zbits, mbits) / nshots
+        probs_ref = calculate_table_population(xref, zref, mref) / nshots
+        K = len(probs)
+        z = np.sqrt(2 * np.log(K) + 15)
+        atol = z * np.sqrt(2 * probs_ref * (1 - probs_ref) / nshots)
+        rtol = 1 / nshots
+        assert np.allclose(probs, probs_ref, atol=atol, rtol=rtol), \
+            f"Statistical mismatch: probs={probs}, probs_ref={probs_ref}, atol={atol}"
+
+
 def test_multiple_circuits_same_simulator():
     """Test reusing same simulator for multiple circuits."""
     circ = Circuit(
@@ -240,7 +292,7 @@ def test_multiple_circuits_same_simulator():
     nshots = 1024 * 5
     nqubits = 6
     nmeas = 3
-    sim = FrameSimulator(nqubits, nshots, num_measurements=nmeas)
+    sim = FrameSimulator(nqubits, nshots, num_measurements=nmeas, randomize_measurements=False)
 
     seed = 15
     # Apply first circuit

@@ -163,7 +163,8 @@ def main():
         max_num_terms = max(max_num_terms, expansion.num_terms)
 
     # Step 7: Compute the expectation value <Z_62> with respect to |0...0>.
-    expec = expansion.trace_with_zero_state()
+    trace_significand, trace_exponent = expansion.trace_with_zero_state()
+    expec = trace_significand * np.exp2(trace_exponent)
 
     end_event.record()
     end_event.synchronize()

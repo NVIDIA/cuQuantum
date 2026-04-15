@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -94,6 +94,11 @@ parser_circuit.add_argument('--backend', type=str, required=True, choices=backen
                             help=f'set the simulator backend that is compatible with the frontend')
 parser_circuit.add_argument('--new', help='create a new circuit rather than use existing circuit', action='store_true')
 
+# Allow turning on/off reuse
+parser_circuit.add_argument('--reuse', action='store_true', help='reuse compiler artifacts across runs to avoid capturing JIT costs')
+parser_circuit.add_argument('--no-reuse', dest='reuse', action='store_false')
+parser_circuit.set_defaults(reuse=True)
+
 # these options make sense to both circuit & api benchmarks, for better UX we need to copy/paste
 parser_circuit.add_argument('--cachedir', type=str, default='.', help='set the directory to cache generated data')
 parser_circuit.add_argument('--nqubits', type=int, help='set the number of qubits for each benchmark (circuit/api)')
@@ -111,7 +116,8 @@ backend.add_argument('--precision', type=str, choices=('single', 'double'),
                      help='set the floating-point precision')
 backend.add_argument('--compute-mode', type=str, choices=['sampling', 'statevector', 'amplitude', 'expectation'], help='set the mode for computation. Note that not all backends support all modes.')
 backend.add_argument('--pauli-string', type=str, required=False, help='specify a Pauli operator for expectation')
-backend.add_argument('--pauli-seed', type=int, required=False, help='use this seed to produce a random Pauli operator for expectation')
+backend.add_argument('--pauli-seed', type=int, required=False, default=0,
+                          help='seed for random Pauli operator when --pauli-string is not set (default: 0, for reproducibility)')
 backend.add_argument('--pauli-identity-fraction', type=float, required=False,
                           help='when using random Pauli operators, make this fraction identity (I). '
                                'By default gives equal weights to all four X, Y, Z, and I.')

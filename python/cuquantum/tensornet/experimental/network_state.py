@@ -33,6 +33,7 @@ from .._internal.decomposition_utils import update_tensor_extents_strides
 from nvmath.internal.tensor_wrapper import infer_tensor_package
 import importlib
 
+
 class NetworkState:
     """
     Create an empty tensor network state.
@@ -175,6 +176,7 @@ class NetworkState:
             raise ValueError(f"For system with one physical dimension, please switch to tensor network simulation method via TNConfig")
         
         self.operands = {}
+        self._gradient_tensor_ids = {}  # tensor_id -> operand (gradient uses operand.shape, operand.strides)
         self.owned_network_operators = {}
         self.non_owned_network_operators = {}
 
@@ -245,13 +247,20 @@ class NetworkState:
             self.allocator = memory._MEMORY_MANAGER[self.internal_package](self.device_id, self.logger)
         self.backend_setup = True
 
+    def _get_cutn_task_name(self, task):
+        """Map logical task name to cutensornet API base name (e.g. expectation_with_gradients -> expectation)."""
+        if task == 'expectation_with_gradients':
+            return 'expectation'
+        return task
+
     def _free_task_object_resources(self, exception=None):
         """
         Free resources allocated in task computation.
         """
         for task_type, key in list(self.cached_task_obj.keys()):
             task_obj = self.cached_task_obj.pop((task_type, key))
-            destroy_func = getattr(cutn, f'destroy_{task_type}')
+            cutn_task = self._get_cutn_task_name(task_type)
+            destroy_func = getattr(cutn, f'destroy_{cutn_task}')
             destroy_func(task_obj)
             self.logger.info(f"The cached {task_type} object has been freed")
         return True
@@ -531,7 +540,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     # operand indices (b, a, B, A) required for modes a, b
     @state_operands_wrapper(operands_arg_index=2, is_single_operand=True, transpose=True)
     @nvmath_utils.precondition(_check_valid_network)
-    def apply_tensor_operator(self, modes, operand, *, control_modes=None, control_values=None, immutable=False, adjoint=False, unitary=False, diagonal=False, stream=None):
+    def apply_tensor_operator(self, modes, operand, *, control_modes=None, control_values=None, immutable=False, adjoint=False, unitary=False, diagonal=False, gradient=False, stream=None):
         """
         Apply a tensor operator to the network state.
 
@@ -549,6 +558,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             adjoint : Whether the operator should be applied in its adjoint form (default `False`).
             unitary : Whether the operator is unitary (default `False`).
             diagonal : Whether the operator is diagonal (default `False`).
+            gradient : If ``True``, register this operator for gradient computation.
             stream : Provide the CUDA stream to use for applying the tensor operator (this is used to copy the operands to the GPU if they are provided on the CPU). 
                 Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
                 :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
@@ -562,11 +572,21 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         """
         if isinstance(self.config, MPSConfig) and len(operand.shape) > 4:
             raise ValueError(f"MPS simulation only supports one-body and two-body operators, found operator dimension ({len(operand.shape)})")
+        if gradient and (control_modes is not None or diagonal):
+            raise ValueError("gradient=True is only supported for non-controlled, non-diagonal apply_tensor_operator.")
         if control_modes is None:
             if diagonal:
                 tensor_id = cutn.state_apply_diagonal_tensor_operator(self.handle, self.state, len(modes), 
                     modes, operand.data_ptr, operand.strides, immutable, adjoint, unitary)
                 self.logger.debug(f"The diagonal tensor operand has been applied to the state with an ID ({tensor_id}).")
+            elif gradient:
+                # Gradient uses same shape/strides as operand.
+                tensor_id = cutn.state_apply_tensor_operator_with_gradient(
+                    self.handle, self.state, len(modes), modes,
+                    operand.data_ptr, operand.strides, immutable, adjoint, unitary,
+                    operand.data_ptr, operand.strides)
+                self.logger.debug(f"The tensor operand has been applied to the state with gradient registration (tensor_id={tensor_id}).")
+                self._gradient_tensor_ids[tensor_id] = operand
             else:
                 tensor_id = cutn.state_apply_tensor_operator(self.handle, self.state, len(modes), 
                     modes, operand.data_ptr, operand.strides, immutable, adjoint, unitary)
@@ -704,6 +724,10 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             raise ValueError(f'The new operand must share the same strides as the original operand ({prev_operand.strides[::-1]}), found ({operand.strides[::-1]})')
         cutn.state_update_tensor_operator(self.handle, self.state, tensor_id, operand.data_ptr, unitary)
         self.operands[tensor_id] = operand, immutable
+        # If this operator has gradient registered, set gradient output to current operand ptr; compute_expectation_with_gradients will set the correct buffers internally when it runs.
+        if tensor_id in self._gradient_tensor_ids:
+            cutn.state_update_tensor_operator_gradient(self.handle, self.state, tensor_id, operand.data_ptr)
+            self._gradient_tensor_ids[tensor_id] = operand
         self.logger.info(f"Tensor operand with ID ({tensor_id}) has been updated.")
         self._mark_updated(structural=False)
         return
@@ -728,12 +752,9 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         if network_operator.dtype != self.dtype:
             raise ValueError(f"Input network operator data type ({network_operator.dtype}) different from network state ({self.dtype})")
         if not self.backend_setup:
-            if network_operator.tensor_products:
-                operand = network_operator.tensor_products
-            elif network_operator.mpos:
-                operand = network_operator.mpos[0][0][0]
-            else:
-                raise RuntimeError(f"Empty NetworkOperator can not be applied to a NetworkState")
+            operand = network_operator._get_representative_operand()
+            if operand is None:
+                raise RuntimeError("Empty NetworkOperator can not be applied to a NetworkState")
             self._setup_backend(operand)
         network_id = cutn.state_apply_network_operator(self.handle, 
             self.state, network_operator.network_operator, immutable, adjoint, unitary)
@@ -864,24 +885,28 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     def _compute_target(self, task, create_args, execute_args, stream, release_workspace, *, config_args=None, caller_name=None, task_key=None):
         if caller_name is None:
             caller_name = task
-        if task not in ('marginal', 'expectation', 'accessor', 'state', 'sampler'):
-            raise ValueError("only supports marginal, sampler, accessor, expectation and state")
-        
+        if task not in ('marginal', 'expectation', 'accessor', 'state', 'sampler', 'expectation_with_gradients'):
+            raise ValueError("only supports marginal, sampler, accessor, expectation, expectation_with_gradients and state")
+
+        cutn_task = self._get_cutn_task_name(task)
+
         if task == 'state':
             create_func = None
         else:
             # avoid going into infinite loops
             if not self._maybe_compute_state(stream, release_workspace):
                 raise ValueError
-            create_func = getattr(cutn, f'create_{task}')
+            create_func = getattr(cutn, f'create_{cutn_task}')
         # Allocate device memory (in stream context) if needed.
         stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
-        prepare_func = getattr(cutn, f'{task}_prepare')
+        prepare_func = getattr(cutn, f'{cutn_task}_prepare')
 
-        if task == 'sampler':
+        if task == 'expectation_with_gradients':
+            execute_func = None  # execute step handled by _execute_expectation_with_gradients
+        elif task == 'sampler':
             execute_func = cutn.sampler_sample
         else:
-            execute_func = getattr(cutn, f'{task}_compute')
+            execute_func = getattr(cutn, f'{cutn_task}_compute')
         
         self.logger.info(f"Beginning {caller_name} computation...")
 
@@ -910,7 +935,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 self.logger.info(f"A new {task} object has been created")
         
         if config_args is not None:
-            configure_func = getattr(cutn, f'{task}_configure')
+            configure_func = getattr(cutn, f'{cutn_task}_configure')
             configure_func(self.handle, task_obj, *config_args)
             # new prepare step needed if the object has be re-configured
             prepare_needed = True
@@ -958,15 +983,18 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         self._allocate_workspace_memory_perhaps(stream_holder, "cache")
 
         if self.logger.isEnabledFor(logging.INFO):
-            info_flops_enum = getattr(cutn, f'{task.capitalize()}Attribute').INFO_FLOPS
-            flops_dtype = getattr(cutn, f'{task}_get_attribute_dtype')(info_flops_enum)
+            info_flops_enum = getattr(cutn, f'{cutn_task.capitalize()}Attribute').INFO_FLOPS
+            flops_dtype = getattr(cutn, f'{cutn_task}_get_attribute_dtype')(info_flops_enum)
             flops = np.zeros(1, dtype=flops_dtype)
-            getattr(cutn, f'{task}_get_info')(self.handle, task_obj, info_flops_enum, flops.ctypes.data, flops.dtype.itemsize)
+            getattr(cutn, f'{cutn_task}_get_info')(self.handle, task_obj, info_flops_enum, flops.ctypes.data, flops.dtype.itemsize)
             self.logger.info(f"Total flop count for {caller_name} computation = {flops.item()/1e9} GFlop")
 
         self.logger.info(f"Starting {caller_name} computation with blocking set to {self.blocking}...")
         with nvmath_utils.cuda_call_ctx(stream_holder, self.blocking, timing) as (self.last_compute_event, elapsed):
-            output = execute_func(self.handle, task_obj, *execute_args, stream_holder.ptr)
+            if task == 'expectation_with_gradients':
+                output = self._execute_expectation_with_gradients(stream_holder, task_obj)
+            else:
+                output = execute_func(self.handle, task_obj, *execute_args, stream_holder.ptr)
         if elapsed.data is not None:
             self.logger.info(f"Computation for {caller_name} took {elapsed.data:.3f} ms to complete.")
         else:
@@ -1203,6 +1231,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 # release reference to underlying operators and NetworkOperator
                 cutn.state_capture_mps(self.handle, self.state)
                 self.operands = {}
+                self._gradient_tensor_ids = {}
                 self.owned_network_operators = {}
                 self.non_owned_network_operators = {}
                 self.initial_state = list(self.mps_tensors)
@@ -1334,3 +1363,113 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             return output, norm.real.item()
         else:
             return output
+
+    def _execute_expectation_with_gradients(self, stream_holder, task_obj):
+        """
+        Execute expectation forward + backward and fill gradient buffers.
+        Called by _compute_target when expectation_with_gradients is True.
+        Expects self._expectation_grad_run_context to be set to
+        (expectation_value, expectation_value_adjoint_arr, return_norm, norm, state_norm_adjoint_arr).
+        """
+        expectation_value, expectation_value_adjoint_arr, return_norm, norm, state_norm_adjoint_arr = self._expectation_grad_run_context
+        gradients_out = {}
+        # Allocate gradient tensors with same shape/strides as operands.
+        if self.internal_package == "cuda":
+            for tensor_id, operand in self._gradient_tensor_ids.items():
+                ext, strides = operand.shape, operand.strides
+                grad = nvmath_utils.create_empty_tensor(
+                    tensor_wrapper._TENSOR_TYPES["numpy"], ext, self.dtype, "cpu", None, False, strides=strides)
+                grad.tensor[:] = 0.0
+                grad = grad.to(self.device_id, stream_holder)
+                gradients_out[tensor_id] = grad
+        else:
+            for tensor_id, operand in self._gradient_tensor_ids.items():
+                ext, strides = operand.shape, operand.strides
+                grad = nvmath_utils.create_empty_tensor(
+                    self.intermediate_class, ext, self.dtype, self.device_id, stream_holder, False, strides=strides)
+                gradients_out[tensor_id] = grad
+            with nvmath_utils.cuda_call_ctx(stream_holder, False, False):
+                for grad in gradients_out.values():
+                    grad.tensor[:] = 0.0
+
+        for tensor_id, grad in gradients_out.items():
+            cutn.state_update_tensor_operator_gradient(self.handle, self.state, tensor_id, grad.data_ptr)
+
+        cutn.expectation_compute_with_gradients_backward(
+            self.handle,
+            task_obj,
+            0,  # overwrite gradients (no accumulation)
+            expectation_value_adjoint_arr.ctypes.data,
+            state_norm_adjoint_arr.ctypes.data if state_norm_adjoint_arr is not None else 0,
+            self.workspace_desc,
+            expectation_value.ctypes.data,
+            norm.ctypes.data if return_norm else 0,
+            stream_holder.ptr,
+        )
+        if self.backend == "numpy" or self.output_location == 'cpu':
+            return {tensor_id: grad.to('cpu', stream_holder=stream_holder).tensor
+                    for tensor_id, grad in gradients_out.items()}
+        return {tensor_id: grad.tensor for tensor_id, grad in gradients_out.items()}
+
+    @nvmath_utils.precondition(_maybe_setup_recompute)
+    @nvmath_utils.precondition(_check_valid_network)
+    @nvmath_utils.precondition(_check_backend_setup, "Expectation with gradients computation")
+    def compute_expectation_with_gradients(self, operators, expectation_value_adjoint, *, return_norm=False, state_norm_adjoint=None, stream=None, release_workspace=False):
+        """
+        Compute the expectation value of the given operator(s) and gradients with respect to tensor operators
+        that were applied with ``gradient=True`` in :meth:`apply_tensor_operator`.
+
+        Args:
+            operators : Pauli string, dict of pauli strings, or :class:`NetworkOperator`.
+            return_norm : If ``True``, the squared norm of the state is also computed and returned (see :meth:`compute_expectation`).
+            expectation_value_adjoint : Scalar adjoint for the expectation value (e.g. 1.0 for d/d(expectation)).
+            state_norm_adjoint : Upstream gradient for state norm in chain rule. Must be ``None`` in this release.
+            stream : Execution stream (see :meth:`compute_expectation`).
+            release_workspace : Whether to release workspace memory on return (see :meth:`compute_expectation`).
+
+        Returns:
+            A tuple ``(expectation_value, norm, gradients)`` where ``norm`` is the squared 2-norm of the state
+            (``None`` if ``return_norm`` is ``False``), ``expectation_value`` is a scalar, and ``gradients`` is a
+            dict mapping tensor_id (int) to the gradient array.
+            Requires that at least one tensor operator was applied with ``gradient=True``.
+        """
+        if not self._gradient_tensor_ids:
+            raise ValueError("compute_expectation_with_gradients requires at least one tensor operator applied with gradient=True")
+        if state_norm_adjoint is not None:
+            raise NotImplementedError("state_norm_adjoint is not supported in this release; pass None")
+        if return_norm is not False:
+            raise NotImplementedError("return_norm is not supported in this release; pass None")
+        if set(self.state_mode_extents) != set([2]):
+            assert isinstance(operators, NetworkOperator), "Pauli operator expectation only supported when all state dimensions equal 2."
+        if isinstance(operators, str):
+            if len(operators) != self.n or (not set(operators).issubset(set('IXYZ'))):
+                raise ValueError("For pauli expectation computation, operators must be a string of IXYZ of length equal to state dimensions.")
+            operators = {operators: 1}
+        own_network_operators = isinstance(operators, dict)
+        if own_network_operators:
+            operators = NetworkOperator.from_pauli_strings(operators, backend=self.backend, dtype=self.dtype, options=self.options, stream=stream)
+            self.owned_network_operators[None] = operators
+        assert isinstance(operators, NetworkOperator)
+        if tuple(self.state_mode_extents) != tuple(operators.state_mode_extents):
+            raise ValueError("State dimension does not match network operator dimension.")
+        expectation_value = np.empty(1, dtype=self.dtype)
+        expectation_value_adjoint_arr = np.asarray(expectation_value_adjoint, dtype=self.dtype)
+        state_norm_adjoint_arr = np.asarray(state_norm_adjoint, dtype=self.dtype) if state_norm_adjoint is not None else None
+        norm = np.empty(1, dtype=self.dtype) if return_norm else None
+        self._expectation_grad_run_context = (expectation_value, expectation_value_adjoint_arr, return_norm, norm, state_norm_adjoint_arr)
+        try:
+            create_args = (operators.network_operator,)
+            task_key = ('expectation_with_gradients', operators._get_key())
+            gradients_out = self._compute_target(
+                'expectation_with_gradients',
+                create_args,
+                None,
+                stream,
+                release_workspace,
+                task_key=task_key
+            )
+        finally:
+            del self._expectation_grad_run_context
+        norm_out = norm.real.item() if return_norm else None
+        return expectation_value.item(), norm_out, gradients_out
+

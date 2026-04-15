@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -9,11 +9,8 @@ import os
 import pytest
 import numpy as np
 
-try:
-    import cupy as cp
-except ImportError:
-    cp = None
-    pytest.skip("skipping binding tests when cupy is not installed", allow_module_level=True)
+cp = pytest.importorskip("cupy")
+
 from cupy import testing
 try:
     import mpi4py
@@ -911,6 +908,22 @@ class TestStateAPIs(TestStateBase):
     @manage_resource('handle')
     @manage_resource('workspace')
     @manage_resource('state')
+    def test_mps_state_compute_returns_finalized_layout(self):
+        if self.mps is False:
+            pytest.skip("MPS-only layout contract test")
+
+        extents_out, strides_out = cutn.state_compute(
+            self.handle, self.state, self.workspace, self.simple_state.mps_tensor_ptrs, self.stream.ptr)
+        self.stream.synchronize()
+
+        for i in range(self.num_qubits):
+            np.testing.assert_array_equal(extents_out[i], np.asarray(self.simple_state.mps_tensor_extents[i], dtype=np.int64))
+            np.testing.assert_array_equal(strides_out[i], np.asarray(self.simple_state.mps_tensor_strides[i], dtype=np.int64))
+
+
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    @manage_resource('state')
     @manage_resource('accessor')
     def test_accessor_bindings(self):
         fixed_values = ()
@@ -960,8 +973,183 @@ class TestStateAPIs(TestStateBase):
         scratch_space = self._configure_prepare('marginal', self.handle, self.marginal, self.workspace, self.stream)
         cutn.marginal_compute(self.handle, self.marginal, 0, self.workspace, self.rdm.data.ptr, self.stream.ptr)
         self.stream.synchronize()
-        
-  
+
+
+class TestMPSOvercompleteExtentsSUGauge:
+    """Regression: SU gauge with overcomplete (over-allocated) MPS tensor extents.
+
+    When boundary MPS tensors are allocated with max_extent larger than
+    their combinatorial bond dimension and SU gauge is enabled,
+    state_compute must not fail with 'Unsupported tensor memory layout!'.
+    """
+
+    @pytest.mark.parametrize("order", ("C", "F"))
+    def test_overcomplete_extents_su_gauge(self, order):
+        num_qubits = 6
+        max_extent = 8
+        dtype = np.complex128
+        stream = cp.cuda.Stream()
+
+        handle = cutn.create()
+        try:
+            qubits_dims = np.asarray([2] * num_qubits, dtype=np.int64)
+            state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits,
+                                      qubits_dims, dtype_to_data_type[dtype])
+            try:
+                gate_h = (2**-0.5 * cp.asarray([[1, 1], [1, -1]], dtype=dtype)).reshape(2, 2, order='F')
+                gate_h_strides = np.array([s // gate_h.itemsize for s in gate_h.strides], dtype=np.int64)
+                cutn.state_apply_tensor_operator(handle, state, 1, (0,),
+                    gate_h.data.ptr, gate_h_strides, 1, 0, 1)
+
+                gate_cx = cp.asarray([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]],
+                                     dtype=dtype).reshape(2, 2, 2, 2, order='F')
+                gate_cx_strides = np.array([s // gate_cx.itemsize for s in gate_cx.strides], dtype=np.int64)
+                for i in range(1, num_qubits):
+                    cutn.state_apply_tensor_operator(handle, state, 2, (i - 1, i),
+                        gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)
+
+                mps_tensor_extents = []
+                mps_tensor_strides = []
+                mps_tensors = []
+                mps_tensor_ptrs = []
+                for i in range(num_qubits):
+                    if i == 0:
+                        extents = (2, max_extent)
+                    elif i == num_qubits - 1:
+                        extents = (max_extent, 2)
+                    else:
+                        extents = (max_extent, 2, max_extent)
+                    mps_tensor_extents.append(extents)
+                    tensor = cp.zeros(extents, dtype=dtype, order=order)
+                    mps_tensors.append(tensor)
+                    mps_tensor_ptrs.append(tensor.data.ptr)
+                    mps_tensor_strides.append([s // tensor.itemsize for s in tensor.strides])
+
+                cutn.state_finalize_mps(handle, state, cutn.BoundaryCondition.OPEN,
+                                        mps_tensor_extents, mps_tensor_strides)
+
+                gauge_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.CONFIG_MPS_GAUGE_OPTION)
+                gauge_val = np.array(cutn.StateMPSGaugeOption.STATE_MPS_GAUGE_SIMPLE, dtype=gauge_dtype)
+                cutn.state_configure(handle, state, cutn.StateAttribute.CONFIG_MPS_GAUGE_OPTION,
+                                     gauge_val.ctypes.data, gauge_val.dtype.itemsize)
+
+                svd_algo_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.MPS_SVD_CONFIG_ALGO)
+                svd_algo = np.array(cutn.TensorSVDAlgo.GESVDJ, dtype=svd_algo_dtype)
+                cutn.state_configure(handle, state, cutn.StateAttribute.MPS_SVD_CONFIG_ALGO,
+                                     svd_algo.ctypes.data, svd_algo.dtype.itemsize)
+
+                workspace = cutn.create_workspace_descriptor(handle)
+                try:
+                    free_mem = cp.cuda.Device().mem_info[0]
+                    cutn.state_prepare(handle, state, free_mem // 4, workspace, stream.ptr)
+                    workspace_size = cutn.workspace_get_memory_size(handle, workspace,
+                        cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+                    scratch = cp.cuda.alloc(workspace_size)
+                    cutn.workspace_set_memory(handle, workspace, cutn.Memspace.DEVICE,
+                        cutn.WorkspaceKind.SCRATCH, scratch.ptr, workspace_size)
+
+                    cutn.state_compute(handle, state, workspace, mps_tensor_ptrs, stream.ptr)
+                    stream.synchronize()
+                finally:
+                    cutn.destroy_workspace_descriptor(workspace)
+            finally:
+                cutn.destroy_state(state)
+        finally:
+            cutn.destroy(handle)
+
+
+class TestMPSNonContiguousStrides:
+
+    @manage_resource('handle')
+    @manage_resource('workspace')
+    def test_mps_noncontiguous_strides_simple_gauge(self):
+        num_qubits = 3
+        dtype = np.complex128
+        stream = cp.cuda.Stream.null
+        qubits_dims = np.array([2] * num_qubits, dtype=np.int64)
+        state = cutn.create_state(self.handle, cutn.StatePurity.PURE, num_qubits, qubits_dims.ctypes.data,
+                                  dtype_to_data_type[dtype])
+        try:
+            gate_h = 2**-0.5 * cp.asarray([[1,1], [1,-1]], dtype=dtype, order='F')
+            gate_cx = cp.asarray([[1,0,0,0],[0,1,0,0],[0,0,0,1],[0,0,1,0]], dtype=dtype).reshape(2,2,2,2, order='F')
+            gate_h_strides = np.asarray((1, 2), dtype=np.int64)
+            gate_cx_strides = np.asarray((1, 2, 4, 8), dtype=np.int64)
+            cutn.state_apply_tensor_operator(self.handle, state, 1, (0,), gate_h.data.ptr,
+                                             gate_h_strides.ctypes.data, 1, 0, 1)
+            cutn.state_apply_tensor_operator(self.handle, state, 2, (0, 1), gate_cx.data.ptr,
+                                             gate_cx_strides.ctypes.data, 1, 0, 1)
+            cutn.state_apply_tensor_operator(self.handle, state, 2, (1, 2), gate_cx.data.ptr,
+                                             gate_cx_strides.ctypes.data, 1, 0, 1)
+
+            max_extent = 2
+            padded_strides = []
+            extents_list = []
+            tensors = []
+            tensor_ptrs = []
+            for i in range(num_qubits):
+                if i == 0:
+                    ext = (2, max_extent)
+                elif i == num_qubits - 1:
+                    ext = (max_extent, 2)
+                else:
+                    ext = (max_extent, 2, max_extent)
+                extents_list.append(ext)
+                strides = [1]
+                for d in ext[:-1]:
+                    strides.append(strides[-1] * (d + 1))
+                padded_strides.append(strides)
+                storage_size = 1
+                for e, s in zip(ext, strides):
+                    storage_size += (e - 1) * s
+                t = cp.zeros(storage_size, dtype=dtype)
+                tensors.append(t)
+                tensor_ptrs.append(t.data.ptr)
+
+            cutn.state_finalize_mps(self.handle, state, cutn.BoundaryCondition.OPEN,
+                                    extents_list, padded_strides)
+
+            gauge_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.CONFIG_MPS_GAUGE_OPTION)
+            gauge_val = np.array(cutn.StateMPSGaugeOption.STATE_MPS_GAUGE_SIMPLE, dtype=gauge_dtype)
+            cutn.state_configure(self.handle, state, cutn.StateAttribute.CONFIG_MPS_GAUGE_OPTION,
+                                 gauge_val.ctypes.data, gauge_val.dtype.itemsize)
+
+            free_mem = cp.cuda.Device().mem_info[0]
+            max_scratch = free_mem // 4
+            cutn.state_prepare(self.handle, state, max_scratch, self.workspace, stream.ptr)
+            ws_size = cutn.workspace_get_memory_size(self.handle, self.workspace,
+                                                     cutn.WorksizePref.RECOMMENDED,
+                                                     cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+            scratch = cp.cuda.alloc(ws_size)
+            cutn.workspace_set_memory(self.handle, self.workspace, cutn.Memspace.DEVICE,
+                                      cutn.WorkspaceKind.SCRATCH, scratch.ptr, ws_size)
+
+            extents_out, strides_out = cutn.state_compute(self.handle, state, self.workspace,
+                                                          tensor_ptrs, stream.ptr)
+            stream.synchronize()
+
+            for i in range(num_qubits):
+                np.testing.assert_array_equal(extents_out[i], np.asarray(extents_list[i], dtype=np.int64))
+                np.testing.assert_array_equal(strides_out[i], np.asarray(padded_strides[i], dtype=np.int64))
+
+            # Correctness: extract strided MPS data, contract, verify GHZ state.
+            # GHZ(3) = (|000⟩ + |111⟩) / √2, which is exact at max_extent=2.
+            itemsize = np.dtype(dtype).itemsize
+            mps_np = []
+            for i in range(num_qubits):
+                byte_strides = tuple(s * itemsize for s in padded_strides[i])
+                view = cp.ndarray(extents_list[i], dtype=dtype, memptr=tensors[i].data, strides=byte_strides)
+                mps_np.append(cp.asnumpy(view))
+
+            sv = np.einsum('ia,ajb,bk->ijk', mps_np[0], mps_np[1], mps_np[2])
+            inv_sqrt2 = 1.0 / np.sqrt(2.0)
+            expected = np.zeros((2, 2, 2), dtype=dtype)
+            expected[0, 0, 0] = inv_sqrt2
+            expected[1, 1, 1] = inv_sqrt2
+            np.testing.assert_allclose(sv, expected, atol=1e-12)
+        finally:
+            cutn.destroy_state(state)
+
+
 @pytest.mark.parametrize(
     'source', ('int', 'seq', 'range')
 )
@@ -1503,6 +1691,219 @@ class TestDistributed:
         cutn.distributed_synchronize(handle)
         cutn.distributed_reset_configuration(handle, 0, 0)  # reset
         # no need to free the comm, for world/self mpi4py does it for us...
+
+
+class TestTensorProductModeConvention:
+    """
+    Bindings-level tests for the mode ordering convention difference between
+    state_apply_tensor_operator and network_operator_append_product.
+
+    With NULL strides (column-major default), the two APIs use different mode
+    orderings for multi-qubit factors: reversed-within-half for
+    apply_tensor_operator vs. forward for append_product.
+    Explicit strides that reverse within each half can compensate.
+    """
+
+    @staticmethod
+    def _random_unitary(dim, rng):
+        mat = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+        q, _ = np.linalg.qr(mat)
+        return q.astype(np.complex128)
+
+    @staticmethod
+    def _compute_sv(handle, state, n_qubits, stream=0):
+        sv = cp.empty((2,) * n_qubits, dtype='complex128', order='F')
+        accessor = cutn.create_accessor(handle, state, 0, (), 0)
+        work_desc = cutn.create_workspace_descriptor(handle)
+        free_mem = cp.cuda.Device().mem_info[0]
+        cutn.accessor_prepare(handle, accessor, free_mem // 2, work_desc, stream)
+        scratch_size = cutn.workspace_get_memory_size(
+            handle, work_desc, cutn.WorksizePref.MIN,
+            cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        scratch = cp.cuda.alloc(int(scratch_size)) if scratch_size > 0 else None
+        if scratch_size > 0:
+            cutn.workspace_set_memory(
+                handle, work_desc, cutn.Memspace.DEVICE,
+                cutn.WorkspaceKind.SCRATCH, scratch.ptr, scratch_size)
+        norm = np.empty(1, dtype='complex128')
+        cutn.accessor_compute(handle, accessor, (), work_desc,
+            sv.data.ptr, norm.ctypes.data, stream)
+        cp.cuda.Stream.null.synchronize()
+        cutn.destroy_workspace_descriptor(work_desc)
+        cutn.destroy_accessor(accessor)
+        return cp.asnumpy(sv)
+
+    def _apply_tensor_operator(self, n_qubits, gate_modes, d_G, d_H, data_type, strides=0):
+        """Compute statevector via state_apply_tensor_operator."""
+        n_gate = len(gate_modes)
+        dims = (2,) * n_qubits
+        handle = cutn.create()
+        state = cutn.create_state(handle, cutn.StatePurity.PURE, n_qubits, dims, data_type)
+        for q in range(n_qubits):
+            cutn.state_apply_tensor_operator(handle, state, 1, (q,), d_H.data.ptr, 0, 1, 0, 1)
+        cutn.state_apply_tensor_operator(handle, state, n_gate, gate_modes, d_G.data.ptr, strides, 1, 0, 1)
+        sv = self._compute_sv(handle, state, n_qubits)
+        cutn.destroy_state(state)
+        cutn.destroy(handle)
+        return sv
+
+    def _apply_product(self, n_qubits, gate_modes, d_G, d_H, data_type, strides=0):
+        """Compute statevector via network_operator_append_product."""
+        n_gate = len(gate_modes)
+        dims = (2,) * n_qubits
+        handle = cutn.create()
+        state = cutn.create_state(handle, cutn.StatePurity.PURE, n_qubits, dims, data_type)
+        for q in range(n_qubits):
+            cutn.state_apply_tensor_operator(handle, state, 1, (q,), d_H.data.ptr, 0, 1, 0, 1)
+        net_op = cutn.create_network_operator(handle, n_qubits, dims, data_type)
+        cutn.network_operator_append_product(
+            handle, net_op, 1.0 + 0j, 1,
+            (n_gate,), (gate_modes,), (strides,), (d_G.data.ptr,))
+        cutn.state_apply_network_operator(handle, state, net_op, 0, 0, 1)
+        sv = self._compute_sv(handle, state, n_qubits)
+        cutn.destroy_network_operator(net_op)
+        cutn.destroy_state(state)
+        cutn.destroy(handle)
+        return sv
+
+    def _make_device_tensors(self, gate_np):
+        """Copy gate and Hadamard to device and return (d_G, d_H, data_type)."""
+        import cuquantum
+        data_type = cuquantum.cudaDataType.CUDA_C_64F
+        H_np = np.array([[1, 1], [1, -1]], dtype=np.complex128) / np.sqrt(2)
+        d_H = cp.asarray(H_np)
+        d_G = cp.asarray(np.ascontiguousarray(gate_np))
+        return d_G, d_H, data_type
+
+    def _run(self, n_qubits, gate_modes, gate_np, product_strides=0):
+        """Apply gate via both paths and return (sv_direct, sv_product)."""
+        d_G, d_H, data_type = self._make_device_tensors(gate_np)
+        sv_direct = self._apply_tensor_operator(n_qubits, gate_modes, d_G, d_H, data_type)
+        sv_product = self._apply_product(n_qubits, gate_modes, d_G, d_H, data_type, strides=product_strides)
+        return sv_direct, sv_product
+
+    def test_single_qubit_null_strides(self):
+        """1-qubit NULL strides: convention difference is trivial, results match."""
+        rng = np.random.default_rng(42)
+        G = self._random_unitary(2, rng)
+        sv_direct, sv_product = self._run(3, (1,), G)
+        np.testing.assert_allclose(sv_product, sv_direct, atol=1e-12, rtol=1e-12,
+            err_msg="1-qubit NULL strides: both paths should agree")
+
+    def test_multi_qubit_null_strides_diverges(self):
+        """2-qubit NULL strides: different mode conventions produce different results.
+
+        This is by design — apply_tensor_operator uses reversed-within-half mode
+        ordering while append_product uses forward ordering. The same raw buffer
+        with NULL strides is interpreted differently.
+        """
+        rng = np.random.default_rng(42)
+        G = self._random_unitary(4, rng).reshape(2, 2, 2, 2)
+        assert not np.allclose(G, G.transpose(1, 0, 3, 2)), \
+            "gate must not be invariant under qubit swap"
+        sv_direct, sv_product = self._run(3, (0, 1), G)
+        assert not np.allclose(sv_product, sv_direct, atol=1e-12, rtol=1e-12), \
+            "2-qubit NULL strides: different mode conventions should cause divergence"
+
+    def test_multi_qubit_product_strides_match_direct(self):
+        """2-qubit: corrected strides on append_product reconcile with apply_tensor_operator."""
+        rng = np.random.default_rng(42)
+        G = self._random_unitary(4, rng).reshape(2, 2, 2, 2)
+        # append_product forward: (q0_in, q1_in, q0_out, q1_out), strides (s0, s1, s2, s3)
+        # apply_tensor_operator reversed: (q1_in, q0_in, q1_out, q0_out), default (1, 2, 4, 8)
+        # To match: s0(q0_in)=2, s1(q1_in)=1, s2(q0_out)=8, s3(q1_out)=4
+        corrected = (2, 1, 8, 4)
+        d_G, d_H, data_type = self._make_device_tensors(G)
+        sv_direct = self._apply_tensor_operator(3, (0, 1), d_G, d_H, data_type)
+        sv_product = self._apply_product(3, (0, 1), d_G, d_H, data_type, strides=corrected)
+        np.testing.assert_allclose(sv_product, sv_direct, atol=1e-12, rtol=1e-12,
+            err_msg="2-qubit corrected product strides: should match apply_tensor_operator")
+
+    def test_multi_qubit_direct_strides_match_product(self):
+        """2-qubit: corrected strides on apply_tensor_operator reconcile with append_product."""
+        rng = np.random.default_rng(42)
+        G = self._random_unitary(4, rng).reshape(2, 2, 2, 2)
+        # apply_tensor_operator reversed: (q1_in, q0_in, q1_out, q0_out), default (1, 2, 4, 8)
+        # append_product forward: (q0_in, q1_in, q0_out, q1_out), default (1, 2, 4, 8)
+        # To make direct match product's default: s0(q1_in)=2, s1(q0_in)=1, s2(q1_out)=8, s3(q0_out)=4
+        corrected = (2, 1, 8, 4)
+        d_G, d_H, data_type = self._make_device_tensors(G)
+        sv_direct = self._apply_tensor_operator(3, (0, 1), d_G, d_H, data_type, strides=corrected)
+        sv_product = self._apply_product(3, (0, 1), d_G, d_H, data_type)
+        np.testing.assert_allclose(sv_product, sv_direct, atol=1e-12, rtol=1e-12,
+            err_msg="2-qubit corrected direct strides: should match append_product")
+
+    def test_multi_qubit_matches_numpy_reference(self):
+        """2-qubit: both APIs must agree with an independent numpy einsum reference."""
+        n_qubits = 3
+        rng = np.random.default_rng(42)
+        G = self._random_unitary(4, rng).reshape(2, 2, 2, 2)
+        H = np.array([[1, 1], [1, -1]], dtype=np.complex128) / np.sqrt(2)
+
+        # Build reference: |psi> = G_{q0,q1} H_{q0} H_{q1} H_{q2} |000>
+        # Start from |000>, apply H to each qubit, then G on (q0, q1)
+        sv = np.zeros((2,) * n_qubits, dtype=np.complex128)
+        sv[(0,) * n_qubits] = 1.0
+        for q in range(n_qubits):
+            sv = np.tensordot(H, sv, axes=([1], [q]))
+            sv = np.moveaxis(sv, 0, q)
+        # Apply G on modes (0, 1): sv[I,J,k] = G[I,J,i,j] * sv[i,j,k]
+        # User/numpy convention: G is (bra0, bra1, ket0, ket1)
+        sv_ref = np.einsum('IJij,ijk->IJk', G, sv)
+
+        # C-contiguous G has element strides (8, 4, 2, 1) for axes (bra0, bra1, ket0, ket1).
+        # apply_tensor_operator with NULL strides interprets as column-major:
+        #   modes (q1_ket, q0_ket, q1_bra, q0_bra) with strides (1, 2, 4, 8)
+        #   i.e. G(j1, j0, i1, i0) — reversed within each half.
+        #   This maps C-contiguous (bra0, bra1, ket0, ket1) to the correct contraction.
+        # append_product with NULL strides interprets as column-major:
+        #   modes (q0_ket, q1_ket, q0_bra, q1_bra) with strides (1, 2, 4, 8)
+        #   i.e. G(j0, j1, i0, i1) — forward within each half.
+        #   This misinterprets C-contiguous data; corrected strides (2, 1, 8, 4) fix it.
+
+        d_G, d_H, data_type = self._make_device_tensors(G)
+
+        sv_direct = self._apply_tensor_operator(n_qubits, (0, 1), d_G, d_H, data_type)
+        np.testing.assert_allclose(sv_direct, sv_ref, atol=1e-12, rtol=1e-12,
+            err_msg="apply_tensor_operator must match numpy reference")
+
+        corrected = (2, 1, 8, 4)
+        sv_product = self._apply_product(n_qubits, (0, 1), d_G, d_H, data_type, strides=corrected)
+        np.testing.assert_allclose(sv_product, sv_ref, atol=1e-12, rtol=1e-12,
+            err_msg="append_product (corrected strides) must match numpy reference")
+
+    def test_multi_qubit_explicit_strides_numpy_reference(self):
+        """2-qubit: explicit strides (no NULL) must match numpy reference for both APIs."""
+        n_qubits = 3
+        rng = np.random.default_rng(42)
+        G = self._random_unitary(4, rng).reshape(2, 2, 2, 2)
+        H = np.array([[1, 1], [1, -1]], dtype=np.complex128) / np.sqrt(2)
+
+        sv = np.zeros((2,) * n_qubits, dtype=np.complex128)
+        sv[(0,) * n_qubits] = 1.0
+        for q in range(n_qubits):
+            sv = np.tensordot(H, sv, axes=([1], [q]))
+            sv = np.moveaxis(sv, 0, q)
+        sv_ref = np.einsum('IJij,ijk->IJk', G, sv)
+
+        d_G, d_H, data_type = self._make_device_tensors(G)
+
+        # Element strides of C-contiguous G(bra0, bra1, ket0, ket1)
+        es = tuple(s // G.itemsize for s in G.strides)  # (8, 4, 2, 1)
+
+        # apply_tensor_operator: modes (q1_ket, q0_ket, q1_bra, q0_bra)
+        # -> user axes: (ket1, ket0, bra1, bra0)
+        direct_strides = (es[3], es[2], es[1], es[0])
+        sv_direct = self._apply_tensor_operator(n_qubits, (0, 1), d_G, d_H, data_type, strides=direct_strides)
+        np.testing.assert_allclose(sv_direct, sv_ref, atol=1e-12, rtol=1e-12,
+            err_msg="apply_tensor_operator (explicit strides) must match numpy reference")
+
+        # append_product: modes (q0_ket, q1_ket, q0_bra, q1_bra)
+        # -> user axes: (ket0, ket1, bra0, bra1)
+        product_strides = (es[2], es[3], es[0], es[1])
+        sv_product = self._apply_product(n_qubits, (0, 1), d_G, d_H, data_type, strides=product_strides)
+        np.testing.assert_allclose(sv_product, sv_ref, atol=1e-12, rtol=1e-12,
+            err_msg="append_product (explicit strides) must match numpy reference")
 
 
 class TestLogger(LoggerTestBase):

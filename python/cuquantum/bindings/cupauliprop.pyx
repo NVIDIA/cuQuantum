@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 25.11.0 to 26.01.0. Do not modify it directly.
+# This code was automatically generated across versions from 25.11.0 to 26.03.1, generator version 0.3.1.dev1477+g125b4cb42. Do not modify it directly.
 
 cimport cython
 cimport cpython
@@ -23,6 +23,7 @@ from libc.stdlib cimport calloc, free, malloc
 from cython cimport view
 cimport cpython.buffer
 cimport cpython.memoryview
+cimport cpython
 from libc.string cimport memcmp, memcpy
 import numpy as _numpy
 
@@ -38,6 +39,34 @@ cdef __from_data(data, dtype_name, expected_dtype, lowpp_type):
     if data.dtype != expected_dtype:
         raise ValueError(f"data array must be of dtype {dtype_name}")
     return lowpp_type.from_ptr(data.ctypes.data, not data.flags.writeable, data)
+
+
+cdef __from_buffer(buffer, size, lowpp_type):
+    cdef Py_buffer view
+    if cpython.PyObject_GetBuffer(buffer, &view, cpython.PyBUF_SIMPLE) != 0:
+        raise TypeError("buffer argument does not support the buffer protocol")
+    try:
+        if view.itemsize != 1:
+            raise ValueError("buffer itemsize must be 1 byte")
+        if view.len != size:
+            raise ValueError(f"buffer length must be {size} bytes")
+        return lowpp_type.from_ptr(<intptr_t><void *>view.buf, not view.readonly, buffer)
+    finally:
+        cpython.PyBuffer_Release(&view)
+
+
+cdef __getbuffer(object self, cpython.Py_buffer *buffer, void *ptr, int size, bint readonly):
+    buffer.buf = <char *>ptr
+    buffer.format = 'b'
+    buffer.internal = NULL
+    buffer.itemsize = 1
+    buffer.len = size
+    buffer.ndim = 1
+    buffer.obj = self
+    buffer.readonly = readonly
+    buffer.shape = &buffer.len
+    buffer.strides = &buffer.itemsize
+    buffer.suboffsets = NULL
 
 
 ###############################################################################
@@ -106,6 +135,12 @@ cdef class PauliTerm:
         other_ = other
         return (memcmp(<void *><intptr_t>(self._ptr), <void *><intptr_t>(other_._ptr), sizeof(cupaulipropPauliTerm_t)) == 0)
 
+    def __getbuffer__(self, Py_buffer *buffer, int flags):
+        __getbuffer(self, buffer, <void *>self._ptr, sizeof(cupaulipropPauliTerm_t), self._readonly)
+
+    def __releasebuffer__(self, Py_buffer *buffer):
+        pass
+
     def __setitem__(self, key, val):
         if key == 0 and isinstance(val, _numpy.ndarray):
             self._ptr = <cupaulipropPauliTerm_t *>malloc(sizeof(cupaulipropPauliTerm_t))
@@ -139,6 +174,11 @@ cdef class PauliTerm:
         if self._readonly:
             raise ValueError("This PauliTerm instance is read-only")
         self._ptr[0].coef = <void *><intptr_t>val
+
+    @staticmethod
+    def from_buffer(buffer):
+        """Create an PauliTerm instance with the memory from the given buffer."""
+        return __from_buffer(buffer, sizeof(cupaulipropPauliTerm_t), PauliTerm)
 
     @staticmethod
     def from_data(data):
@@ -238,6 +278,12 @@ cdef class TruncationStrategy:
         other_ = other
         return (memcmp(<void *><intptr_t>(self._ptr), <void *><intptr_t>(other_._ptr), sizeof(cupaulipropTruncationStrategy_t)) == 0)
 
+    def __getbuffer__(self, Py_buffer *buffer, int flags):
+        __getbuffer(self, buffer, <void *>self._ptr, sizeof(cupaulipropTruncationStrategy_t), self._readonly)
+
+    def __releasebuffer__(self, Py_buffer *buffer):
+        pass
+
     def __setitem__(self, key, val):
         if key == 0 and isinstance(val, _numpy.ndarray):
             self._ptr = <cupaulipropTruncationStrategy_t *>malloc(sizeof(cupaulipropTruncationStrategy_t))
@@ -271,6 +317,11 @@ cdef class TruncationStrategy:
         if self._readonly:
             raise ValueError("This TruncationStrategy instance is read-only")
         self._ptr[0].paramStruct = <void *><intptr_t>val
+
+    @staticmethod
+    def from_buffer(buffer):
+        """Create an TruncationStrategy instance with the memory from the given buffer."""
+        return __from_buffer(buffer, sizeof(cupaulipropTruncationStrategy_t), TruncationStrategy)
 
     @staticmethod
     def from_data(data):
@@ -369,6 +420,12 @@ cdef class CoefficientTruncationParams:
         other_ = other
         return (memcmp(<void *><intptr_t>(self._ptr), <void *><intptr_t>(other_._ptr), sizeof(cupaulipropCoefficientTruncationParams_t)) == 0)
 
+    def __getbuffer__(self, Py_buffer *buffer, int flags):
+        __getbuffer(self, buffer, <void *>self._ptr, sizeof(cupaulipropCoefficientTruncationParams_t), self._readonly)
+
+    def __releasebuffer__(self, Py_buffer *buffer):
+        pass
+
     def __setitem__(self, key, val):
         if key == 0 and isinstance(val, _numpy.ndarray):
             self._ptr = <cupaulipropCoefficientTruncationParams_t *>malloc(sizeof(cupaulipropCoefficientTruncationParams_t))
@@ -391,6 +448,11 @@ cdef class CoefficientTruncationParams:
         if self._readonly:
             raise ValueError("This CoefficientTruncationParams instance is read-only")
         self._ptr[0].cutoff = val
+
+    @staticmethod
+    def from_buffer(buffer):
+        """Create an CoefficientTruncationParams instance with the memory from the given buffer."""
+        return __from_buffer(buffer, sizeof(cupaulipropCoefficientTruncationParams_t), CoefficientTruncationParams)
 
     @staticmethod
     def from_data(data):
@@ -489,6 +551,12 @@ cdef class PauliWeightTruncationParams:
         other_ = other
         return (memcmp(<void *><intptr_t>(self._ptr), <void *><intptr_t>(other_._ptr), sizeof(cupaulipropPauliWeightTruncationParams_t)) == 0)
 
+    def __getbuffer__(self, Py_buffer *buffer, int flags):
+        __getbuffer(self, buffer, <void *>self._ptr, sizeof(cupaulipropPauliWeightTruncationParams_t), self._readonly)
+
+    def __releasebuffer__(self, Py_buffer *buffer):
+        pass
+
     def __setitem__(self, key, val):
         if key == 0 and isinstance(val, _numpy.ndarray):
             self._ptr = <cupaulipropPauliWeightTruncationParams_t *>malloc(sizeof(cupaulipropPauliWeightTruncationParams_t))
@@ -511,6 +579,11 @@ cdef class PauliWeightTruncationParams:
         if self._readonly:
             raise ValueError("This PauliWeightTruncationParams instance is read-only")
         self._ptr[0].cutoff = val
+
+    @staticmethod
+    def from_buffer(buffer):
+        """Create an PauliWeightTruncationParams instance with the memory from the given buffer."""
+        return __from_buffer(buffer, sizeof(cupaulipropPauliWeightTruncationParams_t), PauliWeightTruncationParams)
 
     @staticmethod
     def from_data(data):
@@ -554,7 +627,12 @@ cdef class PauliWeightTruncationParams:
 ###############################################################################
 
 class Status(_IntEnum):
-    """See `cupaulipropStatus_t`."""
+    """
+    Return status of the library API functions.All library API functions
+    return a status which can take one of the following values.
+
+    See `cupaulipropStatus_t`.
+    """
     SUCCESS = CUPAULIPROP_STATUS_SUCCESS
     NOT_INITIALIZED = CUPAULIPROP_STATUS_NOT_INITIALIZED
     INVALID_VALUE = CUPAULIPROP_STATUS_INVALID_VALUE
@@ -564,33 +642,57 @@ class Status(_IntEnum):
     DISTRIBUTED_FAILURE = CUPAULIPROP_STATUS_DISTRIBUTED_FAILURE
 
 class ComputeType(_IntEnum):
-    """See `cupaulipropComputeType_t`."""
+    """
+    Supported compute types.
+
+    See `cupaulipropComputeType_t`.
+    """
     COMPUTE_32F = CUPAULIPROP_COMPUTE_32F
     COMPUTE_64F = CUPAULIPROP_COMPUTE_64F
 
 class Memspace(_IntEnum):
-    """See `cupaulipropMemspace_t`."""
+    """
+    Memory spaces for workspace buffer allocation.
+
+    See `cupaulipropMemspace_t`.
+    """
     DEVICE = CUPAULIPROP_MEMSPACE_DEVICE
     HOST = CUPAULIPROP_MEMSPACE_HOST
 
 class WorkspaceKind(_IntEnum):
-    """See `cupaulipropWorkspaceKind_t`."""
+    """
+    Kinds of workspace memory buffers.
+
+    See `cupaulipropWorkspaceKind_t`.
+    """
     WORKSPACE_SCRATCH = CUPAULIPROP_WORKSPACE_SCRATCH
 
 class TruncationStrategyKind(_IntEnum):
-    """See `cupaulipropTruncationStrategyKind_t`."""
+    """
+    Pauli operator expansion truncation strategies.
+
+    See `cupaulipropTruncationStrategyKind_t`.
+    """
     TRUNCATION_STRATEGY_COEFFICIENT_BASED = CUPAULIPROP_TRUNCATION_STRATEGY_COEFFICIENT_BASED
     TRUNCATION_STRATEGY_PAULI_WEIGHT_BASED = CUPAULIPROP_TRUNCATION_STRATEGY_PAULI_WEIGHT_BASED
 
 class PauliKind(_IntEnum):
-    """See `cupaulipropPauliKind_t`."""
+    """
+    Pauli operators.
+
+    See `cupaulipropPauliKind_t`.
+    """
     PAULI_I = CUPAULIPROP_PAULI_I
     PAULI_X = CUPAULIPROP_PAULI_X
     PAULI_Y = CUPAULIPROP_PAULI_Y
     PAULI_Z = CUPAULIPROP_PAULI_Z
 
 class CliffordGateKind(_IntEnum):
-    """See `cupaulipropCliffordGateKind_t`."""
+    """
+    Clifford gates.
+
+    See `cupaulipropCliffordGateKind_t`.
+    """
     CLIFFORD_GATE_I = CUPAULIPROP_CLIFFORD_GATE_I
     CLIFFORD_GATE_X = CUPAULIPROP_CLIFFORD_GATE_X
     CLIFFORD_GATE_Y = CUPAULIPROP_CLIFFORD_GATE_Y
@@ -607,13 +709,21 @@ class CliffordGateKind(_IntEnum):
     CLIFFORD_GATE_SQRTZ = CUPAULIPROP_CLIFFORD_GATE_SQRTZ
 
 class QuantumOperatorKind(_IntEnum):
-    """See `cupaulipropQuantumOperatorKind_t`."""
+    """
+    Kinds of quantum operators.
+
+    See `cupaulipropQuantumOperatorKind_t`.
+    """
     EXPANSION_KIND_PAULI_ROTATION_GATE = CUPAULIPROP_EXPANSION_KIND_PAULI_ROTATION_GATE
     EXPANSION_KIND_CLIFFORD_GATE = CUPAULIPROP_EXPANSION_KIND_CLIFFORD_GATE
     EXPANSION_KIND_PAULI_NOISE_CHANNEL = CUPAULIPROP_EXPANSION_KIND_PAULI_NOISE_CHANNEL
 
 class SortOrder(_IntEnum):
-    """See `cupaulipropSortOrder_t`."""
+    """
+    Sort order for Pauli expansions.
+
+    See `cupaulipropSortOrder_t`.
+    """
     NONE = CUPAULIPROP_SORT_ORDER_NONE
     INTERNAL = CUPAULIPROP_SORT_ORDER_INTERNAL
     LITTLE_ENDIAN_BITWISE = CUPAULIPROP_SORT_ORDER_LITTLE_ENDIAN_BITWISE
@@ -1030,14 +1140,14 @@ cpdef int pauli_expansion_view_get_location(intptr_t view) except? -1:
 
 
 cpdef pauli_expansion_view_prepare_deduplication(intptr_t handle, intptr_t view_in, int sort_order, int64_t max_workspace_size, intptr_t workspace):
-    """Prepares a Pauli expansion view for deduplication.
+    """Updates the given workspace descriptor in preparation for deduplication of the given view.
 
     Args:
         handle (intptr_t): Library handle.
         view_in (intptr_t): Pauli expansion view to be deduplicated.
         sort_order (SortOrder): Sort order to apply to the output expansion. Use ``CUPAULIPROP_SORT_ORDER_NONE`` if sorting is not required. Currently, only ``CUPAULIPROP_SORT_ORDER_INTERNAL`` and ``CUPAULIPROP_SORT_ORDER_NONE`` are supported.
         max_workspace_size (int64_t): Maximum workspace size limit in bytes.
-        workspace (intptr_t): Workspace descriptor with the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the required workspace buffer size.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareDeduplication`
     """
@@ -1081,14 +1191,14 @@ cpdef pauli_expansion_populate_from_view(intptr_t handle, intptr_t view_in, intp
 
 
 cpdef pauli_expansion_view_prepare_trace_with_expansion_view(intptr_t handle, intptr_t view1, intptr_t view2, int64_t max_workspace_size, intptr_t workspace):
-    """Prepares a Pauli expansion view for computing the product trace of two Pauli expansion views.
+    """Updates the given workspace descriptor in preparation for computing the trace of the product of two Pauli expansion views.
 
     Args:
         handle (intptr_t): Library handle.
         view1 (intptr_t): First Pauli expansion view to be traced.
         view2 (intptr_t): Second Pauli expansion view to be traced.
         max_workspace_size (int64_t): Maximum workspace size limit in bytes.
-        workspace (intptr_t): Workspace descriptor with the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the required workspace buffer size.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareTraceWithExpansionView`
     """
@@ -1097,33 +1207,34 @@ cpdef pauli_expansion_view_prepare_trace_with_expansion_view(intptr_t handle, in
     check_status(__status__)
 
 
-cpdef pauli_expansion_view_compute_trace_with_expansion_view(intptr_t handle, intptr_t view1, intptr_t view2, int32_t take_adjoint1, intptr_t trace, intptr_t workspace, intptr_t stream):
-    """Computes the trace of two Pauli expansion views.
+cpdef pauli_expansion_view_compute_trace_with_expansion_view(intptr_t handle, intptr_t view1, intptr_t view2, int32_t take_adjoint1, intptr_t trace_significand, intptr_t trace_exponent, intptr_t workspace, intptr_t stream):
+    """Computes the trace of the product of two Pauli expansion views.
 
     Args:
         handle (intptr_t): Library handle.
         view1 (intptr_t): First Pauli expansion view.
         view2 (intptr_t): Second Pauli expansion view.
         take_adjoint1 (int32_t): Whether or not the adjoint of the first view is taken. True ``(!= 0)`` if the adjoint is taken, false ``(0)`` otherwise.
-        trace (intptr_t): Pointer to CPU-accessible memory where the trace value will be written. The numerical type must match the data type of the views' coefficients.
+        trace_significand (intptr_t): Pointer to CPU-accessible memory where the trace's significand will be written. The numerical type must match the data type of the views' coefficients.
+        trace_exponent (intptr_t): Pointer to CPU-accessible memory where the trace's exponent will be stored. The numerical type is always ``double``.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream to be used for the operation.
 
     .. seealso:: `cupaulipropPauliExpansionViewComputeTraceWithExpansionView`
     """
     with nogil:
-        __status__ = cupaulipropPauliExpansionViewComputeTraceWithExpansionView(<const Handle>handle, <const PauliExpansionView>view1, <const PauliExpansionView>view2, take_adjoint1, <void*>trace, <WorkspaceDescriptor>workspace, <Stream>stream)
+        __status__ = cupaulipropPauliExpansionViewComputeTraceWithExpansionView(<const Handle>handle, <const PauliExpansionView>view1, <const PauliExpansionView>view2, take_adjoint1, <void*>trace_significand, <double*>trace_exponent, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(__status__)
 
 
 cpdef pauli_expansion_view_prepare_trace_with_zero_state(intptr_t handle, intptr_t view, int64_t max_workspace_size, intptr_t workspace):
-    """Prepares a Pauli expansion view for tracing with the zero state, i.e. computing ``Tr(view * |0...0>)`` .
+    """Updates the given workspace descriptor in preparation for computing the trace of the given Pauli expansion view with the zero state, i.e. computing ``Tr(view * |0...0><0...0|)``.
 
     Args:
         handle (intptr_t): Library handle.
         view (intptr_t): Pauli expansion view to be traced.
         max_workspace_size (int64_t): Maximum workspace size limit in bytes.
-        workspace (intptr_t): Workspace descriptor with the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the required workspace buffer size.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareTraceWithZeroState`
     """
@@ -1132,20 +1243,21 @@ cpdef pauli_expansion_view_prepare_trace_with_zero_state(intptr_t handle, intptr
     check_status(__status__)
 
 
-cpdef pauli_expansion_view_compute_trace_with_zero_state(intptr_t handle, intptr_t view, intptr_t trace, intptr_t workspace, intptr_t stream):
-    """Traces a Pauli expansion view with the zero state, i.e. computes ``Tr(view * |0...0>)`` .
+cpdef pauli_expansion_view_compute_trace_with_zero_state(intptr_t handle, intptr_t view, intptr_t trace_significand, intptr_t trace_exponent, intptr_t workspace, intptr_t stream):
+    """Computes the trace of the Pauli expansion view with the zero state, i.e. ``Tr(view * |0...0><0...0|)``.
 
     Args:
         handle (intptr_t): Library handle.
         view (intptr_t): Pauli expansion view to be traced.
-        trace (intptr_t): Pointer to CPU-accessible memory where the trace value will be written. The numerical type must match the data type of the views' coefficients.
+        trace_significand (intptr_t): Pointer to CPU-accessible memory where the trace's significand will be written. The numerical type must match the data type of the views' coefficients.
+        trace_exponent (intptr_t): Pointer to CPU-accessible memory where the trace's exponent will be stored. The numerical type is always ``double``.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream to be used for the operation.
 
     .. seealso:: `cupaulipropPauliExpansionViewComputeTraceWithZeroState`
     """
     with nogil:
-        __status__ = cupaulipropPauliExpansionViewComputeTraceWithZeroState(<const Handle>handle, <const PauliExpansionView>view, <void*>trace, <WorkspaceDescriptor>workspace, <Stream>stream)
+        __status__ = cupaulipropPauliExpansionViewComputeTraceWithZeroState(<const Handle>handle, <const PauliExpansionView>view, <void*>trace_significand, <double*>trace_exponent, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(__status__)
 
 
@@ -1220,7 +1332,7 @@ cpdef intptr_t create_pauli_noise_channel_operator(intptr_t handle, int32_t num_
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
 
-        probabilities (object): Probabilities for each Pauli channel. For a single qubit Pauli Channel, the probabilities are an array of length 4: ``PauliKind((i)%4)`` (i.e. ``[p_I, p_X, p_Y, p_Z]``). For a two qubit Pauli Channel, probabibilities is an array of length 16. The i-th element of the probabilities is associated with the i-th element of the 2-qubit Pauli strings in lexographic order. E.g. prob[i] corresponds to the Pauli string ``PauliKind((i)%4), PauliKind_t((i)/4)``. It can be:
+        probabilities (object): Probabilities for each Pauli channel. For a single qubit Pauli Channel, the probabilities are an array of length 4: ``PauliKind((i)%4)`` (i.e. ``[p_I, p_X, p_Y, p_Z]``). For a two qubit Pauli Channel, probabilities is an array of length 16. The i-th element of the probabilities is associated with the i-th element of the 2-qubit Pauli strings in lexicographic order. E.g. prob[i] corresponds to the Pauli string ``PauliKind((i)%4), PauliKind_t((i)/4)``. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``float``.
@@ -1240,25 +1352,6 @@ cpdef intptr_t create_pauli_noise_channel_operator(intptr_t handle, int32_t num_
         __status__ = cupaulipropCreatePauliNoiseChannelOperator(<const Handle>handle, num_qubits, <const int32_t*>(_qubit_indices_.data()), <const double*>(_probabilities_.data()), &oper)
     check_status(__status__)
     return <intptr_t>oper
-
-
-cpdef int quantum_operator_get_kind(intptr_t handle, intptr_t oper) except? -1:
-    """Queries what kind of gate or channel a quantum operator represents.
-
-    Args:
-        handle (intptr_t): Library handle.
-        oper (intptr_t): Quantum operator.
-
-    Returns:
-        int: Kind of the quantum operator.
-
-    .. seealso:: `cupaulipropQuantumOperatorGetKind`
-    """
-    cdef _QuantumOperatorKind kind
-    with nogil:
-        __status__ = cupaulipropQuantumOperatorGetKind(<const Handle>handle, <const QuantumOperator>oper, &kind)
-    check_status(__status__)
-    return <int>kind
 
 
 cpdef destroy_operator(intptr_t oper):
@@ -1294,14 +1387,14 @@ cpdef int pauli_expansion_get_sort_order(intptr_t handle, intptr_t pauli_expansi
 
 
 cpdef pauli_expansion_view_prepare_sort(intptr_t handle, intptr_t view_in, int sort_order, int64_t max_workspace_size, intptr_t workspace):
-    """Prepares a Pauli expansion view for sorting.
+    """Updates the given workspace descriptor in preparation for sorting of the given view.
 
     Args:
         handle (intptr_t): Library handle.
         view_in (intptr_t): Pauli expansion view to be sorted.
         sort_order (SortOrder): Sort order to apply.
         max_workspace_size (int64_t): Maximum workspace size limit in bytes.
-        workspace (intptr_t): Workspace descriptor with the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the required workspace buffer size.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareSort`
     """
@@ -1329,7 +1422,7 @@ cpdef pauli_expansion_view_execute_sort(intptr_t handle, intptr_t view_in, intpt
 
 
 cpdef intptr_t create_amplitude_damping_channel_operator(intptr_t handle, int32_t qubit_ind_ex, double damping_prob, double excite_prob) except? 0:
-    """Creates a generalised amplitude damping channel.
+    """Creates a generalized amplitude damping channel.
 
     Args:
         handle (intptr_t): Library handle.
@@ -1347,6 +1440,147 @@ cpdef intptr_t create_amplitude_damping_channel_operator(intptr_t handle, int32_
         __status__ = cupaulipropCreateAmplitudeDampingChannelOperator(<const Handle>handle, qubit_ind_ex, damping_prob, excite_prob, &oper)
     check_status(__status__)
     return <intptr_t>oper
+
+
+cpdef tuple pauli_expansion_view_prepare_trace_with_expansion_view_backward_diff(intptr_t handle, intptr_t view1, intptr_t view2, int64_t max_workspace_size, intptr_t workspace):
+    """Updates the given workspace descriptor in preparation for backward differentiation of the trace of the product of two Pauli expansion views.
+
+    Args:
+        handle (intptr_t): Library handle.
+        view1 (intptr_t): First Pauli expansion view to be traced.
+        view2 (intptr_t): Second Pauli expansion view to be traced.
+        max_workspace_size (int64_t): Maximum workspace size limit in bytes.
+        workspace (intptr_t): Workspace descriptor to be updated with the required workspace buffer size.
+
+    Returns:
+        A 4-tuple containing:
+
+        - int64_t: Required size (in bytes) of the X and Z bits output buffer for ``cotangentExpansion1``.
+        - int64_t: Required size (in bytes) of the coefficients output buffer for ``cotangentExpansion1``.
+        - int64_t: Required size (in bytes) of the X and Z bits output buffer for ``cotangentExpansion2``.
+        - int64_t: Required size (in bytes) of the coefficients output buffer for ``cotangentExpansion2``.
+
+    .. seealso:: `cupaulipropPauliExpansionViewPrepareTraceWithExpansionViewBackwardDiff`
+    """
+    cdef int64_t required_xz_bits_buffer_size1
+    cdef int64_t required_coef_buffer_size1
+    cdef int64_t required_xz_bits_buffer_size2
+    cdef int64_t required_coef_buffer_size2
+    with nogil:
+        __status__ = cupaulipropPauliExpansionViewPrepareTraceWithExpansionViewBackwardDiff(<const Handle>handle, <const PauliExpansionView>view1, <const PauliExpansionView>view2, max_workspace_size, &required_xz_bits_buffer_size1, &required_coef_buffer_size1, &required_xz_bits_buffer_size2, &required_coef_buffer_size2, <WorkspaceDescriptor>workspace)
+    check_status(__status__)
+    return (required_xz_bits_buffer_size1, required_coef_buffer_size1, required_xz_bits_buffer_size2, required_coef_buffer_size2)
+
+
+cpdef pauli_expansion_view_compute_trace_with_expansion_view_backward_diff(intptr_t handle, intptr_t view1, intptr_t view2, int32_t take_adjoint1, intptr_t cotangent_trace_significand, intptr_t cotangent_trace_exponent, intptr_t cotangent_expansion1, intptr_t cotangent_expansion2, intptr_t workspace, intptr_t stream):
+    """Computes the backward differentiation of the trace of two Pauli expansion views.
+
+    Args:
+        handle (intptr_t): Library handle.
+        view1 (intptr_t): First Pauli expansion view.
+        view2 (intptr_t): Second Pauli expansion view.
+        take_adjoint1 (int32_t): Whether or not the adjoint of the first view is taken when forming the trace. True ``(!= 0)`` if the adjoint is taken, false ``(0)`` otherwise.
+        cotangent_trace_significand (intptr_t): Pointer to host-accessible memory holding the scalar cotangent  of ``traceSignificand``. The numerical type must match the data type of the views' coefficients.
+        cotangent_trace_exponent (intptr_t): Pointer to host-accessible memory holding the scalar cotangent  of ``traceExponent``. This argument is currently a dead branch for coefficient cotangents, since ``traceExponent`` presently carries no parameter dependence, though beware that this may change in the future. The numerical type is always ``double``.
+        cotangent_expansion1 (intptr_t): Output Pauli expansion populated with coefficient cotangents corresponding to ``view1``. The numerical type must match the data type of the views' coefficients.
+        cotangent_expansion2 (intptr_t): Output Pauli expansion populated with coefficient cotangents corresponding to ``view2``. The numerical type must match the data type of the views' coefficients.
+        workspace (intptr_t): Allocated workspace descriptor.
+        stream (intptr_t): CUDA stream to be used for the operation.
+
+    .. seealso:: `cupaulipropPauliExpansionViewComputeTraceWithExpansionViewBackwardDiff`
+    """
+    with nogil:
+        __status__ = cupaulipropPauliExpansionViewComputeTraceWithExpansionViewBackwardDiff(<const Handle>handle, <const PauliExpansionView>view1, <const PauliExpansionView>view2, take_adjoint1, <const void*>cotangent_trace_significand, <const double*>cotangent_trace_exponent, <PauliExpansion>cotangent_expansion1, <PauliExpansion>cotangent_expansion2, <WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(__status__)
+
+
+cpdef tuple pauli_expansion_view_prepare_trace_with_zero_state_backward_diff(intptr_t handle, intptr_t view, int64_t max_workspace_size, intptr_t workspace):
+    """Updates the given workspace descriptor in preparation for backward differentiation of the trace with the zero state.
+
+    Args:
+        handle (intptr_t): Library handle.
+        view (intptr_t): Pauli expansion view to be traced.
+        max_workspace_size (int64_t): Maximum workspace size limit in bytes.
+        workspace (intptr_t): Workspace descriptor to be updated with the required workspace buffer size.
+
+    Returns:
+        A 2-tuple containing:
+
+        - int64_t: Required size (in bytes) of the X and Z bits output buffer for the cotangent expansion.
+        - int64_t: Required size (in bytes) of the coefficients output buffer for the cotangent expansion.
+
+    .. seealso:: `cupaulipropPauliExpansionViewPrepareTraceWithZeroStateBackwardDiff`
+    """
+    cdef int64_t required_xz_bits_buffer_size
+    cdef int64_t required_coef_buffer_size
+    with nogil:
+        __status__ = cupaulipropPauliExpansionViewPrepareTraceWithZeroStateBackwardDiff(<const Handle>handle, <const PauliExpansionView>view, max_workspace_size, &required_xz_bits_buffer_size, &required_coef_buffer_size, <WorkspaceDescriptor>workspace)
+    check_status(__status__)
+    return (required_xz_bits_buffer_size, required_coef_buffer_size)
+
+
+cpdef pauli_expansion_view_compute_trace_with_zero_state_backward_diff(intptr_t handle, intptr_t view, intptr_t cotangent_trace_significand, intptr_t cotangent_trace_exponent, intptr_t cotangent_expansion, intptr_t workspace, intptr_t stream):
+    """Computes the backward differentiation of the trace of a Pauli expansion view with the zero state.
+
+    Args:
+        handle (intptr_t): Library handle.
+        view (intptr_t): Pauli expansion view to be traced.
+        cotangent_trace_significand (intptr_t): Pointer to host-accessible memory holding the scalar cotangent  of ``traceSignificand``. The numerical type must match the data type of the view's coefficients.
+        cotangent_trace_exponent (intptr_t): Pointer to host-accessible memory holding the scalar cotangent  of ``traceExponent``. This argument is currently a dead branch for coefficient cotangents, since ``traceExponent`` presently carries no parameter dependence, though beware that this may change in the future. The numerical type is always ``double``.
+        cotangent_expansion (intptr_t): Output Pauli expansion populated with coefficient cotangents corresponding to ``view``. The numerical type must match the data type of the view's coefficients.
+        workspace (intptr_t): Allocated workspace descriptor.
+        stream (intptr_t): CUDA stream to be used for the operation.
+
+    .. seealso:: `cupaulipropPauliExpansionViewComputeTraceWithZeroStateBackwardDiff`
+    """
+    with nogil:
+        __status__ = cupaulipropPauliExpansionViewComputeTraceWithZeroStateBackwardDiff(<const Handle>handle, <const PauliExpansionView>view, <const void*>cotangent_trace_significand, <const double*>cotangent_trace_exponent, <PauliExpansion>cotangent_expansion, <WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(__status__)
+
+
+cpdef quantum_operator_attach_cotangent_buffer(intptr_t handle, intptr_t oper, intptr_t cotangent_buffer, int64_t cotangent_buffer_size, int data_type, int location):
+    """Attaches a cotangent buffer to a quantum operator.
+
+    Args:
+        handle (intptr_t): Library handle.
+        oper (intptr_t): Quantum operator.
+        cotangent_buffer (intptr_t): Pointer to user-owned cotangent buffer.
+        cotangent_buffer_size (int64_t): Size of the buffer in bytes.
+        data_type (int): Data type of elements in the cotangent buffer.
+        location (Memspace): Memory location of the buffer (host or device).
+
+    .. seealso:: `cupaulipropQuantumOperatorAttachCotangentBuffer`
+    """
+    with nogil:
+        __status__ = cupaulipropQuantumOperatorAttachCotangentBuffer(<const Handle>handle, <QuantumOperator>oper, <void*>cotangent_buffer, cotangent_buffer_size, <DataType>data_type, <_Memspace>location)
+    check_status(__status__)
+
+
+cpdef tuple quantum_operator_get_cotangent_buffer(intptr_t handle, intptr_t oper):
+    """Retrieves the cotangent buffer attached to a quantum operator.
+
+    Args:
+        handle (intptr_t): Library handle.
+        oper (intptr_t): Quantum operator.
+
+    Returns:
+        A 4-tuple containing:
+
+        - intptr_t: Pointer to the attached cotangent buffer. If no buffer is attached, this pointer is set to NULL.
+        - int64_t: Required element count (number of differentiable parameters).
+        - int: Data type of elements in the attached buffer. If no buffer is attached, this pointer is set to ``cudaDataType_t`` ``CUPAULIPROP_DATA_TYPE_INVALID``.
+        - int: Memory location of the attached buffer. If no buffer is attached, this pointer is set to ``cupaulipropMemspace_t`` ``CUPAULIPROP_MEMSPACE_DEVICE``.
+
+    .. seealso:: `cupaulipropQuantumOperatorGetCotangentBuffer`
+    """
+    cdef void* cotangent_buffer
+    cdef int64_t cotangent_buffer_num_elements
+    cdef DataType data_type
+    cdef _Memspace location
+    with nogil:
+        __status__ = cupaulipropQuantumOperatorGetCotangentBuffer(<const Handle>handle, <const QuantumOperator>oper, &cotangent_buffer, &cotangent_buffer_num_elements, &data_type, &location)
+    check_status(__status__)
+    return (<intptr_t>cotangent_buffer, cotangent_buffer_num_elements, <int>data_type, <int>location)
 
 
 # Custom implementations for truncation strategy functions (not auto-generated)
@@ -1444,6 +1678,105 @@ cpdef pauli_expansion_view_compute_operator_application(intptr_t handle, intptr_
     
     with nogil:
         status = cupaulipropPauliExpansionViewComputeOperatorApplication(<const Handle>handle, <const PauliExpansionView>view_in, <PauliExpansion>expansion_out, <const QuantumOperator>quantum_operator, adjoint, <cupaulipropSortOrder_t>sort_order, keep_duplicates, num_truncation_strategies, _trunc_ptr, <WorkspaceDescriptor>workspace, <Stream>stream)
+    check_status(status)
+
+
+cpdef tuple pauli_expansion_view_prepare_operator_application_backward_diff(intptr_t handle, intptr_t view_in, intptr_t cotangent_out, intptr_t quantum_operator, int sort_order, int32_t keep_duplicates, int32_t num_truncation_strategies, truncation_strategies, int64_t max_workspace_size, intptr_t workspace):
+    """Prepares a Pauli expansion view for backward differentiation of operator application.
+
+    Args:
+        handle (intptr_t): Library handle.
+        view_in (intptr_t): Input Pauli expansion view (forward input).
+        cotangent_out (intptr_t): Output cotangent represented as a Pauli expansion view.
+        quantum_operator (intptr_t): Quantum operator whose adjoint buffer will be updated during computation.
+        sort_order (int): Sort order to apply to the output expansion. Use ``CUPAULIPROP_SORT_ORDER_NONE`` if sorting is not required.
+        keep_duplicates (int32_t): Whether or not the output expansion is allowed to contain duplicates.
+        num_truncation_strategies (int32_t): Number of Pauli expansion truncation strategies.
+        truncation_strategies (object): Pauli expansion truncation strategies. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``cupaulipropTruncationStrategy_t``.
+
+        max_workspace_size (int64_t): Maximum workspace size limit in bytes.
+        workspace (intptr_t): Workspace descriptor with the required workspace buffer size.
+
+    Returns:
+        A 2-tuple containing:
+
+        - int64_t: Required size (in bytes) of the X and Z bits output buffer.
+        - int64_t: Required size (in bytes) of the coefficients output buffer.
+
+    .. seealso:: `cupaulipropPauliExpansionViewPrepareOperatorApplicationBackwardDiff`
+    """
+    cdef int64_t required_xz_bits_buffer_size
+    cdef int64_t required_coef_buffer_size
+    cdef vector[cupaulipropTruncationStrategy_t] _trunc_vec
+    cdef const cupaulipropTruncationStrategy_t* _trunc_ptr = NULL
+    cdef intptr_t ptr_val
+    
+    # Handle truncation_strategies: Python sequence of TruncationStrategy objects
+    if truncation_strategies is None or num_truncation_strategies == 0:
+        _trunc_ptr = NULL
+    elif cpython.PySequence_Check(truncation_strategies):
+        # Build vector of structs from Python sequence of TruncationStrategy objects
+        for i in range(len(truncation_strategies)):
+            # Get pointer from TruncationStrategy object and dereference to copy the struct
+            ptr_val = <intptr_t><size_t>int(truncation_strategies[i].ptr)
+            _trunc_vec.push_back((<cupaulipropTruncationStrategy_t*>ptr_val)[0])
+        _trunc_ptr = <const cupaulipropTruncationStrategy_t*>(_trunc_vec.data())
+    else:
+        # For advanced users: accept a raw pointer to a pre-built array of structs
+        _trunc_ptr = <const cupaulipropTruncationStrategy_t*><intptr_t>truncation_strategies
+    
+    with nogil:
+        status = cupaulipropPauliExpansionViewPrepareOperatorApplicationBackwardDiff(<const Handle>handle, <const PauliExpansionView>view_in, <const PauliExpansionView>cotangent_out, <const QuantumOperator>quantum_operator, <cupaulipropSortOrder_t>sort_order, keep_duplicates, num_truncation_strategies, _trunc_ptr, max_workspace_size, &required_xz_bits_buffer_size, &required_coef_buffer_size, <WorkspaceDescriptor>workspace)
+    check_status(status)
+    return (required_xz_bits_buffer_size, required_coef_buffer_size)
+
+
+cpdef pauli_expansion_view_compute_operator_application_backward_diff(intptr_t handle, intptr_t view_in, intptr_t cotangent_out, intptr_t cotangent_in, intptr_t quantum_operator, int32_t adjoint, int sort_order, int32_t keep_duplicates, int32_t num_truncation_strategies, truncation_strategies, intptr_t workspace, intptr_t stream):
+    """Computes the backward differentiation of operator application on a Pauli expansion view.
+
+    Args:
+        handle (intptr_t): Library handle.
+        view_in (intptr_t): Input Pauli expansion view (forward input).
+        cotangent_out (intptr_t): Output cotangent represented as a Pauli expansion view.
+        cotangent_in (intptr_t): Pauli expansion populated with the input cotangent.
+        quantum_operator (intptr_t): Quantum operator whose adjoint buffer will be updated.
+        adjoint (int32_t): Whether or not the adjoint of the quantum operator is applied. True (!= 0) if the adjoint is applied, false (0) otherwise.
+        sort_order (int): Sort order to apply to the output expansion. Use ``CUPAULIPROP_SORT_ORDER_NONE`` if sorting is not required.
+        keep_duplicates (int32_t): Whether or not the output expansion is allowed to contain duplicates.
+        num_truncation_strategies (int32_t): Number of Pauli expansion truncation strategies.
+        truncation_strategies (object): Pauli expansion truncation strategies. It can be:
+
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``cupaulipropTruncationStrategy_t``.
+
+        workspace (intptr_t): Allocated workspace descriptor.
+        stream (intptr_t): CUDA stream to be used for the operation.
+
+    .. seealso:: `cupaulipropPauliExpansionViewComputeOperatorApplicationBackwardDiff`
+    """
+    cdef vector[cupaulipropTruncationStrategy_t] _trunc_vec
+    cdef const cupaulipropTruncationStrategy_t* _trunc_ptr = NULL
+    cdef intptr_t ptr_val
+    
+    # Handle truncation_strategies: Python sequence of TruncationStrategy objects
+    if truncation_strategies is None or num_truncation_strategies == 0:
+        _trunc_ptr = NULL
+    elif cpython.PySequence_Check(truncation_strategies):
+        # Build vector of structs from Python sequence of TruncationStrategy objects
+        for i in range(len(truncation_strategies)):
+            # Get pointer from TruncationStrategy object and dereference to copy the struct
+            ptr_val = <intptr_t><size_t>int(truncation_strategies[i].ptr)
+            _trunc_vec.push_back((<cupaulipropTruncationStrategy_t*>ptr_val)[0])
+        _trunc_ptr = <const cupaulipropTruncationStrategy_t*>(_trunc_vec.data())
+    else:
+        # For advanced users: accept a raw pointer to a pre-built array of structs
+        _trunc_ptr = <const cupaulipropTruncationStrategy_t*><intptr_t>truncation_strategies
+    
+    with nogil:
+        status = cupaulipropPauliExpansionViewComputeOperatorApplicationBackwardDiff(<const Handle>handle, <const PauliExpansionView>view_in, <const PauliExpansionView>cotangent_out, <PauliExpansion>cotangent_in, <QuantumOperator>quantum_operator, adjoint, <cupaulipropSortOrder_t>sort_order, keep_duplicates, num_truncation_strategies, _trunc_ptr, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(status)
 
 

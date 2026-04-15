@@ -1,8 +1,8 @@
-# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 25.11.0 to 26.01.0. Do not modify it directly.
+# This code was automatically generated across versions from 25.11.0 to 26.03.1, generator version 0.3.1.dev1477+g125b4cb42. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -68,15 +68,20 @@ cpdef pauli_expansion_view_prepare_deduplication(intptr_t handle, intptr_t view_
 cpdef pauli_expansion_view_execute_deduplication(intptr_t handle, intptr_t view_in, intptr_t expansion_out, int sort_order, intptr_t workspace, intptr_t stream)
 cpdef pauli_expansion_populate_from_view(intptr_t handle, intptr_t view_in, intptr_t expansion_out, intptr_t stream)
 cpdef pauli_expansion_view_prepare_trace_with_expansion_view(intptr_t handle, intptr_t view1, intptr_t view2, int64_t max_workspace_size, intptr_t workspace)
-cpdef pauli_expansion_view_compute_trace_with_expansion_view(intptr_t handle, intptr_t view1, intptr_t view2, int32_t take_adjoint1, intptr_t trace, intptr_t workspace, intptr_t stream)
+cpdef pauli_expansion_view_compute_trace_with_expansion_view(intptr_t handle, intptr_t view1, intptr_t view2, int32_t take_adjoint1, intptr_t trace_significand, intptr_t trace_exponent, intptr_t workspace, intptr_t stream)
 cpdef pauli_expansion_view_prepare_trace_with_zero_state(intptr_t handle, intptr_t view, int64_t max_workspace_size, intptr_t workspace)
-cpdef pauli_expansion_view_compute_trace_with_zero_state(intptr_t handle, intptr_t view, intptr_t trace, intptr_t workspace, intptr_t stream)
+cpdef pauli_expansion_view_compute_trace_with_zero_state(intptr_t handle, intptr_t view, intptr_t trace_significand, intptr_t trace_exponent, intptr_t workspace, intptr_t stream)
 cpdef intptr_t create_clifford_gate_operator(intptr_t handle, int clifford_gate_kind, qubit_indices) except? 0
 cpdef intptr_t create_pauli_rotation_gate_operator(intptr_t handle, double angle, int32_t num_qubits, qubit_indices, paulis) except? 0
 cpdef intptr_t create_pauli_noise_channel_operator(intptr_t handle, int32_t num_qubits, qubit_indices, probabilities) except? 0
-cpdef int quantum_operator_get_kind(intptr_t handle, intptr_t oper) except? -1
 cpdef destroy_operator(intptr_t oper)
 cpdef int pauli_expansion_get_sort_order(intptr_t handle, intptr_t pauli_expansion) except? -1
 cpdef pauli_expansion_view_prepare_sort(intptr_t handle, intptr_t view_in, int sort_order, int64_t max_workspace_size, intptr_t workspace)
 cpdef pauli_expansion_view_execute_sort(intptr_t handle, intptr_t view_in, intptr_t expansion_out, int sort_order, intptr_t workspace, intptr_t stream)
 cpdef intptr_t create_amplitude_damping_channel_operator(intptr_t handle, int32_t qubit_ind_ex, double damping_prob, double excite_prob) except? 0
+cpdef tuple pauli_expansion_view_prepare_trace_with_expansion_view_backward_diff(intptr_t handle, intptr_t view1, intptr_t view2, int64_t max_workspace_size, intptr_t workspace)
+cpdef pauli_expansion_view_compute_trace_with_expansion_view_backward_diff(intptr_t handle, intptr_t view1, intptr_t view2, int32_t take_adjoint1, intptr_t cotangent_trace_significand, intptr_t cotangent_trace_exponent, intptr_t cotangent_expansion1, intptr_t cotangent_expansion2, intptr_t workspace, intptr_t stream)
+cpdef tuple pauli_expansion_view_prepare_trace_with_zero_state_backward_diff(intptr_t handle, intptr_t view, int64_t max_workspace_size, intptr_t workspace)
+cpdef pauli_expansion_view_compute_trace_with_zero_state_backward_diff(intptr_t handle, intptr_t view, intptr_t cotangent_trace_significand, intptr_t cotangent_trace_exponent, intptr_t cotangent_expansion, intptr_t workspace, intptr_t stream)
+cpdef quantum_operator_attach_cotangent_buffer(intptr_t handle, intptr_t oper, intptr_t cotangent_buffer, int64_t cotangent_buffer_size, int data_type, int location)
+cpdef tuple quantum_operator_get_cotangent_buffer(intptr_t handle, intptr_t oper)

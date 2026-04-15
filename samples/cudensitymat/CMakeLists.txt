@@ -396,6 +396,42 @@ target_link_libraries(operator_action_batched_gradient_example
     CUDA::cudart
 )
 
+# Single-GPU MPS TDVP time propagation example
+add_executable(mps_tdvp_example
+  mps_tdvp_example.cpp
+)
+
+set_target_properties(mps_tdvp_example
+  PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD}
+    CUDA_STANDARD ${CMAKE_CUDA_STANDARD}
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_include_directories(mps_tdvp_example
+  PUBLIC
+    ${CUDENSITYMAT_INC_DIR}
+    ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+
+target_link_directories(mps_tdvp_example
+  PUBLIC
+    ${CUDENSITYMAT_LIB_DIR}
+    ${CUTENSORNET_LIB_DIR}
+    ${CUTENSOR_LIB_DIR}
+)
+
+target_link_libraries(mps_tdvp_example
+  PUBLIC
+    cudensitymat
+    cutensornet
+    cutensor
+    CUDA::cusolver
+    CUDA::cublas
+    CUDA::curand
+    CUDA::cudart
+)
+
 # Single-GPU operator eigen-spectrum example
 add_executable(operator_eigenspectrum_example
   operator_eigenspectrum_example.cpp

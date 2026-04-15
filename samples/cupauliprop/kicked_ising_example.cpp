@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <vector>
 #include <cassert>
+#include <cmath>
 #include <chrono>
 
 
@@ -629,9 +630,9 @@ int main(int argc, char** argv) {
   // Obtain a view of the full output expansion (we'll free it in 'Clean up')
   cupaulipropPauliExpansionView_t outView;
   int64_t numOutTerms;
-  HANDLE_CUPP_ERROR(cupaulipropPauliExpansionGetNumTerms(handle, inExpansion, &numOutTerms));
+  HANDLE_CUPP_ERROR(cupaulipropPauliExpansionGetNumTerms(handle, outExpansion, &numOutTerms));
   HANDLE_CUPP_ERROR(cupaulipropPauliExpansionGetContiguousRange(
-    handle, inExpansion, 0, numOutTerms, &outView));
+    handle, outExpansion, 0, numOutTerms, &outView));
 
   // Check that the existing workspace memory is sufficient to compute the trace 
   int64_t reqWorkspaceMem;
@@ -650,9 +651,11 @@ int main(int argc, char** argv) {
     d_workspaceBuffer, workspaceMem));
 
   // Compute the trace; the main and final output of this simulation!
-  double expec;
+  double expecSignificand;
+  double expecExponent;
   HANDLE_CUPP_ERROR(cupaulipropPauliExpansionViewComputeTraceWithZeroState(
-    handle, outView, &expec, workspace, stream));
+    handle, outView, &expecSignificand, &expecExponent, workspace, stream));
+  double expec = expecSignificand * std::pow(2.0, expecExponent);
 
   // End timing after trace is evaluated
   auto endTime = std::chrono::high_resolution_clock::now();

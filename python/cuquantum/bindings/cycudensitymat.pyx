@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.01.0. Do not modify it directly.
+# This code was automatically generated with version 26.03.1, generator version 0.3.1.dev1508+g784d12dd6.d20260402. Do not modify it directly.
 
 from ._internal cimport cudensitymat as _cudensitymat
 
@@ -41,6 +41,10 @@ cdef cudensitymatStatus_t cudensitymatResetRandomSeed(cudensitymatHandle_t handl
 
 cdef cudensitymatStatus_t cudensitymatCreateState(const cudensitymatHandle_t handle, cudensitymatStatePurity_t purity, int32_t numSpaceModes, const int64_t spaceModeExtents[], int64_t batchSize, cudaDataType_t dataType, cudensitymatState_t* state) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cudensitymat._cudensitymatCreateState(handle, purity, numSpaceModes, spaceModeExtents, batchSize, dataType, state)
+
+
+cdef cudensitymatStatus_t cudensitymatCreateStateMPS(const cudensitymatHandle_t handle, cudensitymatStatePurity_t purity, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatBoundaryCondition_t boundaryCondition, const int64_t bondExtents[], cudaDataType_t dataType, int64_t batchSize, cudensitymatState_t* state) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatCreateStateMPS(handle, purity, numSpaceModes, spaceModeExtents, boundaryCondition, bondExtents, dataType, batchSize, state)
 
 
 cdef cudensitymatStatus_t cudensitymatDestroyState(cudensitymatState_t state) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
@@ -115,6 +119,14 @@ cdef cudensitymatStatus_t cudensitymatDestroyMatrixOperator(cudensitymatMatrixOp
     return _cudensitymat._cudensitymatDestroyMatrixOperator(matrixOperator)
 
 
+cdef cudensitymatStatus_t cudensitymatCreateMatrixProductOperator(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatBoundaryCondition_t boundaryCondition, const int64_t bondExtents[], cudaDataType_t dataType, void* tensorData[], cudensitymatWrappedTensorCallback_t tensorCallbacks[], cudensitymatWrappedTensorGradientCallback_t tensorGradientCallbacks[], cudensitymatMatrixProductOperator_t* matrixProductOperator) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatCreateMatrixProductOperator(handle, numSpaceModes, spaceModeExtents, boundaryCondition, bondExtents, dataType, tensorData, tensorCallbacks, tensorGradientCallbacks, matrixProductOperator)
+
+
+cdef cudensitymatStatus_t cudensitymatDestroyMatrixProductOperator(cudensitymatMatrixProductOperator_t matrixProductOperator) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatDestroyMatrixProductOperator(matrixProductOperator)
+
+
 cdef cudensitymatStatus_t cudensitymatCreateOperatorTerm(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatOperatorTerm_t* operatorTerm) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cudensitymat._cudensitymatCreateOperatorTerm(handle, numSpaceModes, spaceModeExtents, operatorTerm)
 
@@ -139,6 +151,10 @@ cdef cudensitymatStatus_t cudensitymatOperatorTermAppendMatrixProductBatch(const
     return _cudensitymat._cudensitymatOperatorTermAppendMatrixProductBatch(handle, operatorTerm, numMatrixOperators, matrixOperators, matrixConjugation, actionDuality, batchSize, staticCoefficients, totalCoefficients, coefficientCallback, coefficientGradientCallback)
 
 
+cdef cudensitymatStatus_t cudensitymatOperatorTermAppendMPOProduct(const cudensitymatHandle_t handle, cudensitymatOperatorTerm_t operatorTerm, int32_t numMPOOperators, const cudensitymatMatrixProductOperator_t mpoOperators[], const int32_t mpoConjugation[], const int32_t stateModesActedOn[], const int32_t modeActionDuality[], cuDoubleComplex coefficient, cudensitymatWrappedScalarCallback_t coefficientCallback, cudensitymatWrappedScalarGradientCallback_t coefficientGradientCallback) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatOperatorTermAppendMPOProduct(handle, operatorTerm, numMPOOperators, mpoOperators, mpoConjugation, stateModesActedOn, modeActionDuality, coefficient, coefficientCallback, coefficientGradientCallback)
+
+
 cdef cudensitymatStatus_t cudensitymatCreateOperator(const cudensitymatHandle_t handle, int32_t numSpaceModes, const int64_t spaceModeExtents[], cudensitymatOperator_t* superoperator) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cudensitymat._cudensitymatCreateOperator(handle, numSpaceModes, spaceModeExtents, superoperator)
 
@@ -157,6 +173,10 @@ cdef cudensitymatStatus_t cudensitymatOperatorAppendTermBatch(const cudensitymat
 
 cdef cudensitymatStatus_t cudensitymatAttachBatchedCoefficients(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, int32_t numOperatorTermBatchedCoeffs, void* operatorTermBatchedCoeffsTmp[], void* operatorTermBatchedCoeffs[], int32_t numOperatorProductBatchedCoeffs, void* operatorProductBatchedCoeffsTmp[], void* operatorProductBatchedCoeffs[]) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cudensitymat._cudensitymatAttachBatchedCoefficients(handle, superoperator, numOperatorTermBatchedCoeffs, operatorTermBatchedCoeffsTmp, operatorTermBatchedCoeffs, numOperatorProductBatchedCoeffs, operatorProductBatchedCoeffsTmp, operatorProductBatchedCoeffs)
+
+
+cdef cudensitymatStatus_t cudensitymatOperatorConfigureAction(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, const cudensitymatState_t stateIn, const cudensitymatState_t stateOut, const void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatOperatorConfigureAction(handle, superoperator, stateIn, stateOut, attributeValue, attributeSize)
 
 
 cdef cudensitymatStatus_t cudensitymatOperatorPrepareAction(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, const cudensitymatState_t stateIn, const cudensitymatState_t stateOut, cudensitymatComputeType_t computeType, size_t workspaceSizeLimit, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
@@ -225,6 +245,58 @@ cdef cudensitymatStatus_t cudensitymatOperatorSpectrumPrepare(const cudensitymat
 
 cdef cudensitymatStatus_t cudensitymatOperatorSpectrumCompute(const cudensitymatHandle_t handle, cudensitymatOperatorSpectrum_t spectrum, double time, int64_t batchSize, int32_t numParams, const double* params, int32_t numEigenStates, cudensitymatState_t eigenstates[], void* eigenvalues, double* tolerances, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
     return _cudensitymat._cudensitymatOperatorSpectrumCompute(handle, spectrum, time, batchSize, numParams, params, numEigenStates, eigenstates, eigenvalues, tolerances, workspace, stream)
+
+
+cdef cudensitymatStatus_t cudensitymatCreateTimePropagationScopeSplitTDVPConfig(const cudensitymatHandle_t handle, cudensitymatTimePropagationScopeSplitTDVPConfig_t* config) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatCreateTimePropagationScopeSplitTDVPConfig(handle, config)
+
+
+cdef cudensitymatStatus_t cudensitymatDestroyTimePropagationScopeSplitTDVPConfig(cudensitymatTimePropagationScopeSplitTDVPConfig_t config) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatDestroyTimePropagationScopeSplitTDVPConfig(config)
+
+
+cdef cudensitymatStatus_t cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute(const cudensitymatHandle_t handle, cudensitymatTimePropagationScopeSplitTDVPConfig_t config, cudensitymatTimePropagationScopeSplitTDVPConfigAttribute_t attribute, const void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute(handle, config, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute(const cudensitymatHandle_t handle, const cudensitymatTimePropagationScopeSplitTDVPConfig_t config, cudensitymatTimePropagationScopeSplitTDVPConfigAttribute_t attribute, void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute(handle, config, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t cudensitymatCreateTimePropagationApproachKrylovConfig(const cudensitymatHandle_t handle, cudensitymatTimePropagationApproachKrylovConfig_t* config) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatCreateTimePropagationApproachKrylovConfig(handle, config)
+
+
+cdef cudensitymatStatus_t cudensitymatDestroyTimePropagationApproachKrylovConfig(cudensitymatTimePropagationApproachKrylovConfig_t config) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatDestroyTimePropagationApproachKrylovConfig(config)
+
+
+cdef cudensitymatStatus_t cudensitymatTimePropagationApproachKrylovConfigSetAttribute(const cudensitymatHandle_t handle, cudensitymatTimePropagationApproachKrylovConfig_t config, cudensitymatTimePropagationApproachKrylovConfigAttribute_t attribute, const void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatTimePropagationApproachKrylovConfigSetAttribute(handle, config, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t cudensitymatTimePropagationApproachKrylovConfigGetAttribute(const cudensitymatHandle_t handle, const cudensitymatTimePropagationApproachKrylovConfig_t config, cudensitymatTimePropagationApproachKrylovConfigAttribute_t attribute, void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatTimePropagationApproachKrylovConfigGetAttribute(handle, config, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t cudensitymatCreateTimePropagation(const cudensitymatHandle_t handle, cudensitymatOperator_t superoperator, int32_t isHermitian, cudensitymatTimePropagationScopeKind_t scopeKind, cudensitymatTimePropagationApproachKind_t approachKind, cudensitymatTimePropagation_t* timePropagation) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatCreateTimePropagation(handle, superoperator, isHermitian, scopeKind, approachKind, timePropagation)
+
+
+cdef cudensitymatStatus_t cudensitymatDestroyTimePropagation(cudensitymatTimePropagation_t timePropagation) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatDestroyTimePropagation(timePropagation)
+
+
+cdef cudensitymatStatus_t cudensitymatTimePropagationConfigure(const cudensitymatHandle_t handle, cudensitymatTimePropagation_t timePropagation, cudensitymatTimePropagationAttribute_t attribute, const void* attributeValue, size_t attributeSize) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatTimePropagationConfigure(handle, timePropagation, attribute, attributeValue, attributeSize)
+
+
+cdef cudensitymatStatus_t cudensitymatTimePropagationPrepare(const cudensitymatHandle_t handle, cudensitymatTimePropagation_t timePropagation, const cudensitymatState_t stateIn, const cudensitymatState_t stateOut, cudensitymatComputeType_t computeType, size_t workspaceSizeLimit, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatTimePropagationPrepare(handle, timePropagation, stateIn, stateOut, computeType, workspaceSizeLimit, workspace, stream)
+
+
+cdef cudensitymatStatus_t cudensitymatTimePropagationCompute(const cudensitymatHandle_t handle, cudensitymatTimePropagation_t timePropagation, double timeStepReal, double timeStepImag, double time, int64_t batchSize, int32_t numParams, const double* params, const cudensitymatState_t stateIn, cudensitymatState_t stateOut, cudensitymatWorkspaceDescriptor_t workspace, cudaStream_t stream) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:
+    return _cudensitymat._cudensitymatTimePropagationCompute(handle, timePropagation, timeStepReal, timeStepImag, time, batchSize, numParams, params, stateIn, stateOut, workspace, stream)
 
 
 cdef cudensitymatStatus_t cudensitymatCreateWorkspace(const cudensitymatHandle_t handle, cudensitymatWorkspaceDescriptor_t* workspaceDescr) except?_CUDENSITYMATSTATUS_T_INTERNAL_LOADING_ERROR nogil:

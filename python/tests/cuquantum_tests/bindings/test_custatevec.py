@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -6,11 +6,7 @@ import copy
 
 import pytest
 
-try:
-    import cupy as cp
-except ImportError:
-    cp = None
-    pytest.skip("cupy uninstalled, skipping custatevec binding tests", allow_module_level=True)
+cp = pytest.importorskip("cupy")
 
 from cupy import testing
 import cupyx as cpx

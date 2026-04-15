@@ -1,8 +1,8 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 25.11.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 26.03.1, generator version 0.3.1.dev1503+gab711511a.d20260402. Do not modify it directly.
 
 from libc.stdint cimport intptr_t
 
@@ -153,6 +153,10 @@ cdef int _check_or_init_custatevec() except -1 nogil:
     cdef void* handle = NULL
 
     with gil, __symbol_lock:
+        # Recheck the flag after obtaining the locks
+        if __py_custatevec_init:
+            return 0
+            
         # Load function
         global __custatevecCreate
         __custatevecCreate = dlsym(RTLD_DEFAULT, 'custatevecCreate')

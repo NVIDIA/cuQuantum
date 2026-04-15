@@ -273,7 +273,8 @@ def main():
     # After the loop, in_expansion holds the final result (from the last swap). Release out_expansion
     out_expansion = None
     # Step 12: Compute the expectation value <Z_62> with respect to |0...0>.
-    expec = in_expansion.trace_with_zero_state()
+    trace_significand, trace_exponent = in_expansion.trace_with_zero_state()
+    expec = trace_significand * np.exp2(trace_exponent)
 
     end_event.record()
     end_event.synchronize()

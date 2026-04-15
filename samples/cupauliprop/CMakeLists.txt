@@ -116,3 +116,31 @@ target_link_libraries(kicked_ising_example
     cupauliprop
     CUDA::cudart
 )
+
+add_executable(kicked_ising_backward_diff_example
+  kicked_ising_backward_diff_example.cpp
+)
+
+set_target_properties(kicked_ising_backward_diff_example
+  PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD}
+    CUDA_STANDARD ${CMAKE_CUDA_STANDARD}
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_include_directories(kicked_ising_backward_diff_example
+  PUBLIC
+    ${CUPAULIPROP_INC_DIR}
+    ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+
+target_link_directories(kicked_ising_backward_diff_example
+  PUBLIC
+    ${CUPAULIPROP_LIB_DIR}
+)
+
+target_link_libraries(kicked_ising_backward_diff_example
+  PUBLIC
+    cupauliprop
+    CUDA::cudart
+)

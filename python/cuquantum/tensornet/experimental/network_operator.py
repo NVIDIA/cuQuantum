@@ -107,12 +107,21 @@ class NetworkOperator:
             self.internal_package=  self.backend
         self.backend_setup = True
     
+    def _get_representative_operand(self):
+        """Return a single wrapped tensor operand, or None if the operator is empty."""
+        if self.tensor_products:
+            return self.tensor_products[0][0][0]
+        if self.mpos:
+            return self.mpos[0][0][0]
+        return None
+
     def _get_key(self):
         return (self.network_operator, len(self.tensor_products), len(self.mpos))
     
-    # Note that cutensornet.network_operator_append_product requires mode ordering b, a, B, A, 
-    # which is different from our standard notation. Therefore we need to transpose it here
-    @state_operands_wrapper(operands_arg_index=3, is_single_operand=False, transpose=True)
+    # cutensornetNetworkOperatorAppendProduct expects ket modes before bra modes,
+    # so we swap the two halves to bridge from the user convention (ABC...abc...)
+    # to the C API convention (abc...ABC...).
+    @state_operands_wrapper(operands_arg_index=3, is_single_operand=False, swap_bra_ket=True)
     def append_product(self, coefficient, modes, tensors, stream=None):
         """Append a tensor product component to the tensor network operator.
 

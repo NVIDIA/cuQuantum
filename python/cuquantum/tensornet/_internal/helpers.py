@@ -132,6 +132,17 @@ def transpose_tensor(tensor_holder):
         tensor_t = tensor_holder.tensor.T
     return tensor_holder.__class__(tensor_t)
 
+def swap_bra_ket_tensor(tensor_holder):
+    """Swap bra and ket halves: (A,B,...,a,b,...) -> (a,b,...,A,B,...)."""
+    ndim = tensor_holder.tensor.ndim
+    k = ndim // 2
+    perm = tuple(range(k, ndim)) + tuple(range(k))
+    if tensor_holder.name == 'torch':
+        tensor_t = tensor_holder.tensor.permute(*perm)
+    else:
+        tensor_t = tensor_holder.tensor.transpose(perm)
+    return tensor_holder.__class__(tensor_t)
+
 def get_auto_backend():
     global AUTO_BACKEND
     if AUTO_BACKEND is None:
