@@ -138,7 +138,7 @@ hilbert_vol = np.prod(hilbert_space_dims)
 max_num_eigvals = 5
 min_block_size = 4
 max_buffer_ratio = 25
-max_restarts = 10
+max_restarts = 9
 
 
 # Create a sequence of pure states |ψ_i⟩

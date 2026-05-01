@@ -440,14 +440,14 @@ expectation_gradient_L0 = [
     ),
     # Non-Hermitian operator (random unitary product terms)
     _exp_grad_config("complex128", "cupy", create_state_factory(4, "complex128", "SDSD", np.random.default_rng(52), backend="cupy", mark_gradients=True),
-        hamiltonian=NetworkOperatorFactory((2, 2, 2, 2), np.random.default_rng(38), "cupy", dtype="complex128", num_repeats=2, real_coefficients=True, use_random_unitary=True, add_mpo=False),
+        hamiltonian=NetworkOperatorFactory((2, 2, 2, 2), np.random.default_rng(38), "cupy", dtype="complex128", num_repeats=2, real_coefficients=False, use_random_unitary=True, add_mpo=False),
         non_hermitian=True,
     ),
 ]
 
 expectation_gradient_L0_torch = [
     _exp_grad_config("complex128", "torch", create_state_factory((2, 3, 2, 4, 2, 5, 2, 3), "complex128", "SDSDSD", np.random.default_rng(43), backend="torch", mark_gradients=True),
-        hamiltonian=NetworkOperatorFactory((2, 3, 2, 4, 2, 5, 2, 3), np.random.default_rng(31), "torch", dtype="complex128", num_repeats=3, real_coefficients=True, use_random_hermitian=True),
+        hamiltonian=NetworkOperatorFactory((2, 3, 2, 4, 2, 5, 2, 3), np.random.default_rng(31), "torch", dtype="complex128", num_repeats=3, real_coefficients=False, use_random_hermitian=True),
     ),
     # Same as above but with an MPO term
     _exp_grad_config("complex128", "torch", create_state_factory((2, 3, 2, 4, 2, 5, 2, 3), "complex128", "SDSDSD", np.random.default_rng(43), backend="torch", mark_gradients=True),
@@ -457,7 +457,7 @@ expectation_gradient_L0_torch = [
 
 expectation_gradient_L1 = [
     _exp_grad_config("complex64", "cupy", create_state_factory(8, "complex64", "SDSDDSD", np.random.default_rng(45), backend="cupy", mark_gradients=True),
-        hamiltonian={"ZYIZXZIZ": 5.0, "XZZYIZXZ": 2.0, "ZZYIXZYY": 3.0}
+        hamiltonian={"ZYIZXZIZ": 5.0j, "XZZYIZXZ": 2.0j, "ZZYIXZYY": 4+3.0j}
     ),
     # Same with identity removal (lightcone simplification)
     _exp_grad_config("complex64", "cupy", create_state_factory(8, "complex64", "SDSDDSD", np.random.default_rng(45), backend="cupy", mark_gradients=True),
@@ -465,7 +465,7 @@ expectation_gradient_L1 = [
         remove_identity=True,
     ),
     _exp_grad_config("complex128", "numpy", create_state_factory((3, 2, 4, 4, 2, 5), "complex128", "SDSDSD", np.random.default_rng(46), backend="numpy", mark_gradients=True),
-        hamiltonian=NetworkOperatorFactory((3, 2, 4, 4, 2, 5), np.random.default_rng(32), "numpy", dtype="complex128", num_repeats=3, real_coefficients=True, use_random_hermitian=True),
+        hamiltonian=NetworkOperatorFactory((3, 2, 4, 4, 2, 5), np.random.default_rng(32), "numpy", dtype="complex128", num_repeats=3, real_coefficients=False, use_random_hermitian=True),
     ),
     # Same as above but with an MPO term
     _exp_grad_config("complex128", "numpy", create_state_factory((3, 2, 4, 4, 2, 5), "complex128", "SDSDSD", np.random.default_rng(46), backend="numpy", mark_gradients=True),
@@ -475,7 +475,7 @@ expectation_gradient_L1 = [
 
 expectation_gradient_L1_torch = [
     _exp_grad_config("float64", "torch", create_state_factory(6, "float64", "SDSDSDS", np.random.default_rng(44), backend="torch", mark_gradients=True),
-        hamiltonian={"ZXIXZI": 4.0, "IXZIZX": 3.0}
+        hamiltonian={"ZXIXZI": 4.0+2j, "IXZIZX": 3.0}
     ),
     # Same with identity removal (lightcone simplification)
     _exp_grad_config("float64", "torch", create_state_factory(6, "float64", "SDSDSDS", np.random.default_rng(44), backend="torch", mark_gradients=True),
@@ -489,7 +489,7 @@ expectation_gradient_L1_torch = [
     ),
     # Non-Hermitian operator with MPO term
     _exp_grad_config("complex64", "torch", create_state_factory((2, 3, 2, 3), "complex64", "SDSDS", np.random.default_rng(53), backend="torch", mark_gradients=True),
-        hamiltonian=NetworkOperatorFactory((2, 3, 2, 3), np.random.default_rng(39), "torch", dtype="complex64", num_repeats=3, real_coefficients=True, use_random_unitary=True, add_mpo=True),
+        hamiltonian=NetworkOperatorFactory((2, 3, 2, 3), np.random.default_rng(39), "torch", dtype="complex64", num_repeats=3, real_coefficients=False, use_random_unitary=True, add_mpo=True),
         non_hermitian=True,
     ),
 ] if torch is not None else []
@@ -500,7 +500,7 @@ expectation_gradient_L2 = [
     ),
     # Same as above but with an MPO term
     _exp_grad_config("complex128", "cupy", create_state_factory((3, 3, 3, 3, 3), "complex128", "SSDDS", np.random.default_rng(47), backend="cupy", mark_gradients=True),
-        hamiltonian=NetworkOperatorFactory((3, 3, 3, 3, 3), np.random.default_rng(33), "cupy", dtype="complex128", num_repeats=4, real_coefficients=True, use_random_hermitian=True, add_mpo=True),
+        hamiltonian=NetworkOperatorFactory((3, 3, 3, 3, 3), np.random.default_rng(33), "cupy", dtype="complex128", num_repeats=4, real_coefficients=False, use_random_hermitian=True, add_mpo=True),
     ),
     _exp_grad_config("complex64", "numpy", create_state_factory((2, 3, 2, 4, 2, 5, 2, 3), "complex64", "SDSDDSS", np.random.default_rng(49), backend="numpy", mark_gradients=True),
         hamiltonian=NetworkOperatorFactory((2, 3, 2, 4, 2, 5, 2, 3), np.random.default_rng(35), "numpy", dtype="complex64", num_repeats=4, real_coefficients=True, use_random_unitary=True),
@@ -508,7 +508,7 @@ expectation_gradient_L2 = [
     ),
     # Same as above but with an MPO term
     _exp_grad_config("complex64", "numpy", create_state_factory((2, 3, 2, 4, 2, 5, 2, 3), "complex64", "SDSDDSS", np.random.default_rng(49), backend="numpy", mark_gradients=True),
-        hamiltonian=NetworkOperatorFactory((2, 3, 2, 4, 2, 5, 2, 3), np.random.default_rng(35), "numpy", dtype="complex64", num_repeats=4, real_coefficients=True, use_random_unitary=True, add_mpo=True),
+        hamiltonian=NetworkOperatorFactory((2, 3, 2, 4, 2, 5, 2, 3), np.random.default_rng(35), "numpy", dtype="complex64", num_repeats=4, real_coefficients=False, use_random_unitary=True, add_mpo=True),
         non_hermitian=True,
     ),
 ]
@@ -523,8 +523,8 @@ expectation_gradient_L2_torch = [
         hamiltonian=NetworkOperatorFactory((2, 2, 2, 2, 2, 2), np.random.default_rng(34), "torch", dtype="float64", num_repeats=2, real_coefficients=True, add_mpo=False),
     ),
     # MPO term only (different RNG state than combined case)
-    _exp_grad_config("float64", "torch", create_state_factory(6, "float64", "SDSDD", np.random.default_rng(48), backend="torch", mark_gradients=True),
-        hamiltonian=NetworkOperatorFactory((2, 2, 2, 2, 2, 2), np.random.default_rng(34), "torch", dtype="float64", num_repeats=0, real_coefficients=True, add_mpo=True),
+    _exp_grad_config("complex64", "torch", create_state_factory(6, "complex64", "SDSDD", np.random.default_rng(48), backend="torch", mark_gradients=True),
+        hamiltonian=NetworkOperatorFactory((2, 2, 2, 2, 2, 2), np.random.default_rng(34), "torch", dtype="complex64", num_repeats=0, real_coefficients=False, add_mpo=True),
     ),
 ] if torch is not None else []
 

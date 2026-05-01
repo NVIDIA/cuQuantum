@@ -9,7 +9,9 @@ import numpy as np
 from mpi4py import MPI
 import pytest
 
-from nvmath.bindings import nccl
+# nvmath-python >= 0.9 no longer ships its own NCCL bindings; NCCL is now
+# provided by the standalone ``nccl4py`` package (imported as ``nccl.core``).
+import nccl.core as nccl
 
 from .distributed_utils import (
     mpi_comm as comm,
@@ -72,37 +74,42 @@ def test_work_stream_mpi_communicator_from_int_pointer():
         assert rank == ctx.get_proc_rank()
 
 
+def _bootstrap_nccl_communicator(rank, size):
+    """Create an externally-managed NCCL communicator using nccl4py.
+
+    All ranks must call this collectively. A unique id is generated on every
+    rank to obtain a same-sized buffer, then rank 0's bytes are broadcast via
+    MPI so all ranks join the same communicator.
+    """
+    unique_id = nccl.get_unique_id()
+    comm.Bcast(unique_id.as_ndarray.view(np.int8), root=0)
+    return nccl.Communicator.init(nranks=size, rank=rank, unique_id=unique_id)
+
+
 @pytest.mark.parametrize("sequence_type", [tuple, list])
 def test_work_stream_nccl_communicator_from_pointer(sequence_type):
     """Test setting NCCL communicator from (pointer, size) sequence with externally managed ncclComm_t."""
     skip_if_provider_unavailable("NCCL")
-    
+
     rank = comm.Get_rank()
     size = comm.Get_size()
     device_id = CURRENT_DEVICE_ID
 
     with cp.cuda.Device(device_id):
-        # Bootstrap NCCL communicator externally (following library_handle pattern)
-        unique_id = nccl.UniqueId()
-        if rank == 0:
-            nccl.get_unique_id(unique_id.ptr)
-        comm.Bcast(unique_id._data.view(np.int8), root=0)
-
-        nccl_comm_ptr = nccl.comm_init_rank(size, unique_id.ptr, rank)
-
+        nccl_comm = _bootstrap_nccl_communicator(rank, size)
         try:
             ctx = WorkStream(device_id=device_id)
             # Pass (ncclComm_t value, size) - library_handle wraps it in numpy array internally
             # The size value is not actually used (library uses itemsize of internal holder)
             ctx.set_communicator(
-                sequence_type([nccl_comm_ptr, np.dtype(np.intp).itemsize]),
+                sequence_type([nccl_comm.ptr, np.dtype(np.intp).itemsize]),
                 provider="NCCL"
             )
             assert size == ctx.get_num_ranks()
             assert rank == ctx.get_proc_rank()
         finally:
             # Clean up externally managed NCCL communicator
-            nccl.comm_destroy(nccl_comm_ptr)
+            nccl_comm.destroy()
 
 
 def test_work_stream_nccl_communicator_from_int_pointer():
@@ -114,21 +121,14 @@ def test_work_stream_nccl_communicator_from_int_pointer():
     device_id = CURRENT_DEVICE_ID
 
     with cp.cuda.Device(device_id):
-        # Bootstrap NCCL communicator externally (following library_handle pattern)
-        unique_id = nccl.UniqueId()
-        if rank == 0:
-            nccl.get_unique_id(unique_id.ptr)
-        comm.Bcast(unique_id._data.view(np.int8), root=0)
-
-        nccl_comm_ptr = nccl.comm_init_rank(size, unique_id.ptr, rank)
-
+        nccl_comm = _bootstrap_nccl_communicator(rank, size)
         try:
             ctx = WorkStream(device_id=device_id)
-            ctx.set_communicator(int(nccl_comm_ptr), provider="NCCL")
+            ctx.set_communicator(int(nccl_comm.ptr), provider="NCCL")
             assert size == ctx.get_num_ranks()
             assert rank == ctx.get_proc_rank()
         finally:
             ctx = None
             cp.cuda.Device().synchronize()
-            nccl.comm_finalize(nccl_comm_ptr)
-            nccl.comm_destroy(nccl_comm_ptr)
+            nccl_comm.finalize()
+            nccl_comm.destroy()
