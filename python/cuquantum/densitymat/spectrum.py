@@ -66,24 +66,32 @@ class OperatorSpectrumConfig:
             If not specified, a default value will be chosen. Defaults to 1.
         max_buffer_ratio: Maximum ratio of the total number of blocks in the Krylov subspace to the number of requested eigenvalues.
             If not specified, a default value will be chosen. Must be greater than 1. Defaults to 5.
-        max_restarts: Maximum number of restart cycles allowed during the iterative eigenvalue computation.
-            If not specified, a default value will be chosen. Defaults to 20.
+        max_restarts: Maximum number of thick restarts of the block Krylov algorithm.
+            The total number of Krylov-subspace expansions performed is at most
+            ``max_restarts + 1`` (one initial expansion plus up to ``max_restarts``
+            restarted expansions). A value of ``0`` corresponds to a single expansion
+            with no restart. If not specified, a default value will be chosen.
+            Defaults to 19 (i.e. up to 20 expansions).
     """
     min_krylov_block_size: Optional[int] = None
     max_buffer_ratio: Optional[int] = None
     max_restarts: Optional[int] = None
     
     def _check_int(self, attribute, name, min_value=0):
-        message = f"Invalid value ({attribute}) for '{name}'. Expect non-zero integer or None."
+        if min_value == -1:
+            bound_desc = "non-negative integer"
+        else:
+            bound_desc = f"integer greater than {min_value}"
+        message = f"Invalid value ({attribute}) for '{name}'. Expect {bound_desc} or None."
         if not isinstance(attribute, (type(None), int)):
             raise ValueError(message)
-        if isinstance(attribute, int) and not attribute > min_value: 
+        if isinstance(attribute, int) and not attribute > min_value:
             raise ValueError(message)
 
     def __post_init__(self):
         self._check_int(self.min_krylov_block_size, "min_krylov_block_size",0)
-        self._check_int(self.max_buffer_ratio, "max_buffer_ratio",1)
-        self._check_int(self.max_restarts, "max_restarts",0)
+        self._check_int(self.max_buffer_ratio, "max_buffer_ratio",1) 
+        self._check_int(self.max_restarts, "max_restarts", -1)
     
     @classmethod
     def _option_to_enum(cls, name):

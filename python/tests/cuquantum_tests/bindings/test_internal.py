@@ -64,5 +64,5 @@ def test_data_type_alignment_with_nvmath():
             if val.name != ref_val.name:
                 raise ValueError(f"{val.name} from nvmath has a different name than cuquantum.cudaDataType")
         except ValueError:
-            # nvmath.CudaDataType has two additional values that are not captured by cuquantum.cudaDataType
-            assert val.name in {"CUDA_R_8F_E4M3", "CUDA_R_8F_E5M2"}
+            # nvmath.CudaDataType has additional values that are not captured by cuquantum.cudaDataType
+            assert val.name in {"CUDA_R_8F_E4M3", "CUDA_R_8F_E5M2", "CUDA_R_4F_E2M1"}

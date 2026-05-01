@@ -37,9 +37,9 @@ install_requires = [
     'nvmath-python>=0.7.0, <1.0.0',  # ">=0.7.0,<1.0.0"
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
     f'custatevec-cu{utils.cuda_major_ver}>=1.13.1, <2',  # ">=1.13.1,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}>=2.12.1, <3',  # ">=2.12.0,<3"
-    f'cudensitymat-cu{utils.cuda_major_ver}>=0.5.1, <0.6',  # ">=0.5.1,<0.6.0"
-    f'cupauliprop-cu{utils.cuda_major_ver}>=0.3.1, <0.4',  # ">=0.3.1,<0.4.0"
+    f'cutensornet-cu{utils.cuda_major_ver}>=2.12.2, <3',  # ">=2.12.2,<3"
+    f'cudensitymat-cu{utils.cuda_major_ver}>=0.5.2, <0.6',  # ">=0.5.1,<0.6.0"
+    f'cupauliprop-cu{utils.cuda_major_ver}>=0.3.2, <0.4',  # ">=0.3.2,<0.4.0"
     f'custabilizer-cu{utils.cuda_major_ver}>=0.3.0, <0.4',  # ">=0.3.0,<0.4.0"
 ]
 if utils.cuda_major_ver == '12':

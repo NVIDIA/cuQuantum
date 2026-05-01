@@ -53,9 +53,9 @@ Runtime dependencies of the cuQuantum Python package include:
 * Driver: Linux (525.60.13+ for CUDA 12, 580.65.06+ for CUDA 13)
 * CUDA Toolkit 12.x or 13.x
 * cuStateVec 1.13.1+
-* cuTensorNet 2.12.1+
-* cuDensityMat >=0.5.1, <0.6.0
-* cuPauliProp  >=0.3.1, <0.4.0
+* cuTensorNet 2.12.2+
+* cuDensityMat >=0.5.2, <0.6.0
+* cuPauliProp  >=0.3.2, <0.4.0
 * cuStabilizer >=0.3.0, <0.4.0
 * Python >=3.11, <3.14
 * NumPy v1.21+
@@ -66,6 +66,7 @@ Runtime dependencies of the cuQuantum Python package include:
 * Qiskit v1.4.2+ (optional, see [installation guide](https://qiskit.org/documentation/getting_started.html))
 * Cirq v0.6.0+ (optional, see [installation guide](https://quantumai.google/cirq/install))
 * mpi4py v3.1.0+ (optional, see [installation guide](https://mpi4py.readthedocs.io/en/stable/install.html))
+* nccl4py (optional)
 
 If you install everything from conda-forge, all the required dependencies are taken care for you (except for the driver).
 

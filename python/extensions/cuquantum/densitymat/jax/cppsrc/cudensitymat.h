@@ -64,7 +64,7 @@
 
 #define CUDENSITYMAT_MAJOR 0 //!< cuDensityMat major version.
 #define CUDENSITYMAT_MINOR 5 //!< cuDensityMat minor version.
-#define CUDENSITYMAT_PATCH 1 //!< cuDensityMat patch version.
+#define CUDENSITYMAT_PATCH 2 //!< cuDensityMat patch version.
 #define CUDENSITYMAT_VERSION (CUDENSITYMAT_MAJOR * 10000 + CUDENSITYMAT_MINOR * 100 + CUDENSITYMAT_PATCH)
 
 
@@ -222,7 +222,7 @@ typedef enum
 typedef enum
 {
   CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_EXPANSION = 0,  ///< int32_t: Configures the max ratio of the number of Krylov subspace blocks to the number of requested eigen-pairs (defaults to 5)
-  CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_RESTARTS = 1,   ///< int32_t: Configures the max number of restarted iterations of the block Krylov algorithm (defaults to 20)
+  CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MAX_RESTARTS = 1,   ///< int32_t: Configures the max number of restarted iterations of the block Krylov algorithm (defaults to 19)
   CUDENSITYMAT_OPERATOR_SPECTRUM_CONFIG_MIN_BLOCK_SIZE = 2, ///< int32_t: Configures the min block size of the block Krylov algorithm (defaults to 1)
 } cudensitymatOperatorSpectrumConfig_t;
 
@@ -2031,33 +2031,6 @@ cudensitymatStatus_t cudensitymatAttachBatchedCoefficients(
                       int32_t numOperatorProductBatchedCoeffs,
                       void * operatorProductBatchedCoeffsTmp[],
                       void * operatorProductBatchedCoeffs[]);
-
-/**
- * \brief Configures the operator action on a quantum state.
- *
- * \param[in] handle Library handle.
- * \param[inout] superoperator Operator.
- * \param[in] stateIn Representative input quantum state on which the operator
- * is supposed to act. The actual quantum state acted on during computation
- * may be different, but it has to be of the same shape, kind,
- * and factorization structure (topology, bond dimensions, etc).
- * \param[in] stateOut Representative output quantum state produced by the action
- * of the operator on the input quantum state. The actual quantum state acted on
- * during computation may be different, but it has to be of the same shape,
- * kind, and factorization structure (topology, bond dimensions, etc).
- * \param[in] attribute Configuration attribute.
- * \param[in] attributeValue Pointer to the configuration attribute value (type-erased).
- * \param[in] attributeSize The size of the configuration attribute value.
- * \return cudensitymatStatus_t 
- */
-cudensitymatStatus_t cudensitymatOperatorConfigureAction(
-                    const cudensitymatHandle_t handle,
-                    cudensitymatOperator_t superoperator,
-                    const cudensitymatState_t stateIn,
-                    const cudensitymatState_t stateOut,
-                    //cudensitymatOperatorActionAttributes_t attribute, //`FIXME
-                    const void * attributeValue,
-                    size_t attributeSize);
 
 /**
  * \brief Prepares the operator for an action on a quantum state.

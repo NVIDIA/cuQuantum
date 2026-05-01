@@ -42,7 +42,11 @@ NCCL_COMM_PTR = None
 if AVAILABLE_PROVIDER == "NCCL":
     with cp.cuda.Device(device_id):
         nvmath.distributed.initialize(device_id, mpi_comm, backends=["nccl"])
-        NCCL_COMM_PTR = nvmath.distributed.get_context().nccl_comm
+        nccl_comm = nvmath.distributed.get_context().nccl_comm
+        if isinstance(nccl_comm, int):
+            NCCL_COMM_PTR = nccl_comm
+        else:
+            NCCL_COMM_PTR = nccl_comm.ptr
 
 def skip_if_provider_unavailable(provider: str):
     """Skip test if the requested provider doesn't match the loaded interface."""

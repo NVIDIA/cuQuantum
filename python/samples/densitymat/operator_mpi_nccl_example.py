@@ -67,7 +67,11 @@ ordered_print("Created WorkStream (execution context) on current device.")
 
 # Setup NCCL communicator (initialized via nvmath.distributed)
 nvmath.distributed.initialize(dev.id, comm, backends=["nccl"])
-nccl_comm_ptr = nvmath.distributed.get_context().nccl_comm
+nccl_comm = nvmath.distributed.get_context().nccl_comm
+if isinstance(nccl_comm, int):
+    nccl_comm_ptr = nccl_comm
+else:
+    nccl_comm_ptr = nccl_comm.ptr
 ctx.set_communicator(nccl_comm_ptr, provider="NCCL")
 ordered_print("Set NCCL communicator on execution context, enabling distributed computation.")
 
