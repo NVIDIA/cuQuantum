@@ -79,7 +79,7 @@ Runtime dependencies of the cuQuantum Python JAX package include:
 * Python 3.11+
 * An NVIDIA GPU with compute capability 7.5+
 * CUDA Toolkit 12.x or 13.x
-* cuquantum-python-cu12~=26.9.0 for CUDA 12 or cuquantum-python-cu13~=26.9.0 for CUDA 13
+* cuquantum-python-cu12~=26.11.0 for CUDA 12 or cuquantum-python-cu13~=26.11.0 for CUDA 13
 * jax[cuda12-local]>=0.8 for CUDA 12 or jax[cuda13-local]>=0.8 for CUDA 13
 
 ## Developer Notes

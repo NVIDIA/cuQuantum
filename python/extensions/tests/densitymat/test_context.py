@@ -225,6 +225,14 @@ class TestStateContext:
         assert isinstance(state_ctx._state_in_adj, int)
         assert isinstance(state_ctx._state_out_adj, int)
 
+        # A second backward pass must reuse the same handles: traced backward primitives embed
+        # their addresses, so destroying them would leave those primitives pointing at freed handles.
+        in_ptr, out_ptr = state_ctx._state_in_adj, state_ctx._state_out_adj
+        state_ctx.create_adjoint_buffers()
+
+        assert state_ctx._state_in_adj == in_ptr
+        assert state_ctx._state_out_adj == out_ptr
+
     def test_free(self):
         """
         Test StateContext.free.

@@ -2,11 +2,18 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 26.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 26.11.0. Do not modify it directly.
 
 
 
 # <<<< PREAMBLE CONTENT >>>>
+
+from libc.stdint cimport (
+    int32_t,
+    int64_t,
+    intptr_t,
+    uint64_t,
+)
 
 cdef extern from * nogil:
     """
@@ -43,13 +50,6 @@ cdef extern from * nogil:
 cdef extern from "<dlfcn.h>":
     void* _cyb_dlsym "dlsym"(void*, const char*) nogil
     const void * _cyb_RTLD_DEFAULT "RTLD_DEFAULT"
-
-from libc.stdint cimport (
-    int32_t,
-    int64_t,
-    intptr_t,
-    uint64_t,
-)
 
 import threading as _cyb_threading
 

@@ -1,5 +1,4 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
-#
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
@@ -18,20 +17,20 @@ def get_lib_path(name):
 
     # We have switched to use dlopen, force library loading via internal API
     if "custatevec" in name:
-        from cuquantum import bindings
-        bindings._internal.custatevec._inspect_function_pointers()
+        from cuquantum.bindings._internal import custatevec
+        custatevec._inspect_function_pointers()
     elif "cutensor" in name:  # cutensor or cutensornet
-        from cuquantum import bindings
-        bindings._internal.cutensornet._inspect_function_pointers()
+        from cuquantum.bindings._internal import cutensornet
+        cutensornet._inspect_function_pointers()
     elif "cudensitymat" in name:
-        from cuquantum import bindings
-        bindings._internal.cudensitymat._inspect_function_pointers()
+        from cuquantum.bindings._internal import cudensitymat
+        cudensitymat._inspect_function_pointers()
     elif "cupauliprop" in name:
-        from cuquantum import bindings
-        bindings._internal.cupauliprop._inspect_function_pointers()
+        from cuquantum.bindings._internal import cupauliprop
+        cupauliprop._inspect_function_pointers()
     elif "custabilizer" in name:
-        from cuquantum import bindings
-        bindings._internal.custabilizer._inspect_function_pointers()
+        from cuquantum.bindings._internal import custabilizer
+        custabilizer._inspect_function_pointers()
 
     try:
         with open('/proc/self/maps') as f:

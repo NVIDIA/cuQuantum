@@ -1,10 +1,12 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
-#
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
-import sys
+import gc
 import itertools
+import sys
+from typing import Any
+
 import opt_einsum
 import pytest
 
@@ -12,6 +14,8 @@ from nvmath.internal.utils import infer_object_package
 
 from cuquantum import MemoryLimitExceeded
 from cuquantum.tensornet import contract, einsum, OptimizerInfo
+from cuquantum.tensornet import tensor_network
+from cuquantum.tensornet._internal import grad_torch
 from cuquantum.bindings import cutensornet as cutn
 
 from .utils.data import BACKEND_MEMSPACE, dtype_names, einsum_expressions
@@ -36,7 +40,7 @@ class _TestContractBase(_BaseTester):
         ))
         rng.shuffle(TEST_CONFIGS)
         yield from TEST_CONFIGS
-    
+
     def _test_runner(
             self, func, einsum_expr_pack, xp, dtype, order,
             use_numpy_path, gradient, rng, **kwargs):
@@ -199,8 +203,8 @@ class TestContractFunctionality(_TestContractBase):
         self._test_runner(
             contract,
             ["abc,bcd,ade", {}, {"slicing": {"min_slices": 4}}, None], # einsum_expr_pack
-            xp, 
-            dtype, 
+            xp,
+            dtype,
             "C", # order
             False, # use_numpy_path
             gradient,
@@ -217,8 +221,8 @@ class TestContractFunctionality(_TestContractBase):
         self._test_runner(
             contract,
             [((5, 4, 3), (3, 4, 6), (6, 5), None), {}, {}, None], # einsum_expr_pack
-            xp, 
-            dtype, 
+            xp,
+            dtype,
             "F", # order
             True, # use_numpy_path
             gradient,
@@ -235,8 +239,8 @@ class TestContractFunctionality(_TestContractBase):
         self._test_runner(
             contract,
             "abc,ace,abd->de", # einsum_expr_pack
-            xp, 
-            dtype, 
+            xp,
+            dtype,
             order,
             False, # use_numpy_path
             gradient,
@@ -253,8 +257,8 @@ class TestContractFunctionality(_TestContractBase):
         self._test_runner(
             contract,
             (('a', 'b'), ('b', 'c', 'd'), ('a',)), # einsum_expr_pack
-            xp, 
-            dtype, 
+            xp,
+            dtype,
             "C", # order
             use_numpy_path,
             gradient,
@@ -262,7 +266,7 @@ class TestContractFunctionality(_TestContractBase):
             stream=True,
             return_info=True,
         )
-   
+
 NUM_TESTS_PER_CASE = 5
 
 
@@ -313,7 +317,7 @@ class TestContract(_TestContractBase):
     "einsum_expr_pack", einsum_expressions
 )
 class TestEinsum(_TestContractBase):
-    
+
     def test_einsum(
             self, einsum_expr_pack, xp, dtype, order,
             use_numpy_path, optimize):
@@ -321,3 +325,131 @@ class TestEinsum(_TestContractBase):
         self._test_runner(
             einsum, einsum_expr_pack, xp, dtype, order,
             use_numpy_path, None, rng, optimize=optimize)
+
+
+def _make_fake_torch_network(
+        torch: Any, instances: list[Any], *, fail_forward: bool = False) -> type[Any]:
+    """Create a fake Torch-backed Network that tracks free() calls."""
+
+    class FakeNetwork:
+        def __init__(self, *operands: Any, **kwargs: Any) -> None:
+            self.package = "torch"
+            self.operand = next(operand for operand in operands if torch.is_tensor(operand))
+            self.device_id = 0
+            self.is_interleaved = False
+            self.valid_state = True
+            self.free_calls = 0
+            instances.append(self)
+
+        def contract_path(self, optimize: Any = None) -> tuple[list[Any], None]:
+            if fail_forward:
+                raise RuntimeError("forward failed")
+            return [], None
+
+        def contract(self, stream: Any = None) -> Any:
+            return self.operand * 2
+
+        def gradients(self, output_grad: Any, stream: Any = None) -> tuple[Any]:
+            return (output_grad * 2,)
+
+        def free(self) -> None:
+            if self.valid_state:
+                self.valid_state = False
+                self.free_calls += 1
+
+    return FakeNetwork
+
+
+@pytest.mark.parametrize(
+    "operand_requires_grad, grad_enabled",
+    ((False, True), (True, False)),
+)
+def test_torch_contract_frees_network_without_autograd(
+        monkeypatch: pytest.MonkeyPatch,
+        operand_requires_grad: bool,
+        grad_enabled: bool) -> None:
+    """Verify immediate Network cleanup when no autograd graph is created."""
+
+    torch = pytest.importorskip("torch")
+    instances: list[Any] = []
+    monkeypatch.setattr(
+        tensor_network, "Network", _make_fake_torch_network(torch, instances))
+    operand = torch.ones(2, requires_grad=operand_requires_grad)
+
+    with torch.set_grad_enabled(grad_enabled):
+        output = contract("i->i", operand)
+
+    # Exactly one free proves both no leak and idempotent ownership.
+    assert instances[0].free_calls == 1
+    # Neither disabled grad mode nor a constant input can produce an autograd graph.
+    assert not output.requires_grad
+
+
+@pytest.mark.parametrize("completion", ("backward", "discard"))
+def test_torch_contract_frees_network_after_graph_completion(
+        monkeypatch: pytest.MonkeyPatch, completion: str) -> None:
+    """Verify Network cleanup after backward or graph disposal."""
+
+    torch = pytest.importorskip("torch")
+    instances: list[Any] = []
+    monkeypatch.setattr(
+        tensor_network, "Network", _make_fake_torch_network(torch, instances))
+
+    class FakeDevice:
+        def __init__(self, *args: Any) -> None:
+            pass
+
+        def set_current(self) -> None:
+            pass
+
+    monkeypatch.setattr(grad_torch, "Device", FakeDevice)
+    operand = torch.ones(2, requires_grad=True)
+    output = contract("i->i", operand)
+
+    # A live graph must retain the Network until backward or graph disposal.
+    assert instances[0].free_calls == 0
+    if completion == "backward":
+        output.sum().backward()
+        # The fake gradient confirms that backward still maps gradients correctly.
+        assert torch.equal(operand.grad, torch.full_like(operand, 2))
+    else:
+        del output
+        gc.collect()
+
+    # Either graph-completion route must release the Network exactly once.
+    assert instances[0].free_calls == 1
+
+
+def test_torch_contract_frees_network_on_forward_error(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify Network cleanup when the autograd forward path fails."""
+
+    torch = pytest.importorskip("torch")
+    instances: list[Any] = []
+    monkeypatch.setattr(
+        tensor_network, "Network",
+        _make_fake_torch_network(torch, instances, fail_forward=True))
+    operand = torch.ones(2, requires_grad=True)
+
+    with pytest.raises(RuntimeError, match="forward failed"):
+        contract("i->i", operand)
+
+    # Cleanup on the error path must destroy the internally owned Network once.
+    assert instances[0].free_calls == 1
+
+
+def test_torch_contract_frees_network_on_grad_torch_import_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify Network cleanup when grad_torch fails to import on first use."""
+    torch = pytest.importorskip("torch")
+    instances: list[Any] = []
+    monkeypatch.setattr(tensor_network, "Network", _make_fake_torch_network(torch, instances))
+    # This module already imported grad_torch; undo that so contract() imports it again.
+    monkeypatch.delattr(sys.modules["cuquantum.tensornet._internal"], "grad_torch")
+    monkeypatch.setitem(sys.modules, "cuquantum.tensornet._internal.grad_torch", None)
+
+    with pytest.raises(ImportError, match="grad_torch"):
+        contract("i->i", torch.ones(2))
+
+    assert instances[0].free_calls == 1

@@ -16,7 +16,52 @@ STATE_DEFAULT_DTYPE = 'complex128'
 
 STATE_SUPPORTED_DTYPE_NAMES = {'float32', 'float64', 'complex64', 'complex128'}
 
-EXACT_MPS_EXTENT_LIMIT = 2**10 # limit the number of qubits for exact MPS to avoid extent overflowing
+EXACT_MPS_EXTENT_LIMIT = 2**10 # bond extent limit for MPS simulation without an explicit MPSConfig.max_extent
+
+
+def get_mps_output_extents(state_mode_extents, max_extent, itemsize):
+    """Extents of the output MPS tensors: ``(mode, right)``, ``(left, mode, right)``, ..., ``(left, mode)``.
+
+    The natural extent of a bond is the smaller product of the mode extents on either side, capped by
+    ``max_extent`` if given. Without ``max_extent`` the bond extents may not exceed ``EXACT_MPS_EXTENT_LIMIT``. Every
+    tensor's element count and size in bytes must fit in int64, the range of the C API. Running products saturate
+    one past the int64 maximum, so no intermediate value grows without bound.
+    """
+    int64_max = np.iinfo(np.int64).max
+    bound = int64_max + 1 if max_extent is None else min(int(max_extent), int64_max + 1)
+
+    def bounded_cumprod(extents):
+        product = 1
+        result = []
+        for extent in extents:
+            product = min(product * int(extent), bound)
+            result.append(product)
+        return result
+
+    extents_left = bounded_cumprod(state_mode_extents[:-1])
+    extents_right = bounded_cumprod(reversed(state_mode_extents[1:]))
+    bond_extents = [min(left, right) for left, right in zip(extents_left, reversed(extents_right))]
+    if max_extent is None and max(bond_extents) > EXACT_MPS_EXTENT_LIMIT:
+        needed = max(bond_extents)
+        needed = str(needed) if needed <= int64_max else f"more than {int64_max}"
+        raise ValueError(
+            f"Without MPSConfig.max_extent, MPS bond extents are limited to {EXACT_MPS_EXTENT_LIMIT}, but the exact "
+            f"bond extents of this state reach {needed}. Set MPSConfig.max_extent explicitly; a value at or above "
+            f"the largest exact bond extent truncates no bond extent.")
+
+    n = len(state_mode_extents)
+    extents = []
+    for i, mode_extent in enumerate(state_mode_extents):
+        site = ((bond_extents[i-1],) if i > 0 else ()) + (int(mode_extent),) + ((bond_extents[i],) if i < n - 1 else ())
+        elements = 1
+        for extent in site:
+            elements *= extent
+        if elements * itemsize > int64_max:
+            raise ValueError(
+                f"The MPS tensor at site {i} would have extents {site} ({elements} elements of {itemsize} bytes), "
+                f"beyond the int64 range of the C API; set a smaller MPSConfig.max_extent.")
+        extents.append(site)
+    return extents
 
 MPS_STATE_ATTRIBUTE_MAP = {
     'canonical_center' : cutn.StateAttribute.CONFIG_MPS_CANONICAL_CENTER,

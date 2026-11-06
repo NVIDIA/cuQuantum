@@ -138,6 +138,7 @@ class MPSHelper:
             self.gate_algo, self.svd_config, self.compute_type, self.work_desc)
         
         workspace_size = cutn.workspace_get_memory_size(self.handle, self.work_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+        host_workspace_size = cutn.workspace_get_memory_size(self.handle, self.work_desc, cutn.WorksizePref.MIN, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH)
 
         # free resources
         cutn.destroy_tensor_descriptor(desc_tensor_in_A)
@@ -145,16 +146,20 @@ class MPSHelper:
         cutn.destroy_tensor_descriptor(desc_tensor_in_G)
         cutn.destroy_tensor_descriptor(desc_tensor_out_A)
         cutn.destroy_tensor_descriptor(desc_tensor_out_B)
-        return workspace_size
+        return workspace_size, host_workspace_size
 
-    def set_workspace(self, work, workspace_size):
-        """Compute the maximal workspace needed for MPS gating algorithm.
-        
+    def set_workspace(self, work, workspace_size, host_work=None, host_workspace_size=0):
+        """Set the workspace buffers for the MPS gating algorithm.
+
         Args:
-            work: Pointer to the allocated workspace.
+            work: Pointer to the allocated device workspace.
             workspace_size: The required workspace size on the device.
+            host_work: The allocated host workspace (a NumPy array), or None if ``host_workspace_size`` is zero.
+            host_workspace_size: The required workspace size on the host.
         """
         cutn.workspace_set_memory(self.handle, self.work_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH, work.ptr, workspace_size)
+        if host_workspace_size > 0:
+            cutn.workspace_set_memory(self.handle, self.work_desc, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH, host_work.ctypes.data, host_workspace_size)
 
     def apply_gate(self, site_A, site_B, gate, verbose, stream):
         """Inplace execution of the apply gate algoritm on site A and site B.
@@ -340,10 +345,12 @@ def main():
 
     free_mem, total_mem = dev.mem_info
     worksize = free_mem *.7
-    required_workspace_size = mps_helper.compute_max_workspace_sizes()
+    required_workspace_size, required_host_workspace_size = mps_helper.compute_max_workspace_sizes()
     work = cp.cuda.alloc(worksize)
-    print(f"Maximal workspace size requried: {required_workspace_size / 1024 ** 3:.3f} GB")
-    mps_helper.set_workspace(work, required_workspace_size)
+    host_work = np.empty(required_host_workspace_size, dtype=np.int8)  # must stay alive until the computation completes
+    print(f"Maximal device workspace size required: {required_workspace_size / 1024 ** 3:.3f} GB")
+    print(f"Maximal host workspace size required: {required_host_workspace_size / 1024 ** 3:.3f} GB")
+    mps_helper.set_workspace(work, required_workspace_size, host_work, required_host_workspace_size)
 
     ###########
     # Execution

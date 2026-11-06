@@ -2,9 +2,12 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import math
 import os
 
 import pytest
+import types
+
 import numpy as np
 try:
     import torch
@@ -17,6 +20,8 @@ from nvmath.internal.tensor_wrapper import wrap_operand
 from cuquantum.tensornet import CircuitToEinsum
 from cuquantum.tensornet._internal.helpers import _get_backend_asarray_func
 from cuquantum.tensornet.experimental import NetworkState, MPSConfig, TNConfig, NetworkOperator
+from cuquantum.tensornet.experimental._internal.network_state_utils import (
+    EXACT_MPS_EXTENT_LIMIT, get_mps_output_extents)
 from cuquantum.bindings import cutensornet as cutn
 
 from ..utils.data import ARRAY_BACKENDS
@@ -189,6 +194,28 @@ def _computed_output_shapes(mps_in, **config_kwargs):
         return [tuple(TensorBackend.to_numpy(t).shape) for t in state.compute_output_state()]
 
 
+def _capture_test_backend(name):
+    """Array operations used by the MPS capture tests, on CuPy or PyTorch (CUDA) tensors."""
+    if name == "cupy":
+        cp = pytest.importorskip("cupy")
+        return types.SimpleNamespace(
+            asarray=lambda a: cp.asarray(a),
+            to_numpy=cp.asnumpy,
+            data_ptr=lambda t: t.data.ptr,
+            copy=lambda t: t.copy(order="F"))
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("PyTorch without CUDA")
+    return types.SimpleNamespace(
+        asarray=lambda a: torch.as_tensor(np.asarray(a), device="cuda"),
+        to_numpy=lambda t: t.cpu().numpy(),
+        data_ptr=lambda t: t.data_ptr(),
+        copy=lambda t: t.clone())
+
+
+CAPTURE_TEST_BACKENDS = ("cupy", "torch")
+
+
 class TestNetworkStateBasicFunctionality(_BaseTester):
 
     def test_from_circuit(self, circuit_L0, circuit_exact_sv_L0):
@@ -296,6 +323,38 @@ class TestNetworkStateBasicFunctionality(_BaseTester):
         
         tol = get_contraction_tolerance(state.dtype)
         np.testing.assert_allclose(sv_tn, sv_mps, **tol)
+
+    @pytest.mark.parametrize("state_dims", ((2, 2, 2), (2, 3, 2)), ids=lambda d: "x".join(map(str, d)))
+    @pytest.mark.parametrize("modes", ((0, 1, 2), (2, 1, 0), (1, 2, 0)), ids=lambda m: "".join(map(str, m)))
+    @pytest.mark.parametrize("adjoint", (False, True), ids=("direct", "adjoint"))
+    @pytest.mark.parametrize("pure_state", (True, False), ids=("pure", "mixed"))
+    def test_three_qudit_diagonal_operator(self, state_dims, modes, adjoint, pure_state):
+        """A diagonal operator on modes (q_0, q_1, q_2) is passed as the rank-3 array of its
+        diagonal entries D[i_{q_0}, i_{q_1}, i_{q_2}]. Random complex entries make the mode
+        order and the adjoint observable; the reference is computed with NumPy."""
+        rng = np.random.default_rng(3)
+        letters = "abc"
+        # Generic product state: one random unitary per qudit on |000>.
+        psi = np.zeros(state_dims, dtype=np.complex128)
+        psi[0, 0, 0] = 1.0
+        unitaries = [np.linalg.qr(rng.normal(size=(d, d)) + 1j * rng.normal(size=(d, d)))[0] for d in state_dims]
+        for q, u in enumerate(unitaries):
+            psi = np.einsum(f"Jj,{letters[:q]}j{letters[q+1:]}->{letters[:q]}J{letters[q+1:]}", u, psi)
+        diag_shape = tuple(state_dims[m] for m in modes)
+        diag = rng.normal(size=diag_shape) + 1j * rng.normal(size=diag_shape)
+        d_idx = "".join(letters[m] for m in modes)
+        psi_ref = np.einsum(f"{d_idx},abc->abc", np.conj(diag) if adjoint else diag, psi)
+
+        with NetworkState(state_dims, dtype="complex128", config=TNConfig(), pure_state=pure_state) as state:
+            for q, u in enumerate(unitaries):
+                state.apply_tensor_operator((q,), u, unitary=True)
+            state.apply_tensor_operator(modes, diag, diagonal=True, adjoint=adjoint, unitary=False)
+            tol = get_contraction_tolerance(state.dtype)
+            if pure_state:
+                np.testing.assert_allclose(state.compute_state_vector(), psi_ref, **tol)
+            else:
+                rho_ref = np.outer(psi_ref.reshape(-1), psi_ref.reshape(-1).conj()).reshape(state_dims * 2)
+                np.testing.assert_allclose(state.compute_density_matrix(), rho_ref, **tol)
 
     def test_control_values_default(self):
         """Test that control_values=None defaults to 1 for all control modes.
@@ -869,6 +928,221 @@ class TestNetworkStateBasicFunctionality(_BaseTester):
         QuantumStateTestHelper.verify_state_vector(sv0, sv1, **tol)
         QuantumStateTestHelper.verify_state_vector(sv0, sv2, **tol)
 
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_mps_release_operators_with_mixed_extents(self, gauge_option):
+        # swaps of qudits of unequal extents let bonds grow beyond their targets while a gate is applied, and a
+        # compression restores them after the gate; releasing the operators in the middle must still give the result
+        # of the uninterrupted run
+        dims = (2, 3, 5, 3, 2)
+        config = MPSConfig(max_extent=8, rel_cutoff=1e-2, gauge_option=gauge_option)
+        rng = np.random.default_rng(5)
+        _, initial = _random_mixed_mps(dims, rng, "complex128", 2)
+        gates = []
+        for modes in ((0, 3), (4, 1), (2, 0), (1, 3), (4, 0), (3, 1)):
+            d = dims[modes[0]] * dims[modes[1]]
+            u, _ = np.linalg.qr(rng.standard_normal((d, d)) + 1j * rng.standard_normal((d, d)))
+            gates.append((modes, u.reshape([dims[m] for m in modes] * 2)))
+
+        with NetworkState(dims, dtype="complex128", config=config) as state:
+            state.set_initial_mps(initial)
+            for modes, gate in gates[:3]:
+                state.apply_tensor_operator(modes, gate)
+            captured = [o.copy() for o in state.compute_output_state(release_operators=True)]
+            for modes, gate in gates[3:]:
+                state.apply_tensor_operator(modes, gate)
+            sv0 = state.compute_state_vector()
+        with NetworkState(dims, dtype="complex128", config=config) as reference:
+            reference.set_initial_mps(initial)
+            for modes, gate in gates:
+                reference.apply_tensor_operator(modes, gate)
+            sv1 = reference.compute_state_vector()
+        with NetworkState(dims, dtype="complex128", config=config) as restarted:
+            restarted.set_initial_mps(captured)
+            for modes, gate in gates[3:]:
+                restarted.apply_tensor_operator(modes, gate)
+            sv2 = restarted.compute_state_vector()
+
+        tol = get_mps_tolerance("complex128")
+        QuantumStateTestHelper.verify_state_vector(sv0, sv1, **tol)
+        QuantumStateTestHelper.verify_state_vector(sv0, sv2, **tol)
+
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    @pytest.mark.parametrize("backend", CAPTURE_TEST_BACKENDS)
+    @pytest.mark.parametrize("sequence", ("apply", "update", "channel", "release_each_compute"))
+    def test_mps_release_operators_then_compute_again(self, sequence, backend, gauge_option):
+        # state computations after release_operators=True start from the captured output state,
+        # also when the state is computed more than once before the next release
+        xp = _capture_test_backend(backend)
+        rng = np.random.default_rng(5)
+        gates = [xp.asarray(np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))[0].reshape(2, 2, 2, 2))
+                 for _ in range(3)]
+        x = xp.asarray(np.asarray([[0, 1], [1, 0]], dtype="complex128"))
+        z = xp.asarray(np.asarray([[1, 0], [0, -1]], dtype="complex128"))
+        identity = xp.asarray(np.eye(2, dtype="complex128"))
+
+        def random_state():
+            state = NetworkState((2, 2, 2), dtype="complex128", config=MPSConfig(gauge_option=gauge_option))
+            for gate, modes in zip(gates, ((0, 1), (1, 2), (0, 1))):
+                state.apply_tensor_operator(modes, gate, unitary=True)
+            return state
+
+        def reference(operators):
+            with random_state() as state:
+                for modes, operand in operators:
+                    state.apply_tensor_operator(modes, operand, unitary=True)
+                return xp.to_numpy(state.compute_state_vector())
+
+        with random_state() as state:
+            captured = state.compute_output_state(release_operators=True)
+            if sequence == "apply":
+                state.apply_tensor_operator((0,), x, unitary=True)
+                sv_first = xp.to_numpy(state.compute_state_vector())
+                state.apply_tensor_operator((1,), z, unitary=True)
+                sv_second = xp.to_numpy(state.compute_state_vector())
+                expected = (reference([((0,), x)]), reference([((0,), x), ((1,), z)]))
+            elif sequence == "update":
+                tensor_id = state.apply_tensor_operator((0,), x, unitary=True, immutable=False)
+                sv_first = xp.to_numpy(state.compute_state_vector())
+                state.update_tensor_operator(tensor_id, z, unitary=True)
+                sv_second = xp.to_numpy(state.compute_state_vector())
+                expected = (reference([((0,), x)]), reference([((0,), z)]))
+            elif sequence == "channel":
+                # every property computation of a state with stochastic channels computes the state again
+                state.apply_unitary_tensor_channel((0,), [x, identity], [1.0, 0.0])
+                sv_first = xp.to_numpy(state.compute_state_vector())
+                sv_second = xp.to_numpy(state.compute_state_vector())
+                expected = (reference([((0,), x)]),) * 2
+            else:
+                state.apply_tensor_operator((0,), x, unitary=True)
+                recaptured = state.compute_output_state(release_operators=True)
+                # computed in place and captured again: no additional output tensors
+                assert [xp.data_ptr(t) for t in recaptured] == [xp.data_ptr(t) for t in captured]
+                sv_first = xp.to_numpy(state.compute_state_vector())
+                state.apply_tensor_operator((1,), z, unitary=True)
+                sv_second = xp.to_numpy(state.compute_state_vector())
+                expected = (reference([((0,), x)]), reference([((0,), x), ((1,), z)]))
+            np.testing.assert_allclose(sv_first, expected[0], atol=1e-12)
+            np.testing.assert_allclose(sv_second, expected[1], atol=1e-12)
+
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    @pytest.mark.parametrize("truncation", ({}, {"max_extent": 2}, {"rel_cutoff": 0.1}),
+                             ids=("exact", "max_extent", "rel_cutoff"))
+    @pytest.mark.parametrize("backend", CAPTURE_TEST_BACKENDS)
+    def test_mps_capture_every_computation_in_place(self, truncation, backend, gauge_option):
+        # capturing after every computation computes into the tensors holding the captured initial state (an
+        # implementation property of NetworkState that the C API does not guarantee); the result matches the same
+        # steps computed into separate tensors (a new state initialized with a copy of each output)
+        xp = _capture_test_backend(backend)
+        rng = np.random.default_rng(11)
+        n = 4
+        layers = [[(modes, xp.asarray(np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))[0]
+                                      .reshape(2, 2, 2, 2))) for modes in ((0, 1), (2, 3), (1, 2))]
+                  for _ in range(3)]
+        config = MPSConfig(gauge_option=gauge_option, **truncation)
+
+        def state_vector(mps):
+            mps = [xp.to_numpy(t) for t in mps]
+            return np.einsum("ia,ajb,bkc,cl->ijkl", *mps)
+
+        reference = None
+        with NetworkState((2,) * n, dtype="complex128", config=config) as state:
+            pointers = None
+            for layer in layers:
+                for modes, gate in layer:
+                    state.apply_tensor_operator(modes, gate, unitary=True)
+                captured = state.compute_output_state(release_operators=True)
+                if pointers is not None:
+                    # computed in place: the output tensors are those holding the previous capture
+                    assert [xp.data_ptr(t) for t in captured] == pointers
+                pointers = [xp.data_ptr(t) for t in captured]
+                with NetworkState((2,) * n, dtype="complex128", config=config) as ref_state:
+                    if reference is not None:
+                        ref_state.set_initial_mps(reference)
+                    for modes, gate in layer:
+                        ref_state.apply_tensor_operator(modes, gate, unitary=True)
+                    reference = [xp.copy(t) for t in ref_state.compute_output_state()]
+                np.testing.assert_allclose(state_vector(captured), state_vector(reference), atol=1e-10)
+
+    def test_mps_truncation_with_channel_interleaved_properties(self):
+        # With value-based truncation and a stochastic channel whose outcomes give different bond extents, every
+        # computation can change the extents and change them back; a cached expectation object must only be reused at
+        # the extents it was created for. Every expectation is one of the two per-outcome values.
+        cp = pytest.importorskip("cupy")
+        n = 4
+        config = MPSConfig(max_extent=4, rel_cutoff=0.2)
+        operator = NetworkOperator.from_pauli_strings({"ZZZZ": 1.0, "XIII": 0.5}, dtype="complex128")
+
+        def build(channel_branch=None):
+            rng = np.random.default_rng(3)
+            state = NetworkState((2,) * n, dtype="complex128", config=config)
+            for modes in ((0, 1), (1, 2), (2, 3), (0, 1)):
+                u = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))[0].reshape(2, 2, 2, 2)
+                state.apply_tensor_operator(modes, cp.asarray(u), unitary=True)
+            entangling = cp.asarray(
+                np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))[0].reshape(2, 2, 2, 2))
+            identity = cp.eye(4, dtype="complex128").reshape(2, 2, 2, 2)
+            if channel_branch is None:
+                state.apply_unitary_tensor_channel((1, 2), [entangling, identity], [0.5, 0.5])
+            elif channel_branch == "entangling":
+                state.apply_tensor_operator((1, 2), entangling, unitary=True)
+            return state
+
+        expected = []
+        for branch in ("entangling", "identity"):
+            with build(branch) as state:
+                expected.append(complex(state.compute_expectation(operator)))
+        seen = set()
+        with build() as state:
+            for _ in range(20):
+                state.compute_output_state()
+                value = complex(state.compute_expectation(operator))
+                matches = [i for i, e in enumerate(expected) if abs(value - e) < 1e-10]
+                assert matches, f"expectation {value} matches neither channel outcome {expected}"
+                seen.update(matches)
+        assert seen == {0, 1}, "both channel outcomes should occur in 20 computations"
+
+    @pytest.mark.parametrize("backend", CAPTURE_TEST_BACKENDS)
+    def test_mps_own_output_as_initial_state(self, backend):
+        # output tensors of a state passed back to set_initial_mps of the same state hold its initial state:
+        # later computations must not overwrite them
+        xp = _capture_test_backend(backend)
+        rng = np.random.default_rng(6)
+        shapes = ((2, 2), (2, 2, 2), (2, 2))
+        mps = [xp.asarray(rng.normal(size=s) + 1j * rng.normal(size=s)) for s in shapes]
+        x = xp.asarray(np.asarray([[0, 1], [1, 0]], dtype="complex128"))
+        z = xp.asarray(np.asarray([[1, 0], [0, -1]], dtype="complex128"))
+
+        def run(state, operators):
+            results = []
+            for modes, operand in operators:
+                state.apply_tensor_operator(modes, operand, unitary=True)
+                results.append(xp.to_numpy(state.compute_state_vector()))
+            return results
+
+        operators = [((0,), x), ((1,), z)]
+        with NetworkState((2, 2, 2), dtype="complex128", config=MPSConfig(gauge_option='simple')) as state:
+            state.set_initial_mps(mps)
+            output = state.compute_output_state()
+            initial = [xp.copy(t) for t in output]  # copies, for the reference
+            state.set_initial_mps(output)
+            actual = run(state, operators)
+        with NetworkState((2, 2, 2), dtype="complex128", config=MPSConfig(gauge_option='simple')) as reference:
+            reference.set_initial_mps(initial)
+            expected = run(reference, operators)
+        for a, b in zip(actual, expected):
+            np.testing.assert_allclose(a, b, atol=1e-12)
+
+    def test_mps_expectation_after_unsupported_gradients(self):
+        # gradients are not supported for MPS simulation; the failed call leaves the object usable
+        cp = pytest.importorskip("cupy")
+        h = cp.asarray([[1, 1], [1, -1]], dtype="complex128") / 2 ** 0.5
+        with NetworkState((2, 2), dtype="complex128", config=MPSConfig()) as state:
+            state.apply_tensor_operator((0,), h, unitary=True, gradient=True)
+            with pytest.raises(cutn.cuTensorNetError) as e:
+                state.compute_expectation_with_gradients("XI", 1.0)
+            assert e.value.status == cutn.Status.NOT_SUPPORTED
+            np.testing.assert_allclose(complex(state.compute_expectation("XI")), 1.0, atol=1e-12)
+
     @pytest.mark.parametrize("stream_kind", ("object", "ptr"))
     def test_mps_release_operators_with_explicit_stream(self, stream_kind):
         cp = pytest.importorskip("cupy")
@@ -1057,7 +1331,48 @@ class TestNetworkStateBasicFunctionality(_BaseTester):
         with state:
             mps = state.compute_output_state()
             assert mps is not None
-    
+
+    @pytest.mark.parametrize("max_extent", (None, 2))
+    @pytest.mark.parametrize("algorithm", ("gesvd", "gesvdj", "gesvdr", "gesvdp"))
+    def test_mps_two_qubit_gate_all_svd_algorithms(self, algorithm, max_extent):
+        # Apply a two-qubit gate to an MPS under each SVD algorithm. A bond extent of 2 is exact
+        # for the Bell pair, so both settings yield the same state.
+        config = MPSConfig(algorithm=algorithm, max_extent=max_extent)
+        hadamard = np.array([[1, 1], [1, -1]], dtype='complex128') / np.sqrt(2)
+        cnot = np.eye(4, dtype='complex128')[[0, 1, 3, 2]].reshape(2, 2, 2, 2)
+        with NetworkState((2, 2, 2), dtype='complex128', config=config) as state:
+            state.apply_tensor_operator((0,), hadamard, immutable=True)
+            state.apply_tensor_operator((0, 1), cnot, immutable=True)
+            mps = state.compute_output_state()
+            assert len(mps) == 3
+            sv = state.compute_state_vector()
+        expected = np.zeros((2, 2, 2), dtype='complex128')
+        expected[0, 0, 0] = expected[1, 1, 0] = 1 / np.sqrt(2)
+        np.testing.assert_allclose(np.asarray(sv), expected, atol=1e-12)
+
+    @pytest.mark.parametrize("algorithm", ("gesvd", "gesvdj", "gesvdr", "gesvdp"))
+    def test_mps_two_qubit_gate_without_host_workspace(self, monkeypatch, algorithm):
+        # A caller that provides device scratch workspace only. The documented contract expects the
+        # caller to attach the host scratch workspace the prepare call reports; the library nevertheless
+        # tolerates its absence for backward compatibility (callers written before cuSOLVER started
+        # requesting host workspace for the SVD). This test pins that undocumented tolerance for every
+        # SVD algorithm; it is not a guarantee users may rely on.
+        set_memory = cutn.workspace_set_memory
+        def set_device_memory_only(handle, desc, memspace, kind, ptr, size):
+            if memspace == cutn.Memspace.HOST:
+                return
+            return set_memory(handle, desc, memspace, kind, ptr, size)
+        monkeypatch.setattr(cutn, "workspace_set_memory", set_device_memory_only)
+        config = MPSConfig(algorithm=algorithm, max_extent=2)
+        hadamard = np.array([[1, 1], [1, -1]], dtype='complex128') / np.sqrt(2)
+        cnot = np.eye(4, dtype='complex128')[[0, 1, 3, 2]].reshape(2, 2, 2, 2)
+        with NetworkState((2, 2, 2), dtype='complex128', config=config) as state:
+            state.apply_tensor_operator((0,), hadamard, immutable=True)
+            state.apply_tensor_operator((0, 1), cnot, immutable=True)
+            sv = state.compute_state_vector()
+        expected = np.zeros((2, 2, 2), dtype='complex128')
+        expected[0, 0, 0] = expected[1, 1, 0] = 1 / np.sqrt(2)
+        np.testing.assert_allclose(np.asarray(sv), expected, atol=1e-12)
 
     @pytest.mark.parametrize("remove_identity", (True, False, 'auto'))
     def test_expectation_from_pauli_strings(self, circuit_L0, exact_config, circuit_exact_sv_L0, remove_identity):
@@ -1175,6 +1490,246 @@ class TestNetworkStateBasicFunctionality(_BaseTester):
             f"  from left-canonical : {left}\n"
             f"  from right-canonical: {right}"
         )
+
+
+class TestMPSOutputExtentSizing:
+    """Output MPS sizing: natural bond extents, the limit without max_extent, and the int64 range of the C API."""
+
+    HADAMARD = (
+        np.array([[1, 1], [1, -1]], dtype="complex128") / np.sqrt(2)
+    )
+
+    @pytest.mark.parametrize("max_extent, expected", (
+        (None, [(2, 2), (2, 3, 6), (6, 5, 7), (7, 7)]),
+        (4, [(2, 2), (2, 3, 4), (4, 5, 4), (4, 7)]),
+        (10**6, [(2, 2), (2, 3, 6), (6, 5, 7), (7, 7)]),
+    ))
+    def test_extents_for_uneven_mode_extents(self, max_extent, expected):
+        assert get_mps_output_extents((2, 3, 5, 7), max_extent, 16) == expected
+
+    def test_documented_limit_matches(self):
+        # the limit is documented by value in MPSConfig; keep the two in sync
+        assert f"limited to {EXACT_MPS_EXTENT_LIMIT}" in " ".join(MPSConfig.__doc__.split())
+
+    def test_limit_without_max_extent(self):
+        extents = get_mps_output_extents((2,) * 20, None, 16)
+        assert max(e[-1] for e in extents[:-1]) == EXACT_MPS_EXTENT_LIMIT
+        with pytest.raises(ValueError, match=f"limited to {EXACT_MPS_EXTENT_LIMIT}"):
+            get_mps_output_extents((2,) * 22, None, 16)
+        with pytest.raises(ValueError, match=f"limited to {EXACT_MPS_EXTENT_LIMIT}"):
+            get_mps_output_extents((2,) * 130, None, 16)
+
+    def test_explicit_max_extent_lifts_the_limit(self):
+        # a cap at or above the largest exact bond extent gives the exact extents
+        extents = get_mps_output_extents((2,) * 22, 2048, 16)
+        assert extents == get_mps_output_extents((2,) * 22, 2**40, 16)
+        assert max(e[-1] for e in extents[:-1]) == 2048
+
+    @pytest.mark.parametrize("max_extent, itemsize, accepted", (
+        (2**28, 16, True),   # central tensor 2**28 * 2 * 2**28 elements of 16 bytes = 2**61 bytes
+        (2**29, 16, False),  # 2**63 bytes
+        (2**29, 8, True),    # 2**62 bytes
+        (np.iinfo(np.int64).max + 1, 16, False),
+        (2**70, 16, False),
+    ))
+    def test_int64_range(self, max_extent, itemsize, accepted):
+        if accepted:
+            get_mps_output_extents((2,) * 130, max_extent, itemsize)
+        else:
+            with pytest.raises(ValueError, match="int64"):
+                get_mps_output_extents((2,) * 130, max_extent, itemsize)
+
+    @pytest.mark.parametrize("max_extent", (0, -1, 2.5, True, "8"))
+    def test_invalid_max_extent_is_rejected(self, max_extent):
+        with pytest.raises(ValueError, match="max_extent"):
+            MPSConfig(max_extent=max_extent)
+
+    def test_numpy_integer_max_extent_is_accepted(self):
+        assert MPSConfig(max_extent=np.int64(4)).max_extent == 4
+
+    @classmethod
+    def _hadamard_amplitude(cls, n, max_extent):
+        config = MPSConfig(max_extent=max_extent, gauge_option="simple")
+        with NetworkState((2,) * n, dtype="complex128", config=config) as state:
+            state.apply_tensor_operator((0,), cls.HADAMARD)
+            return state.compute_amplitude("0" * n)
+
+    def test_explicit_max_extent_above_limit_is_accepted(self):
+        assert np.isclose(self._hadamard_amplitude(22, 1025), 1 / np.sqrt(2))
+
+    def test_extent_sizing_does_not_overflow_beyond_63_qubits(self):
+        assert np.isclose(self._hadamard_amplitude(64, 8), 1 / np.sqrt(2))
+
+    def test_uncapped_extent_above_limit_is_rejected(self):
+        with pytest.raises(ValueError, match=f"limited to {EXACT_MPS_EXTENT_LIMIT}"):
+            self._hadamard_amplitude(22, None)
+
+    def test_explicit_max_extent_above_int64_is_rejected(self):
+        with pytest.raises(ValueError, match="int64"):
+            self._hadamard_amplitude(128, 2**70)
+
+
+class TestMPSCanonicalizationTruncation:
+
+    SEED = 2024
+    QUDIT_DIMS = (4, 4, 2)
+    TRUNCATED_EXTENT = 3
+    TOL = 1e-10
+    RIGHT_GATE_SITES = ((0, 1), (1, 2), (0, 1))
+    LEFT_GATE_SITES = ((2, 1), (1, 0), (2, 1))
+    SWEEP_CASES = [
+        pytest.param(QUDIT_DIMS, RIGHT_GATE_SITES, 0, 2, id='right'),
+        pytest.param(QUDIT_DIMS[::-1], LEFT_GATE_SITES, 1, 0, id='left'),
+    ]
+
+    @staticmethod
+    def _random_unitary_gate(rng, dim_a, dim_b):
+        dim = dim_a * dim_b
+        matrix = (
+            rng.standard_normal((dim, dim))
+            + 1j * rng.standard_normal((dim, dim))
+        )
+        q, _ = np.linalg.qr(matrix)
+        return q.reshape(dim_a, dim_b, dim_a, dim_b)
+
+    @staticmethod
+    def _dense_state(mps):
+        """Contract the MPS, including its gauges, without mutating it."""
+        tensors = list(mps.mps_tensors)
+        for site, gauge in mps.gauges.items():
+            tensors[site] = np.einsum('i,ijk->ijk', gauge, tensors[site])
+        state = tensors[0]
+        for tensor in tensors[1:]:
+            state = np.tensordot(
+                state, tensor, axes=([state.ndim - 1], [0])
+            )
+        return state.reshape(mps.state_dims)
+
+    @staticmethod
+    def _schmidt_values(state, bond):
+        left_extent = np.prod(state.shape[:bond + 1])
+        return np.linalg.svd(
+            state.reshape(left_extent, -1), compute_uv=False
+        )
+
+    @staticmethod
+    def _fidelity(psi, phi):
+        overlap = np.vdot(psi.ravel(), phi.ravel())
+        return abs(overlap) ** 2 / (
+            np.vdot(psi.ravel(), psi.ravel()).real
+            * np.vdot(phi.ravel(), phi.ravel()).real
+        )
+
+    @classmethod
+    def _build_entangled_mps(cls, gauge_option, qudit_dims, gate_sites):
+        rng = np.random.default_rng(cls.SEED)
+        mps = MPS(
+            range(3),
+            'numpy',
+            qudit_dims=qudit_dims,
+            gauge_option=gauge_option,
+        )
+        for sites in gate_sites:
+            gate = cls._random_unitary_gate(
+                rng, qudit_dims[sites[0]], qudit_dims[sites[1]]
+            )
+            mps.apply_gate(sites, gate)
+        return mps
+
+    @classmethod
+    def _assert_optimal_truncation(cls, psi, psi_trunc, bond):
+        exact_schmidt = cls._schmidt_values(psi, bond)
+        assert exact_schmidt[-1] > 1e-3
+        achieved = cls._fidelity(psi, psi_trunc)
+        optimal = (
+            np.sum(exact_schmidt[:cls.TRUNCATED_EXTENT] ** 2)
+            / np.sum(exact_schmidt ** 2)
+        )
+        assert abs(achieved - optimal) < cls.TOL, (
+            f"fidelity {achieved!r} vs optimal {optimal!r}"
+        )
+
+        truncated_schmidt = cls._schmidt_values(
+            psi_trunc, bond
+        )[:cls.TRUNCATED_EXTENT]
+        expected = exact_schmidt[:cls.TRUNCATED_EXTENT]
+        np.testing.assert_allclose(
+            truncated_schmidt / np.linalg.norm(truncated_schmidt),
+            expected / np.linalg.norm(expected),
+            rtol=0,
+            atol=cls.TOL,
+        )
+
+    @classmethod
+    def _check_reference(
+            cls, gauge_option, qudit_dims, gate_sites, bond, canonical_center):
+        mps = cls._build_entangled_mps(
+            gauge_option, qudit_dims, gate_sites
+        )
+        psi = cls._dense_state(mps)
+        assert mps[bond].shape[-1] == qudit_dims[bond]
+
+        mps.max_extents[bond] = cls.TRUNCATED_EXTENT
+        mps.canonical_center = canonical_center
+        mps.canonicalize()
+        assert mps[bond].shape[-1] == cls.TRUNCATED_EXTENT
+
+        cls._assert_optimal_truncation(
+            psi, cls._dense_state(mps), bond
+        )
+
+    @pytest.mark.parametrize(
+        'qudit_dims,gate_sites,bond,canonical_center', SWEEP_CASES
+    )
+    def test_simple_update_truncates_on_schmidt_values(
+            self, qudit_dims, gate_sites, bond, canonical_center):
+        """Simple-update canonicalization truncates optimally in both directions."""
+        self._check_reference(
+            'simple', qudit_dims, gate_sites, bond, canonical_center
+        )
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "Gauge-free truncating canonicalization has no local information about the far "
+        "environment: the sweep truncates a pair that is not the orthogonality center, "
+        "so the discarded singular values are not Schmidt values and the result is "
+        "suboptimal."))
+    def test_gauge_free_canonicalization_is_not_optimal(self):
+        self._check_reference(
+            'free', self.QUDIT_DIMS, self.RIGHT_GATE_SITES, 0, 1
+        )
+
+    @pytest.mark.parametrize(
+        'qudit_dims,gate_sites,bond,canonical_center', SWEEP_CASES
+    )
+    def test_network_state_truncates_on_schmidt_values(
+            self, qudit_dims, gate_sites, bond, canonical_center):
+        """The native simple-update sweep matches optimal Schmidt truncation."""
+        cp = pytest.importorskip('cupy')
+
+        mps = self._build_entangled_mps(
+            'simple', qudit_dims, gate_sites
+        )
+        psi = self._dense_state(mps)
+        tensors = mps.absorb_gauges(mps.mps_tensors)
+        initial = [
+            tensors[0].reshape(tensors[0].shape[1:]),
+            tensors[1],
+            tensors[2].reshape(tensors[2].shape[:-1]),
+        ]
+        assert initial[bond].shape[-1] == qudit_dims[bond]
+
+        config = MPSConfig(
+            gauge_option='simple',
+            max_extent=self.TRUNCATED_EXTENT,
+            canonical_center=canonical_center,
+        )
+        with NetworkState(qudit_dims, dtype='complex128', config=config) as state:
+            state.set_initial_mps([cp.asarray(tensor) for tensor in initial])
+            psi_trunc = cp.asnumpy(state.compute_state_vector())
+            output = state.compute_output_state()
+        assert output[bond].shape[-1] == self.TRUNCATED_EXTENT
+
+        self._assert_optimal_truncation(psi, psi_trunc, bond)
 
 
 @pytest.fixture(params=CircuitStateMatrix.L1(), scope="class")
@@ -2506,3 +3061,595 @@ class TestNetworkOperator:
             expec_test, expec_ref,
             atol=1e-12, rtol=1e-12,
         ), "expectation with multi-qubit tensor product must match numpy reference"
+
+
+# ---------------------------------------------------------------------------------------------
+# MPS correctness regressions checked against dense numpy references:
+#   * sites no operation touches keep the user's initial MPS tensors; with C-order (row-major)
+#     input and the free gauge they were once read back as column-major (silently transposed);
+#   * approximate (zip-up) MPO application without truncation must be exact; splits made while
+#     an MPO bond was still open were once clamped to the final MPS extents near the chain edge.
+# ---------------------------------------------------------------------------------------------
+
+def _random_mps_c_order(n, chi, rng, dtype):
+    """Open-boundary qubit MPS: (left, phys, right) tensors and the pkn form with edge bonds dropped."""
+    full, dim = [], 1
+    for i in range(1, n + 1):
+        right = min(2**i, 2**(n - i), chi)
+        t = rng.standard_normal((dim, 2, right))
+        if dtype.startswith('complex'):
+            t = t + 1j * rng.standard_normal((dim, 2, right))
+        full.append(t.astype(dtype))
+        dim = right
+    operands = [full[0][0]] + full[1:-1] + [full[-1][:, :, 0]]
+    return full, [np.ascontiguousarray(t) for t in operands]
+
+
+def _dense_from_mps(full):
+    v = full[0]
+    for t in full[1:]:
+        v = np.tensordot(v, t, axes=(-1, 0))
+    return v.reshape(-1)
+
+
+def _dense_from_mpo(mpo):
+    """Dense O[out, in] of an MPO in the cuTensorNet layout (first: k,n,b; middle: p,k,n,b; last: p,k,b),
+    where k is contracted with the state and b is the output leg."""
+    t = np.tensordot(mpo[0], mpo[1], axes=(1, 0))            # (k0, b0, k1, n1, b1) or (k0, b0, k1, b1)
+    for w in mpo[2:]:
+        t = np.tensordot(t, w, axes=(-2, 0))
+    num_sites = len(mpo)
+    t = t.reshape((2, 2) * num_sites)                         # (k0, b0, k1, b1, ...)
+    t = t.transpose(list(range(1, 2 * num_sites, 2)) + list(range(0, 2 * num_sites, 2)))
+    return t.reshape(2**num_sites, 2**num_sites)
+
+
+def _apply_dense(op, psi, sites, n):
+    """Apply op[out, in] (acting on `sites`) to the dense n-qubit state psi."""
+    num_sites = len(sites)
+    out = np.tensordot(op.reshape((2,) * 2 * num_sites), psi.reshape((2,) * n),
+                       axes=(list(range(num_sites, 2 * num_sites)), sites))
+    return np.moveaxis(out, list(range(num_sites)), sites).reshape(-1)
+
+
+def _random_mpo(num_sites, bond, rng, dtype):
+    shapes = [(2, bond, 2)] + [(bond, 2, bond, 2)] * (num_sites - 2) + [(bond, 2, 2)]
+    out = []
+    for shape in shapes:
+        t = rng.standard_normal(shape)
+        if dtype.startswith('complex'):
+            t = t + 1j * rng.standard_normal(shape)
+        out.append(t.astype(dtype))
+    return out
+
+
+def _unitary_mpo(num_sites, rng):
+    """Exactly unitary MPO whose individual site tensors are not unitary (SVD split of a random unitary)."""
+    dim = 2**num_sites
+    q, r = np.linalg.qr(rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim)))
+    u = q * (np.diag(r) / np.abs(np.diag(r)))
+    # (out_0..out_{L-1}, in_0..in_{L-1}) -> per-site (in_i, out_i) pairs, then left-to-right SVD split
+    t = u.reshape((2,) * 2 * num_sites)
+    t = t.transpose([x for i in range(num_sites) for x in (num_sites + i, i)])
+    mpo, left, rest = [], 1, t.reshape(1, -1)
+    for i in range(num_sites - 1):
+        rest = rest.reshape(left * 4, -1)
+        a, s, b = np.linalg.svd(rest, full_matrices=False)
+        keep = int((s > 1e-12 * s[0]).sum())
+        site = a[:, :keep].reshape(left, 2, 2, keep)          # (p, k, b, n)
+        mpo.append(site[0].transpose(0, 2, 1) if i == 0 else site.transpose(0, 1, 3, 2))
+        rest, left = s[:keep, None] * b[:keep], keep
+    mpo.append(rest.reshape(left, 2, 2))                        # (p, k, b)
+    return mpo, u
+
+
+def _relative_error(actual, expected):
+    return np.linalg.norm(actual - expected) / np.linalg.norm(expected)
+
+
+class TestMPSUntouchedInitialSites:
+    """set_initial_mps with C-order entangled tensors: sites left untouched must come back unchanged."""
+
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    @pytest.mark.parametrize("dtype", ("float64", "complex128"))
+    @pytest.mark.parametrize("operation", ("none", "one_site_gate", "two_site_gate", "partial_mpo"))
+    def test_state_vector_matches_reference(self, gauge_option, dtype, operation):
+        n = 6
+        rng = np.random.default_rng(7)
+        full, operands = _random_mps_c_order(n, 4, rng, dtype)
+        expected = _dense_from_mps(full)
+        with NetworkState((2,) * n, dtype=dtype, config=MPSConfig(gauge_option=gauge_option)) as state:
+            state.set_initial_mps(operands)
+            if operation == "one_site_gate":
+                op = rng.standard_normal((2, 2)).astype(dtype)
+                state.apply_tensor_operator((2,), op)
+                expected = _apply_dense(op, expected, [2], n)
+            elif operation == "two_site_gate":
+                op = rng.standard_normal((4, 4)).astype(dtype)
+                state.apply_tensor_operator((2, 3), op.reshape(2, 2, 2, 2))
+                expected = _apply_dense(op, expected, [2, 3], n)
+            elif operation == "partial_mpo":
+                mpo = _random_mpo(2, 2, rng, dtype)
+                state.apply_mpo((2, 3), mpo)
+                expected = _apply_dense(_dense_from_mpo(mpo), expected, [2, 3], n)
+            actual = state.compute_state_vector().reshape(-1)
+        assert _relative_error(actual, expected) < 1e-10
+
+
+class TestApproxMPOUntruncatedExact:
+    """Approximate MPO application without truncation must reproduce the exact result."""
+
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    @pytest.mark.parametrize("start", (0, 2, 4))      # left edge, middle, right edge of an 8-site chain
+    @pytest.mark.parametrize("mpo_kind", ("random", "unitary"))
+    def test_state_vector_matches_dense_reference(self, gauge_option, start, mpo_kind):
+        n, num_sites = 8, 4
+        rng = np.random.default_rng(11)
+        full, operands = _random_mps_c_order(n, 4, rng, "complex128")
+        if mpo_kind == "random":
+            mpo = _random_mpo(num_sites, 4, rng, "complex128")
+            op = _dense_from_mpo(mpo)
+        else:
+            mpo, op = _unitary_mpo(num_sites, rng)
+            assert np.allclose(_dense_from_mpo(mpo), op)
+        sites = list(range(start, start + num_sites))
+        expected = _apply_dense(op, _dense_from_mps(full), sites, n)
+        config = MPSConfig(gauge_option=gauge_option, mpo_application="approximate")
+        with NetworkState((2,) * n, dtype="complex128", config=config) as state:
+            state.set_initial_mps(operands)
+            state.apply_mpo(sites, mpo, unitary=(mpo_kind == "unitary"))
+            actual = state.compute_state_vector().reshape(-1)
+        assert _relative_error(actual, expected) < 1e-10
+
+
+def _random_mixed_mps(dims, rng, dtype, chi=None):
+    """Open-boundary MPS of qudit extents `dims` with full bonds (or bonds capped at chi), in pkn form with edge
+    bonds dropped."""
+    full, left = [], 1
+    for i, d in enumerate(dims):
+        right = min(int(np.prod(dims[:i + 1])), int(np.prod(dims[i + 1:])), chi or np.inf)
+        t = rng.standard_normal((left, d, right)) + 1j * rng.standard_normal((left, d, right))
+        full.append(t.astype(dtype))
+        left = right
+    operands = [full[0][0]] + full[1:-1] + [full[-1][:, :, 0]]
+    return full, [np.ascontiguousarray(t) for t in operands]
+
+
+def _random_mixed_mpo(site_dims, bond, rng, dtype):
+    """Random MPO in the pknb layout; site j acts on a qudit of extent site_dims[j]."""
+    num_sites = len(site_dims)
+    out = []
+    for j, d in enumerate(site_dims):
+        shape = ((bond,) if j > 0 else ()) + (d,) + ((bond,) if j < num_sites - 1 else ()) + (d,)
+        out.append((rng.standard_normal(shape) + 1j * rng.standard_normal(shape)).astype(dtype))
+    return out
+
+
+def _dense_from_mixed_mpo(mpo):
+    """Dense O[out, in] of an MPO in the pknb layout with arbitrary qudit extents."""
+    t = mpo[0].transpose(0, 2, 1)                              # (k0, b0, n)
+    for w in mpo[1:-1]:
+        t = np.moveaxis(np.tensordot(t, w, axes=(-1, 0)), -2, -1)  # (..., k, b, n)
+    t = np.tensordot(t, mpo[-1], axes=(-1, 0))                 # (k0, b0, ..., k, b)
+    num_sites = len(mpo)
+    dim = int(np.prod([w.shape[-1] for w in mpo]))
+    t = t.transpose(list(range(1, 2 * num_sites, 2)) + list(range(0, 2 * num_sites, 2)))
+    return t.reshape(dim, dim)
+
+
+def _apply_dense_mixed(op, psi, sites, dims):
+    """Apply op[out, in] acting on `sites` (in the given order) to the dense state psi of extents `dims`."""
+    site_dims = [dims[s] for s in sites]
+    num_sites = len(sites)
+    out = np.tensordot(op.reshape(site_dims * 2), psi.reshape(dims),
+                       axes=(list(range(num_sites, 2 * num_sites)), sites))
+    return np.moveaxis(out, list(range(num_sites)), sites).reshape(-1)
+
+
+def _emulated_state(full, dims, sites, op, **config):
+    """State vector from the test emulator after applying an MPO (list of tensors) or a gate (one tensor) on sites."""
+    emulator = MPS(list(range(len(dims))), "numpy", qudit_dims=list(dims), dtype="complex128",
+                   mps_tensors=[t.copy() for t in full], **config)
+    if isinstance(op, (list, tuple)):
+        emulator.apply_mpo(list(sites), op)
+    else:
+        emulator.apply_gate(list(sites), op)
+    return np.asarray(emulator.compute_state_vector()).reshape(-1)
+
+
+# Non-adjacent sites of mixed-extent states: the swaps that bring them together change which qudits lie on either
+# side of a bond, so the bond can need more than the final MPS allows there.
+_MIXED_EXTENT_NON_ADJACENT = (
+    ((3, 2, 5, 7), (0, 2)),
+    ((3, 2, 5, 7), (1, 3)),
+    ((3, 2, 5, 7), (0, 3)),
+    ((3, 2, 5, 7), (0, 2, 3)),
+    ((3, 2, 5, 7), (3, 1)),
+    ((2, 3, 5, 7, 2, 3), (1, 4)),
+    ((2, 3, 5, 7, 2, 3), (0, 2, 5)),
+    ((2, 3, 5, 7, 2, 3), (5, 0)),
+    ((2, 3, 5, 7, 2, 3), (4, 0, 2)),
+    ((7, 2, 2, 5, 3), (0, 4, 2)),
+)
+
+
+class TestMixedExtentMPO:
+    """MPO on a state with mixed qudit extents: exact application, and approximate application whose ranks fit the
+    requested extents, must match the dense reference; untruncated approximate application limits intermediate bonds
+    to the largest output extent and must match the test emulator, which applies the same limit."""
+
+    @staticmethod
+    def _check(dims, sites, gauge_option, mpo_application, *, chi=None, mpo_bond=3, max_extent=None):
+        rng = np.random.default_rng(17)
+        full, operands = _random_mixed_mps(dims, rng, "complex128", chi)
+        mpo = _random_mixed_mpo([dims[s] for s in sites], mpo_bond, rng, "complex128")
+        expected = _apply_dense_mixed(_dense_from_mixed_mpo(mpo), _dense_from_mps(full), list(sites), list(dims))
+        config = MPSConfig(gauge_option=gauge_option, mpo_application=mpo_application, max_extent=max_extent)
+        with NetworkState(dims, dtype="complex128", config=config) as state:
+            state.set_initial_mps(operands)
+            state.apply_mpo(sites, mpo)
+            actual = state.compute_state_vector().reshape(-1)
+        if mpo_application == "approximate" and max_extent is None:
+            expected = _emulated_state(full, dims, sites, mpo, gauge_option=gauge_option, mpo_application=mpo_application)
+            assert _relative_error(actual, expected) < 1e-8
+        else:
+            assert _relative_error(actual, expected) < 1e-10
+
+    @pytest.mark.parametrize("dims, sites", _MIXED_EXTENT_NON_ADJACENT)
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_non_adjacent_exact_application(self, dims, sites, gauge_option):
+        self._check(dims, sites, gauge_option, "exact")
+
+    # Approximate (zip-up) application without truncation on non-adjacent sites of an entangled state.
+    @pytest.mark.parametrize("dims, sites", _MIXED_EXTENT_NON_ADJACENT)
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_non_adjacent_approximate_application(self, dims, sites, gauge_option):
+        self._check(dims, sites, gauge_option, "approximate")
+
+    # Approximate application compresses the swaps and every split to max_extent. From a product state, a cut
+    # through any intermediate crosses at most k-1 bonds of a k-site MPO, so its rank is at most D**(k-1); with
+    # D = 2 and k <= 3, max_extent = 4 truncates no bond that matters while staying below the physical bonds.
+    @pytest.mark.parametrize("dims, sites", _MIXED_EXTENT_NON_ADJACENT)
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_non_adjacent_approximate_capped_application(self, dims, sites, gauge_option):
+        self._check(dims, sites, gauge_option, "approximate", chi=1, mpo_bond=2, max_extent=4)
+
+    # After the swaps of qudits 4 and 0, the split of qudits 0 and 2 has qudits 1 and 2 (3 * 3) on one side of a bond
+    # whose final extent is 12 (qudits 0 and 1, 4 * 3), and hands the open MPO bond to that side, so it needs 9 * 2 = 18.
+    # The split is bounded by the largest output extent (16), not by its own final extent (12).
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_open_mpo_bond_on_a_permuted_bond(self, gauge_option):
+        self._check((4, 3, 3, 2, 2, 2, 2), (4, 0, 2, 1), gauge_option, "approximate", mpo_bond=2)
+
+    # No bound exceeds its final extent during the sweep, so the swaps that restore the qudit order are capped. While
+    # the order is still permuted, bond 1 has qudits 1 and 3 (2 * 4 = 8) on one side, more than its final extent of 6,
+    # which is also the largest output extent here: the swap is bounded by the order it leaves behind and by that
+    # limit, as in the emulator.
+    @pytest.mark.parametrize("mpo_bond", (2, 3))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_order_restoring_swap_on_a_permuted_bond(self, gauge_option, mpo_bond):
+        self._check((3, 2, 3, 4), (2, 0, 3, 1), gauge_option, "approximate", mpo_bond=mpo_bond)
+
+    # Random geometries: 4-5 qudits of extents 2-4, MPOs on 2-5 sites in random order, no truncation (library equals
+    # the emulator).
+    @pytest.mark.parametrize("seed", range(16))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_random_permuted_application(self, gauge_option, seed):
+        rng = np.random.default_rng(seed)
+        num_qudits = int(rng.integers(4, 6))
+        dims = tuple(int(d) for d in rng.integers(2, 5, num_qudits))
+        num_sites = int(rng.integers(2, num_qudits + 1))
+        sites = tuple(int(s) for s in rng.permutation(num_qudits)[:num_sites])
+        self._check(dims, sites, gauge_option, "approximate", mpo_bond=int(rng.integers(2, 4)))
+
+    # Approximate (zip-up) application without truncation on adjacent sites.
+    @pytest.mark.parametrize("dims, sites", (
+        ((3, 2, 5, 7), (0, 1)),
+        ((3, 2, 5, 7), (1, 2, 3)),
+        ((3, 2, 5, 7), (3, 2, 1, 0)),
+        ((2, 3, 5, 7, 2, 3), (1, 2, 3, 4)),
+        ((2, 3, 5, 7, 2, 3), (5, 4, 3)),
+    ))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_adjacent_approximate_application(self, dims, sites, gauge_option):
+        self._check(dims, sites, gauge_option, "approximate")
+
+
+class TestMixedExtentNonAdjacentGate:
+    """Two-qudit gate on non-adjacent qudits of an entangled mixed-extent state: without truncation options the swaps
+    are exact and the result matches the dense reference; with a cutoff the swaps are bounded (intermediate bonds at
+    most the largest output extent) and the result matches the test emulator."""
+
+    @pytest.mark.parametrize("dims, sites", (
+        ((2, 7, 3), (0, 2)),
+        ((2, 7, 3), (2, 0)),
+        ((3, 2, 5, 7), (0, 3)),
+        ((2, 3, 5, 7, 2, 3), (1, 4)),
+        ((2, 3, 5, 7, 2, 3), (5, 0)),
+        ((7, 2, 2, 5, 3), (0, 4)),
+    ))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    @pytest.mark.parametrize("rel_cutoff", (None, 1e-14), ids=("exact", "rel_cutoff"))
+    def test_state_vector(self, dims, sites, gauge_option, rel_cutoff):
+        rng = np.random.default_rng(23)
+        full, operands = _random_mixed_mps(dims, rng, "complex128")
+        site_dims = [dims[s] for s in sites]
+        dim = int(np.prod(site_dims))
+        op = rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))
+        config = MPSConfig(gauge_option=gauge_option, rel_cutoff=rel_cutoff)
+        with NetworkState(dims, dtype="complex128", config=config) as state:
+            state.set_initial_mps(operands)
+            state.apply_tensor_operator(sites, op.reshape(site_dims * 2))
+            mps = state.compute_output_state()
+            actual = state.compute_state_vector().reshape(-1)
+        if rel_cutoff is None:
+            expected = _apply_dense_mixed(op, _dense_from_mps(full), list(sites), list(dims))
+            assert _relative_error(actual, expected) < 1e-10
+            # the bonds enlarged by the swaps are back at their largest exact extents
+            exact = [min(math.prod(dims[:i + 1]), math.prod(dims[i + 1:])) for i in range(len(dims) - 1)]
+            assert [t.shape[-1] for t in mps[:-1]] == exact
+        else:
+            expected = _emulated_state(full, dims, sites, op.reshape(site_dims * 2), gauge_option=gauge_option,
+                                       rel_cutoff=rel_cutoff)
+            assert _relative_error(actual, expected) < 1e-8
+
+    # Multi-controlled operators are applied as MPOs, with swaps that bring the qudits together and restore the order;
+    # exact MPO application without truncation options is exact.
+    @pytest.mark.parametrize("dims, controls, target", (
+        ((3, 2, 3, 4), (2, 0), 3),
+        ((3, 2, 3, 4), (3, 0), 1),
+        ((2, 3, 5, 7, 2, 3), (5, 0), 3),
+        ((2, 3, 5, 7, 2, 3), (1, 4, 0), 5),
+    ))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_multi_controlled_operator(self, dims, controls, target, gauge_option):
+        rng = np.random.default_rng(29)
+        full, operands = _random_mixed_mps(dims, rng, "complex128")
+        d = dims[target]
+        block = rng.standard_normal((d, d)) + 1j * rng.standard_normal((d, d))
+        control_dims = [dims[c] for c in controls]
+        values = [e - 1 for e in control_dims]
+        op = np.eye(math.prod(control_dims) * d, dtype=block.dtype)
+        active = int(np.ravel_multi_index(values, control_dims)) * d
+        op[active:active + d, active:active + d] = block
+        expected = _apply_dense_mixed(op, _dense_from_mps(full), list(controls) + [target], list(dims))
+        config = MPSConfig(gauge_option=gauge_option, mpo_application="exact")
+        with NetworkState(dims, dtype="complex128", config=config) as state:
+            state.set_initial_mps(operands)
+            state.apply_tensor_operator((target,), block, control_modes=controls, control_values=values,
+                                        unitary=False)
+            actual = state.compute_state_vector().reshape(-1)
+        assert _relative_error(actual, expected) < 1e-10
+
+
+class TestApproxMPONonAdjacentFullBond:
+    """Untruncated approximate MPO application on non-adjacent sites of a full-bond MPS with equal qudit extents must
+    match the test emulator. The splits made while an MPO bond is open leave bonds above their targets; the swaps
+    restoring the qudit order were once truncated to the targets next to those bonds, before the compression sweep,
+    and lost weight."""
+
+    @pytest.mark.parametrize("dims, sites", (
+        ((2,) * 7, (3, 5, 6)),
+        ((2,) * 7, (3, 6, 5)),
+        ((2,) * 7, (3, 0, 1)),
+        ((2,) * 8, (4, 6, 7)),
+        ((2,) * 8, (3, 7, 6)),
+        ((2,) * 9, (8, 1, 4, 6)),
+        ((3,) * 6, (4, 0, 2)),
+    ))
+    @pytest.mark.parametrize("mpo_bond", (2, 4))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_state_vector_matches_dense_reference(self, dims, sites, mpo_bond, gauge_option):
+        rng = np.random.default_rng(7)
+        full, operands = _random_mixed_mps(dims, rng, "complex128")
+        mpo = _random_mixed_mpo([dims[s] for s in sites], mpo_bond, rng, "complex128")
+        expected = _emulated_state(full, dims, sites, mpo, gauge_option=gauge_option, mpo_application="approximate")
+        config = MPSConfig(gauge_option=gauge_option, mpo_application="approximate")
+        with NetworkState(dims, dtype="complex128", config=config) as state:
+            state.set_initial_mps(operands)
+            state.apply_mpo(sites, mpo)
+            actual = state.compute_state_vector().reshape(-1)
+        assert _relative_error(actual, expected) < 1e-8
+
+
+def _mpo_geometries(n):
+    """MPO site sequences on an n-site chain: contiguous ascending/descending at either edge and in the middle,
+    non-contiguous ascending and unordered."""
+    return {
+        "contiguous-ascending-left": (0, 1, 2, 3),
+        "contiguous-ascending-middle": (2, 3, 4),
+        "contiguous-ascending-right": tuple(range(n - 4, n)),
+        "contiguous-descending-left": (3, 2, 1, 0),
+        "contiguous-descending-right": tuple(range(n - 1, n - 5, -1)),
+        "non-contiguous-ascending": (0, 2, 5),
+        "non-contiguous-ascending-right": (n - 6, n - 3, n - 1),
+        "non-contiguous-unordered": (n - 1, 1, 3),
+        "non-contiguous-unordered-edges": (2, n - 1, 0),
+    }
+
+
+class TestApproxMPOGeometries:
+    """Approximate MPO application across site geometries and qudit extents.
+
+    The library must match the test emulator, which runs the same zip-up algorithm in NumPy (intermediate bounds and
+    their limit at the largest output extent, post-sweep compression and simple-update gauges included)."""
+
+    STATES = {"qubit": (2,) * 10, "qutrit": (3,) * 7, "mixed": (2, 3, 5, 7, 2, 3, 2)}
+
+    @pytest.mark.parametrize("state", STATES)
+    @pytest.mark.parametrize("geometry", _mpo_geometries(7))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    @pytest.mark.parametrize("svd_options", ({}, {"rel_cutoff": 1e-2}, {"max_extent": 4}),
+                             ids=("untruncated", "rel_cutoff", "max_extent"))
+    @pytest.mark.parametrize("seed", (29, 31))
+    def test_state_vector(self, state, geometry, gauge_option, svd_options, seed):
+        dims = self.STATES[state]
+        sites = _mpo_geometries(len(dims))[geometry]
+        rng = np.random.default_rng(seed)
+        # the initial MPS fits the requested extents, so only the MPO application is compared
+        full, operands = _random_mixed_mps(dims, rng, "complex128", svd_options.get("max_extent", 12))
+        mpo = _random_mixed_mpo([dims[s] for s in sites], 3, rng, "complex128")
+        config = MPSConfig(gauge_option=gauge_option, mpo_application="approximate", **svd_options)
+        with NetworkState(dims, dtype="complex128", config=config) as state_:
+            state_.set_initial_mps(operands)
+            state_.apply_mpo(sites, mpo)
+            actual = np.asarray(state_.compute_state_vector()).reshape(-1)
+
+        emulator = MPS(list(range(len(dims))), "numpy", qudit_dims=dims, dtype="complex128",
+                       mps_tensors=[t.copy() for t in full], gauge_option=gauge_option,
+                       mpo_application="approximate", **trim_mps_config(svd_options))
+        emulator.apply_mpo(sites, mpo)
+        assert _relative_error(actual, np.asarray(emulator.compute_state_vector()).reshape(-1)) < 1e-8
+
+
+class TestSmallNormMPS:
+    """An MPS whose norm is far below machine epsilon must not lose its tensors: singular values below epsilon are
+    negligible only relative to the largest one, not in absolute terms."""
+
+    @pytest.mark.parametrize("operator", ("mpo", "gate"))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_state_matches_dense_reference(self, operator, gauge_option):
+        dims, sites = (2,) * 8, (1, 4, 6)
+        rng = np.random.default_rng(43)
+        full, operands = _random_mixed_mps(dims, rng, "complex128")
+        scale = 1e-3  # 8 tensors: norm ~1e-24 times that of the unscaled state
+        full = [t * scale for t in full]
+        operands = [t * scale for t in operands]
+        if operator == "mpo":
+            mpo = _random_mixed_mpo([dims[s] for s in sites], 2, rng, "complex128")
+            expected = _apply_dense_mixed(_dense_from_mixed_mpo(mpo), _dense_from_mps(full), list(sites), list(dims))
+        else:
+            op = rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))
+            expected = _apply_dense_mixed(op, _dense_from_mps(full), [1, 6], list(dims))
+        config = MPSConfig(gauge_option=gauge_option, rel_cutoff=1e-14)
+        with NetworkState(dims, dtype="complex128", config=config) as state:
+            state.set_initial_mps(operands)
+            if operator == "mpo":
+                state.apply_mpo(sites, mpo)
+            else:
+                state.apply_tensor_operator((1, 6), op.reshape(2, 2, 2, 2))
+            actual = state.compute_state_vector().reshape(-1)
+        assert np.linalg.norm(actual) > 0
+        assert _relative_error(actual / np.linalg.norm(actual), expected / np.linalg.norm(expected)) < 1e-10
+
+    # Single precision with norms down to just above the smallest normal float: singular values between eps times the
+    # largest one and the smallest normal float must not be inverted (their reciprocal overflows and the SVD fails).
+    # The free gauge never inverts and stays accurate; simple-gauge gauges hold absolute singular values, which become
+    # subnormal at such norms, so only a finite result is required there below norms of about 1e-30.
+    @pytest.mark.parametrize("operator", ("mpo", "gate"))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    @pytest.mark.parametrize("norm", (1e-28, 1e-37))
+    def test_single_precision_near_float_minimum(self, operator, gauge_option, norm):
+        dims, sites = (2,) * 8, (1, 4, 6)
+        rng = np.random.default_rng(47)
+        full, _ = _random_mixed_mps(dims, rng, "complex128")
+        scale = (norm / np.linalg.norm(_dense_from_mps(full))) ** (1 / len(dims))
+        full = [(t * scale).astype("complex64") for t in full]
+        operands = [np.ascontiguousarray(t) for t in [full[0][0]] + full[1:-1] + [full[-1][:, :, 0]]]
+        full128 = [t.astype("complex128") for t in full]
+        if operator == "mpo":
+            mpo = [t.astype("complex64") for t in _random_mixed_mpo([dims[s] for s in sites], 2, rng, "complex128")]
+            dense_op = _dense_from_mixed_mpo([t.astype("complex128") for t in mpo])
+            expected = _apply_dense_mixed(dense_op, _dense_from_mps(full128), list(sites), list(dims))
+        else:
+            op = (rng.standard_normal((4, 4)) + 1j * rng.standard_normal((4, 4))).astype("complex64")
+            expected = _apply_dense_mixed(op.astype("complex128"), _dense_from_mps(full128), [1, 6], list(dims))
+        config = MPSConfig(gauge_option=gauge_option, rel_cutoff=1e-6)
+        with NetworkState(dims, dtype="complex64", config=config) as state:
+            state.set_initial_mps(operands)
+            if operator == "mpo":
+                state.apply_mpo(sites, mpo)
+            else:
+                state.apply_tensor_operator((1, 6), op.reshape(2, 2, 2, 2))
+            actual = np.asarray(state.compute_state_vector()).reshape(-1).astype("complex128")
+        assert np.all(np.isfinite(actual))
+        assert np.linalg.norm(actual) > 0
+        if gauge_option == "free" or norm >= 1e-30:
+            assert _relative_error(actual / np.linalg.norm(actual), expected / np.linalg.norm(expected)) < 1e-3
+
+
+class TestIntermediateExtentLimit:
+    """In a truncated simulation, intermediate bonds are limited to the largest output bond extent; the library must
+    match the emulator, which applies the same limit."""
+
+    # Extents 2 and 7: intermediate bonds near the extent-7 block can need more than the largest bond (8); the limit
+    # binds and changes the result in all but the MPO on (1, 4, 6).
+    @pytest.mark.parametrize("operator, sites", (("gate", (0, 5)), ("gate", (6, 1)), ("mpo", (1, 4, 6)),
+                                                 ("mpo", (7, 1, 4))))
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    def test_matches_emulator(self, operator, sites, gauge_option):
+        dims = (2, 2, 2, 7, 7, 2, 2, 2)
+        rng = np.random.default_rng(41)
+        full, operands = _random_mixed_mps(dims, rng, "complex128", 8)
+        site_dims = [dims[s] for s in sites]
+        if operator == "gate":
+            dim = math.prod(site_dims)
+            op = (rng.standard_normal((dim, dim)) + 1j * rng.standard_normal((dim, dim))).reshape(site_dims * 2)
+        else:
+            op = _random_mixed_mpo(site_dims, 2, rng, "complex128")
+        config = MPSConfig(gauge_option=gauge_option, max_extent=8)
+        with NetworkState(dims, dtype="complex128", config=config) as state:
+            state.set_initial_mps(operands)
+            if operator == "gate":
+                state.apply_tensor_operator(sites, op)
+            else:
+                state.apply_mpo(sites, op)
+            actual = np.asarray(state.compute_state_vector()).reshape(-1)
+        emulator = MPS(list(range(len(dims))), "numpy", qudit_dims=dims, dtype="complex128",
+                       mps_tensors=[t.copy() for t in full], gauge_option=gauge_option, max_extent=8)
+        if operator == "gate":
+            emulator.apply_gate(list(sites), op)
+        else:
+            emulator.apply_mpo(list(sites), op)
+        assert _relative_error(actual, np.asarray(emulator.compute_state_vector()).reshape(-1)) < 1e-8
+
+
+def _apply_mpo_exact_mps(full, mpo, first):
+    """Exact MPO application on a (left, phys, right) MPS; returns the bond chi*D MPS (mps bond major)."""
+    num_sites = len(mpo)
+    out = []
+    for i, a in enumerate(full):
+        j = i - first
+        if j < 0 or j >= num_sites:
+            out.append(a)
+            continue
+        w = mpo[j]
+        if j == 0:
+            w = w[None]                       # (p=1, k, n, b)
+        elif j == num_sites - 1:
+            w = w[:, :, None, :]              # (p, k, n=1, b)
+        t = np.einsum('akc,pknb->apbcn', a, w)
+        out.append(t.reshape(a.shape[0] * w.shape[0], 2, a.shape[2] * w.shape[2]))
+    return out
+
+
+def _log_overlap(x, y):
+    """log|<x|y>| of two (left, phys, right) MPS via transfer matrices, rescaled per site."""
+    env, log_scale = np.ones((1, 1)), 0.0
+    for a, b in zip(x, y):
+        env = np.einsum('ab,akc,bkd->cd', env, a.conj(), b, optimize=True)
+        scale = np.abs(env).max()
+        env, log_scale = env / scale, log_scale + np.log(scale)
+    return log_scale + np.log(abs(env[0, 0]))
+
+
+class TestLongMPS:
+    """MPS longer than 63 qubits: physical bond products exceed int64 and must not overflow anywhere."""
+
+    @pytest.mark.parametrize("gauge_option", ("free", "simple"))
+    @pytest.mark.parametrize("start", (0, 63, 126))   # left edge, middle, right edge of a 130-site chain
+    def test_mpo_on_long_chain_matches_exact(self, gauge_option, start):
+        n, num_sites = 130, 4
+        rng = np.random.default_rng(13)
+        full, operands = _random_mps_c_order(n, 4, rng, "complex128")
+        mpo = _random_mpo(num_sites, 4, rng, "complex128")
+        expected = _apply_mpo_exact_mps(full, mpo, start)
+        config = MPSConfig(gauge_option=gauge_option, max_extent=64)
+        with NetworkState((2,) * n, dtype="complex128", config=config) as state:
+            state.set_initial_mps(operands)
+            state.apply_mpo(list(range(start, start + num_sites)), mpo)
+            out = [np.asarray(t) for t in state.compute_output_state()]
+        actual = [out[0][None]] + out[1:-1] + [out[-1][..., None]]
+        infidelity = 1 - np.exp(2 * _log_overlap(actual, expected)
+                                - _log_overlap(actual, actual) - _log_overlap(expected, expected))
+        assert infidelity < 1e-10

@@ -174,6 +174,7 @@ class Workspace:
         new_ptr = cupp.create_workspace_descriptor(int(self._library_handle))
         self._ptr = new_ptr
 
+        buf_host = None
         try:
             if isinstance(stream, StreamHolder):
                 stream_holder = stream
@@ -187,4 +188,10 @@ class Workspace:
 
             # Restore previous descriptor and buffers
             self._ptr = old_ptr
+
+            # Device scratch is freed in stream order, but host scratch is not, so wait for
+            # stream work that may still use it. This keeps non-blocking calls safe. Done last
+            # so a failed sync cannot skip the cleanup; buf_host stays alive until then.
+            if buf_host is not None:
+                stream_holder.obj.sync()
 

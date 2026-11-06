@@ -2,27 +2,34 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 26.09.0 to 26.11.0. Do not modify it directly.
 
 
 # <<<< PREAMBLE CONTENT >>>>
 
 cimport cpython as _cyb_cpython
 cimport cpython.buffer as _cyb_cpython_buffer
+from cpython.buffer cimport (
+    PyBUF_SIMPLE as _cyb_PyBUF_SIMPLE,
+    PyBuffer_Release as _cyb_PyBuffer_Release,
+    PyObject_GetBuffer as _cyb_PyObject_GetBuffer,
+    Py_buffer as _cyb_Py_buffer,
+)
+from cuquantum.bindings._utils cimport (
+    get_resource_ptr as _cyb_get_resource_ptr,
+    nullable_unique_ptr as _cyb_nullable_unique_ptr,
+)
 from libc.stdint cimport (
     int32_t,
     int64_t,
     intptr_t,
 )
-from libc.stdlib cimport (
-    calloc as _cyb_calloc,
-    free as _cyb_free,
-    malloc as _cyb_malloc,
-)
 from libc.string cimport (
     memcmp as _cyb_memcmp,
     memcpy as _cyb_memcpy,
+    memmove as _cyb_memmove,
 )
+from libcpp.vector cimport vector as _cyb_vector
 
 from enum import IntEnum as _cyb_IntEnum
 
@@ -50,7 +57,7 @@ cdef _cyb_from_buffer(buffer, size, lowpp_type):
             raise ValueError("buffer itemsize must be 1 byte")
         if view.len != size:
             raise ValueError(f"buffer length must be {size} bytes")
-        return lowpp_type.from_ptr(<intptr_t><void *>view.buf, not view.readonly, buffer)
+        return lowpp_type.from_ptr(<intptr_t><void *>view.buf, view.readonly != 0, buffer)
     finally:
         _cyb_cpython.PyBuffer_Release(&view)
 
@@ -109,25 +116,15 @@ cdef class PauliTerm:
     .. seealso:: `cupaulipropPauliTerm_t`
     """
     cdef:
+        cupaulipropPauliTerm_t _data
         cupaulipropPauliTerm_t *_ptr
         object _owner
-        bint _owned
         bint _readonly
 
     def __init__(self):
-        self._ptr = <cupaulipropPauliTerm_t *>_cyb_calloc(1, sizeof(cupaulipropPauliTerm_t))
-        if self._ptr == NULL:
-            raise MemoryError("Error allocating PauliTerm")
+        self._ptr = &self._data
         self._owner = None
-        self._owned = True
         self._readonly = False
-
-    def __dealloc__(self):
-        cdef cupaulipropPauliTerm_t *ptr
-        if self._owned and self._ptr != NULL:
-            ptr = self._ptr
-            self._ptr = NULL
-            _cyb_free(ptr)
 
     def __repr__(self):
         return f"<{__name__}.PauliTerm object at {hex(id(self))}>"
@@ -157,14 +154,22 @@ cdef class PauliTerm:
         pass
 
     def __setitem__(self, key, val):
-        if key == 0 and isinstance(val, _numpy.ndarray):
-            self._ptr = <cupaulipropPauliTerm_t *>_cyb_malloc(sizeof(cupaulipropPauliTerm_t))
-            if self._ptr == NULL:
-                raise MemoryError("Error allocating PauliTerm")
-            _cyb_memcpy(<void*>self._ptr, <void*><intptr_t>val.ctypes.data, sizeof(cupaulipropPauliTerm_t))
-            self._owner = None
-            self._owned = True
-            self._readonly = not val.flags.writeable
+        cdef _cyb_Py_buffer view
+        if key == 0:
+            if self._readonly:
+                raise ValueError("This PauliTerm instance is read-only")
+            _cyb_PyObject_GetBuffer(val, &view, _cyb_PyBUF_SIMPLE)
+            try:
+                if <size_t>view.len < sizeof(cupaulipropPauliTerm_t):
+                    raise ValueError(
+                        "source buffer too small: expected at least %d bytes, got %d" % (sizeof(cupaulipropPauliTerm_t), view.len)
+                    )
+                _cyb_memmove(<void*>&self._data, view.buf, sizeof(cupaulipropPauliTerm_t))
+                self._ptr = &self._data
+                self._owner = None
+                self._readonly = view.readonly != 0
+            finally:
+                _cyb_PyBuffer_Release(&view)
         else:
             setattr(self, key, val)
 
@@ -217,16 +222,12 @@ cdef class PauliTerm:
             raise ValueError("ptr must not be null (0)")
         cdef PauliTerm obj = PauliTerm.__new__(PauliTerm)
         if owner is None:
-            obj._ptr = <cupaulipropPauliTerm_t *>_cyb_malloc(sizeof(cupaulipropPauliTerm_t))
-            if obj._ptr == NULL:
-                raise MemoryError("Error allocating PauliTerm")
-            _cyb_memcpy(<void*>(obj._ptr), <void*>ptr, sizeof(cupaulipropPauliTerm_t))
+            _cyb_memcpy(<void*>&obj._data, <void*>ptr, sizeof(cupaulipropPauliTerm_t))
+            obj._ptr = &obj._data
             obj._owner = None
-            obj._owned = True
         else:
             obj._ptr = <cupaulipropPauliTerm_t *>ptr
             obj._owner = owner
-            obj._owned = False
         obj._readonly = readonly
         return obj
 
@@ -252,25 +253,15 @@ cdef class TruncationStrategy:
     .. seealso:: `cupaulipropTruncationStrategy_t`
     """
     cdef:
+        cupaulipropTruncationStrategy_t _data
         cupaulipropTruncationStrategy_t *_ptr
         object _owner
-        bint _owned
         bint _readonly
 
     def __init__(self):
-        self._ptr = <cupaulipropTruncationStrategy_t *>_cyb_calloc(1, sizeof(cupaulipropTruncationStrategy_t))
-        if self._ptr == NULL:
-            raise MemoryError("Error allocating TruncationStrategy")
+        self._ptr = &self._data
         self._owner = None
-        self._owned = True
         self._readonly = False
-
-    def __dealloc__(self):
-        cdef cupaulipropTruncationStrategy_t *ptr
-        if self._owned and self._ptr != NULL:
-            ptr = self._ptr
-            self._ptr = NULL
-            _cyb_free(ptr)
 
     def __repr__(self):
         return f"<{__name__}.TruncationStrategy object at {hex(id(self))}>"
@@ -300,14 +291,22 @@ cdef class TruncationStrategy:
         pass
 
     def __setitem__(self, key, val):
-        if key == 0 and isinstance(val, _numpy.ndarray):
-            self._ptr = <cupaulipropTruncationStrategy_t *>_cyb_malloc(sizeof(cupaulipropTruncationStrategy_t))
-            if self._ptr == NULL:
-                raise MemoryError("Error allocating TruncationStrategy")
-            _cyb_memcpy(<void*>self._ptr, <void*><intptr_t>val.ctypes.data, sizeof(cupaulipropTruncationStrategy_t))
-            self._owner = None
-            self._owned = True
-            self._readonly = not val.flags.writeable
+        cdef _cyb_Py_buffer view
+        if key == 0:
+            if self._readonly:
+                raise ValueError("This TruncationStrategy instance is read-only")
+            _cyb_PyObject_GetBuffer(val, &view, _cyb_PyBUF_SIMPLE)
+            try:
+                if <size_t>view.len < sizeof(cupaulipropTruncationStrategy_t):
+                    raise ValueError(
+                        "source buffer too small: expected at least %d bytes, got %d" % (sizeof(cupaulipropTruncationStrategy_t), view.len)
+                    )
+                _cyb_memmove(<void*>&self._data, view.buf, sizeof(cupaulipropTruncationStrategy_t))
+                self._ptr = &self._data
+                self._owner = None
+                self._readonly = view.readonly != 0
+            finally:
+                _cyb_PyBuffer_Release(&view)
         else:
             setattr(self, key, val)
 
@@ -360,16 +359,12 @@ cdef class TruncationStrategy:
             raise ValueError("ptr must not be null (0)")
         cdef TruncationStrategy obj = TruncationStrategy.__new__(TruncationStrategy)
         if owner is None:
-            obj._ptr = <cupaulipropTruncationStrategy_t *>_cyb_malloc(sizeof(cupaulipropTruncationStrategy_t))
-            if obj._ptr == NULL:
-                raise MemoryError("Error allocating TruncationStrategy")
-            _cyb_memcpy(<void*>(obj._ptr), <void*>ptr, sizeof(cupaulipropTruncationStrategy_t))
+            _cyb_memcpy(<void*>&obj._data, <void*>ptr, sizeof(cupaulipropTruncationStrategy_t))
+            obj._ptr = &obj._data
             obj._owner = None
-            obj._owned = True
         else:
             obj._ptr = <cupaulipropTruncationStrategy_t *>ptr
             obj._owner = owner
-            obj._owned = False
         obj._readonly = readonly
         return obj
 
@@ -394,25 +389,15 @@ cdef class CoefficientTruncationParams:
     .. seealso:: `cupaulipropCoefficientTruncationParams_t`
     """
     cdef:
+        cupaulipropCoefficientTruncationParams_t _data
         cupaulipropCoefficientTruncationParams_t *_ptr
         object _owner
-        bint _owned
         bint _readonly
 
     def __init__(self):
-        self._ptr = <cupaulipropCoefficientTruncationParams_t *>_cyb_calloc(1, sizeof(cupaulipropCoefficientTruncationParams_t))
-        if self._ptr == NULL:
-            raise MemoryError("Error allocating CoefficientTruncationParams")
+        self._ptr = &self._data
         self._owner = None
-        self._owned = True
         self._readonly = False
-
-    def __dealloc__(self):
-        cdef cupaulipropCoefficientTruncationParams_t *ptr
-        if self._owned and self._ptr != NULL:
-            ptr = self._ptr
-            self._ptr = NULL
-            _cyb_free(ptr)
 
     def __repr__(self):
         return f"<{__name__}.CoefficientTruncationParams object at {hex(id(self))}>"
@@ -442,14 +427,22 @@ cdef class CoefficientTruncationParams:
         pass
 
     def __setitem__(self, key, val):
-        if key == 0 and isinstance(val, _numpy.ndarray):
-            self._ptr = <cupaulipropCoefficientTruncationParams_t *>_cyb_malloc(sizeof(cupaulipropCoefficientTruncationParams_t))
-            if self._ptr == NULL:
-                raise MemoryError("Error allocating CoefficientTruncationParams")
-            _cyb_memcpy(<void*>self._ptr, <void*><intptr_t>val.ctypes.data, sizeof(cupaulipropCoefficientTruncationParams_t))
-            self._owner = None
-            self._owned = True
-            self._readonly = not val.flags.writeable
+        cdef _cyb_Py_buffer view
+        if key == 0:
+            if self._readonly:
+                raise ValueError("This CoefficientTruncationParams instance is read-only")
+            _cyb_PyObject_GetBuffer(val, &view, _cyb_PyBUF_SIMPLE)
+            try:
+                if <size_t>view.len < sizeof(cupaulipropCoefficientTruncationParams_t):
+                    raise ValueError(
+                        "source buffer too small: expected at least %d bytes, got %d" % (sizeof(cupaulipropCoefficientTruncationParams_t), view.len)
+                    )
+                _cyb_memmove(<void*>&self._data, view.buf, sizeof(cupaulipropCoefficientTruncationParams_t))
+                self._ptr = &self._data
+                self._owner = None
+                self._readonly = view.readonly != 0
+            finally:
+                _cyb_PyBuffer_Release(&view)
         else:
             setattr(self, key, val)
 
@@ -491,16 +484,12 @@ cdef class CoefficientTruncationParams:
             raise ValueError("ptr must not be null (0)")
         cdef CoefficientTruncationParams obj = CoefficientTruncationParams.__new__(CoefficientTruncationParams)
         if owner is None:
-            obj._ptr = <cupaulipropCoefficientTruncationParams_t *>_cyb_malloc(sizeof(cupaulipropCoefficientTruncationParams_t))
-            if obj._ptr == NULL:
-                raise MemoryError("Error allocating CoefficientTruncationParams")
-            _cyb_memcpy(<void*>(obj._ptr), <void*>ptr, sizeof(cupaulipropCoefficientTruncationParams_t))
+            _cyb_memcpy(<void*>&obj._data, <void*>ptr, sizeof(cupaulipropCoefficientTruncationParams_t))
+            obj._ptr = &obj._data
             obj._owner = None
-            obj._owned = True
         else:
             obj._ptr = <cupaulipropCoefficientTruncationParams_t *>ptr
             obj._owner = owner
-            obj._owned = False
         obj._readonly = readonly
         return obj
 
@@ -525,25 +514,15 @@ cdef class PauliWeightTruncationParams:
     .. seealso:: `cupaulipropPauliWeightTruncationParams_t`
     """
     cdef:
+        cupaulipropPauliWeightTruncationParams_t _data
         cupaulipropPauliWeightTruncationParams_t *_ptr
         object _owner
-        bint _owned
         bint _readonly
 
     def __init__(self):
-        self._ptr = <cupaulipropPauliWeightTruncationParams_t *>_cyb_calloc(1, sizeof(cupaulipropPauliWeightTruncationParams_t))
-        if self._ptr == NULL:
-            raise MemoryError("Error allocating PauliWeightTruncationParams")
+        self._ptr = &self._data
         self._owner = None
-        self._owned = True
         self._readonly = False
-
-    def __dealloc__(self):
-        cdef cupaulipropPauliWeightTruncationParams_t *ptr
-        if self._owned and self._ptr != NULL:
-            ptr = self._ptr
-            self._ptr = NULL
-            _cyb_free(ptr)
 
     def __repr__(self):
         return f"<{__name__}.PauliWeightTruncationParams object at {hex(id(self))}>"
@@ -573,14 +552,22 @@ cdef class PauliWeightTruncationParams:
         pass
 
     def __setitem__(self, key, val):
-        if key == 0 and isinstance(val, _numpy.ndarray):
-            self._ptr = <cupaulipropPauliWeightTruncationParams_t *>_cyb_malloc(sizeof(cupaulipropPauliWeightTruncationParams_t))
-            if self._ptr == NULL:
-                raise MemoryError("Error allocating PauliWeightTruncationParams")
-            _cyb_memcpy(<void*>self._ptr, <void*><intptr_t>val.ctypes.data, sizeof(cupaulipropPauliWeightTruncationParams_t))
-            self._owner = None
-            self._owned = True
-            self._readonly = not val.flags.writeable
+        cdef _cyb_Py_buffer view
+        if key == 0:
+            if self._readonly:
+                raise ValueError("This PauliWeightTruncationParams instance is read-only")
+            _cyb_PyObject_GetBuffer(val, &view, _cyb_PyBUF_SIMPLE)
+            try:
+                if <size_t>view.len < sizeof(cupaulipropPauliWeightTruncationParams_t):
+                    raise ValueError(
+                        "source buffer too small: expected at least %d bytes, got %d" % (sizeof(cupaulipropPauliWeightTruncationParams_t), view.len)
+                    )
+                _cyb_memmove(<void*>&self._data, view.buf, sizeof(cupaulipropPauliWeightTruncationParams_t))
+                self._ptr = &self._data
+                self._owner = None
+                self._readonly = view.readonly != 0
+            finally:
+                _cyb_PyBuffer_Release(&view)
         else:
             setattr(self, key, val)
 
@@ -622,16 +609,12 @@ cdef class PauliWeightTruncationParams:
             raise ValueError("ptr must not be null (0)")
         cdef PauliWeightTruncationParams obj = PauliWeightTruncationParams.__new__(PauliWeightTruncationParams)
         if owner is None:
-            obj._ptr = <cupaulipropPauliWeightTruncationParams_t *>_cyb_malloc(sizeof(cupaulipropPauliWeightTruncationParams_t))
-            if obj._ptr == NULL:
-                raise MemoryError("Error allocating PauliWeightTruncationParams")
-            _cyb_memcpy(<void*>(obj._ptr), <void*>ptr, sizeof(cupaulipropPauliWeightTruncationParams_t))
+            _cyb_memcpy(<void*>&obj._data, <void*>ptr, sizeof(cupaulipropPauliWeightTruncationParams_t))
+            obj._ptr = &obj._data
             obj._owner = None
-            obj._owned = True
         else:
             obj._ptr = <cupaulipropPauliWeightTruncationParams_t *>ptr
             obj._owner = owner
-            obj._owned = False
         obj._readonly = readonly
         return obj
 
@@ -657,25 +640,15 @@ cdef class DistributedCommunicator:
     .. seealso:: `cupaulipropDistributedCommunicator_t`
     """
     cdef:
+        cupaulipropDistributedCommunicator_t _data
         cupaulipropDistributedCommunicator_t *_ptr
         object _owner
-        bint _owned
         bint _readonly
 
     def __init__(self):
-        self._ptr = <cupaulipropDistributedCommunicator_t *>_cyb_calloc(1, sizeof(cupaulipropDistributedCommunicator_t))
-        if self._ptr == NULL:
-            raise MemoryError("Error allocating DistributedCommunicator")
+        self._ptr = &self._data
         self._owner = None
-        self._owned = True
         self._readonly = False
-
-    def __dealloc__(self):
-        cdef cupaulipropDistributedCommunicator_t *ptr
-        if self._owned and self._ptr != NULL:
-            ptr = self._ptr
-            self._ptr = NULL
-            _cyb_free(ptr)
 
     def __repr__(self):
         return f"<{__name__}.DistributedCommunicator object at {hex(id(self))}>"
@@ -705,14 +678,22 @@ cdef class DistributedCommunicator:
         pass
 
     def __setitem__(self, key, val):
-        if key == 0 and isinstance(val, _numpy.ndarray):
-            self._ptr = <cupaulipropDistributedCommunicator_t *>_cyb_malloc(sizeof(cupaulipropDistributedCommunicator_t))
-            if self._ptr == NULL:
-                raise MemoryError("Error allocating DistributedCommunicator")
-            _cyb_memcpy(<void*>self._ptr, <void*><intptr_t>val.ctypes.data, sizeof(cupaulipropDistributedCommunicator_t))
-            self._owner = None
-            self._owned = True
-            self._readonly = not val.flags.writeable
+        cdef _cyb_Py_buffer view
+        if key == 0:
+            if self._readonly:
+                raise ValueError("This DistributedCommunicator instance is read-only")
+            _cyb_PyObject_GetBuffer(val, &view, _cyb_PyBUF_SIMPLE)
+            try:
+                if <size_t>view.len < sizeof(cupaulipropDistributedCommunicator_t):
+                    raise ValueError(
+                        "source buffer too small: expected at least %d bytes, got %d" % (sizeof(cupaulipropDistributedCommunicator_t), view.len)
+                    )
+                _cyb_memmove(<void*>&self._data, view.buf, sizeof(cupaulipropDistributedCommunicator_t))
+                self._ptr = &self._data
+                self._owner = None
+                self._readonly = view.readonly != 0
+            finally:
+                _cyb_PyBuffer_Release(&view)
         else:
             setattr(self, key, val)
 
@@ -765,16 +746,12 @@ cdef class DistributedCommunicator:
             raise ValueError("ptr must not be null (0)")
         cdef DistributedCommunicator obj = DistributedCommunicator.__new__(DistributedCommunicator)
         if owner is None:
-            obj._ptr = <cupaulipropDistributedCommunicator_t *>_cyb_malloc(sizeof(cupaulipropDistributedCommunicator_t))
-            if obj._ptr == NULL:
-                raise MemoryError("Error allocating DistributedCommunicator")
-            _cyb_memcpy(<void*>(obj._ptr), <void*>ptr, sizeof(cupaulipropDistributedCommunicator_t))
+            _cyb_memcpy(<void*>&obj._data, <void*>ptr, sizeof(cupaulipropDistributedCommunicator_t))
+            obj._ptr = &obj._data
             obj._owner = None
-            obj._owned = True
         else:
             obj._ptr = <cupaulipropDistributedCommunicator_t *>ptr
             obj._owner = owner
-            obj._owned = False
         obj._readonly = readonly
         return obj
 
@@ -945,8 +922,8 @@ cpdef int32_t get_num_packed_integers(int32_t num_qubits) except? -1:
         num_qubits (int32_t): Number of qubits.
 
     Returns:
-        int32_t: Number of uint64 integers needed to store X bits (or
-            Z bits) for one Pauli string. To get the total storage
+        int32_t: Number of uint64 integers needed to store X bits (or Z
+            bits) for one Pauli string. To get the total storage
             requirement, multiply this value by 2.
 
     .. seealso:: `cupaulipropGetNumPackedIntegers`
@@ -991,10 +968,9 @@ cpdef reset_distributed_configuration(intptr_t handle, int provider, intptr_t co
 
     Args:
         handle (intptr_t): Library handle.
-        provider (DistributedProvider): Communication service
-            provider.
-        comm_ptr (intptr_t): Pointer to the communicator in a type-
-            erased form.
+        provider (DistributedProvider): Communication service provider.
+        comm_ptr (intptr_t): Pointer to the communicator in a type-erased
+            form.
         comm_size (size_t): Size of the communicator in bytes.
 
     .. seealso:: `cupaulipropResetDistributedConfiguration`
@@ -1100,10 +1076,10 @@ cpdef workspace_set_memory(intptr_t handle, intptr_t workspace_desc, int mem_spa
         workspace_desc (intptr_t): Workspace descriptor.
         mem_space (Memspace): Memory space.
         workspace_kind (WorkspaceKind): Workspace kind.
-        memory_buffer (intptr_t): Pointer to a user-owned memory
-            buffer to be used by the specified workspace.
-        memory_buffer_size (int64_t): Size of the provided memory
-            buffer in bytes.
+        memory_buffer (intptr_t): Pointer to a user-owned memory buffer to
+            be used by the specified workspace.
+        memory_buffer_size (int64_t): Size of the provided memory buffer
+            in bytes.
 
     .. seealso:: `cupaulipropWorkspaceSetMemory`
     """
@@ -1123,9 +1099,8 @@ cpdef tuple workspace_get_memory(intptr_t handle, intptr_t workspace_descr, int 
 
     Returns:
         A 2-tuple containing:
-
         - intptr_t: Pointer to a user-owned memory buffer used by the
-            specified workspace.
+                specified workspace.
         - int64_t: Size of the memory buffer in bytes.
 
     .. seealso:: `cupaulipropWorkspaceGetMemory`
@@ -1144,41 +1119,40 @@ cpdef intptr_t create_pauli_expansion(intptr_t handle, int32_t num_qubits, intpt
     Args:
         handle (intptr_t): Library handle.
         num_qubits (int32_t): Number of qubits.
-        xz_bits_buffer (intptr_t): Pointer to a user-owned memory
-            buffer to be used by the created Pauli operator expansion
-            for storing the X and Z bits. The first
-            ``num_local_terms`` entries must contain the X and Z bits
-            for the terms in the calling process's local segment (its
-            share of the full expansion, when distributed).
+        xz_bits_buffer (intptr_t): Pointer to a user-owned memory buffer
+            to be used by the created Pauli operator expansion for storing
+            the X and Z bits. The first ``num_local_terms`` entries must
+            contain the X and Z bits for the terms in the calling
+            process's local segment (its share of the full expansion, when
+            distributed).
         xz_bits_buffer_size (int64_t): Size (in bytes) of the provided
             memory buffer for storing the X and Z bits.
-        coef_buffer (intptr_t): Pointer to a user-owned memory buffer
-            to be used by the created Pauli operator expansion for
-            storing the coefficients. The first ``num_local_terms``
-            entries must contain the coefficients for the terms in the
-            calling process's local segment (its share of the full
-            expansion, when distributed).
-        coef_buffer_size (int64_t): Size (in bytes) of the provided
-            memory buffer for storing the coefficients.
+        coef_buffer (intptr_t): Pointer to a user-owned memory buffer to
+            be used by the created Pauli operator expansion for storing
+            the coefficients. The first ``num_local_terms`` entries must
+            contain the coefficients for the terms in the calling
+            process's local segment (its share of the full expansion, when
+            distributed).
+        coef_buffer_size (int64_t): Size (in bytes) of the provided memory
+            buffer for storing the coefficients.
         data_type (int): Data type of the coefficients in the Pauli
             operator expansion.
         num_local_terms (int64_t): Number of terms in the calling
-            process's local segment (its share of the full expansion,
-            when distributed, or the entire expansion in single-
-            process execution). The first ``num_local_terms`` entries
-            in both storage buffers define that segment.
+            process's local segment (its share of the full expansion, when
+            distributed, or the entire expansion in single-process
+            execution). The first ``num_local_terms`` entries in both
+            storage buffers define that segment.
         sort_order (SortOrder): Local sort order of the expansion. In
-            multi-process execution, every process must specify the
-            same local sort property. A local sort order does not
-            establish a global sort order. Use
-            ``CUPAULIPROP_SORT_ORDER_NONE`` for locally unsorted
-            expansions.
+            multi-process execution, every process must specify the same
+            local sort property. A local sort order does not establish a
+            global sort order. Use ``CUPAULIPROP_SORT_ORDER_NONE`` for
+            locally unsorted expansions.
         has_duplicates (int32_t): Whether duplicate Pauli strings may
             exist globally. In multi-process execution, false (0)
-            guarantees that no Pauli string is duplicated either
-            within one process or across different processes. True (!=
-            0) makes no uniqueness guarantee. Every process must
-            specify the same value.
+            guarantees that no Pauli string is duplicated either within
+            one process or across different processes. True (!= 0) makes
+            no uniqueness guarantee. Every process must specify the same
+            value.
 
     Returns:
         intptr_t: Pauli operator expansion.
@@ -1214,24 +1188,22 @@ cpdef tuple pauli_expansion_get_storage_buffer(intptr_t handle, intptr_t pauli_e
 
     Returns:
         A 6-tuple containing:
-
-        - intptr_t: Pointer to a user-owned memory buffer used by the
-            Pauli operator expansion for storing the X and Z bits for
-            each Pauli operator term.
-        - int64_t: Size (in bytes) of the memory buffer for X and Z
-            bits.
-        - intptr_t: Pointer to a user-owned memory buffer used by the
-            Pauli operator expansion for storing the coefficients for
-            each Pauli operator term.
+        - intptr_t: Pointer to a user-owned memory buffer used by the Pauli
+                operator expansion for storing the X and Z bits for each Pauli
+                operator term.
+        - int64_t: Size (in bytes) of the memory buffer for X and Z bits.
+        - intptr_t: Pointer to a user-owned memory buffer used by the Pauli
+                operator expansion for storing the coefficients for each Pauli
+                operator term.
         - int64_t: Size (in bytes) of the memory buffer for storing the
-            coefficients.
-        - int64_t: Number of terms in the calling process's local
-            segment (its share of the full expansion, when
-            distributed, or the entire expansion in single-process
-            execution). The first ``num_local_terms`` entries in both
-            returned storage buffers define that segment.
-        - int: Storage location of the Pauli operator expansion (whether
-            it is on the host or device).
+                coefficients.
+        - int64_t: Number of terms in the calling process's local segment
+                (its share of the full expansion, when distributed, or the
+                entire expansion in single-process execution). The first
+                ``num_local_terms`` entries in both returned storage buffers
+                define that segment.
+        - int: Storage location of the Pauli operator expansion (whether it
+                is on the host or device).
 
     .. seealso:: `cupaulipropPauliExpansionGetStorageBuffer`
     """
@@ -1334,10 +1306,10 @@ cpdef int32_t pauli_expansion_is_deduplicated(intptr_t handle, intptr_t pauli_ex
 
     Returns:
         int32_t: Indicating whether the Pauli operator expansion is
-            deduplicated. True (!= 0) if the Pauli operator expansion
-            is guaranteed to not contain duplicate Pauli strings,
-            false (0) if no such guarantee can be made (though it may
-            be incidentally the case).
+            deduplicated. True (!= 0) if the Pauli operator expansion is
+            guaranteed to not contain duplicate Pauli strings, false (0)
+            if no such guarantee can be made (though it may be
+            incidentally the case).
 
     .. seealso:: `cupaulipropPauliExpansionIsDeduplicated`
     """
@@ -1354,14 +1326,14 @@ cpdef intptr_t pauli_expansion_get_contiguous_range(intptr_t handle, intptr_t pa
     Args:
         handle (intptr_t): Library handle.
         pauli_expansion (intptr_t): Pauli operator expansion.
-        start_index (int64_t): Start index of the range (inclusive,
-            first element in the range).
-        end_index (int64_t): End index of the range (exclusive, one
-            past the last element).
+        start_index (int64_t): Start index of the range (inclusive, first
+            element in the range).
+        end_index (int64_t): End index of the range (exclusive, one past
+            the last element).
 
     Returns:
-        intptr_t: View to a range of Pauli terms inside the Pauli
-            operator expansion.
+        intptr_t: View to a range of Pauli terms inside the Pauli operator
+            expansion.
 
     .. seealso:: `cupaulipropPauliExpansionGetContiguousRange`
     """
@@ -1429,14 +1401,14 @@ cpdef pauli_expansion_view_prepare_deduplication(intptr_t handle, intptr_t view_
         handle (intptr_t): Library handle.
         view_in (intptr_t): Pauli expansion view to be deduplicated.
         sort_order (SortOrder): Sort order to apply to the output
-            expansion. Use ``CUPAULIPROP_SORT_ORDER_NONE`` if sorting
-            is not required. Currently, only
+            expansion. Use ``CUPAULIPROP_SORT_ORDER_NONE`` if sorting is
+            not required. Currently, only
             ``CUPAULIPROP_SORT_ORDER_INTERNAL`` and
             ``CUPAULIPROP_SORT_ORDER_NONE`` are supported.
         max_workspace_device_size (int64_t): Maximum workspace device-
             memory size limit in bytes.
-        workspace (intptr_t): Workspace descriptor to be updated with
-            the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the
+            required workspace buffer size.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareDeduplication`
     """
@@ -1451,11 +1423,11 @@ cpdef pauli_expansion_view_execute_deduplication(intptr_t handle, intptr_t view_
     Args:
         handle (intptr_t): Library handle.
         view_in (intptr_t): Pauli expansion view to be deduplicated.
-        expansion_out (intptr_t): Pauli expansion to be populated with
-            the deduplicated view.
+        expansion_out (intptr_t): Pauli expansion to be populated with the
+            deduplicated view.
         sort_order (SortOrder): Sort order to apply to the output
-            expansion. Use ``CUPAULIPROP_SORT_ORDER_NONE`` if sorting
-            is not required. Currently, only
+            expansion. Use ``CUPAULIPROP_SORT_ORDER_NONE`` if sorting is
+            not required. Currently, only
             ``CUPAULIPROP_SORT_ORDER_INTERNAL`` and
             ``CUPAULIPROP_SORT_ORDER_NONE`` are supported.
         workspace (intptr_t): Allocated workspace descriptor.
@@ -1477,8 +1449,8 @@ cpdef pauli_expansion_view_prepare_sort(intptr_t handle, intptr_t view_in, int s
         sort_order (SortOrder): Sort order to apply.
         max_workspace_device_size (int64_t): Maximum workspace device-
             memory size limit in bytes.
-        workspace (intptr_t): Workspace descriptor to be updated with
-            the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the
+            required workspace buffer size.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareSort`
     """
@@ -1493,8 +1465,8 @@ cpdef pauli_expansion_view_execute_sort(intptr_t handle, intptr_t view_in, intpt
     Args:
         handle (intptr_t): Library handle.
         view_in (intptr_t): Pauli expansion view to be sorted.
-        expansion_out (intptr_t): Pauli expansion to be populated with
-            the sorted view.
+        expansion_out (intptr_t): Pauli expansion to be populated with the
+            sorted view.
         sort_order (SortOrder): Sort order to apply.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream to be used for the operation.
@@ -1531,8 +1503,8 @@ cpdef pauli_expansion_view_prepare_trace_with_expansion_view(intptr_t handle, in
         view2 (intptr_t): Second Pauli expansion view to be traced.
         max_workspace_device_size (int64_t): Maximum workspace device-
             memory size limit in bytes.
-        workspace (intptr_t): Workspace descriptor to be updated with
-            the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the
+            required workspace buffer size.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareTraceWithExpansionView`
     """
@@ -1548,16 +1520,15 @@ cpdef pauli_expansion_view_compute_trace_with_expansion_view(intptr_t handle, in
         handle (intptr_t): Library handle.
         view1 (intptr_t): First Pauli expansion view.
         view2 (intptr_t): Second Pauli expansion view.
-        take_adjoint1 (int32_t): Whether or not the adjoint of the
-            first view is taken. True ``(!= 0)`` if the adjoint is
-            taken, false ``(0)`` otherwise.
+        take_adjoint1 (int32_t): Whether or not the adjoint of the first
+            view is taken. True ``(!= 0)`` if the adjoint is taken, false
+            ``(0)`` otherwise.
         trace_significand (intptr_t): Pointer to CPU-accessible memory
-            where the trace's significand will be written. The
-            numerical type must match the data type of the views'
-            coefficients.
-        trace_exponent (intptr_t): Pointer to CPU-accessible memory
-            where the trace's exponent will be stored. The numerical
-            type is always ``double``.
+            where the trace's significand will be written. The numerical
+            type must match the data type of the views' coefficients.
+        trace_exponent (intptr_t): Pointer to CPU-accessible memory where
+            the trace's exponent will be stored. The numerical type is
+            always ``double``.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream to be used for the operation.
 
@@ -1577,20 +1548,19 @@ cpdef tuple pauli_expansion_view_prepare_trace_with_expansion_view_backward_diff
         view2 (intptr_t): Second Pauli expansion view to be traced.
         max_workspace_device_size (int64_t): Maximum workspace device-
             memory size limit in bytes.
-        workspace (intptr_t): Workspace descriptor to be updated with
-            the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the
+            required workspace buffer size.
 
     Returns:
         A 4-tuple containing:
-
         - int64_t: Required size (in bytes) of the X and Z bits output
-            buffer for ``cotangentExpansion1``.
+                buffer for ``cotangentExpansion1``.
         - int64_t: Required size (in bytes) of the coefficients output
-            buffer for ``cotangentExpansion1``.
+                buffer for ``cotangentExpansion1``.
         - int64_t: Required size (in bytes) of the X and Z bits output
-            buffer for ``cotangentExpansion2``.
+                buffer for ``cotangentExpansion2``.
         - int64_t: Required size (in bytes) of the coefficients output
-            buffer for ``cotangentExpansion2``.
+                buffer for ``cotangentExpansion2``.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareTraceWithExpansionViewBackwardDiff`
     """
@@ -1611,30 +1581,29 @@ cpdef pauli_expansion_view_compute_trace_with_expansion_view_backward_diff(intpt
         handle (intptr_t): Library handle.
         view1 (intptr_t): First Pauli expansion view.
         view2 (intptr_t): Second Pauli expansion view.
-        take_adjoint1 (int32_t): Whether or not the adjoint of the
-            first view is taken when forming the trace. True ``(!=
-            0)`` if the adjoint is taken, false ``(0)`` otherwise.
-        cotangent_trace_significand (intptr_t): Pointer to host-
-            accessible memory holding the scalar cotangent
-            :math:`\\tilde{s} = \\partial L / \\partial s` of
-            ``traceSignificand``. The numerical type must match the
-            data type of the views' coefficients.
-        cotangent_trace_exponent (intptr_t): Pointer to host-
-            accessible memory holding the scalar cotangent
-            :math:`\\tilde{p} = \\partial L / \\partial p` of
-            ``traceExponent``. This argument is currently a dead
-            branch for coefficient cotangents, since ``traceExponent``
-            presently carries no parameter dependence, though beware
-            that this may change in the future. The numerical type is
-            always ``double``.
-        cotangent_expansion1 (intptr_t): Output Pauli expansion
-            populated with coefficient cotangents corresponding to
-            ``view1``. The numerical type must match the data type of
-            the views' coefficients.
-        cotangent_expansion2 (intptr_t): Output Pauli expansion
-            populated with coefficient cotangents corresponding to
-            ``view2``. The numerical type must match the data type of
-            the views' coefficients.
+        take_adjoint1 (int32_t): Whether or not the adjoint of the first
+            view is taken when forming the trace. True ``(!= 0)`` if the
+            adjoint is taken, false ``(0)`` otherwise.
+        cotangent_trace_significand (intptr_t): Pointer to host-accessible
+            memory holding the scalar cotangent :math:`\\tilde{s} =
+            \\partial L / \\partial s` of ``traceSignificand``. The
+            numerical type must match the data type of the views'
+            coefficients.
+        cotangent_trace_exponent (intptr_t): Pointer to host-accessible
+            memory holding the scalar cotangent :math:`\\tilde{p} =
+            \\partial L / \\partial p` of ``traceExponent``. This argument
+            is currently a dead branch for coefficient cotangents, since
+            ``traceExponent`` presently carries no parameter dependence,
+            though beware that this may change in the future. The
+            numerical type is always ``double``.
+        cotangent_expansion1 (intptr_t): Output Pauli expansion populated
+            with coefficient cotangents corresponding to ``view1``. The
+            numerical type must match the data type of the views'
+            coefficients.
+        cotangent_expansion2 (intptr_t): Output Pauli expansion populated
+            with coefficient cotangents corresponding to ``view2``. The
+            numerical type must match the data type of the views'
+            coefficients.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream to be used for the operation.
 
@@ -1653,8 +1622,8 @@ cpdef pauli_expansion_view_prepare_trace_with_zero_state(intptr_t handle, intptr
         view (intptr_t): Pauli expansion view to be traced.
         max_workspace_device_size (int64_t): Maximum workspace device-
             memory size limit in bytes.
-        workspace (intptr_t): Workspace descriptor to be updated with
-            the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the
+            required workspace buffer size.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareTraceWithZeroState`
     """
@@ -1670,12 +1639,11 @@ cpdef pauli_expansion_view_compute_trace_with_zero_state(intptr_t handle, intptr
         handle (intptr_t): Library handle.
         view (intptr_t): Pauli expansion view to be traced.
         trace_significand (intptr_t): Pointer to CPU-accessible memory
-            where the trace's significand will be written. The
-            numerical type must match the data type of the views'
-            coefficients.
-        trace_exponent (intptr_t): Pointer to CPU-accessible memory
-            where the trace's exponent will be stored. The numerical
-            type is always ``double``.
+            where the trace's significand will be written. The numerical
+            type must match the data type of the views' coefficients.
+        trace_exponent (intptr_t): Pointer to CPU-accessible memory where
+            the trace's exponent will be stored. The numerical type is
+            always ``double``.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream to be used for the operation.
 
@@ -1694,16 +1662,15 @@ cpdef tuple pauli_expansion_view_prepare_trace_with_zero_state_backward_diff(int
         view (intptr_t): Pauli expansion view to be traced.
         max_workspace_device_size (int64_t): Maximum workspace device-
             memory size limit in bytes.
-        workspace (intptr_t): Workspace descriptor to be updated with
-            the required workspace buffer size.
+        workspace (intptr_t): Workspace descriptor to be updated with the
+            required workspace buffer size.
 
     Returns:
         A 2-tuple containing:
-
         - int64_t: Required size (in bytes) of the X and Z bits output
-            buffer for the cotangent expansion.
+                buffer for the cotangent expansion.
         - int64_t: Required size (in bytes) of the coefficients output
-            buffer for the cotangent expansion.
+                buffer for the cotangent expansion.
 
     .. seealso:: `cupaulipropPauliExpansionViewPrepareTraceWithZeroStateBackwardDiff`
     """
@@ -1721,23 +1688,22 @@ cpdef pauli_expansion_view_compute_trace_with_zero_state_backward_diff(intptr_t 
     Args:
         handle (intptr_t): Library handle.
         view (intptr_t): Pauli expansion view to be traced.
-        cotangent_trace_significand (intptr_t): Pointer to host-
-            accessible memory holding the scalar cotangent
-            :math:`\\tilde{s} = \\partial L / \\partial s` of
-            ``traceSignificand``. The numerical type must match the
-            data type of the view's coefficients.
-        cotangent_trace_exponent (intptr_t): Pointer to host-
-            accessible memory holding the scalar cotangent
-            :math:`\\tilde{p} = \\partial L / \\partial p` of
-            ``traceExponent``. This argument is currently a dead
-            branch for coefficient cotangents, since ``traceExponent``
-            presently carries no parameter dependence, though beware
-            that this may change in the future. The numerical type is
-            always ``double``.
-        cotangent_expansion (intptr_t): Output Pauli expansion
-            populated with coefficient cotangents corresponding to
-            ``view``. The numerical type must match the data type of
-            the view's coefficients.
+        cotangent_trace_significand (intptr_t): Pointer to host-accessible
+            memory holding the scalar cotangent :math:`\\tilde{s} =
+            \\partial L / \\partial s` of ``traceSignificand``. The
+            numerical type must match the data type of the view's
+            coefficients.
+        cotangent_trace_exponent (intptr_t): Pointer to host-accessible
+            memory holding the scalar cotangent :math:`\\tilde{p} =
+            \\partial L / \\partial p` of ``traceExponent``. This argument
+            is currently a dead branch for coefficient cotangents, since
+            ``traceExponent`` presently carries no parameter dependence,
+            though beware that this may change in the future. The
+            numerical type is always ``double``.
+        cotangent_expansion (intptr_t): Output Pauli expansion populated
+            with coefficient cotangents corresponding to ``view``. The
+            numerical type must match the data type of the view's
+            coefficients.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream to be used for the operation.
 
@@ -1759,14 +1725,13 @@ cpdef intptr_t create_clifford_gate_operator(intptr_t handle, int clifford_gate_
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
 
-
     Returns:
         intptr_t: Quantum operator associated with the Clifford gate.
 
     .. seealso:: `cupaulipropCreateCliffordGateOperator`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _qubit_indices_
-    get_resource_ptr[int32_t](_qubit_indices_, qubit_indices, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _qubit_indices_
+    _cyb_get_resource_ptr[int32_t](_qubit_indices_, qubit_indices, <int32_t*>NULL)
     cdef QuantumOperator oper
     with nogil:
         __status__ = cupaulipropCreateCliffordGateOperator(<const Handle>handle, <_CliffordGateKind>clifford_gate_kind, <const int32_t*>(_qubit_indices_.data()), &oper)
@@ -1781,17 +1746,15 @@ cpdef intptr_t create_pauli_rotation_gate_operator(intptr_t handle, double angle
         handle (intptr_t): Library handle.
         angle (double): Rotation angle in radians.
         num_qubits (int32_t): Number of qubits.
-        qubit_indices (object): Qubit indices. If NULL, the qubit
-            indices are assumed to be [0, 1, 2, ..., num_qubits-1]. It can be:
+        qubit_indices (object): Qubit indices. If NULL, the qubit indices
+            are assumed to be [0, 1, 2, ..., num_qubits-1]. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         paulis (object): Pauli operators for each qubit index. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``_PauliKind``.
-
 
     Returns:
         intptr_t: Quantum operator associated with the Pauli rotation
@@ -1799,10 +1762,10 @@ cpdef intptr_t create_pauli_rotation_gate_operator(intptr_t handle, double angle
 
     .. seealso:: `cupaulipropCreatePauliRotationGateOperator`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _qubit_indices_
-    get_resource_ptr[int32_t](_qubit_indices_, qubit_indices, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int] ] _paulis_
-    get_resource_ptr[int](_paulis_, paulis, <int*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _qubit_indices_
+    _cyb_get_resource_ptr[int32_t](_qubit_indices_, qubit_indices, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int] ] _paulis_
+    _cyb_get_resource_ptr[int](_paulis_, paulis, <int*>NULL)
     cdef QuantumOperator oper
     with nogil:
         __status__ = cupaulipropCreatePauliRotationGateOperator(<const Handle>handle, angle, num_qubits, <const int32_t*>(_qubit_indices_.data()), <const _PauliKind*>(_paulis_.data()), &oper)
@@ -1815,36 +1778,33 @@ cpdef intptr_t create_pauli_noise_channel_operator(intptr_t handle, int32_t num_
 
     Args:
         handle (intptr_t): Library handle.
-        num_qubits (int32_t): Number of qubits. Only 1 and 2 qubits
-            are supported.
+        num_qubits (int32_t): Number of qubits. Only 1 and 2 qubits are
+            supported.
         qubit_indices (object): Qubit indices. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        probabilities (object): Probabilities for each Pauli channel.
-            For a single qubit Pauli Channel, the probabilities are an
-            array of length 4: ``PauliKind((i)%4)`` (i.e. ``[p_I, p_X,
-            p_Y, p_Z]``). For a two qubit Pauli Channel, probabilities
-            is an array of length 16. The i-th element of the
-            probabilities is associated with the i-th element of the
-            2-qubit Pauli strings in lexicographic order. E.g. prob[i]
-            corresponds to the Pauli string ``PauliKind((i)%4),
-            PauliKind_t((i)/4)``. It can be:
+        probabilities (object): Probabilities for each Pauli channel. For
+            a single qubit Pauli Channel, the probabilities are an array
+            of length 4: ``PauliKind((i)%4)`` (i.e. ``[p_I, p_X, p_Y,
+            p_Z]``). For a two qubit Pauli Channel, probabilities is an
+            array of length 16. The i-th element of the probabilities is
+            associated with the i-th element of the 2-qubit Pauli strings
+            in lexicographic order. E.g. prob[i] corresponds to the Pauli
+            string ``PauliKind((i)%4), PauliKind_t((i)/4)``. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``float``.
-
 
     Returns:
         intptr_t: Quantum operator associated with the Pauli channel.
 
     .. seealso:: `cupaulipropCreatePauliNoiseChannelOperator`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _qubit_indices_
-    get_resource_ptr[int32_t](_qubit_indices_, qubit_indices, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[double] ] _probabilities_
-    get_resource_ptr[double](_probabilities_, probabilities, <double*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _qubit_indices_
+    _cyb_get_resource_ptr[int32_t](_qubit_indices_, qubit_indices, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[double] ] _probabilities_
+    _cyb_get_resource_ptr[double](_probabilities_, probabilities, <double*>NULL)
     cdef QuantumOperator oper
     with nogil:
         __status__ = cupaulipropCreatePauliNoiseChannelOperator(<const Handle>handle, num_qubits, <const int32_t*>(_qubit_indices_.data()), <const double*>(_probabilities_.data()), &oper)
@@ -1858,12 +1818,12 @@ cpdef intptr_t create_amplitude_damping_channel_operator(intptr_t handle, int32_
     Args:
         handle (intptr_t): Library handle.
         qubit_index (int32_t): Index of qubit upon which to operate.
-        damping_prob (double): Probability that the qubit is damped,
-            i.e. decohered into a classical state.
+        damping_prob (double): Probability that the qubit is damped, i.e.
+            decohered into a classical state.
         excite_prob (double): Probability that damping results in
-            excitation (driving to the one state) rather than
-            dissipation (driving to the zero state). Set to zero for
-            conventional, dissipative amplitude damping.
+            excitation (driving to the one state) rather than dissipation
+            (driving to the zero state). Set to zero for conventional,
+            dissipative amplitude damping.
 
     Returns:
         intptr_t: Quantum operator associated with the channel.
@@ -1886,8 +1846,7 @@ cpdef quantum_operator_attach_cotangent_buffer(intptr_t handle, intptr_t oper, i
         cotangent_buffer (intptr_t): Pointer to user-owned cotangent
             buffer.
         cotangent_buffer_size (int64_t): Size of the buffer in bytes.
-        data_type (int): Data type of elements in the cotangent
-            buffer.
+        data_type (int): Data type of elements in the cotangent buffer.
         location (Memspace): Memory location of the buffer (host or
             device).
 
@@ -1907,17 +1866,16 @@ cpdef tuple quantum_operator_get_cotangent_buffer(intptr_t handle, intptr_t oper
 
     Returns:
         A 4-tuple containing:
-
-        - intptr_t: Pointer to the attached cotangent buffer. If no
-            buffer is attached, this pointer is set to NULL.
+        - intptr_t: Pointer to the attached cotangent buffer. If no buffer
+                is attached, this pointer is set to NULL.
         - int64_t: Required element count (number of differentiable
-            parameters).
-        - int: Data type of elements in the attached buffer. If no
-            buffer is attached, this pointer is set to
-            ``cudaDataType_t`` ``CUPAULIPROP_DATA_TYPE_INVALID``.
+                parameters).
+        - int: Data type of elements in the attached buffer. If no buffer is
+                attached, this pointer is set to ``cudaDataType_t``
+                ``CUPAULIPROP_DATA_TYPE_INVALID``.
         - int: Memory location of the attached buffer. If no buffer is
-            attached, this pointer is set to ``cupaulipropMemspace_t``
-            ``CUPAULIPROP_MEMSPACE_DEVICE``.
+                attached, this pointer is set to ``cupaulipropMemspace_t``
+                ``CUPAULIPROP_MEMSPACE_DEVICE``.
 
     .. seealso:: `cupaulipropQuantumOperatorGetCotangentBuffer`
     """

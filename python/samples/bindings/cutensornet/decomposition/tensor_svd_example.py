@@ -127,6 +127,15 @@ cutn.workspace_set_memory(
     cutn.Memspace.DEVICE,
     cutn.WorkspaceKind.SCRATCH,
     work.ptr, required_workspace_size)
+required_host_workspace_size = cutn.workspace_get_memory_size(handle,
+    work_desc, cutn.WorksizePref.MIN, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH)
+if required_host_workspace_size > 0:
+    host_work = np.empty(required_host_workspace_size, dtype=np.int8)  # must stay alive until the computation completes
+    cutn.workspace_set_memory(
+        handle, work_desc,
+        cutn.Memspace.HOST,
+        cutn.WorkspaceKind.SCRATCH,
+        host_work.ctypes.data, required_host_workspace_size)
 
 print("Query and allocate required workspace.")
 

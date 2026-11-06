@@ -202,12 +202,13 @@ def get_pauli_string_as_packed_integers(paulis, qubits):
     for i in range(len(qubits)):
         int_ind = qubits[i] // num_bits_per_packed_int
         bit_ind = qubits[i] % num_bits_per_packed_int
+        bit_mask = np.uint64(1 << bit_ind)
         
         # Overwrite a bit of either the X or Z masks (or both when pauli==Y)
         if paulis[i] in [cupauliprop.PauliKind.PAULI_X, cupauliprop.PauliKind.PAULI_Y]:
-            x_ptr[int_ind] = x_ptr[int_ind] | (1 << bit_ind)
+            x_ptr[int_ind] = x_ptr[int_ind] | bit_mask
         if paulis[i] in [cupauliprop.PauliKind.PAULI_Z, cupauliprop.PauliKind.PAULI_Y]:
-            z_ptr[int_ind] = z_ptr[int_ind] | (1 << bit_ind)
+            z_ptr[int_ind] = z_ptr[int_ind] | bit_mask
     
     return out
 
@@ -598,4 +599,3 @@ def main():
 
 
 main()
-

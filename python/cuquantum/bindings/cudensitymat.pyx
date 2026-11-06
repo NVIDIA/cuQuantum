@@ -2,10 +2,22 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 26.06.0 to 26.11.0. Do not modify it directly.
 
 
 # <<<< PREAMBLE CONTENT >>>>
+
+from cuquantum.bindings._utils cimport (
+    get_resource_ptr as _cyb_get_resource_ptr,
+    get_resource_ptrs as _cyb_get_resource_ptrs,
+    nullable_unique_ptr as _cyb_nullable_unique_ptr,
+)
+from libc.stdint cimport (
+    int32_t,
+    int64_t,
+    intptr_t,
+)
+from libcpp.vector cimport vector as _cyb_vector
 
 from enum import IntEnum as _cyb_IntEnum
 
@@ -274,8 +286,8 @@ class EigenDecompositionScopeSplitDMRGConfigAttribute(_cyb_IntEnum):
 
 class EigenDecompositionApproachLinearConfigAttribute(_cyb_IntEnum):
     """
-    Configuration attributes for the iterative linear solver (e.g., MINRES)
-    used by shift-invert DMRG.
+    Configuration attributes for the iterative linear solver (currently
+    MINRES).
 
     See `cudensitymatEigenDecompositionApproachLinearConfigAttribute_t`.
     """
@@ -420,14 +432,15 @@ cpdef inline check_status(int status):
 # Wrapper functions
 ###############################################################################
 
-cpdef get_version():
+cpdef size_t get_version() except? 0:
     """Returns the semantic version number of the cuDensityMat library.
 
     .. seealso:: `cudensitymatGetVersion`
     """
+    cdef size_t ret
     with nogil:
-        __status__ = cudensitymatGetVersion()
-    check_status(__status__)
+        ret = cudensitymatGetVersion()
+    return ret
 
 
 cpdef intptr_t create() except? 0:
@@ -463,10 +476,9 @@ cpdef reset_distributed_configuration(intptr_t handle, int provider, intptr_t co
 
     Args:
         handle (intptr_t): Library handle.
-        provider (DistributedProvider): Communication service
-            provider.
-        comm_ptr (intptr_t): Pointer to the communicator in a type-
-            erased form.
+        provider (DistributedProvider): Communication service provider.
+        comm_ptr (intptr_t): Pointer to the communicator in a type-erased
+            form.
         comm_size (size_t): Size of the communicator in bytes.
 
     .. seealso:: `cudensitymatResetDistributedConfiguration`
@@ -539,21 +551,20 @@ cpdef intptr_t create_state(intptr_t handle, int purity, int32_t num_space_modes
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
-        batch_size (int64_t): Batch size (number of equally-shaped
-            quantum states in the batch). Note that setting the batch
-            size to zero is the same as setting it to 1 (no batching).
+        batch_size (int64_t): Batch size (number of equally-shaped quantum
+            states in the batch). Note that setting the batch size to zero
+            is the same as setting it to 1 (no batching).
         data_type (int): Numerical representation data type (type of
             tensor elements).
 
     Returns:
-        intptr_t: Empty dense quantum state (or a batch of such
-            quantum states).
+        intptr_t: Empty dense quantum state (or a batch of such quantum
+            states).
 
     .. seealso:: `cudensitymatCreateState`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
     cdef State state
     with nogil:
         __status__ = cudensitymatCreateState(<const Handle>handle, <_StatePurity>purity, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), batch_size, <DataType>data_type, &state)
@@ -574,33 +585,30 @@ cpdef intptr_t create_state_mps(intptr_t handle, int purity, int32_t num_space_m
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
         boundary_condition (BoundaryCondition): Boundary condition.
         bond_extents (object): Extents of the bond modes. For open
-            boundary condition, the length of the array must be equal
-            to the number of space modes minus one, where
-            ``bond_extents[i]`` is the bond dimension between site
-            ``i`` and site ``i+1``. For periodic boundary condition,
-            the length of the array must be equal to the number of
-            space modes. It can be:
+            boundary condition, the length of the array must be equal to
+            the number of space modes minus one, where ``bond_extents[i]``
+            is the bond dimension between site ``i`` and site ``i+1``. For
+            periodic boundary condition, the length of the array must be
+            equal to the number of space modes. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
         data_type (int): Quantum state data type.
-        batch_size (int64_t): Batch size (number of equally-shaped
-            quantum states in the batch).
+        batch_size (int64_t): Batch size (number of equally-shaped quantum
+            states in the batch).
 
     Returns:
-        intptr_t: Empty quantum state (or a batch of quantum states)
-            in the MPS factorized form.
+        intptr_t: Empty quantum state (or a batch of quantum states) in
+            the MPS factorized form.
 
     .. seealso:: `cudensitymatCreateStateMPS`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _bond_extents_
-    get_resource_ptr[int64_t](_bond_extents_, bond_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _bond_extents_
+    _cyb_get_resource_ptr[int64_t](_bond_extents_, bond_extents, <int64_t*>NULL)
     cdef State state
     with nogil:
         __status__ = cudensitymatCreateStateMPS(<const Handle>handle, <_StatePurity>purity, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), <_BoundaryCondition>boundary_condition, <const int64_t*>(_bond_extents_.data()), <DataType>data_type, batch_size, &state)
@@ -615,18 +623,17 @@ cpdef state_mps_set_current_bond_extents(intptr_t handle, intptr_t state, bond_e
         handle (intptr_t): Library handle.
         state (intptr_t): Matrix-product-state quantum state.
         bond_extents (object): Current (valid) bond extents. The array
-            length equals the number of bonds (number of space modes
-            minus one for open boundary condition). May be ``NULL``
-            for a single-site state, which has no bonds. It can be:
+            length equals the number of bonds (number of space modes minus
+            one for open boundary condition). May be ``NULL`` for a
+            single-site state, which has no bonds. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
 
-
     .. seealso:: `cudensitymatStateMPSSetCurrentBondExtents`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _bond_extents_
-    get_resource_ptr[int64_t](_bond_extents_, bond_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _bond_extents_
+    _cyb_get_resource_ptr[int64_t](_bond_extents_, bond_extents, <int64_t*>NULL)
     with nogil:
         __status__ = cudensitymatStateMPSSetCurrentBondExtents(<const Handle>handle, <State>state, <const int64_t*>(_bond_extents_.data()))
     check_status(__status__)
@@ -638,11 +645,10 @@ cpdef state_mps_get_current_bond_extents(intptr_t handle, intptr_t state, intptr
     Args:
         handle (intptr_t): Library handle.
         state (intptr_t): Matrix-product-state quantum state.
-        bond_extents (intptr_t): Output array for the current (valid)
-            bond extents. The array length equals the number of bonds
-            (number of space modes minus one for open boundary
-            condition). May be ``NULL`` for a single-site state, which
-            has no bonds.
+        bond_extents (intptr_t): Output array for the current (valid) bond
+            extents. The array length equals the number of bonds (number
+            of space modes minus one for open boundary condition). May be
+            ``NULL`` for a single-site state, which has no bonds.
 
     .. seealso:: `cudensitymatStateMPSGetCurrentBondExtents`
     """
@@ -655,8 +661,7 @@ cpdef destroy_state(intptr_t state):
     """Destroys the quantum state.
 
     Args:
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
+        state (intptr_t): Quantum state (or a batch of quantum states).
 
     .. seealso:: `cudensitymatDestroyState`
     """
@@ -670,8 +675,7 @@ cpdef int32_t state_get_num_components(intptr_t handle, intptr_t state) except? 
 
     Args:
         handle (intptr_t): Library handle.
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
+        state (intptr_t): Quantum state (or a batch of quantum states).
 
     Returns:
         int32_t: Number of components (tensors) in the quantum state
@@ -691,35 +695,30 @@ cpdef state_attach_component_storage(intptr_t handle, intptr_t state, int32_t nu
 
     Args:
         handle (intptr_t): Library handle.
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
-        num_state_components (int32_t): Number of components (tensors)
-            in the quantum state representation (on the current
-            process). The number of components can be retrieved by
-            calling the API function
-            ``cudensitymatStateGetNumComponents``.
-        component_buffer (object): Pointers to user-owned GPU-
-            accessible storage buffers for all components (tensors)
-            constituting the quantum state representation (on the
-            current process). It can be:
+        state (intptr_t): Quantum state (or a batch of quantum states).
+        num_state_components (int32_t): Number of components (tensors) in
+            the quantum state representation (on the current process). The
+            number of components can be retrieved by calling the API
+            function ``cudensitymatStateGetNumComponents``.
+        component_buffer (object): Pointers to user-owned GPU-accessible
+            storage buffers for all components (tensors) constituting the
+            quantum state representation (on the current process). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
         component_buffer_size (object): Sizes of the provided storage
-            buffers for all components (tensors) constituting the
-            quantum state representation (on the current process). It can be:
+            buffers for all components (tensors) constituting the quantum
+            state representation (on the current process). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``size_t``.
 
-
     .. seealso:: `cudensitymatStateAttachComponentStorage`
     """
-    cdef nullable_unique_ptr[ vector[void*] ] _component_buffer_
-    get_resource_ptrs[void](_component_buffer_, component_buffer, <void*>NULL)
-    cdef nullable_unique_ptr[ vector[size_t] ] _component_buffer_size_
-    get_resource_ptr[size_t](_component_buffer_size_, component_buffer_size, <size_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[void*] ] _component_buffer_
+    _cyb_get_resource_ptrs[void](_component_buffer_, component_buffer, <void*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[size_t] ] _component_buffer_size_
+    _cyb_get_resource_ptr[size_t](_component_buffer_size_, component_buffer_size, <size_t*>NULL)
     with nogil:
         __status__ = cudensitymatStateAttachComponentStorage(<const Handle>handle, <State>state, num_state_components, <void**>(_component_buffer_.data()), <const size_t*>(_component_buffer_size_.data()))
     check_status(__status__)
@@ -730,16 +729,15 @@ cpdef state_get_component_num_modes(intptr_t handle, intptr_t state, int32_t sta
 
     Args:
         handle (intptr_t): Library handle.
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
+        state (intptr_t): Quantum state (or a batch of quantum states).
         state_component_local_id (int32_t): Component local id (on the
             current parallel process).
-        state_component_global_id (intptr_t): Component global id
-            (across all parallel processes).
+        state_component_global_id (intptr_t): Component global id (across
+            all parallel processes).
         state_component_num_modes (intptr_t): Number of modes in the
             queried component tensor.
-        batch_mode_location (intptr_t): Location of the batch mode (or
-            -1 if the batch mode is absent).
+        batch_mode_location (intptr_t): Location of the batch mode (or -1
+            if the batch mode is absent).
 
     .. seealso:: `cudensitymatStateGetComponentNumModes`
     """
@@ -753,12 +751,11 @@ cpdef state_get_component_info(intptr_t handle, intptr_t state, int32_t state_co
 
     Args:
         handle (intptr_t): Library handle.
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
+        state (intptr_t): Quantum state (or a batch of quantum states).
         state_component_local_id (int32_t): Component local id (on the
             current parallel process).
-        state_component_global_id (intptr_t): Component global id
-            (across all parallel processes).
+        state_component_global_id (intptr_t): Component global id (across
+            all parallel processes).
         state_component_num_modes (intptr_t): Number of modes in the
             queried component tensor.
         state_component_mode_extents (intptr_t): Component tensor mode
@@ -781,8 +778,7 @@ cpdef state_initialize_zero(intptr_t handle, intptr_t state, intptr_t stream):
 
     Args:
         handle (intptr_t): Library handle.
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
+        state (intptr_t): Quantum state (or a batch of quantum states).
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateInitializeZero`
@@ -797,11 +793,10 @@ cpdef state_compute_scaling(intptr_t handle, intptr_t state, intptr_t scaling_fa
 
     Args:
         handle (intptr_t): Library handle.
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
+        state (intptr_t): Quantum state (or a batch of quantum states).
         scaling_factors (intptr_t): Array of scaling factor(s) of
-            dimension equal to the batch size in the GPU-accessible
-            RAM (same data type as used by the quantum state).
+            dimension equal to the batch size in the GPU-accessible RAM
+            (same data type as used by the quantum state).
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateComputeScaling`
@@ -816,11 +811,10 @@ cpdef state_compute_norm(intptr_t handle, intptr_t state, intptr_t norm, intptr_
 
     Args:
         handle (intptr_t): Library handle.
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
-        norm (intptr_t): Pointer to the squared Frobenius norm(s)
-            vector storage in the GPU-accessible RAM (float or double
-            real data type).
+        state (intptr_t): Quantum state (or a batch of quantum states).
+        norm (intptr_t): Pointer to the squared Frobenius norm(s) vector
+            storage in the GPU-accessible RAM (float or double real data
+            type).
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateComputeNorm`
@@ -835,11 +829,10 @@ cpdef state_compute_trace(intptr_t handle, intptr_t state, intptr_t trace, intpt
 
     Args:
         handle (intptr_t): Library handle.
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
-        trace (intptr_t): Pointer to the trace(s) vector storage in
-            the GPU-accessible RAM (same data type as used by the
-            quantum state).
+        state (intptr_t): Quantum state (or a batch of quantum states).
+        trace (intptr_t): Pointer to the trace(s) vector storage in the
+            GPU-accessible RAM (same data type as used by the quantum
+            state).
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateComputeTrace`
@@ -856,11 +849,11 @@ cpdef state_compute_accumulation(intptr_t handle, intptr_t state_in, intptr_t st
         handle (intptr_t): Library handle.
         state_in (intptr_t): Accumulated quantum state (or a batch of
             quantum states).
-        state_out (intptr_t): Accumulating quantum state (or a batch
-            of quantum states).
+        state_out (intptr_t): Accumulating quantum state (or a batch of
+            quantum states).
         scaling_factors (intptr_t): Array of scaling factor(s) of
-            dimension equal to the batch size in the GPU-accessible
-            RAM (same data type as used by the quantum state).
+            dimension equal to the batch size in the GPU-accessible RAM
+            (same data type as used by the quantum state).
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateComputeAccumulation`
@@ -875,13 +868,13 @@ cpdef state_compute_inner_product(intptr_t handle, intptr_t state_left, intptr_t
 
     Args:
         handle (intptr_t): Library handle.
-        state_left (intptr_t): Left quantum state (or a batch of
-            quantum states).
-        state_right (intptr_t): Right quantum state (or a batch of
-            quantum states).
-        inner_product (intptr_t): Pointer to the inner product(s)
-            vector storage in the GPU-accessible RAM (same data type
-            as the one used by the quantum states).
+        state_left (intptr_t): Left quantum state (or a batch of quantum
+            states).
+        state_right (intptr_t): Right quantum state (or a batch of quantum
+            states).
+        inner_product (intptr_t): Pointer to the inner product(s) vector
+            storage in the GPU-accessible RAM (same data type as the one
+            used by the quantum states).
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatStateComputeInnerProduct`
@@ -896,49 +889,50 @@ cpdef intptr_t create_elementary_operator(intptr_t handle, int32_t num_space_mod
 
     Args:
         handle (intptr_t): Library handle.
-        num_space_modes (int32_t): Number of the (state) space modes
-            acted on.
-        space_mode_extents (object): Extents of the (state) space
-            modes acted on. It can be:
+        num_space_modes (int32_t): Number of the (state) space modes acted
+            on.
+        space_mode_extents (object): Extents of the (state) space modes
+            acted on. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
-        sparsity (ElementaryOperatorSparsity): Tensor operator
-            sparsity defining the storage scheme.
+        sparsity (ElementaryOperatorSparsity): Tensor operator sparsity
+            defining the storage scheme.
         num_diagonals (int32_t): For multi-diagonal tensor operator
-            matrices, specifies the total number of non-zero diagonals
-            (>= 1), otherwise ignored.
+            matrices, specifies the total number of non-zero diagonals (>=
+            1), otherwise ignored.
         diagonal_offsets (object): For multi-diagonal tensor operator
-            matrices, these are the offsets of the non-zero diagonals
-            (for example, the main diagonal has offset 0, the diagonal
-            right above the main diagonal has offset +1, the diagonal
-            right below the main diagonal has offset -1, and so on). It can be:
+            matrices, these are the offsets of the non-zero diagonals (for
+            example, the main diagonal has offset 0, the diagonal right
+            above the main diagonal has offset +1, the diagonal right
+            below the main diagonal has offset -1, and so on). The
+            diagonal offsets must be unique (each non-zero diagonal is
+            specified and stored exactly once); repeated offsets are
+            rejected. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         data_type (int): Tensor operator data type.
         tensor_data (intptr_t): GPU-accessible pointer to the tensor
             operator elements storage.
-        tensor_callback (object): Optional user-defined tensor
-            callback function which can be called later to fill in the
-            tensor elements in the provided storage, or NULL.
-        tensor_gradient_callback (object): Optional user-defined
-            tensor gradient callback function which can be called
-            later to compute the Vector-Jacobian Product (VJP) for the
-            tensor operator, to produce gradients with respect to the
-            user-defined real parameters, or NULL.
+        tensor_callback (object): Optional user-defined tensor callback
+            function which can be called later to fill in the tensor
+            elements in the provided storage, or NULL.
+        tensor_gradient_callback (object): Optional user-defined tensor
+            gradient callback function which can be called later to
+            compute the Vector-Jacobian Product (VJP) for the tensor
+            operator, to produce gradients with respect to the user-
+            defined real parameters, or NULL.
 
     Returns:
         intptr_t: Elementary tensor operator.
 
     .. seealso:: `cudensitymatCreateElementaryOperator`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _diagonal_offsets_
-    get_resource_ptr[int32_t](_diagonal_offsets_, diagonal_offsets, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _diagonal_offsets_
+    _cyb_get_resource_ptr[int32_t](_diagonal_offsets_, diagonal_offsets, <int32_t*>NULL)
     cdef _WrappedTensorCallback _tensor_callback_ = _convert_tensor_callback(tensor_callback)
     cdef _WrappedTensorGradientCallback _tensor_gradient_callback_ = _convert_tensor_gradient_callback(tensor_gradient_callback)
     cdef ElementaryOperator elem_operator
@@ -955,57 +949,55 @@ cpdef intptr_t create_elementary_operator_batch(intptr_t handle, int32_t num_spa
 
     Args:
         handle (intptr_t): Library handle.
-        num_space_modes (int32_t): Number of the (state) space modes
-            acted on.
-        space_mode_extents (object): Extents of the (state) space
-            modes acted on. It can be:
+        num_space_modes (int32_t): Number of the (state) space modes acted
+            on.
+        space_mode_extents (object): Extents of the (state) space modes
+            acted on. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
         batch_size (int64_t): Batch size (>= 1).
-        sparsity (ElementaryOperatorSparsity): Tensor operator
-            sparsity defining the storage scheme.
+        sparsity (ElementaryOperatorSparsity): Tensor operator sparsity
+            defining the storage scheme.
         num_diagonals (int32_t): For multi-diagonal tensor operator
-            matrices, specifies the total number of non-zero diagonals
-            (>= 1).
-        diagonal_offsets (object): Offsets of the non-zero diagonals
-            (for example, the main diagonal has offset 0, the diagonal
-            right above the main diagonal has offset +1, the diagonal
-            right below the main diagonal has offset -1, and so on). It can be:
+            matrices, specifies the total number of non-zero diagonals (>=
+            1).
+        diagonal_offsets (object): Offsets of the non-zero diagonals (for
+            example, the main diagonal has offset 0, the diagonal right
+            above the main diagonal has offset +1, the diagonal right
+            below the main diagonal has offset -1, and so on). The
+            diagonal offsets must be unique (each non-zero diagonal is
+            specified and stored exactly once); repeated offsets are
+            rejected. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         data_type (int): Tensor operator data type.
         tensor_data (intptr_t): GPU-accessible pointer to the tensor
             operator elements storage, where all elementary tensor
-            operators within the batch are stored contiguously in
-            memory.
+            operators within the batch are stored contiguously in memory.
         tensor_callback (object): Optional user-defined batched tensor
             callback function which can be called later to fill in the
-            tensor elements in the provided batched storage, or NULL.
-            Note that the provided batched tensor callback function is
-            expected to fill in all tensor instances within the batch
-            in one call.
-        tensor_gradient_callback (object): Optional user-defined
-            batched tensor gradient callback function which can be
-            called later to compute the Vector-Jacobian Product (VJP)
-            for the batched tensor operator, to produce gradients with
-            respect to the batched user-defined real parameters, or
-            NULL.
+            tensor elements in the provided batched storage, or NULL. Note
+            that the provided batched tensor callback function is expected
+            to fill in all tensor instances within the batch in one call.
+        tensor_gradient_callback (object): Optional user-defined batched
+            tensor gradient callback function which can be called later to
+            compute the Vector-Jacobian Product (VJP) for the batched
+            tensor operator, to produce gradients with respect to the
+            batched user-defined real parameters, or NULL.
 
     Returns:
         intptr_t: Batched elementary tensor operator (a batch of
-            individual elementary tensor operators stored contiguously
-            in memory).
+            individual elementary tensor operators stored contiguously in
+            memory).
 
     .. seealso:: `cudensitymatCreateElementaryOperatorBatch`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _diagonal_offsets_
-    get_resource_ptr[int32_t](_diagonal_offsets_, diagonal_offsets, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _diagonal_offsets_
+    _cyb_get_resource_ptr[int32_t](_diagonal_offsets_, diagonal_offsets, <int32_t*>NULL)
     cdef _WrappedTensorCallback _tensor_callback_ = _convert_tensor_callback(tensor_callback)
     cdef _WrappedTensorGradientCallback _tensor_gradient_callback_ = _convert_tensor_gradient_callback(tensor_gradient_callback)
     cdef ElementaryOperator elem_operator
@@ -1036,34 +1028,33 @@ cpdef intptr_t create_matrix_operator_dense_local(intptr_t handle, int32_t num_s
 
     Args:
         handle (intptr_t): Library handle.
-        num_space_modes (int32_t): Number of the (state) space modes
-            acted on. It must coincide with the total number of space
-            modes in the Hilbert space.
-        space_mode_extents (object): Extents of the (state) space
-            modes acted on. It can be:
+        num_space_modes (int32_t): Number of the (state) space modes acted
+            on. It must coincide with the total number of space modes in
+            the Hilbert space.
+        space_mode_extents (object): Extents of the (state) space modes
+            acted on. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
         data_type (int): Matrix operator data type.
         matrix_data (intptr_t): GPU-accessible pointer to the matrix
             operator elements storage.
-        matrix_callback (object): Optional user-defined tensor
-            callback function which can be called later to fill in the
-            matrix elements in the provided storage, or NULL.
-        matrix_gradient_callback (object): Optional user-defined
-            tensor gradient callback function which can be called
-            later to compute the Vector-Jacobian Product (VJP) for the
-            matrix operator, to produce gradients with respect to the
-            user-defined real parameters, or NULL.
+        matrix_callback (object): Optional user-defined tensor callback
+            function which can be called later to fill in the matrix
+            elements in the provided storage, or NULL.
+        matrix_gradient_callback (object): Optional user-defined tensor
+            gradient callback function which can be called later to
+            compute the Vector-Jacobian Product (VJP) for the matrix
+            operator, to produce gradients with respect to the user-
+            defined real parameters, or NULL.
 
     Returns:
         intptr_t: Full matrix operator.
 
     .. seealso:: `cudensitymatCreateMatrixOperatorDenseLocal`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
     cdef _WrappedTensorCallback _matrix_callback_ = _convert_tensor_callback(matrix_callback)
     cdef _WrappedTensorGradientCallback _matrix_gradient_callback_ = _convert_tensor_gradient_callback(matrix_gradient_callback)
     cdef MatrixOperator matrix_operator
@@ -1080,33 +1071,29 @@ cpdef intptr_t create_matrix_operator_dense_local_batch(intptr_t handle, int32_t
 
     Args:
         handle (intptr_t): Library handle.
-        num_space_modes (int32_t): Number of the (state) space modes
-            acted on. It must coincide with the total number of space
-            modes in the Hilbert space.
-        space_mode_extents (object): Extents of the (state) space
-            modes acted on. It can be:
+        num_space_modes (int32_t): Number of the (state) space modes acted
+            on. It must coincide with the total number of space modes in
+            the Hilbert space.
+        space_mode_extents (object): Extents of the (state) space modes
+            acted on. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
         batch_size (int64_t): Batch size (>= 1).
         data_type (int): Matrix operator data type.
         matrix_data (intptr_t): GPU-accessible pointer to the matrix
-            operator elements storage where all matrix operator
-            instances within the batch are stored contiguously in
-            memory.
+            operator elements storage where all matrix operator instances
+            within the batch are stored contiguously in memory.
         matrix_callback (object): Optional user-defined batched tensor
             callback function which can be called later to fill in the
-            matrix elements in the provided batched storage, or NULL.
-            Note that the provided batched tensor callback function is
-            expected to fill in all matrix instances within the batch
-            in one call.
-        matrix_gradient_callback (object): Optional user-defined
-            batched tensor gradient callback function which can be
-            called later to compute the Vector-Jacobian Product (VJP)
-            for the batched matrix operator, to produce gradients with
-            respect to the batched user-defined real parameters, or
-            NULL.
+            matrix elements in the provided batched storage, or NULL. Note
+            that the provided batched tensor callback function is expected
+            to fill in all matrix instances within the batch in one call.
+        matrix_gradient_callback (object): Optional user-defined batched
+            tensor gradient callback function which can be called later to
+            compute the Vector-Jacobian Product (VJP) for the batched
+            matrix operator, to produce gradients with respect to the
+            batched user-defined real parameters, or NULL.
 
     Returns:
         intptr_t: Batched full matrix operator (a batch of full matrix
@@ -1114,8 +1101,8 @@ cpdef intptr_t create_matrix_operator_dense_local_batch(intptr_t handle, int32_t
 
     .. seealso:: `cudensitymatCreateMatrixOperatorDenseLocalBatch`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
     cdef _WrappedTensorCallback _matrix_callback_ = _convert_tensor_callback(matrix_callback)
     cdef _WrappedTensorGradientCallback _matrix_gradient_callback_ = _convert_tensor_gradient_callback(matrix_gradient_callback)
     cdef MatrixOperator matrix_operator
@@ -1146,56 +1133,51 @@ cpdef intptr_t create_matrix_product_operator(intptr_t handle, int32_t num_space
 
     Args:
         handle (intptr_t): Library handle.
-        num_space_modes (int32_t): Number of the (state) space modes
-            acted on.
-        space_mode_extents (object): Extents of the (state) space
-            modes acted on. It can be:
+        num_space_modes (int32_t): Number of the (state) space modes acted
+            on.
+        space_mode_extents (object): Extents of the (state) space modes
+            acted on. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
         boundary_condition (BoundaryCondition): Boundary condition.
         bond_extents (object): Extents of the bond modes. For open
-            boundary condition, the length of the array must be equal
-            to the number of space modes minus one, where
-            ``bond_extents[i]`` is the bond dimension between site
-            ``i`` and site ``i+1``. For periodic boundary condition,
-            the length of the array must be equal to the number of
-            space modes. It can be:
+            boundary condition, the length of the array must be equal to
+            the number of space modes minus one, where ``bond_extents[i]``
+            is the bond dimension between site ``i`` and site ``i+1``. For
+            periodic boundary condition, the length of the array must be
+            equal to the number of space modes. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
         data_type (int): Matrix product operator data type.
-        tensor_data (object): GPU-accessible pointers to the elements
-            of each site tensor constituting the matrix product
-            operator (``tensor_data[i]`` points to site ``i``). It can be:
+        tensor_data (object): GPU-accessible pointers to the elements of
+            each site tensor constituting the matrix product operator
+            (``tensor_data[i]`` points to site ``i``). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        tensor_callbacks (object): Optional user-defined tensor
-            callback functions (for each MPO tensor) which can be
-            called later to fill in the matrix product operator
-            elements in the provided storage, or NULL.
-        tensor_gradient_callbacks (object): Optional user-defined
-            tensor gradient callback functions (for each MPO tensor)
-            which can be called later to compute the Vector-Jacobian
-            Product (VJP) for the matrix product operator, to produce
-            gradients with respect to the user-defined real
-            parameters, or NULL.
+        tensor_callbacks (object): Optional user-defined tensor callback
+            functions (for each MPO tensor) which can be called later to
+            fill in the matrix product operator elements in the provided
+            storage, or NULL.
+        tensor_gradient_callbacks (object): Optional user-defined tensor
+            gradient callback functions (for each MPO tensor) which can be
+            called later to compute the Vector-Jacobian Product (VJP) for
+            the matrix product operator, to produce gradients with respect
+            to the user-defined real parameters, or NULL.
 
     Returns:
         intptr_t: Matrix product operator.
 
     .. seealso:: `cudensitymatCreateMatrixProductOperator`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int64_t] ] _bond_extents_
-    get_resource_ptr[int64_t](_bond_extents_, bond_extents, <int64_t*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _tensor_data_
-    get_resource_ptrs[void](_tensor_data_, tensor_data, <void*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _bond_extents_
+    _cyb_get_resource_ptr[int64_t](_bond_extents_, bond_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[void*] ] _tensor_data_
+    _cyb_get_resource_ptrs[void](_tensor_data_, tensor_data, <void*>NULL)
     cdef vector[_WrappedTensorCallback] _tensor_callbacks_vec_
     cdef _WrappedTensorCallback * _tensor_callbacks_ = NULL
     if tensor_callbacks is not None:
@@ -1243,21 +1225,20 @@ cpdef intptr_t create_operator_term(intptr_t handle, int32_t num_space_modes, sp
         num_space_modes (int32_t): Number of modes (quantum degrees of
             freedom) defining the primary/dual tensor product space in
             which the operator term will act.
-        space_mode_extents (object): Extents of the modes (quantum
-            degrees of freedom) defining the primary/dual tensor
-            product space in which the operator term will act. It can be:
+        space_mode_extents (object): Extents of the modes (quantum degrees
+            of freedom) defining the primary/dual tensor product space in
+            which the operator term will act. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
-
 
     Returns:
         intptr_t: Operator term.
 
     .. seealso:: `cudensitymatCreateOperatorTerm`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
     cdef OperatorTerm operator_term
     with nogil:
         __status__ = cudensitymatCreateOperatorTerm(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), &operator_term)
@@ -1287,53 +1268,49 @@ cpdef operator_term_append_elementary_product(intptr_t handle, intptr_t operator
         operator_term (intptr_t): Operator term.
         num_elem_operators (int32_t): Number of elementary tensor
             operators in the tensor operator product.
-        elem_operators (object): Elementary tensor operators
-            constituting the tensor operator product. It can be:
+        elem_operators (object): Elementary tensor operators constituting
+            the tensor operator product. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        state_modes_acted_on (object): State modes acted on by the
-            tensor operator product. This is a concatenated list of
-            the state modes acted on by all constituting elementary
-            tensor operators in the same order how they appear in the
-            elem_operators argument. It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``int32_t``.
-
-        mode_action_duality (object): Duality status of each mode
-            action, that is, whether the action applies to a ket mode
-            of the quantum state (value zero) or a bra mode of the
-            quantum state (positive value). It can be:
+        state_modes_acted_on (object): State modes acted on by the tensor
+            operator product. This is a concatenated list of the state
+            modes acted on by all constituting elementary tensor operators
+            in the same order how they appear in the elem_operators
+            argument. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
+        mode_action_duality (object): Duality status of each mode action,
+            that is, whether the action applies to a ket mode of the
+            quantum state (value zero) or a bra mode of the quantum state
+            (positive value). It can be:
 
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
         coefficient (complex): Constant (static) complex scalar
             coefficient associated with the appended tensor operator
             product.
         coefficient_callback (object): Optional user-defined complex
-            scalar callback function which can be called later to
-            update the scalar coefficient associated with the tensor
-            operator product, or NULL. The total coefficient
-            associated with the tensor operator product is a product
-            of the constant coefficient and the result of the scalar
-            callback function, if defined.
+            scalar callback function which can be called later to update
+            the scalar coefficient associated with the tensor operator
+            product, or NULL. The total coefficient associated with the
+            tensor operator product is a product of the constant
+            coefficient and the result of the scalar callback function, if
+            defined.
         coefficient_gradient_callback (object): Optional user-defined
-            scalar gradient callback function which can be called
-            later to compute the gradients of the complex scalar
-            coefficient with respect to the user-defined real
-            parameters, or NULL.
+            scalar gradient callback function which can be called later to
+            compute the gradients of the complex scalar coefficient with
+            respect to the user-defined real parameters, or NULL.
 
     .. seealso:: `cudensitymatOperatorTermAppendElementaryProduct`
     """
-    cdef nullable_unique_ptr[ vector[ElementaryOperator*] ] _elem_operators_
-    get_resource_ptrs[ElementaryOperator](_elem_operators_, elem_operators, <ElementaryOperator*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_acted_on_
-    get_resource_ptr[int32_t](_state_modes_acted_on_, state_modes_acted_on, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mode_action_duality_
-    get_resource_ptr[int32_t](_mode_action_duality_, mode_action_duality, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[ElementaryOperator*] ] _elem_operators_
+    _cyb_get_resource_ptrs[ElementaryOperator](_elem_operators_, elem_operators, <ElementaryOperator*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _state_modes_acted_on_
+    _cyb_get_resource_ptr[int32_t](_state_modes_acted_on_, state_modes_acted_on, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _mode_action_duality_
+    _cyb_get_resource_ptr[int32_t](_mode_action_duality_, mode_action_duality, <int32_t*>NULL)
     cdef cuDoubleComplex _coefficient_ = cuDoubleComplex(coefficient.real, coefficient.imag)
     cdef _WrappedScalarCallback _coefficient_callback_ = _convert_scalar_callback(coefficient_callback)
     cdef _WrappedScalarGradientCallback _coefficient_gradient_callback_ = _convert_scalar_gradient_callback(coefficient_gradient_callback)
@@ -1352,65 +1329,62 @@ cpdef operator_term_append_elementary_product_batch(intptr_t handle, intptr_t op
         operator_term (intptr_t): Operator term.
         num_elem_operators (int32_t): Number of elementary tensor
             operators in the tensor operator product.
-        elem_operators (object): Elementary tensor operators
-            constituting the tensor operator product (each elementary
-            tensor operator may or may not be batched). It can be:
+        elem_operators (object): Elementary tensor operators constituting
+            the tensor operator product (each elementary tensor operator
+            may or may not be batched). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        state_modes_acted_on (object): State modes acted on by the
-            tensor operator product. This is a concatenated list of
-            the state modes acted on by all constituting elementary
-            tensor operators in the same order how they appear in the
-            elem_operators argument. It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``int32_t``.
-
-        mode_action_duality (object): Duality status of each mode
-            action, that is, whether the action applies to a ket mode
-            of the quantum state (value zero) or a bra mode of the
-            quantum state (positive value). It can be:
+        state_modes_acted_on (object): State modes acted on by the tensor
+            operator product. This is a concatenated list of the state
+            modes acted on by all constituting elementary tensor operators
+            in the same order how they appear in the elem_operators
+            argument. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
+        mode_action_duality (object): Duality status of each mode action,
+            that is, whether the action applies to a ket mode of the
+            quantum state (value zero) or a bra mode of the quantum state
+            (positive value). It can be:
 
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
         batch_size (int64_t): Batch size (>= 1).
-        static_coefficients (intptr_t): GPU-accessible array of
-            constant (static) complex scalar coefficients associated
-            with the appended batch of elementary tensor operator
-            products (of length ``batch_size``).
+        static_coefficients (intptr_t): GPU-accessible array of constant
+            (static) complex scalar coefficients associated with the
+            appended batch of elementary tensor operator products (of
+            length ``batch_size``).
         total_coefficients (intptr_t): GPU-accessible storage for the
-            array of total complex scalar coefficients associated with
-            the appended batch of elementary tensor operator products
-            (of length ``batch_size``). Each coefficient will be a
-            product of a static coefficient and a dynamic coefficient
-            generated by the provided scalar callback during the
-            computation phase. If the scalar callback is not supplied
-            here (NULL), this argument can also be set to NULL.
+            array of total complex scalar coefficients associated with the
+            appended batch of elementary tensor operator products (of
+            length ``batch_size``). Each coefficient will be a product of
+            a static coefficient and a dynamic coefficient generated by
+            the provided scalar callback during the computation phase. If
+            the scalar callback is not supplied here (NULL), this argument
+            can also be set to NULL.
         coefficient_callback (object): Optional user-defined batched
-            complex scalar callback function which can be called later
-            to update the array of dynamic scalar coefficients
-            associated with the defined batch of elementary tensor
-            operator products, or NULL. The total coefficient
-            associated with an elementary tensor operator product is a
-            product of the constant (static) coefficient and the
-            result of the scalar callback function, if defined.
+            complex scalar callback function which can be called later to
+            update the array of dynamic scalar coefficients associated
+            with the defined batch of elementary tensor operator products,
+            or NULL. The total coefficient associated with an elementary
+            tensor operator product is a product of the constant (static)
+            coefficient and the result of the scalar callback function, if
+            defined.
         coefficient_gradient_callback (object): Optional user-defined
-            batched scalar gradient callback function which can be
-            called later to compute the gradients of the batched
-            complex scalar coefficients with respect to the batched
-            user-defined real parameters, or NULL.
+            batched scalar gradient callback function which can be called
+            later to compute the gradients of the batched complex scalar
+            coefficients with respect to the batched user-defined real
+            parameters, or NULL.
 
     .. seealso:: `cudensitymatOperatorTermAppendElementaryProductBatch`
     """
-    cdef nullable_unique_ptr[ vector[ElementaryOperator*] ] _elem_operators_
-    get_resource_ptrs[ElementaryOperator](_elem_operators_, elem_operators, <ElementaryOperator*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_acted_on_
-    get_resource_ptr[int32_t](_state_modes_acted_on_, state_modes_acted_on, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mode_action_duality_
-    get_resource_ptr[int32_t](_mode_action_duality_, mode_action_duality, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[ElementaryOperator*] ] _elem_operators_
+    _cyb_get_resource_ptrs[ElementaryOperator](_elem_operators_, elem_operators, <ElementaryOperator*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _state_modes_acted_on_
+    _cyb_get_resource_ptr[int32_t](_state_modes_acted_on_, state_modes_acted_on, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _mode_action_duality_
+    _cyb_get_resource_ptr[int32_t](_mode_action_duality_, mode_action_duality, <int32_t*>NULL)
     cdef _WrappedScalarCallback _coefficient_callback_ = _convert_scalar_callback(coefficient_callback)
     cdef _WrappedScalarGradientCallback _coefficient_gradient_callback_ = _convert_scalar_gradient_callback(coefficient_gradient_callback)
     with nogil:
@@ -1426,55 +1400,50 @@ cpdef operator_term_append_matrix_product(intptr_t handle, intptr_t operator_ter
     Args:
         handle (intptr_t): Library handle.
         operator_term (intptr_t): Operator term.
-        num_matrix_operators (int32_t): Number of full matrix
-            operators in the matrix operator product.
-        matrix_operators (object): Full matrix operators constituting
-            the matrix operator product. It can be:
+        num_matrix_operators (int32_t): Number of full matrix operators in
+            the matrix operator product.
+        matrix_operators (object): Full matrix operators constituting the
+            matrix operator product. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        matrix_conjugation (object): Hermitian conjugation status of
-            each matrix in the matrix operator product (zero means
-            normal, positive integer means conjugate-transposed). For
-            real matrices, hermitean conjugation reduces to a mere
-            matrix transpose since there is no complex conjugation
-            involved. It can be:
+        matrix_conjugation (object): Hermitian conjugation status of each
+            matrix in the matrix operator product (zero means normal,
+            positive integer means conjugate-transposed). For real
+            matrices, hermitean conjugation reduces to a mere matrix
+            transpose since there is no complex conjugation involved. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        action_duality (object): Duality status of each matrix
-            operator action, that is, whether it acts on all ket modes
-            of the quantum state (value zero) or on all bra modes of
-            the quantum state (positive integer value). It can be:
+        action_duality (object): Duality status of each matrix operator
+            action, that is, whether it acts on all ket modes of the
+            quantum state (value zero) or on all bra modes of the quantum
+            state (positive integer value). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         coefficient (complex): Constant (static) complex scalar
             coefficient associated with the matrix operator product.
         coefficient_callback (object): Optional user-defined complex
-            scalar callback function which can be called later to
-            update the scalar coefficient associated with the matrix
-            operator product, or NULL. The total coefficient
-            associated with the matrix operator product is a product
-            of the constant coefficient and the result of the scalar
-            callback function, if defined.
+            scalar callback function which can be called later to update
+            the scalar coefficient associated with the matrix operator
+            product, or NULL. The total coefficient associated with the
+            matrix operator product is a product of the constant
+            coefficient and the result of the scalar callback function, if
+            defined.
         coefficient_gradient_callback (object): Optional user-defined
-            scalar gradient callback function which can be called
-            later to compute the gradients of the complex scalar
-            coefficient with respect to the user-defined real
-            parameters, or NULL.
+            scalar gradient callback function which can be called later to
+            compute the gradients of the complex scalar coefficient with
+            respect to the user-defined real parameters, or NULL.
 
     .. seealso:: `cudensitymatOperatorTermAppendMatrixProduct`
     """
-    cdef nullable_unique_ptr[ vector[MatrixOperator*] ] _matrix_operators_
-    get_resource_ptrs[MatrixOperator](_matrix_operators_, matrix_operators, <MatrixOperator*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _matrix_conjugation_
-    get_resource_ptr[int32_t](_matrix_conjugation_, matrix_conjugation, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _action_duality_
-    get_resource_ptr[int32_t](_action_duality_, action_duality, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[MatrixOperator*] ] _matrix_operators_
+    _cyb_get_resource_ptrs[MatrixOperator](_matrix_operators_, matrix_operators, <MatrixOperator*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _matrix_conjugation_
+    _cyb_get_resource_ptr[int32_t](_matrix_conjugation_, matrix_conjugation, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _action_duality_
+    _cyb_get_resource_ptr[int32_t](_action_duality_, action_duality, <int32_t*>NULL)
     cdef cuDoubleComplex _coefficient_ = cuDoubleComplex(coefficient.real, coefficient.imag)
     cdef _WrappedScalarCallback _coefficient_callback_ = _convert_scalar_callback(coefficient_callback)
     cdef _WrappedScalarGradientCallback _coefficient_gradient_callback_ = _convert_scalar_gradient_callback(coefficient_gradient_callback)
@@ -1491,68 +1460,64 @@ cpdef operator_term_append_matrix_product_batch(intptr_t handle, intptr_t operat
     Args:
         handle (intptr_t): Library handle.
         operator_term (intptr_t): Operator term.
-        num_matrix_operators (int32_t): Number of full matrix
-            operators in the matrix operator product.
-        matrix_operators (object): Full matrix operators constituting
-            the matrix operator product (each full matrix operator may
-            or may not be batched). It can be:
+        num_matrix_operators (int32_t): Number of full matrix operators in
+            the matrix operator product.
+        matrix_operators (object): Full matrix operators constituting the
+            matrix operator product (each full matrix operator may or may
+            not be batched). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        matrix_conjugation (object): Hermitian conjugation status of
-            each matrix in the matrix operator product (zero means
-            normal, positive integer means conjugate-transposed). For
-            real matrices, hermitean conjugation reduces to a mere
-            matrix transpose since there is no complex conjugation
-            involved. It can be:
+        matrix_conjugation (object): Hermitian conjugation status of each
+            matrix in the matrix operator product (zero means normal,
+            positive integer means conjugate-transposed). For real
+            matrices, hermitean conjugation reduces to a mere matrix
+            transpose since there is no complex conjugation involved. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        action_duality (object): Duality status of each matrix
-            operator action, that is, whether it acts on all ket modes
-            of the quantum state (value zero) or on all bra modes of
-            the quantum state (positive integer value). It can be:
+        action_duality (object): Duality status of each matrix operator
+            action, that is, whether it acts on all ket modes of the
+            quantum state (value zero) or on all bra modes of the quantum
+            state (positive integer value). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         batch_size (int64_t): Batch size (>= 1).
-        static_coefficients (intptr_t): GPU-accessible array of
-            constant (static) complex scalar coefficients associated
-            with the appended batch of full matrix operator products
-            (of length ``batch_size``).
+        static_coefficients (intptr_t): GPU-accessible array of constant
+            (static) complex scalar coefficients associated with the
+            appended batch of full matrix operator products (of length
+            ``batch_size``).
         total_coefficients (intptr_t): GPU-accessible storage for the
-            array of total complex scalar coefficients associated with
-            the appended batch of full matrix operator products (of
-            length ``batch_size``). Each coefficient will be a product
-            of a static coefficient and a dynamic coefficient
-            generated by the provided scalar callback during the
-            computation phase. If the scalar callback is not supplied
-            here (NULL), this argument can also be set to NULL.
+            array of total complex scalar coefficients associated with the
+            appended batch of full matrix operator products (of length
+            ``batch_size``). Each coefficient will be a product of a
+            static coefficient and a dynamic coefficient generated by the
+            provided scalar callback during the computation phase. If the
+            scalar callback is not supplied here (NULL), this argument can
+            also be set to NULL.
         coefficient_callback (object): Optional user-defined batched
-            complex scalar callback function which can be called later
-            to update the array of dynamic scalar coefficients
-            associated with the defined batch of full matrix operator
-            products, or NULL. The total coefficient associated with
-            an elementary tensor operator product is a product of the
-            constant (static) coefficient and the result of the scalar
-            callback function, if defined.
+            complex scalar callback function which can be called later to
+            update the array of dynamic scalar coefficients associated
+            with the defined batch of full matrix operator products, or
+            NULL. The total coefficient associated with an elementary
+            tensor operator product is a product of the constant (static)
+            coefficient and the result of the scalar callback function, if
+            defined.
         coefficient_gradient_callback (object): Optional user-defined
-            batched scalar gradient callback function which can be
-            called later to compute the gradients of the batched
-            complex scalar coefficients with respect to the batched
-            user-defined real parameters, or NULL.
+            batched scalar gradient callback function which can be called
+            later to compute the gradients of the batched complex scalar
+            coefficients with respect to the batched user-defined real
+            parameters, or NULL.
 
     .. seealso:: `cudensitymatOperatorTermAppendMatrixProductBatch`
     """
-    cdef nullable_unique_ptr[ vector[MatrixOperator*] ] _matrix_operators_
-    get_resource_ptrs[MatrixOperator](_matrix_operators_, matrix_operators, <MatrixOperator*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _matrix_conjugation_
-    get_resource_ptr[int32_t](_matrix_conjugation_, matrix_conjugation, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _action_duality_
-    get_resource_ptr[int32_t](_action_duality_, action_duality, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[MatrixOperator*] ] _matrix_operators_
+    _cyb_get_resource_ptrs[MatrixOperator](_matrix_operators_, matrix_operators, <MatrixOperator*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _matrix_conjugation_
+    _cyb_get_resource_ptr[int32_t](_matrix_conjugation_, matrix_conjugation, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _action_duality_
+    _cyb_get_resource_ptr[int32_t](_action_duality_, action_duality, <int32_t*>NULL)
     cdef _WrappedScalarCallback _coefficient_callback_ = _convert_scalar_callback(coefficient_callback)
     cdef _WrappedScalarGradientCallback _coefficient_gradient_callback_ = _convert_scalar_gradient_callback(coefficient_gradient_callback)
     with nogil:
@@ -1568,63 +1533,57 @@ cpdef operator_term_append_mpo_product(intptr_t handle, intptr_t operator_term, 
     Args:
         handle (intptr_t): Library handle.
         operator_term (intptr_t): Operator term.
-        num_mpo_operators (int32_t): Number of MPO operators in the
-            MPO product.
+        num_mpo_operators (int32_t): Number of MPO operators in the MPO
+            product.
         mpo_operators (object): MPO operators constituting the MPO
             product. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        mpo_conjugation (object): Hermitian conjugation status of each
-            MPO in the MPO product (zero means normal, positive
-            integer means conjugate-transposed). It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of ``int32_t``.
-
-        state_modes_acted_on (object): State modes acted on by the
-            product of matrix product operators. This is a
-            concatenated list of the state modes acted on by all
-            constituting MPO operators in the same order how they
-            appear in the mpo_operators argument. It can be:
+        mpo_conjugation (object): Hermitian conjugation status of each MPO
+            in the MPO product (zero means normal, positive integer means
+            conjugate-transposed). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        mode_action_duality (object): Duality status of each mode
-            action, that is, whether the action applies to a ket mode
-            of the quantum state (value zero) or a bra mode of the
-            quantum state (positive value). It can be:
+        state_modes_acted_on (object): State modes acted on by the product
+            of matrix product operators. This is a concatenated list of
+            the state modes acted on by all constituting MPO operators in
+            the same order how they appear in the mpo_operators argument. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
+        mode_action_duality (object): Duality status of each mode action,
+            that is, whether the action applies to a ket mode of the
+            quantum state (value zero) or a bra mode of the quantum state
+            (positive value). It can be:
 
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of ``int32_t``.
         coefficient (complex): Constant (static) complex scalar
             coefficient associated with the MPO product.
         coefficient_callback (object): Optional user-defined complex
-            scalar callback function which can be called later to
-            update the scalar coefficient associated with the MPO
-            product, or NULL. The total coefficient associated with
-            the MPO product is a product of the constant coefficient
-            and the result of the scalar callback function, if
-            defined.
+            scalar callback function which can be called later to update
+            the scalar coefficient associated with the MPO product, or
+            NULL. The total coefficient associated with the MPO product is
+            a product of the constant coefficient and the result of the
+            scalar callback function, if defined.
         coefficient_gradient_callback (object): Optional user-defined
-            scalar gradient callback function function which can be
-            called later to compute the gradients of the complex
-            scalar coefficient with respect to the user-defined real
-            parameters, or NULL.
+            scalar gradient callback function function which can be called
+            later to compute the gradients of the complex scalar
+            coefficient with respect to the user-defined real parameters,
+            or NULL.
 
     .. seealso:: `cudensitymatOperatorTermAppendMPOProduct`
     """
-    cdef nullable_unique_ptr[ vector[MatrixProductOperator*] ] _mpo_operators_
-    get_resource_ptrs[MatrixProductOperator](_mpo_operators_, mpo_operators, <MatrixProductOperator*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mpo_conjugation_
-    get_resource_ptr[int32_t](_mpo_conjugation_, mpo_conjugation, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _state_modes_acted_on_
-    get_resource_ptr[int32_t](_state_modes_acted_on_, state_modes_acted_on, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mode_action_duality_
-    get_resource_ptr[int32_t](_mode_action_duality_, mode_action_duality, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[MatrixProductOperator*] ] _mpo_operators_
+    _cyb_get_resource_ptrs[MatrixProductOperator](_mpo_operators_, mpo_operators, <MatrixProductOperator*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _mpo_conjugation_
+    _cyb_get_resource_ptr[int32_t](_mpo_conjugation_, mpo_conjugation, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _state_modes_acted_on_
+    _cyb_get_resource_ptr[int32_t](_state_modes_acted_on_, state_modes_acted_on, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _mode_action_duality_
+    _cyb_get_resource_ptr[int32_t](_mode_action_duality_, mode_action_duality, <int32_t*>NULL)
     cdef cuDoubleComplex _coefficient_ = cuDoubleComplex(coefficient.real, coefficient.imag)
     cdef _WrappedScalarCallback _coefficient_callback_ = _convert_scalar_callback(coefficient_callback)
     cdef _WrappedScalarGradientCallback _coefficient_gradient_callback_ = _convert_scalar_gradient_callback(coefficient_gradient_callback)
@@ -1640,9 +1599,9 @@ cpdef intptr_t create_operator(intptr_t handle, int32_t num_space_modes, space_m
 
     Args:
         handle (intptr_t): Library handle.
-        num_space_modes (int32_t): Number of modes (degrees of
-            freedom) defining the primary/dual tensor product space in
-            which the operator term will act.
+        num_space_modes (int32_t): Number of modes (degrees of freedom)
+            defining the primary/dual tensor product space in which the
+            operator term will act.
         space_mode_extents (object): Extents of the modes (degrees of
             freedom) defining the primary/dual tensor product space in
             which the operator term will act. It can be:
@@ -1650,14 +1609,13 @@ cpdef intptr_t create_operator(intptr_t handle, int32_t num_space_modes, space_m
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int64_t``.
 
-
     Returns:
         intptr_t: Operator.
 
     .. seealso:: `cudensitymatCreateOperator`
     """
-    cdef nullable_unique_ptr[ vector[int64_t] ] _space_mode_extents_
-    get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int64_t] ] _space_mode_extents_
+    _cyb_get_resource_ptr[int64_t](_space_mode_extents_, space_mode_extents, <int64_t*>NULL)
     cdef Operator superoperator
     with nogil:
         __status__ = cudensitymatCreateOperator(<const Handle>handle, num_space_modes, <const int64_t*>(_space_mode_extents_.data()), &superoperator)
@@ -1686,24 +1644,23 @@ cpdef operator_append_term(intptr_t handle, intptr_t superoperator, intptr_t ope
         handle (intptr_t): Library handle.
         superoperator (intptr_t): Operator.
         operator_term (intptr_t): Operator term.
-        duality (int32_t): Duality status of the operator term action
-            as a whole. If not zero, the duality status of each mode
-            action inside the operator term will be flipped, that is,
-            action from the left will be replaced by action from the
-            right, and vice versa.
+        duality (int32_t): Duality status of the operator term action as a
+            whole. If not zero, the duality status of each mode action
+            inside the operator term will be flipped, that is, action from
+            the left will be replaced by action from the right, and vice
+            versa.
         coefficient (complex): Constant (static) complex scalar
             coefficient associated with the operator term.
         coefficient_callback (object): Optional user-defined complex
-            scalar callback function which can be called later to
-            update the scalar coefficient associated with the operator
-            term, or NULL. The total coefficient associated with the
-            operator term is a product of the constant coefficient and
-            the result of the scalar callback function, if defined.
+            scalar callback function which can be called later to update
+            the scalar coefficient associated with the operator term, or
+            NULL. The total coefficient associated with the operator term
+            is a product of the constant coefficient and the result of the
+            scalar callback function, if defined.
         coefficient_gradient_callback (object): Optional user-defined
-            scalar gradient callback function which can be called
-            later to compute the gradients of the complex scalar
-            coefficient with respect to the user-defined real
-            parameters, or NULL.
+            scalar gradient callback function which can be called later to
+            compute the gradients of the complex scalar coefficient with
+            respect to the user-defined real parameters, or NULL.
 
     .. seealso:: `cudensitymatOperatorAppendTerm`
     """
@@ -1724,36 +1681,34 @@ cpdef operator_append_term_batch(intptr_t handle, intptr_t superoperator, intptr
         handle (intptr_t): Library handle.
         superoperator (intptr_t): Operator.
         operator_term (intptr_t): Operator term.
-        duality (int32_t): Duality status of the operator term action
-            as a whole. If not zero, the duality status of each mode
-            action inside the operator term will be flipped, that is,
-            action from the left will be replaced by action from the
-            right, and vice versa.
+        duality (int32_t): Duality status of the operator term action as a
+            whole. If not zero, the duality status of each mode action
+            inside the operator term will be flipped, that is, action from
+            the left will be replaced by action from the right, and vice
+            versa.
         batch_size (int64_t): Batch size (>= 1).
-        static_coefficients (intptr_t): GPU-accessible array of
-            constant (static) complex scalar coefficients associated
-            with the appended batch of operator terms (of length
-            ``batch_size``).
+        static_coefficients (intptr_t): GPU-accessible array of constant
+            (static) complex scalar coefficients associated with the
+            appended batch of operator terms (of length ``batch_size``).
         total_coefficients (intptr_t): GPU-accessible storage for the
-            array of total complex scalar coefficients associated with
-            the appended batch of operator terms (of length
-            ``batch_size``). Each coefficient will be a product of a
-            static coefficient and a dynamic coefficient generated by
-            the coefficient callback during the computation phase. If
-            the scalar callback is not supplied here (NULL), this
-            argument can also be set to NULL.
+            array of total complex scalar coefficients associated with the
+            appended batch of operator terms (of length ``batch_size``).
+            Each coefficient will be a product of a static coefficient and
+            a dynamic coefficient generated by the coefficient callback
+            during the computation phase. If the scalar callback is not
+            supplied here (NULL), this argument can also be set to NULL.
         coefficient_callback (object): Optional user-defined batched
-            complex scalar callback function which can be called later
-            to update the array of scalar coefficients associated with
-            the defined batch of operator terms, or NULL. The total
-            coefficient associated with an operator term is a product
-            of the constant (static) coefficient and the result of the
-            scalar callback function, if defined.
+            complex scalar callback function which can be called later to
+            update the array of scalar coefficients associated with the
+            defined batch of operator terms, or NULL. The total
+            coefficient associated with an operator term is a product of
+            the constant (static) coefficient and the result of the scalar
+            callback function, if defined.
         coefficient_gradient_callback (object): Optional user-defined
-            batched scalar gradient callback function which can be
-            called later to compute the gradients of the batched
-            complex scalar coefficients with respect to the batched
-            user-defined real parameters, or NULL.
+            batched scalar gradient callback function which can be called
+            later to compute the gradients of the batched complex scalar
+            coefficients with respect to the batched user-defined real
+            parameters, or NULL.
 
     .. seealso:: `cudensitymatOperatorAppendTermBatch`
     """
@@ -1774,43 +1729,39 @@ cpdef attach_batched_coefficients(intptr_t handle, intptr_t superoperator, int32
         superoperator (intptr_t): Operator.
         num_operator_term_batched_coeffs (int32_t): Number of batched
             coefficients in the operator term.
-        operator_term_batched_coeffs_tmp (object): Temporary buffer
-            for the batched coefficients in the operator term. It can be:
+        operator_term_batched_coeffs_tmp (object): Temporary buffer for
+            the batched coefficients in the operator term. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
         operator_term_batched_coeffs (object): Actual buffer for the
             batched coefficients in the operator term. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        num_operator_product_batched_coeffs (int32_t): Number of
-            batched coefficients in the operator product.
-        operator_product_batched_coeffs_tmp (object): Temporary buffer
-            for the batched coefficients in the operator product. It can be:
-
-            - an :class:`int` as the pointer address to the array, or
-            - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        operator_product_batched_coeffs (object): Actual buffer for
+        num_operator_product_batched_coeffs (int32_t): Number of batched
+            coefficients in the operator product.
+        operator_product_batched_coeffs_tmp (object): Temporary buffer for
             the batched coefficients in the operator product. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
+        operator_product_batched_coeffs (object): Actual buffer for the
+            batched coefficients in the operator product. It can be:
 
+            - an :class:`int` as the pointer address to the array, or
+            - a Python sequence of :class:`int`\s (as pointer addresses).
 
     .. seealso:: `cudensitymatAttachBatchedCoefficients`
     """
-    cdef nullable_unique_ptr[ vector[void*] ] _operator_term_batched_coeffs_tmp_
-    get_resource_ptrs[void](_operator_term_batched_coeffs_tmp_, operator_term_batched_coeffs_tmp, <void*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _operator_term_batched_coeffs_
-    get_resource_ptrs[void](_operator_term_batched_coeffs_, operator_term_batched_coeffs, <void*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _operator_product_batched_coeffs_tmp_
-    get_resource_ptrs[void](_operator_product_batched_coeffs_tmp_, operator_product_batched_coeffs_tmp, <void*>NULL)
-    cdef nullable_unique_ptr[ vector[void*] ] _operator_product_batched_coeffs_
-    get_resource_ptrs[void](_operator_product_batched_coeffs_, operator_product_batched_coeffs, <void*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[void*] ] _operator_term_batched_coeffs_tmp_
+    _cyb_get_resource_ptrs[void](_operator_term_batched_coeffs_tmp_, operator_term_batched_coeffs_tmp, <void*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[void*] ] _operator_term_batched_coeffs_
+    _cyb_get_resource_ptrs[void](_operator_term_batched_coeffs_, operator_term_batched_coeffs, <void*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[void*] ] _operator_product_batched_coeffs_tmp_
+    _cyb_get_resource_ptrs[void](_operator_product_batched_coeffs_tmp_, operator_product_batched_coeffs_tmp, <void*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[void*] ] _operator_product_batched_coeffs_
+    _cyb_get_resource_ptrs[void](_operator_product_batched_coeffs_, operator_product_batched_coeffs, <void*>NULL)
     with nogil:
         __status__ = cudensitymatAttachBatchedCoefficients(<const Handle>handle, <Operator>superoperator, num_operator_term_batched_coeffs, <void**>(_operator_term_batched_coeffs_tmp_.data()), <void**>(_operator_term_batched_coeffs_.data()), num_operator_product_batched_coeffs, <void**>(_operator_product_batched_coeffs_tmp_.data()), <void**>(_operator_product_batched_coeffs_.data()))
     check_status(__status__)
@@ -1880,8 +1831,8 @@ cpdef state_fitting_scope_split_als_config_set_attribute(intptr_t handle, intptr
         handle (intptr_t): Library handle.
         config (intptr_t): ALS split-scope state-fitting configuration
             object.
-        attribute (StateFittingScopeSplitALSConfigAttribute):
-            Attribute to set.
+        attribute (StateFittingScopeSplitALSConfigAttribute): Attribute to
+            set.
         attribute_value (intptr_t): Pointer to the attribute value.
         attribute_size (size_t): Size of the attribute value in bytes.
 
@@ -1902,10 +1853,9 @@ cpdef state_fitting_scope_split_als_config_get_attribute(intptr_t handle, intptr
         handle (intptr_t): Library handle.
         config (intptr_t): ALS split-scope state-fitting configuration
             object.
-        attribute (StateFittingScopeSplitALSConfigAttribute):
-            Attribute to get.
-        attribute_value (intptr_t): Pointer to store the attribute
-            value.
+        attribute (StateFittingScopeSplitALSConfigAttribute): Attribute to
+            get.
+        attribute_value (intptr_t): Pointer to store the attribute value.
         attribute_size (size_t): Size of the buffer in bytes.
 
     .. note:: To compute the attribute size, use the itemsize of the corresponding data
@@ -1925,8 +1875,7 @@ cpdef intptr_t create_state_fitting_approach_lin_solve_config(intptr_t handle) e
         handle (intptr_t): Library handle.
 
     Returns:
-        intptr_t: LinSolve state-fitting approach configuration
-            object.
+        intptr_t: LinSolve state-fitting approach configuration object.
 
     .. seealso:: `cudensitymatCreateStateFittingApproachLinSolveConfig`
     """
@@ -1941,8 +1890,8 @@ cpdef destroy_state_fitting_approach_lin_solve_config(intptr_t config):
     """Destroys a LinSolve state-fitting approach configuration object.
 
     Args:
-        config (intptr_t): LinSolve state-fitting approach
-            configuration object.
+        config (intptr_t): LinSolve state-fitting approach configuration
+            object.
 
     .. seealso:: `cudensitymatDestroyStateFittingApproachLinSolveConfig`
     """
@@ -1978,10 +1927,10 @@ cpdef state_fitting_approach_lin_solve_config_set_attribute(intptr_t handle, int
 
     Args:
         handle (intptr_t): Library handle.
-        config (intptr_t): LinSolve state-fitting approach
-            configuration object.
-        attribute (StateFittingApproachLinSolveConfigAttribute):
-            Attribute to set.
+        config (intptr_t): LinSolve state-fitting approach configuration
+            object.
+        attribute (StateFittingApproachLinSolveConfigAttribute): Attribute
+            to set.
         attribute_value (intptr_t): Pointer to the attribute value.
         attribute_size (size_t): Size of the attribute value in bytes.
 
@@ -2000,12 +1949,11 @@ cpdef state_fitting_approach_lin_solve_config_get_attribute(intptr_t handle, int
 
     Args:
         handle (intptr_t): Library handle.
-        config (intptr_t): LinSolve state-fitting approach
-            configuration object.
-        attribute (StateFittingApproachLinSolveConfigAttribute):
-            Attribute to get.
-        attribute_value (intptr_t): Pointer to store the attribute
-            value.
+        config (intptr_t): LinSolve state-fitting approach configuration
+            object.
+        attribute (StateFittingApproachLinSolveConfigAttribute): Attribute
+            to get.
+        attribute_value (intptr_t): Pointer to store the attribute value.
         attribute_size (size_t): Size of the buffer in bytes.
 
     .. note:: To compute the attribute size, use the itemsize of the corresponding data
@@ -2024,23 +1972,22 @@ cpdef operator_prepare_action(intptr_t handle, intptr_t superoperator, intptr_t 
     Args:
         handle (intptr_t): Library handle.
         superoperator (intptr_t): Operator.
-        state_in (intptr_t): Representative input quantum state on
-            which the operator is supposed to act. The actual quantum
-            state acted on during computation may be different, but it
-            has to be of the same shape, kind, and factorization
-            structure (topology, bond dimensions, etc).
-        state_out (intptr_t): Representative output quantum state
-            produced by the action of the operator on the input
-            quantum state. The actual quantum state acted on during
-            computation may be different, but it has to be of the same
-            shape, kind, and factorization structure (topology, bond
-            dimensions, etc).
+        state_in (intptr_t): Representative input quantum state on which
+            the operator is supposed to act. The actual quantum state
+            acted on during computation may be different, but it has to be
+            of the same shape, kind, and factorization structure
+            (topology, bond dimensions, etc).
+        state_out (intptr_t): Representative output quantum state produced
+            by the action of the operator on the input quantum state. The
+            actual quantum state acted on during computation may be
+            different, but it has to be of the same shape, kind, and
+            factorization structure (topology, bond dimensions, etc).
         compute_type (ComputeType): Desired compute type.
         workspace_size_limit (size_t): Workspace buffer size limit
             (bytes).
-        workspace (intptr_t): Empty workspace descriptor on entrance.
-            The workspace size required for the computation will be
-            set on exit.
+        workspace (intptr_t): Empty workspace descriptor on entrance. The
+            workspace size required for the computation will be set on
+            exit.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatOperatorPrepareAction`
@@ -2058,11 +2005,11 @@ cpdef operator_compute_action(intptr_t handle, intptr_t superoperator, double ti
         superoperator (intptr_t): Operator.
         time (double): Time value.
         batch_size (int64_t): Batch size (>=1).
-        num_params (int32_t): Number of variable parameters defined by
-            the user.
-        params (intptr_t): GPU-accessible pointer to an F-order
-            2d-array of user-defined real parameter values:
-            params[num_params, batch_size].
+        num_params (int32_t): Number of variable parameters defined by the
+            user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array
+            of user-defined real parameter values: params[num_params,
+            batch_size].
         state_in (intptr_t): Input quantum state (or a batch of input
             quantum states).
         state_out (intptr_t): Updated resulting quantum state which
@@ -2083,23 +2030,23 @@ cpdef operator_prepare_action_backward_diff(intptr_t handle, intptr_t superopera
     Args:
         handle (intptr_t): Library handle.
         superoperator (intptr_t): Operator.
-        state_in (intptr_t): Representative input quantum state on
-            which the operator is supposed to act. The actual quantum
-            state acted on during computation may be different, but it
-            has to be of the same shape, kind, and factorization
-            structure (topology, bond dimensions, etc).
-        state_out_adj (intptr_t): Representative adjoint of the output
-            quantum state produced by the action of the operator on
-            the input quantum state. The actual output quantum state
-            acted on during computation may be different, but it has
-            to be of the same shape, kind, and factorization structure
+        state_in (intptr_t): Representative input quantum state on which
+            the operator is supposed to act. The actual quantum state
+            acted on during computation may be different, but it has to be
+            of the same shape, kind, and factorization structure
             (topology, bond dimensions, etc).
+        state_out_adj (intptr_t): Representative adjoint of the output
+            quantum state produced by the action of the operator on the
+            input quantum state. The actual output quantum state acted on
+            during computation may be different, but it has to be of the
+            same shape, kind, and factorization structure (topology, bond
+            dimensions, etc).
         compute_type (ComputeType): Desired compute type.
         workspace_size_limit (size_t): Workspace buffer size limit
             (bytes).
-        workspace (intptr_t): Empty workspace descriptor on entrance.
-            The workspace size required for the computation will be
-            set on exit.
+        workspace (intptr_t): Empty workspace descriptor on entrance. The
+            workspace size required for the computation will be set on
+            exit.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatOperatorPrepareActionBackwardDiff`
@@ -2117,22 +2064,22 @@ cpdef operator_compute_action_backward_diff(intptr_t handle, intptr_t superopera
         superoperator (intptr_t): Operator.
         time (double): Time value.
         batch_size (int64_t): Batch size (>=1).
-        num_params (int32_t): Number of variable real parameters
-            defined by the user.
-        params (intptr_t): GPU-accessible pointer to an F-order
-            2d-array of user-defined real parameter values:
-            params[num_params, batch_size].
+        num_params (int32_t): Number of variable real parameters defined
+            by the user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array
+            of user-defined real parameter values: params[num_params,
+            batch_size].
         state_in (intptr_t): Input quantum state (or a batch).
-        state_out_adj (intptr_t): Adjoint of the output quantum state
-            (or a batch).
-        state_in_adj (intptr_t): Adjoint of the input quantum state
-            (or a batch). Note that this array will not be zeroed out
-            on entrance, it will be accumulated into.
-        params_grad (intptr_t): GPU-accessible pointer where the
-            partial derivatives with respect to the user-defined real
-            parameters will be accumulated (same shape as params).
-            Note that this array will not be zeroed out on entrance,
-            it will be accumulated into.
+        state_out_adj (intptr_t): Adjoint of the output quantum state (or
+            a batch).
+        state_in_adj (intptr_t): Adjoint of the input quantum state (or a
+            batch). Note that this array will not be zeroed out on
+            entrance, it will be accumulated into.
+        params_grad (intptr_t): GPU-accessible pointer where the partial
+            derivatives with respect to the user-defined real parameters
+            will be accumulated (same shape as params). Note that this
+            array will not be zeroed out on entrance, it will be
+            accumulated into.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream.
 
@@ -2148,34 +2095,32 @@ cpdef intptr_t create_operator_action(intptr_t handle, int32_t num_operators, op
 
     Args:
         handle (intptr_t): Library handle.
-        num_operators (int32_t): Number of operators involved (number
-            of operator-state products).
-        operators (object): Constituting operator(s) with the same
-            domain of action. Some of the operators may be set to NULL
-            to represent zero action on a specific input quantum
-            state. It can be:
+        num_operators (int32_t): Number of operators involved (number of
+            operator-state products).
+        operators (object): Constituting operator(s) with the same domain
+            of action. Some of the operators may be set to NULL to
+            represent zero action on a specific input quantum state. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        scope_kind (StateFittingScopeKind): Operator action scope
-            (full or split). State-fitting enum
+        scope_kind (StateFittingScopeKind): Operator action scope (full or
+            split). State-fitting enum
             ``cudensitymatStateFittingScopeKind_t``; selects the dense
-            (FULL) or factorized (SPLIT, e.g. MPS) state-fitting code
-            path used when applying the operator(s).
+            (FULL) or factorized (SPLIT, e.g. MPS) state-fitting code path
+            used when applying the operator(s).
         approach_kind (StateFittingApproachKind): Operator action
             approach. State-fitting enum
             ``cudensitymatStateFittingApproachKind_t``; selects the
-            gauge/orthogonalization strategy used to keep the output
-            state representable in the chosen scope.
+            gauge/orthogonalization strategy used to keep the output state
+            representable in the chosen scope.
 
     Returns:
         intptr_t: Operator action.
 
     .. seealso:: `cudensitymatCreateOperatorAction`
     """
-    cdef nullable_unique_ptr[ vector[Operator*] ] _operators_
-    get_resource_ptrs[Operator](_operators_, operators, <Operator*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[Operator*] ] _operators_
+    _cyb_get_resource_ptrs[Operator](_operators_, operators, <Operator*>NULL)
     cdef OperatorAction operator_action
     with nogil:
         __status__ = cudensitymatCreateOperatorAction(<const Handle>handle, num_operators, <Operator*>(_operators_.data()), <_StateFittingScopeKind>scope_kind, <_StateFittingApproachKind>approach_kind, &operator_action)
@@ -2247,28 +2192,27 @@ cpdef operator_action_prepare(intptr_t handle, intptr_t operator_action, state_i
         handle (intptr_t): Library handle.
         operator_action (intptr_t): Operator(s) action specification.
         state_in (object): Input quantum state(s) for all operator(s)
-            defining the current Operator Action. Each input quantum
-            state can be a batch of quantum states itself (with the
-            same batch size). It can be:
+            defining the current Operator Action. Each input quantum state
+            can be a batch of quantum states itself (with the same batch
+            size). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
-        state_out (intptr_t): Updated output quantum state (or a
-            batch) which accumulates the (aggregate) operator(s)
-            action on all input quantum state(s).
+        state_out (intptr_t): Updated output quantum state (or a batch)
+            which accumulates the (aggregate) operator(s) action on all
+            input quantum state(s).
         compute_type (ComputeType): Desired compute type.
         workspace_size_limit (size_t): Workspace buffer size limit
             (bytes).
-        workspace (intptr_t): Empty workspace descriptor on entrance.
-            The workspace size required for the computation will be
-            set on exit.
+        workspace (intptr_t): Empty workspace descriptor on entrance. The
+            workspace size required for the computation will be set on
+            exit.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatOperatorActionPrepare`
     """
-    cdef nullable_unique_ptr[ vector[State*] ] _state_in_
-    get_resource_ptrs[State](_state_in_, state_in, <State*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[State*] ] _state_in_
+    _cyb_get_resource_ptrs[State](_state_in_, state_in, <State*>NULL)
     with nogil:
         __status__ = cudensitymatOperatorActionPrepare(<const Handle>handle, <OperatorAction>operator_action, <const State*>(_state_in_.data()), <const State>state_out, <_ComputeType>compute_type, workspace_size_limit, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(__status__)
@@ -2282,27 +2226,25 @@ cpdef operator_action_compute(intptr_t handle, intptr_t operator_action, double 
         operator_action (intptr_t): Operator(s) action.
         time (double): Time value.
         batch_size (int64_t): Batch size (>=1).
-        num_params (int32_t): Number of variable parameters defined by
-            the user.
-        params (intptr_t): GPU-accessible pointer to an F-order
-            2d-array of user-defined real parameter values:
-            params[num_params, batch_size].
+        num_params (int32_t): Number of variable parameters defined by the
+            user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array
+            of user-defined real parameter values: params[num_params,
+            batch_size].
         state_in (object): Input quantum state(s). Each input quantum
             state can be a batch of quantum states, in general. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
         state_out (intptr_t): Updated output quantum state which
-            accumulates operator action(s) on all input quantum
-            state(s).
+            accumulates operator action(s) on all input quantum state(s).
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatOperatorActionCompute`
     """
-    cdef nullable_unique_ptr[ vector[State*] ] _state_in_
-    get_resource_ptrs[State](_state_in_, state_in, <State*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[State*] ] _state_in_
+    _cyb_get_resource_ptrs[State](_state_in_, state_in, <State*>NULL)
     with nogil:
         __status__ = cudensitymatOperatorActionCompute(<const Handle>handle, <OperatorAction>operator_action, time, batch_size, num_params, <const double*>params, <const State*>(_state_in_.data()), <State>state_out, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(__status__)
@@ -2351,9 +2293,9 @@ cpdef expectation_prepare(intptr_t handle, intptr_t expectation, intptr_t state,
         compute_type (ComputeType): Desired compute type.
         workspace_size_limit (size_t): Workspace buffer size limit
             (bytes).
-        workspace (intptr_t): Empty workspace descriptor on entrance.
-            The workspace size required for the computation will be
-            set on exit.
+        workspace (intptr_t): Empty workspace descriptor on entrance. The
+            workspace size required for the computation will be set on
+            exit.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatExpectationPrepare`
@@ -2371,16 +2313,15 @@ cpdef expectation_compute(intptr_t handle, intptr_t expectation, double time, in
         expectation (intptr_t): Expectation value object.
         time (double): Specified time.
         batch_size (int64_t): Batch size (>=1).
-        num_params (int32_t): Number of variable parameters defined by
-            the user.
-        params (intptr_t): GPU-accessible pointer to an F-order
-            2d-array of user-defined real parameter values:
-            params[num_params, batch_size].
-        state (intptr_t): Quantum state (or a batch of quantum
-            states).
-        expectation_value (intptr_t): Pointer to the expectation
-            value(s) vector storage in GPU-accessible RAM of the same
-            data type as used by the state and operator.
+        num_params (int32_t): Number of variable parameters defined by the
+            user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array
+            of user-defined real parameter values: params[num_params,
+            batch_size].
+        state (intptr_t): Quantum state (or a batch of quantum states).
+        expectation_value (intptr_t): Pointer to the expectation value(s)
+            vector storage in GPU-accessible RAM of the same data type as
+            used by the state and operator.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream.
 
@@ -2399,8 +2340,8 @@ cpdef intptr_t create_operator_spectrum(intptr_t handle, intptr_t superoperator,
         superoperator (intptr_t): Operator (cannot be batched).
         is_hermitian (int32_t): Specifies whether the operator is
             Hermitian (!=0) or not (0).
-        spectrum_kind (OperatorSpectrumKind): Requested kind of the
-            eigen-spectrum computation.
+        spectrum_kind (OperatorSpectrumKind): Requested kind of the eigen-
+            spectrum computation.
 
     Returns:
         intptr_t: Eigen-spectrum computation object.
@@ -2486,9 +2427,9 @@ cpdef operator_spectrum_prepare(intptr_t handle, intptr_t spectrum, int32_t max_
         compute_type (ComputeType): Desired compute type.
         workspace_size_limit (size_t): Workspace buffer size limit
             (bytes).
-        workspace (intptr_t): Empty workspace descriptor on entrance.
-            The workspace buffer sizes required for the computation
-            will be set on return.
+        workspace (intptr_t): Empty workspace descriptor on entrance. The
+            workspace buffer sizes required for the computation will be
+            set on return.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatOperatorSpectrumPrepare`
@@ -2506,25 +2447,23 @@ cpdef operator_spectrum_compute(intptr_t handle, intptr_t spectrum, double time,
         spectrum (intptr_t): Eigen-spectrum computation object.
         time (double): Specified time.
         batch_size (int64_t): Batch size (==1).
-        num_params (int32_t): Number of variable parameters defined by
-            the user.
-        params (intptr_t): GPU-accessible pointer to an F-order
-            2d-array of user-defined real parameter values:
-            params[num_params, batch_size].
+        num_params (int32_t): Number of variable parameters defined by the
+            user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array
+            of user-defined real parameter values: params[num_params,
+            batch_size].
         num_eigen_states (int32_t): Actual number of eigenstates to
             compute, which must not exceed the value of the
-            ``maxEigenStates`` parameter provided during the
-            preparation of the eigen-spectrum computation object.
-        eigenstates (object): Quantum eigenstates (cannot be batched).
-            The initial values of the provided quantum states will be
-            used as the initial guesses for the first Krylov subspace
-            block (if the block size is smaller than the number of
-            requested eigenstates, only the leading quantum states
-            will be used). It can be:
+            ``maxEigenStates`` parameter provided during the preparation
+            of the eigen-spectrum computation object.
+        eigenstates (object): Quantum eigenstates (cannot be batched). The
+            initial values of the provided quantum states will be used as
+            the initial guesses for the first Krylov subspace block (if
+            the block size is smaller than the number of requested
+            eigenstates, only the leading quantum states will be used). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
         eigenvalues (intptr_t): Pointer to the eigenvalues storage
             (F-order array of shape [num_eigen_states, batch_size]) in
             GPU-accessible RAM (same data type as used by the quantum
@@ -2536,19 +2475,19 @@ cpdef operator_spectrum_compute(intptr_t handle, intptr_t spectrum, double time,
             convergence residual norms (which may differ from the
             requested values in either direction). These characterize
             solver convergence, not the representation error of the
-            returned state. For the full-state solver they coincide
-            with the eigenpair residual ||H x - E x||; for split (DMRG
-            / shift-invert) solvers the returned value is the local
-            per-site solver residual, NOT the global ||H|psi> -
-            E|psi>||. The representation error is a separate quantity
-            (dedicated query, when available).
+            returned state. For the full-state solver they coincide with
+            the eigenpair residual ||H x - E x||; for split (DMRG / shift-
+            invert) solvers the returned value is the local per-site
+            solver residual, NOT the global ||H|psi> - E|psi>||. The
+            representation error is a separate quantity (dedicated query,
+            when available).
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatOperatorSpectrumCompute`
     """
-    cdef nullable_unique_ptr[ vector[State*] ] _eigenstates_
-    get_resource_ptrs[State](_eigenstates_, eigenstates, <State*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[State*] ] _eigenstates_
+    _cyb_get_resource_ptrs[State](_eigenstates_, eigenstates, <State*>NULL)
     with nogil:
         __status__ = cudensitymatOperatorSpectrumCompute(<const Handle>handle, <OperatorSpectrum>spectrum, time, batch_size, num_params, <const double*>params, num_eigen_states, <State*>(_eigenstates_.data()), <void*>eigenvalues, <double*>tolerances, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(__status__)
@@ -2638,8 +2577,7 @@ cpdef time_propagation_scope_split_tdvp_config_get_attribute(intptr_t handle, in
         config (intptr_t): TDVP configuration object.
         attribute (TimePropagationScopeSplitTDVPConfigAttribute):
             Attribute to get.
-        attribute_value (intptr_t): Pointer to store the attribute
-            value.
+        attribute_value (intptr_t): Pointer to store the attribute value.
         attribute_size (size_t): Size of the buffer in bytes.
 
     .. note:: To compute the attribute size, use the itemsize of the corresponding data
@@ -2659,8 +2597,7 @@ cpdef intptr_t create_time_propagation_approach_krylov_config(intptr_t handle) e
         handle (intptr_t): Library handle.
 
     Returns:
-        intptr_t: Krylov-subspace time propagation configuration
-            object.
+        intptr_t: Krylov-subspace time propagation configuration object.
 
     .. seealso:: `cudensitymatCreateTimePropagationApproachKrylovConfig`
     """
@@ -2675,8 +2612,8 @@ cpdef destroy_time_propagation_approach_krylov_config(intptr_t config):
     """Destroys a Krylov-subspace time propagation configuration object.
 
     Args:
-        config (intptr_t): Krylov-subspace time propagation
-            configuration object.
+        config (intptr_t): Krylov-subspace time propagation configuration
+            object.
 
     .. seealso:: `cudensitymatDestroyTimePropagationApproachKrylovConfig`
     """
@@ -2715,8 +2652,8 @@ cpdef time_propagation_approach_krylov_config_set_attribute(intptr_t handle, int
 
     Args:
         handle (intptr_t): Library handle.
-        config (intptr_t): Krylov-subspace time propagation
-            configuration object.
+        config (intptr_t): Krylov-subspace time propagation configuration
+            object.
         attribute (TimePropagationApproachKrylovConfigAttribute):
             Attribute to set.
         attribute_value (intptr_t): Pointer to the attribute value.
@@ -2737,12 +2674,11 @@ cpdef time_propagation_approach_krylov_config_get_attribute(intptr_t handle, int
 
     Args:
         handle (intptr_t): Library handle.
-        config (intptr_t): Krylov-subspace time propagation
-            configuration object.
+        config (intptr_t): Krylov-subspace time propagation configuration
+            object.
         attribute (TimePropagationApproachKrylovConfigAttribute):
             Attribute to get.
-        attribute_value (intptr_t): Pointer to store the attribute
-            value.
+        attribute_value (intptr_t): Pointer to store the attribute value.
         attribute_size (size_t): Size of the buffer in bytes.
 
     .. note:: To compute the attribute size, use the itemsize of the corresponding data
@@ -2765,8 +2701,8 @@ cpdef intptr_t create_time_propagation(intptr_t handle, intptr_t superoperator, 
             Hermitian (!=0) or not (0).
         scope_kind (TimePropagationScopeKind): Requested propagation
             scope.
-        approach_kind (TimePropagationApproachKind): Requested
-            propagation approach.
+        approach_kind (TimePropagationApproachKind): Requested propagation
+            approach.
 
     Returns:
         intptr_t: Time propagation object.
@@ -2843,16 +2779,16 @@ cpdef time_propagation_prepare(intptr_t handle, intptr_t time_propagation, intpt
     Args:
         handle (intptr_t): Library handle.
         time_propagation (intptr_t): Time propagation object.
-        state_in (intptr_t): Representative input quantum state for
-            the time propagation.
-        state_out (intptr_t): Representative output quantum state for
-            the time propagation.
+        state_in (intptr_t): Representative input quantum state for the
+            time propagation.
+        state_out (intptr_t): Representative output quantum state for the
+            time propagation.
         compute_type (ComputeType): Desired compute type.
         workspace_size_limit (size_t): Workspace buffer size limit
             (bytes).
-        workspace (intptr_t): Empty workspace descriptor on entrance.
-            The workspace size required for the computation will be
-            set on exit.
+        workspace (intptr_t): Empty workspace descriptor on entrance. The
+            workspace size required for the computation will be set on
+            exit.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatTimePropagationPrepare`
@@ -2868,20 +2804,19 @@ cpdef time_propagation_compute(intptr_t handle, intptr_t time_propagation, doubl
     Args:
         handle (intptr_t): Library handle.
         time_propagation (intptr_t): Time propagation object.
-        time_step_real (double): Real part of time step for
-            propagation.
+        time_step_real (double): Real part of time step for propagation.
         time_step_imag (double): Imaginary part of time step for
             propagation.
         time (double): Time value.
         batch_size (int64_t): Batch size (==1).
-        num_params (int32_t): Number of variable parameters defined by
-            the user.
-        params (intptr_t): GPU-accessible pointer to an F-order
-            2d-array of user-defined real parameter values:
-            params[num_params, batch_size].
+        num_params (int32_t): Number of variable parameters defined by the
+            user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array
+            of user-defined real parameter values: params[num_params,
+            batch_size].
         state_in (intptr_t): Input quantum state (can be batched).
-        state_out (intptr_t): Time propagated output quantum state
-            (can be batched).
+        state_out (intptr_t): Time propagated output quantum state (can be
+            batched).
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream.
 
@@ -2975,8 +2910,7 @@ cpdef svd_config_get_attribute(intptr_t handle, intptr_t config, int attribute, 
         handle (intptr_t): Library handle.
         config (intptr_t): SVD configuration object.
         attribute (SVDConfigAttribute): Attribute to get.
-        attribute_value (intptr_t): Pointer to store the attribute
-            value.
+        attribute_value (intptr_t): Pointer to store the attribute value.
         attribute_size (size_t): Size of the buffer in bytes.
 
     .. note:: To compute the attribute size, use the itemsize of the corresponding data
@@ -3075,8 +3009,7 @@ cpdef eigen_decomposition_scope_split_dmrg_config_get_attribute(intptr_t handle,
         config (intptr_t): DMRG configuration object.
         attribute (EigenDecompositionScopeSplitDMRGConfigAttribute):
             Attribute to get.
-        attribute_value (intptr_t): Pointer to store the attribute
-            value.
+        attribute_value (intptr_t): Pointer to store the attribute value.
         attribute_size (size_t): Size of the buffer in bytes.
 
     .. note:: To compute the attribute size, use the itemsize of the corresponding data
@@ -3176,8 +3109,7 @@ cpdef eigen_decomposition_approach_krylov_config_get_attribute(intptr_t handle, 
             object.
         attribute (EigenDecompositionApproachKrylovConfigAttribute):
             Attribute to get.
-        attribute_value (intptr_t): Pointer to store the attribute
-            value.
+        attribute_value (intptr_t): Pointer to store the attribute value.
         attribute_size (size_t): Size of the buffer in bytes.
 
     .. note:: To compute the attribute size, use the itemsize of the corresponding data
@@ -3191,7 +3123,7 @@ cpdef eigen_decomposition_approach_krylov_config_get_attribute(intptr_t handle, 
 
 
 cpdef intptr_t create_eigen_decomposition_approach_linear_config(intptr_t handle) except? 0:
-    """Creates an iterative linear-solver configuration object with default settings.
+    """Creates an eigen-decomposition iterative linear-solver approach configuration object with default settings.
 
     Args:
         handle (intptr_t): Library handle.
@@ -3209,7 +3141,7 @@ cpdef intptr_t create_eigen_decomposition_approach_linear_config(intptr_t handle
 
 
 cpdef destroy_eigen_decomposition_approach_linear_config(intptr_t config):
-    """Destroys an iterative linear-solver configuration object.
+    """Destroys an eigen-decomposition iterative linear-solver approach configuration object.
 
     Args:
         config (intptr_t): Linear-solver configuration object.
@@ -3244,7 +3176,7 @@ cpdef get_eigen_decomposition_approach_linear_config_attribute_dtype(int attr):
 ###########################################################################
 
 cpdef eigen_decomposition_approach_linear_config_set_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size):
-    """Sets an attribute of the iterative linear-solver configuration.
+    """Sets an attribute of the eigen-decomposition iterative linear-solver approach configuration.
 
     Args:
         handle (intptr_t): Library handle.
@@ -3265,15 +3197,14 @@ cpdef eigen_decomposition_approach_linear_config_set_attribute(intptr_t handle, 
 
 
 cpdef eigen_decomposition_approach_linear_config_get_attribute(intptr_t handle, intptr_t config, int attribute, intptr_t attribute_value, size_t attribute_size):
-    """Gets an attribute of the iterative linear-solver configuration.
+    """Gets an attribute of the eigen-decomposition iterative linear-solver approach configuration.
 
     Args:
         handle (intptr_t): Library handle.
         config (intptr_t): Linear-solver configuration object.
         attribute (EigenDecompositionApproachLinearConfigAttribute):
             Attribute to get.
-        attribute_value (intptr_t): Pointer to store the attribute
-            value.
+        attribute_value (intptr_t): Pointer to store the attribute value.
         attribute_size (size_t): Size of the buffer in bytes.
 
     .. note:: To compute the attribute size, use the itemsize of the corresponding data
@@ -3294,12 +3225,13 @@ cpdef intptr_t create_eigen_decomposition(intptr_t handle, intptr_t superoperato
         superoperator (intptr_t): Operator.
         is_hermitian (int32_t): Specifies whether the operator is
             Hermitian (!=0) or not (0).
-        spectrum_kind (EigenDecompositionSpectrumKind): Requested kind
-            of the eigen-spectrum computation.
-        scope_kind (EigenDecompositionScopeKind): Requested
-            decomposition scope (full vs split).
+        spectrum_kind (EigenDecompositionSpectrumKind): Requested kind of
+            the eigen-spectrum computation.
+        scope_kind (EigenDecompositionScopeKind): Requested decomposition
+            scope (full vs split).
         approach_kind (EigenDecompositionApproachKind): Requested
-            decomposition approach (e.g., Krylov).
+            decomposition approach (e.g., Krylov or iterative linear
+            solve).
 
     Returns:
         intptr_t: Eigen-decomposition computation object.
@@ -3317,8 +3249,8 @@ cpdef destroy_eigen_decomposition(intptr_t eigen_decomposition):
     """Destroys an eigen-decomposition computation object.
 
     Args:
-        eigen_decomposition (intptr_t): Eigen-decomposition
-            computation object.
+        eigen_decomposition (intptr_t): Eigen-decomposition computation
+            object.
 
     .. seealso:: `cudensitymatDestroyEigenDecomposition`
     """
@@ -3357,10 +3289,9 @@ cpdef eigen_decomposition_configure(intptr_t handle, intptr_t eigen_decompositio
 
     Args:
         handle (intptr_t): Library handle.
-        eigen_decomposition (intptr_t): Eigen-decomposition
-            computation object.
-        attribute (EigenDecompositionAttribute): Attribute to
-            configure.
+        eigen_decomposition (intptr_t): Eigen-decomposition computation
+            object.
+        attribute (EigenDecompositionAttribute): Attribute to configure.
         attribute_value (intptr_t): Pointer to the attribute value.
         attribute_size (size_t): Size of the attribute value in bytes.
 
@@ -3379,8 +3310,8 @@ cpdef eigen_decomposition_prepare(intptr_t handle, intptr_t eigen_decomposition,
 
     Args:
         handle (intptr_t): Library handle.
-        eigen_decomposition (intptr_t): Eigen-decomposition
-            computation object.
+        eigen_decomposition (intptr_t): Eigen-decomposition computation
+            object.
         max_eigen_states (int32_t): Maximum number of eigen-pairs to
             compute.
         state (intptr_t): Representative quantum state (cannot be
@@ -3388,9 +3319,9 @@ cpdef eigen_decomposition_prepare(intptr_t handle, intptr_t eigen_decomposition,
         compute_type (ComputeType): Desired compute type.
         workspace_size_limit (size_t): Workspace buffer size limit
             (bytes).
-        workspace (intptr_t): Empty workspace descriptor on entrance.
-            The workspace buffer sizes required for the computation
-            will be set on return.
+        workspace (intptr_t): Empty workspace descriptor on entrance. The
+            workspace buffer sizes required for the computation will be
+            set on return.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatEigenDecompositionPrepare`
@@ -3405,36 +3336,34 @@ cpdef eigen_decomposition_compute(intptr_t handle, intptr_t eigen_decomposition,
 
     Args:
         handle (intptr_t): Library handle.
-        eigen_decomposition (intptr_t): Eigen-decomposition
-            computation object.
+        eigen_decomposition (intptr_t): Eigen-decomposition computation
+            object.
         time (double): Specified time.
-        batch_size (int64_t): Batch size (must be 1 in this release;
-            >1 returns ``CUDENSITYMAT_STATUS_NOT_SUPPORTED`` at
-            Compute).
-        num_params (int32_t): Number of variable parameters defined by
-            the user.
-        params (intptr_t): GPU-accessible pointer to an F-order
-            2d-array of user-defined real parameter values:
-            params[num_params, batch_size].
+        batch_size (int64_t): Batch size (must be 1 in this release; >1
+            returns ``CUDENSITYMAT_STATUS_NOT_SUPPORTED`` at Compute).
+        num_params (int32_t): Number of variable parameters defined by the
+            user.
+        params (intptr_t): GPU-accessible pointer to an F-order 2d-array
+            of user-defined real parameter values: params[num_params,
+            batch_size].
         num_eigen_states (int32_t): Actual number of eigenstates to
             compute, which must not exceed the value of the
-            ``maxEigenStates`` parameter provided during the
-            preparation of the eigen-decomposition computation object.
-        eigenstates (object): Quantum eigenstates. The initial values
-            of the provided quantum states will be used as the initial
+            ``maxEigenStates`` parameter provided during the preparation
+            of the eigen-decomposition computation object.
+        eigenstates (object): Quantum eigenstates. The initial values of
+            the provided quantum states will be used as the initial
             guesses for the iterative solver. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
         eigenvalues (intptr_t): Pointer to the eigenvalues storage
             (F-order array of shape [num_eigen_states, batch_size]) in
             GPU-accessible RAM (same data type as used by the quantum
-            state and operator). For the shift-invert DMRG split kind,
-            the input value is the target energy sigma (the returned
-            eigenpair is the one whose eigenvalue is nearest sigma);
-            it is ignored on input by other split kinds/approaches. On
-            output, holds the computed eigenvalue(s).
+            state and operator). For the shift-invert DMRG split kind, the
+            input value is the target energy sigma (the returned eigenpair
+            is the one whose eigenvalue is nearest sigma); it is ignored
+            on input by other split kinds/approaches. On output, holds the
+            computed eigenvalue(s).
         tolerances (intptr_t): Pointer to an F-order array of shape
             [num_eigen_states, batch_size] in CPU-accessible RAM. On
             input, the desired solver convergence tolerances for all
@@ -3442,19 +3371,25 @@ cpdef eigen_decomposition_compute(intptr_t handle, intptr_t eigen_decomposition,
             convergence residual norms (which may differ from the
             requested values in either direction). These characterize
             solver convergence, not the representation error of the
-            returned state. For the full-state solver they coincide
-            with the eigenpair residual ||H x - E x||; for split (DMRG
-            / shift-invert) solvers the returned value is the local
-            per-site solver residual, NOT the global ||H|psi> -
-            E|psi>||. The representation error is a separate quantity
-            (dedicated query, when available).
+            returned state. For the full-state solver they coincide with
+            the eigenpair residual ||H x - E x||; for split (DMRG / shift-
+            invert) solvers the returned value is the local per-site
+            solver residual, NOT the global ||H|psi> - E|psi>||. The
+            representation error is a separate quantity (dedicated query,
+            when available). For shift-invert DMRG specifically, the input
+            value is the requested per-site relative normal-equation
+            tolerance. On output it is the maximum achieved absolute post-
+            insertion (and, for 2-site updates, post-truncation) local
+            normal-equation residual over every region in the final
+            complete fitting sweep of the final outer iteration. It is not
+            the achieved outer energy-difference metric.
         workspace (intptr_t): Allocated workspace descriptor.
         stream (intptr_t): CUDA stream.
 
     .. seealso:: `cudensitymatEigenDecompositionCompute`
     """
-    cdef nullable_unique_ptr[ vector[State*] ] _eigenstates_
-    get_resource_ptrs[State](_eigenstates_, eigenstates, <State*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[State*] ] _eigenstates_
+    _cyb_get_resource_ptrs[State](_eigenstates_, eigenstates, <State*>NULL)
     with nogil:
         __status__ = cudensitymatEigenDecompositionCompute(<const Handle>handle, <EigenDecomposition>eigen_decomposition, time, batch_size, num_params, <const double*>params, num_eigen_states, <State*>(_eigenstates_.data()), <void*>eigenvalues, <double*>tolerances, <WorkspaceDescriptor>workspace, <Stream>stream)
     check_status(__status__)
@@ -3520,10 +3455,10 @@ cpdef workspace_set_memory(intptr_t handle, intptr_t workspace_descr, int mem_sp
         workspace_descr (intptr_t): Workspace descriptor.
         mem_space (Memspace): Memory space.
         workspace_kind (WorkspaceKind): Workspace kind.
-        memory_buffer (intptr_t): Pointer to a user-owned memory
-            buffer to be used by the specified workspace.
-        memory_buffer_size (size_t): Size of the provided memory
-            buffer in bytes.
+        memory_buffer (intptr_t): Pointer to a user-owned memory buffer to
+            be used by the specified workspace.
+        memory_buffer_size (size_t): Size of the provided memory buffer in
+            bytes.
 
     .. seealso:: `cudensitymatWorkspaceSetMemory`
     """
@@ -3543,9 +3478,8 @@ cpdef tuple workspace_get_memory(intptr_t handle, intptr_t workspace_descr, int 
 
     Returns:
         A 2-tuple containing:
-
         - intptr_t: Pointer to a user-owned memory buffer used by the
-            specified workspace.
+                specified workspace.
         - size_t: Size of the memory buffer in bytes.
 
     .. seealso:: `cudensitymatWorkspaceGetMemory`
@@ -3565,8 +3499,8 @@ cpdef elementary_operator_attach_buffer(intptr_t handle, intptr_t elem_operator,
         handle (intptr_t): Library handle.
         elem_operator (intptr_t): Elementary tensor operator (either
             batched or non-batched).
-        buffer (intptr_t): GPU-accessible pointer to the tensor
-            operator elements storage.
+        buffer (intptr_t): GPU-accessible pointer to the tensor operator
+            elements storage.
         buffer_size (size_t): Size of the memory buffer in bytes.
 
     .. seealso:: `cudensitymatElementaryOperatorAttachBuffer`
@@ -3583,8 +3517,8 @@ cpdef matrix_operator_dense_local_attach_buffer(intptr_t handle, intptr_t matrix
         handle (intptr_t): Library handle.
         matrix_operator (intptr_t): Full dense local matrix operator
             (either batched or non-batched).
-        buffer (intptr_t): GPU-accessible pointer to the matrix
-            operator elements storage.
+        buffer (intptr_t): GPU-accessible pointer to the matrix operator
+            elements storage.
         buffer_size (size_t): Size of the memory buffer in bytes.
 
     .. seealso:: `cudensitymatMatrixOperatorDenseLocalAttachBuffer`

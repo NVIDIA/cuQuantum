@@ -1,5 +1,4 @@
-# Copyright (c) 2021-2023, NVIDIA CORPORATION & AFFILIATES
-#
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
@@ -9,6 +8,8 @@ Entry point to using tensors from different libraries seamlessly.
 __all__ = [ 'infer_tensor_package', 'wrap_operand', 'wrap_operands', 'to', 'copy_']
 
 import functools
+import importlib.util
+import sys
 
 import numpy as np
 
@@ -22,15 +23,11 @@ _TENSOR_TYPES = {
     'numpy': NumpyTensor
 }
 
-# Optional modules
-try:
-    import torch
-    from .tensor_ifc_torch import TorchTensor
-    _TENSOR_TYPES['torch']  = TorchTensor
-except ImportError as e:
-    torch = None
-
 _SUPPORTED_PACKAGES = tuple(_TENSOR_TYPES.keys())
+
+# torch checked but not imported; tensor type is registered on first use.
+if "torch" in sys.modules or importlib.util.find_spec("torch") is not None:
+    _SUPPORTED_PACKAGES += ("torch",)
 
 def infer_tensor_package(tensor):
     """
@@ -39,7 +36,12 @@ def infer_tensor_package(tensor):
     if issubclass(tensor.__class__, np.ndarray):
         return 'numpy'
     module = tensor.__class__.__module__
-    return module.split('.')[0]
+    package = module.split(".")[0]
+    if package == "torch" and package not in _TENSOR_TYPES:
+        from .tensor_ifc_torch import TorchTensor
+
+        _TENSOR_TYPES["torch"] = TorchTensor
+    return package
 
 def wrap_operand(native_operand):
     """
@@ -70,7 +72,7 @@ def check_valid_operand_type(wrapped_operands):
     """
     istensor = [o.istensor() for o in wrapped_operands]
     if not all(istensor):
-        unknown = [f"{location}: {type(wrapped_operands[location].tensor)}" 
+        unknown = [f"{location}: {type(wrapped_operands[location].tensor)}"
                     for location, predicate in enumerate(istensor) if predicate is False]
         unknown = formatters.array2string(unknown)
         message = f"""The operands should be ndarray-like objects from one of {_SUPPORTED_PACKAGES} packages.
@@ -94,11 +96,11 @@ def wrap_operands(native_operands):
 
 def to(operands, device, stream_holder):
     """
-    Copy the wrapped operands to the specified device ('cpu' or int) and return the 
+    Copy the wrapped operands to the specified device ('cpu' or int) and return the
     wrapped operands on the device.
     """
     operands = tuple(o.to(device, stream_holder) for o in operands)
-               
+
     return wrap_operands(operands)
 
 

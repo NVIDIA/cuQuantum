@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated across versions from 23.03.0 to 26.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 23.03.0 to 26.11.0. Do not modify it directly.
 
 
 
@@ -229,14 +229,14 @@ cpdef sampler_get_info(intptr_t handle, intptr_t tensor_network_sampler, int att
 cpdef int64_t state_apply_unitary_channel(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, int32_t num_tensors, tensor_data, tensor_mode_strides, probabilities) except? -1
 cpdef state_capture_mps(intptr_t handle, intptr_t tensor_network_state)
 cpdef int64_t state_apply_general_channel(intptr_t handle, intptr_t tensor_network_state, int32_t num_state_modes, state_modes, int32_t num_tensors, tensor_data, tensor_mode_strides) except? -1
-cpdef intptr_t create_state_projection_mps(intptr_t handle, int32_t num_states, tensor_network_states, intptr_t coeffs, int32_t symmetric, int32_t num_envs, intptr_t spec_envs, int boundary_condition, int32_t num_tensors, qudits_per_tensor, extents_out, strides_out, dual_tensors_data_out, intptr_t ortho_spec) except? 0
+cpdef intptr_t create_state_projection_mps(intptr_t handle, int32_t num_states, tensor_network_states, intptr_t coeffs, int32_t symmetric, int32_t num_envs, intptr_t spec_envs, int boundary_condition, int32_t num_tensors, qudits_per_tensor, extents_out, strides_out, dual_tensors_data_out, ortho_spec) except? 0
 cpdef get_state_projection_mps_attribute_dtype(int attr)
 cpdef state_projection_mps_configure(intptr_t handle, intptr_t tensor_network_projection, int attribute, intptr_t attribute_value, size_t attribute_size)
 cpdef state_projection_mps_prepare(intptr_t handle, intptr_t tensor_network_projection, size_t max_workspace_size_device, intptr_t work_desc, intptr_t cuda_stream)
-cpdef state_projection_mps_compute_tensor_env(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, strides_in, intptr_t env_tensor_data_in, strides_out, intptr_t env_tensor_data_out, int32_t apply_inv_metric, int32_t re_resolve_channels, intptr_t work_desc, intptr_t cuda_stream)
-cpdef state_projection_mps_get_tensor_info(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, intptr_t extents, intptr_t recommended_strides)
-cpdef state_projection_mps_extract_tensor(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream)
-cpdef state_projection_mps_insert_tensor(intptr_t handle, intptr_t tensor_network_projection, intptr_t env_spec, intptr_t ortho_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream)
+cpdef state_projection_mps_compute_tensor_env(intptr_t handle, intptr_t tensor_network_projection, env_spec, strides_in, intptr_t env_tensor_data_in, strides_out, intptr_t env_tensor_data_out, int32_t apply_inv_metric, int32_t re_resolve_channels, intptr_t work_desc, intptr_t cuda_stream)
+cpdef state_projection_mps_get_tensor_info(intptr_t handle, intptr_t tensor_network_projection, env_spec, intptr_t extents, intptr_t recommended_strides)
+cpdef state_projection_mps_extract_tensor(intptr_t handle, intptr_t tensor_network_projection, env_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream)
+cpdef state_projection_mps_insert_tensor(intptr_t handle, intptr_t tensor_network_projection, env_spec, ortho_spec, strides, intptr_t env_tensor_data, intptr_t work_desc, intptr_t cuda_stream)
 cpdef destroy_state_projection_mps(intptr_t tensor_network_projection)
 cpdef intptr_t create_network(intptr_t handle) except? 0
 cpdef destroy_network(intptr_t network_desc)
@@ -262,7 +262,7 @@ cpdef int64_t state_apply_tensor_operator_with_gradient(intptr_t handle, intptr_
 cpdef state_update_tensor_operator_gradient(intptr_t handle, intptr_t tensor_network_state, int64_t tensor_id, intptr_t gradient_data)
 cpdef expectation_compute_with_gradients_backward(intptr_t handle, intptr_t tensor_network_expectation, int32_t accumulate_gradients, intptr_t expectation_value_adjoint, intptr_t state_norm_adjoint, intptr_t work_desc, intptr_t expectation_value, intptr_t state_norm, intptr_t cuda_stream)
 cpdef state_projection_mps_update_coefficients(intptr_t handle, intptr_t tensor_network_projection, int32_t num_coeffs, intptr_t coeffs)
-cpdef state_projection_mps_update_dual_tensors(intptr_t handle, intptr_t tensor_network_projection, max_extents, valid_extents, strides, dual_tensors_data, intptr_t ortho_spec, intptr_t cuda_stream)
+cpdef state_projection_mps_update_dual_tensors(intptr_t handle, intptr_t tensor_network_projection, max_extents, valid_extents, strides, dual_tensors_data, ortho_spec, intptr_t cuda_stream)
 cpdef str get_last_error()
 cpdef intptr_t create_marginal_diagonal(intptr_t handle, intptr_t tensor_network_state, int32_t num_marginal_modes, marginal_modes, int32_t num_projected_modes, projected_modes, marginal_diagonal_tensor_strides) except? 0
 cpdef intptr_t create_distributed_tensor_descriptor(intptr_t handle, int32_t num_modes, extents, element_strides, block_sizes, block_strides, nranks_per_mode, mode_labels, int data_type) except? 0

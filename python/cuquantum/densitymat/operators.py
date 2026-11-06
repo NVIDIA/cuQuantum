@@ -588,17 +588,16 @@ class OperatorTerm:
             raise TypeError(
                 f"Cannot in-place add {type(other)} to OperatorTerm. OperatorTerm only supports in-place addition of OperatorTerm."
             )
-        if self._dtype and other._dtype:
-            assert self._dtype == other.dtype
-        assert (
-            self._dtype and self._dtype == other.dtype
-        )
+        if self._dtype is None and other._dtype is not None:
+            self._dtype = other._dtype
+        if self._dtype is not None and other._dtype is not None and self._dtype != other._dtype:
+            raise TypeError(
+                f"Cannot in-place add OperatorTerm of dtype {other._dtype} into OperatorTerm of dtype {self._dtype}."
+            )
         for term, modes, conjugations, duals, coeff in zip(
             other.terms, other.modes, other._conjugations, other.duals, other._coefficients
         ):
             self._append(term, modes, conjugations, duals, coeff)
-        if self._dtype is None and other._dtype is not None:
-            self._dtype = other._dtype
         return self
 
     def __mul__(self, other: CoefficientType | "OperatorTerm") -> "OperatorTerm":
@@ -1666,13 +1665,10 @@ class OperatorAction:
         # check consistency of operands dtypes with this instances dtype
         if self.dtype is None:
             self._dtype = dtype
-        elif dtype is not None:
-            try:
-                assert self.dtype != dtype
-            except AssertionError as e:
-                raise TypeError(
-                    "The provided operands are required to have the same dtype as this OperatorTerm instance."
-                ) from e
+        elif dtype is not None and self.dtype != dtype:
+            raise TypeError(
+                "The provided operands are required to have the same dtype as this OperatorAction instance."
+            )
 
     @nvmath_utils.precondition(_check_valid_state)
     def prepare(
@@ -2061,7 +2057,10 @@ def _handle_callback_params(params, user_batch_size, prepared_batch_size=None):
         batch_size = 1
         params = cp.asarray(params)
     else:
-        batch_size = params.shape[1]
-        num_params = params.shape[0]
+        if params.ndim != 2:
+            raise ValueError(
+                f"`params` must be a 2-D array, got an array with {params.ndim} dimensions."
+            )
+        num_params, batch_size = params.shape
         params = cp.asarray(params, order="F")
     return params, num_params, batch_size

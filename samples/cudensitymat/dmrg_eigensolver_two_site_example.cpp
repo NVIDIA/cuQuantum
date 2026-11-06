@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstdlib>
 #include <vector>
 #include <numeric>
 #include <random>
@@ -452,7 +453,26 @@ void exampleWorkflow(cudensitymatHandle_t handle)
                         CUDENSITYMAT_WORKSPACE_SCRATCH,
                         scratchBuf, scratchSize));
   }
-  if (verbose) std::cout << "Prepared DMRG plan; scratch workspace = " << scratchSize << " bytes\n";
+  // Provide the host scratch workspace reported by the prepare call, if any.
+  std::size_t hostScratchSize = 0;
+  HANDLE_CUDM_ERROR(cudensitymatWorkspaceGetMemorySize(handle, workspaceDescr,
+                      CUDENSITYMAT_MEMSPACE_HOST,
+                      CUDENSITYMAT_WORKSPACE_SCRATCH,
+                      &hostScratchSize));
+  void* hostScratchBuf = nullptr;
+  if (hostScratchSize > 0) {
+    hostScratchBuf = std::malloc(hostScratchSize);
+    if (hostScratchBuf == nullptr) {
+      std::cerr << "Failed to allocate " << hostScratchSize << " bytes of host scratch workspace\n";
+      std::abort();
+    }
+    HANDLE_CUDM_ERROR(cudensitymatWorkspaceSetMemory(handle, workspaceDescr,
+                        CUDENSITYMAT_MEMSPACE_HOST,
+                        CUDENSITYMAT_WORKSPACE_SCRATCH,
+                        hostScratchBuf, hostScratchSize));
+  }
+  if (verbose) std::cout << "Prepared DMRG plan; scratch workspace = " << scratchSize
+                         << " bytes (device), " << hostScratchSize << " bytes (host)\n";
 
   // --- 7. Compute the ground-state pair (eigenvalue, MPS) ---
   void * eigenvalueGpu = createArrayGPU<Complex>(1);
@@ -499,6 +519,7 @@ void exampleWorkflow(cudensitymatHandle_t handle)
   // --- 8. Cleanup (reverse Create order) ---
   destroyArrayGPU(eigenvalueGpu);
   if (scratchBuf) HANDLE_CUDA_ERROR(cudaFree(scratchBuf));
+  if (hostScratchBuf) std::free(hostScratchBuf);
   HANDLE_CUDM_ERROR(cudensitymatDestroyWorkspace(workspaceDescr));
   HANDLE_CUDM_ERROR(cudensitymatDestroyEigenDecomposition(eigen));
   HANDLE_CUDM_ERROR(cudensitymatDestroyState(mpsState));

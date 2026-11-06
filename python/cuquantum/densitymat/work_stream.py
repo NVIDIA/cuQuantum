@@ -11,6 +11,7 @@ import weakref
 import collections
 
 import cupy as cp
+import numpy as np
 
 if TYPE_CHECKING:
     import mpi4py.MPI
@@ -54,7 +55,8 @@ class WorkStream:
         allocator: An object that supports the :class:`BaseCUDAMemoryManager` protocol, used to draw device memory. If an allocator is not provided, a memory allocator from the library package will be used (:func:`torch.cuda.caching_allocator_alloc` for PyTorch operands, :func:`cupy.cuda.alloc` otherwise).
         compute_type (cuquantum.ComputeType): CUDA compute type. A suitable compute type will be selected if not specified.
         logger (logging.Logger): Python Logger object. The root logger will be used if a logger object is not provided.
-        workspace_info: A property attribute that stores a 2-tuple of ints representing currently allocated and anticipated workspace size in bytes.
+        workspace_info: A property attribute that stores a 2-tuple of ints representing currently allocated and anticipated device workspace size in bytes.
+        host_workspace_info: A property attribute that stores a 2-tuple of ints representing currently allocated and anticipated host workspace size in bytes. Host workspace is allocated (as pageable host memory) and attached automatically whenever a ``prepare`` call reports a host requirement, e.g. for the SVD inside 2-site MPS updates.
 
     Methods:
 
@@ -152,8 +154,11 @@ class WorkStream:
         # initialize other private attributes
         self._buf_scratch = None
         self._size_scratch = 0
+        self._buf_host_scratch = None
+        self._size_host_scratch = 0
         self._last_compute_event = None
         self._required_size_upper_bound = 0
+        self._required_host_size_upper_bound = 0
         self.logger.info(
             f"Created WorkStream on device {self.device_id} with stream {self.stream}."
         )
@@ -187,6 +192,19 @@ class WorkStream:
                 the size of the workspace buffer to be allocated in the future based on previous ``prepare`` calls of other API objects.
         """
         return self._size_scratch, self._required_size_upper_bound
+
+    @property
+    def host_workspace_info(self) -> Tuple[int, int]:
+        """
+        Information on current and anticipated host workspace size in bytes.
+
+        Returns:
+            int
+                the size of the currently allocated host workspace buffer.
+            int
+                the size of the host workspace buffer to be allocated in the future based on previous ``prepare`` calls of other API objects.
+        """
+        return self._size_host_scratch, self._required_host_size_upper_bound
 
     def set_communicator(
         self,
@@ -260,6 +278,8 @@ class WorkStream:
         self._ptr = cudm.destroy_workspace(self._validated_ptr)
         setattr(self, f"_buf_{kind.lower()}", None)
         setattr(self, f"_size_{kind.lower()}", 0)
+        setattr(self, f"_buf_host_{kind.lower()}", None)
+        setattr(self, f"_size_host_{kind.lower()}", 0)
         self._ptr = new_ptr
         self._finalizer.detach()
         self._finalizer = weakref.finalize(
@@ -271,6 +291,7 @@ class WorkStream:
             msg=f"Destroying Workspace instance {self}",
         )
         self._required_size_upper_bound = 0
+        self._required_host_size_upper_bound = 0
 
     def _workspace_set_memory(
         self,
@@ -288,17 +309,19 @@ class WorkStream:
             size: int
                 Size of allocated buffer in bytes.
             memspace: str
-                "DEVICE" (default) or "HOST". Currently only "DEVICE" is supported.
+                "DEVICE" (default) or "HOST".
             kind: str
                 "SCRATCH" (default) or "CACHE". Currently only "SCRATCH" is supported.
         """
 
         self.logger.info(
-            f"Attaching memory buffer of size {size} on device {self.device_id} with stream {self.stream}."
+            f"Attaching {memspace.lower()} memory buffer of size {size} for device {self.device_id} with stream {self.stream}."
         )
-        if memspace != "DEVICE" or kind != "SCRATCH":
+        if memspace not in MEM_SPACE_MAP:
+            raise ValueError(f'memspace must be "DEVICE" or "HOST", got {memspace!r}.')
+        if kind != "SCRATCH":
             raise NotImplementedError(
-                'Currently only memspace = "DEVICE"  and kind = "SCRATCH" is supported in cudensitymat.workspace_set_memory.'
+                'Currently only kind = "SCRATCH" is supported in cudensitymat.workspace_set_memory.'
             )
 
         cudm.workspace_set_memory(
@@ -314,20 +337,26 @@ class WorkStream:
         """
         Updates the upper bound to workspace sizes required among all previous prepare calls.
 
+        The host requirement reported by the same prepare call is tracked alongside the device
+        requirement, so that callers only need to track the device size.
+
         Returns:
             int:
-                Workspace size required by most recent prepare call.
+                Workspace size required by most recent prepare call in ``memspace``.
             int:
-                Upper bound to workspace sizes required.
+                Upper bound to workspace sizes required in ``memspace``.
         """
+        if memspace == "DEVICE":
+            self._update_required_size_upper_bound("HOST", kind)
         _, size = cudm.workspace_get_memory(
             self._handle._validated_ptr,
             self._validated_ptr,
             MEM_SPACE_MAP[memspace],
             WORK_SPACE_KIND_MAP[kind],
         )
-        self._required_size_upper_bound = max(self._required_size_upper_bound, size)
-        return size, self._required_size_upper_bound
+        bound_attr = "_required_size_upper_bound" if memspace == "DEVICE" else "_required_host_size_upper_bound"
+        setattr(self, bound_attr, max(getattr(self, bound_attr), size))
+        return size, getattr(self, bound_attr)
 
     @nvmath_utils.precondition(_check_valid_state)
     def _sync(self) -> None:
@@ -340,20 +369,30 @@ class WorkStream:
         """
         Allocates workspace buffer and attaches it to workspace descriptor, if necessary.
 
+        Allocating the device workspace also allocates and attaches the host workspace when a
+        previous ``prepare`` call reported a host requirement, so callers only need to request
+        the device workspace.
+
         Args:
             memspace: str
-                "DEVICE" (default) or "HOST". Currently only "DEVICE" is supported.
+                "DEVICE" (default) or "HOST".
             kind: str
                 "SCRATCH" (default) or "CACHE". Currently only "SCRATCH" is supported.
         """
+        if kind != "SCRATCH":
+            raise NotImplementedError('Currently only kind = "SCRATCH" is supported.')
+        if memspace == "HOST":
+            self._maybe_allocate_host(kind)
+            return
+        if memspace != "DEVICE":
+            raise ValueError(f'memspace must be "DEVICE" or "HOST", got {memspace!r}.')
+        self._maybe_allocate_host(kind)
         _ptr, _size = cudm.workspace_get_memory(
             self._handle._validated_ptr,
             self._validated_ptr,
             MEM_SPACE_MAP[memspace],
             WORK_SPACE_KIND_MAP[kind],
         )
-        if memspace != "DEVICE":
-            raise NotImplementedError("Only device memory buffers currently supported.")
         if _ptr == 0:
             # normal state after prepare call
             _buf_size = getattr(self, f"_size_{kind.lower()}")
@@ -386,3 +425,32 @@ class WorkStream:
                 getattr(self, f"_buf_{kind.lower()}").ptr,
                 getattr(self, f"_size_{kind.lower()}"),
             ) == (_ptr, _size)
+
+    def _maybe_allocate_host(self, kind="SCRATCH") -> None:
+        """
+        Allocates the host workspace buffer and attaches it to the workspace descriptor, if a
+        previous ``prepare`` call reported a host requirement and no sufficient buffer is attached.
+
+        The buffer is pageable host memory owned by this instance; it is kept alive until the
+        workspace is released or a larger buffer replaces it.
+        """
+        required = self._required_host_size_upper_bound
+        if required == 0:
+            return
+        _ptr, _size = cudm.workspace_get_memory(
+            self._handle._validated_ptr,
+            self._validated_ptr,
+            MEM_SPACE_MAP["HOST"],
+            WORK_SPACE_KIND_MAP[kind],
+        )
+        buf_attr, size_attr = f"_buf_host_{kind.lower()}", f"_size_host_{kind.lower()}"
+        if _ptr != 0 and _size >= required:
+            # buffer currently attached and large enough
+            assert getattr(self, buf_attr) is not None and getattr(self, buf_attr).ctypes.data == _ptr
+            return
+        if getattr(self, buf_attr) is None or getattr(self, size_attr) < required:
+            self.logger.info(f"Allocating host memory buffer of size {required} for device {self.device_id}.")
+            setattr(self, buf_attr, np.empty(required, dtype=np.uint8))
+            setattr(self, size_attr, required)
+        buf = getattr(self, buf_attr)
+        self._workspace_set_memory(buf.ctypes.data, getattr(self, size_attr), "HOST", kind)

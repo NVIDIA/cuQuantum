@@ -74,10 +74,11 @@ def get_pauli_string_as_packed_integers(paulis: Sequence[str], qubits: Sequence[
     for pauli, qubit in zip(paulis, qubits):
         int_ind = qubit // 64
         bit_ind = qubit % 64
+        bit_mask = np.uint64(1 << bit_ind)
         if pauli in ("X", "Y"):
-            x_ptr[int_ind] |= 1 << bit_ind
+            x_ptr[int_ind] |= bit_mask
         if pauli in ("Z", "Y"):
-            z_ptr[int_ind] |= 1 << bit_ind
+            z_ptr[int_ind] |= bit_mask
     return out
 
 
@@ -179,4 +180,3 @@ def main():
 
 
 main()
-

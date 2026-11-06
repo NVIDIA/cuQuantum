@@ -1492,6 +1492,80 @@ class TestMPSOvercompleteExtentsSUGauge:
             cutn.destroy(handle)
 
 
+class TestMPSFreshWorkspaceDescriptor:
+    """
+    The workspace descriptor passed to state_compute need not be the one filled by state_prepare.
+    A freshly created descriptor carrying only the device scratch buffer works with every SVD
+    algorithm. Note that the documented contract expects the caller to attach the host scratch
+    workspace reported by state_prepare; running without it is an undocumented backward-compatibility
+    tolerance, which this test pins (it is not a guarantee users may rely on).
+    """
+
+    @pytest.mark.parametrize("algorithm", (cutn.TensorSVDAlgo.GESVD, cutn.TensorSVDAlgo.GESVDR))
+    def test_compute_with_fresh_descriptor(self, algorithm):
+        num_qubits = 3
+        dtype = np.complex128
+        stream = cp.cuda.Stream()
+
+        handle = cutn.create()
+        try:
+            qubits_dims = np.asarray([2] * num_qubits, dtype=np.int64)
+            state = cutn.create_state(handle, cutn.StatePurity.PURE, num_qubits,
+                                      qubits_dims, dtype_to_data_type[dtype])
+            try:
+                gate_h = (2**-0.5 * cp.asarray([[1, 1], [1, -1]], dtype=dtype)).reshape(2, 2, order='F')
+                gate_h_strides = np.array([s // gate_h.itemsize for s in gate_h.strides], dtype=np.int64)
+                cutn.state_apply_tensor_operator(handle, state, 1, (0,),
+                    gate_h.data.ptr, gate_h_strides, 1, 0, 1)
+                gate_cx = cp.asarray([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]],
+                                     dtype=dtype).reshape(2, 2, 2, 2, order='F')
+                gate_cx_strides = np.array([s // gate_cx.itemsize for s in gate_cx.strides], dtype=np.int64)
+                cutn.state_apply_tensor_operator(handle, state, 2, (0, 1),
+                    gate_cx.data.ptr, gate_cx_strides, 1, 0, 1)
+
+                max_extent = 2
+                mps_tensor_extents = [(2, max_extent), (max_extent, 2, max_extent), (max_extent, 2)]
+                mps_tensors = [cp.zeros(extents, dtype=dtype, order='F') for extents in mps_tensor_extents]
+                mps_tensor_ptrs = [t.data.ptr for t in mps_tensors]
+                mps_tensor_strides = [[s // t.itemsize for s in t.strides] for t in mps_tensors]
+                cutn.state_finalize_mps(handle, state, cutn.BoundaryCondition.OPEN,
+                                        mps_tensor_extents, mps_tensor_strides)
+
+                svd_algo_dtype = cutn.state_get_attribute_dtype(cutn.StateAttribute.MPS_SVD_CONFIG_ALGO)
+                svd_algo = np.array(algorithm, dtype=svd_algo_dtype)
+                cutn.state_configure(handle, state, cutn.StateAttribute.MPS_SVD_CONFIG_ALGO,
+                                     svd_algo.ctypes.data, svd_algo.dtype.itemsize)
+
+                prepare_workspace = cutn.create_workspace_descriptor(handle)
+                compute_workspace = cutn.create_workspace_descriptor(handle)
+                try:
+                    free_mem = cp.cuda.Device().mem_info[0]
+                    cutn.state_prepare(handle, state, free_mem // 4, prepare_workspace, stream.ptr)
+                    workspace_size = cutn.workspace_get_memory_size(handle, prepare_workspace,
+                        cutn.WorksizePref.RECOMMENDED, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+                    scratch = cp.cuda.alloc(workspace_size)
+                    # Attach the device scratch buffer to a different, freshly created descriptor.
+                    cutn.workspace_set_memory(handle, compute_workspace, cutn.Memspace.DEVICE,
+                        cutn.WorkspaceKind.SCRATCH, scratch.ptr, workspace_size)
+                    cutn.state_compute(handle, state, compute_workspace, mps_tensor_ptrs, stream.ptr)
+                    stream.synchronize()
+                finally:
+                    cutn.destroy_workspace_descriptor(compute_workspace)
+                    cutn.destroy_workspace_descriptor(prepare_workspace)
+
+                # Bell pair on qubits (0, 1), qubit 2 in |0>.
+                sv = mps_tensors[0]
+                for t in mps_tensors[1:]:
+                    sv = cp.tensordot(sv, t, axes=([sv.ndim - 1], [0]))
+                expected = np.zeros((2, 2, 2), dtype=dtype)
+                expected[0, 0, 0] = expected[1, 1, 0] = 2**-0.5
+                np.testing.assert_allclose(cp.asnumpy(sv), expected, atol=1e-12)
+            finally:
+                cutn.destroy_state(state)
+        finally:
+            cutn.destroy(handle)
+
+
 class TestMPSNonContiguousStrides:
 
     @manage_resource('handle')
@@ -1582,6 +1656,80 @@ class TestMPSNonContiguousStrides:
             np.testing.assert_allclose(sv, expected, atol=1e-12)
         finally:
             cutn.destroy_state(state)
+
+
+class TestMPSOversizedOutputBuffers:
+    """Compact output buffers with extents above the maximal possible ones are reused as scratch storage."""
+
+    def _random_gates(self, dims, rng):
+        gates = []
+        for _ in range(2):
+            for q in list(range(0, len(dims) - 1, 2)) + list(range(1, len(dims) - 1, 2)):
+                d = dims[q] * dims[q + 1]
+                u, _ = np.linalg.qr(rng.standard_normal((d, d)) + 1j * rng.standard_normal((d, d)))
+                gates.append(((q, q + 1), u))
+        return gates
+
+    def _compute(self, dims, gates, bonds, dtype):
+        """Returns the prepared workspace size and the computed MPS for compact output buffers with the given bonds.
+
+        Uses its own handle: a second preparation on the same handle can report a different workspace size.
+        """
+        n = len(dims)
+        stream = cp.cuda.Stream.null
+        handle = cutn.create()
+        workspace = cutn.create_workspace_descriptor(handle)
+        state = cutn.create_state(handle, cutn.StatePurity.PURE, n, np.asarray(dims, dtype=np.int64).ctypes.data,
+                                  dtype_to_data_type[dtype])
+        try:
+            operators = [cp.asarray(u, dtype=dtype) for _, u in gates]
+            for ((a, b), _), op in zip(gates, operators):
+                cutn.state_apply_tensor_operator(handle, state, 2, (a, b), op.data.ptr, 0, 1, 0, 1)
+            extents = [(dims[0], bonds[0])] + [(bonds[i - 1], dims[i], bonds[i]) for i in range(1, n - 1)] \
+                + [(bonds[-1], dims[-1])]
+            strides = [tuple(int(s) for s in np.cumprod((1,) + e[:-1])) for e in extents]
+            buffers = [cp.zeros(int(np.prod(e)), dtype=dtype) for e in extents]
+            cutn.state_finalize_mps(handle, state, cutn.BoundaryCondition.OPEN, extents, strides)
+            cutn.state_prepare(handle, state, cp.cuda.Device().mem_info[0] // 4, workspace, stream.ptr)
+            ws_size = cutn.workspace_get_memory_size(handle, workspace, cutn.WorksizePref.MIN,
+                                                     cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
+            scratch = cp.cuda.alloc(ws_size)
+            cutn.workspace_set_memory(handle, workspace, cutn.Memspace.DEVICE,
+                                      cutn.WorkspaceKind.SCRATCH, scratch.ptr, ws_size)
+            extents_out, strides_out = cutn.state_compute(handle, state, workspace,
+                                                          [o.data.ptr for o in buffers], stream.ptr)
+            stream.synchronize()
+            itemsize = np.dtype(dtype).itemsize
+            mps = [cp.asnumpy(cp.ndarray(tuple(e), dtype=dtype, memptr=o.data, strides=tuple(s * itemsize for s in st)))
+                   for o, e, st in zip(buffers, extents_out, strides_out)]
+            return ws_size, mps
+        finally:
+            cutn.destroy_state(state)
+            cutn.destroy_workspace_descriptor(workspace)
+            cutn.destroy(handle)
+
+    @pytest.mark.parametrize('dims', ([2] * 8, [3, 2, 5, 7, 2, 3]))
+    def test_oversized_compact_buffers(self, dims):
+        dtype = np.complex128
+        n = len(dims)
+        gates = self._random_gates(dims, np.random.default_rng(7))
+        exact_bonds = [min(int(np.prod(dims[:c + 1])), int(np.prod(dims[c + 1:]))) for c in range(n - 1)]
+        ws_exact, mps_exact = self._compute(dims, gates, exact_bonds, dtype)
+        ws_oversized, mps_oversized = self._compute(dims, gates, [64] * (n - 1), dtype)
+        # the oversized buffers hold whatever the exactly sized ones hold, so they need no extra workspace
+        assert ws_oversized <= ws_exact
+
+        psi = np.zeros(dims, dtype=dtype)
+        psi[(0,) * n] = 1
+        for (a, b), u in gates:
+            out = list(range(n))
+            out[a], out[b] = n, n + 1
+            psi = np.einsum(u.reshape(dims[a], dims[b], dims[a], dims[b]), [n, n + 1, a, b], psi, list(range(n)), out)
+        for mps in (mps_exact, mps_oversized):
+            sv = mps[0]
+            for t in mps[1:]:
+                sv = np.tensordot(sv, t, axes=([-1], [0]))
+            np.testing.assert_allclose(sv, psi, atol=1e-12)
 
 
 @pytest.mark.parametrize(

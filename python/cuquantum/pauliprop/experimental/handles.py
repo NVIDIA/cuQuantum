@@ -33,6 +33,18 @@ __all__ = ["LibraryHandle"]
 
 
 class LibraryHandle:
+    """A cuPauliProp library context.
+
+    A new handle uses single-process execution. To enable multi-process
+    execution, call :meth:`set_communicator` before creating any
+    :class:`~cuquantum.pauliprop.experimental.PauliExpansion` or other object
+    owned by the handle.
+
+    Args:
+        device_id: GPU device ordinal. If omitted, use the current device.
+        logger: Logger used by the handle and its child objects.
+    """
+
     def __init__(self,
                 device_id : int | None = None,
                 logger : Logger | None = None):
@@ -76,13 +88,22 @@ class LibraryHandle:
     ) -> None:
         """Register a communicator with this library handle.
 
+        This is a collective operation over all processes in the current or
+        replacement communicator and may block for synchronization. Every
+        expansion subsequently created from this handle is distributed across
+        that communicator.
+
         ``provider`` is inferred from ``mpi4py.MPI.Comm``,
         ``nccl.core.Communicator``, and ``nvmath.distributed.DistributedContext``
         (which supplies its NCCL communicator and therefore requires
         initialization with the ``"nccl"`` backend). Raw ``int`` /
-        ``(ptr, size)`` inputs require an explicit provider. Before replacing
-        or clearing a communicator, destroy all objects created from this
-        handle.
+        ``(ptr, size)`` inputs require an explicit provider.
+
+        Before replacing or clearing a communicator, destroy all expansions,
+        views, workspace descriptors, and operator objects created from this
+        handle; existing objects are not converted to the new execution mode.
+        Keep the communicator alive until the handle and all objects that use
+        it have been destroyed.
 
         Args:
             comm: Communicator object, ``nvmath.distributed`` context, raw
@@ -167,15 +188,18 @@ class LibraryHandle:
         self._nccl_comm_holder = nccl_comm_holder
 
     def get_communicator(self):
-        """Return the communicator previously passed to :meth:`set_communicator`."""
+        """Return the process-local communicator object passed to :meth:`set_communicator`.
+
+        Returns ``None`` when the handle uses single-process execution.
+        """
         return self._comm
 
     @nvmath_utils.precondition(_check_valid_state)
     def get_num_ranks(self) -> int:
-        """Return the number of distributed processes for this handle."""
+        """Return the number of processes in the handle's current configuration."""
         return cupp.get_num_ranks(self._validated_ptr)
 
     @nvmath_utils.precondition(_check_valid_state)
     def get_proc_rank(self) -> int:
-        """Return this process's rank in the distributed configuration."""
+        """Return this process's rank in the handle's current configuration."""
         return cupp.get_proc_rank(self._validated_ptr)

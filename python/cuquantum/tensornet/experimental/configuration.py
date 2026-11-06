@@ -136,7 +136,10 @@ class MPSConfig:
     """A data class for MPS based tensor network simulation configuration that can be provided to the :class:`NetworkState` object.
 
     Attributes:
-        max_extent (int) : The maximal extent for truncation. If not provided, no extent truncation will be performed.
+        max_extent (int) : The maximal extent for truncation. If not provided, no extent truncation will be performed and
+            the bond extents of the MPS are limited to 1024, so states whose exact bond extents exceed it raise an error;
+            setting ``max_extent`` explicitly lifts this limit (a value at or above the largest exact bond extent
+            truncates no bond extent).
         canonical_center (int) : The canonical center for the final MPS. If not provided, no canonicalization will be performed.
         abs_cutoff (float) : The absolute value cutoff for MPS SVD truncation. If not provided, no truncation will be performed.
         rel_cutoff (float) : The relative value cutoff for MPS SVD truncation. If not provided, no truncation will be performed.
@@ -149,6 +152,9 @@ class MPSConfig:
         gesvdj_max_sweeps (int) : The maximal number of sweeps for gesvdj computation.
         gesvdr_oversampling (int) : The oversampling parameter for gesvdr computation.
         gesvdr_niters (int) : The number of iterations for gesvdr computation.
+
+    .. note::
+        MPS simulation requires at least two state modes. For a single state mode, use :class:`TNConfig` instead.
     """
     max_extent : Optional[int] = None
     canonical_center : Optional[int] = None
@@ -165,6 +171,10 @@ class MPSConfig:
     gesvdr_niters : Optional[int] = 0
 
     def __post_init__(self):
+        if self.max_extent is not None:
+            if isinstance(self.max_extent, bool) or not isinstance(self.max_extent, (int, np.integer)) or self.max_extent < 1:
+                message = f"Invalid value ({self.max_extent}) for 'max_extent'. Expect positive integer or None"
+                raise ValueError(message)
         if self.algorithm is not None:
             assert self.algorithm in SVD_ALGORITHM_MAP
         if self.mpo_application is not None:

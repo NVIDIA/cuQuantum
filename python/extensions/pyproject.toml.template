@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cuquantum-python-jax-cu@CUDA_MAJOR_VER@"
-version = "0.0.7"
+version = "0.0.8"
 description = "NVIDIA cuQuantum Python JAX"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -41,7 +41,7 @@ classifiers = [
     "@CUDA_CLASSIFIER@",
 ]
 dependencies = [
-    "cuquantum-python-cu@CUDA_MAJOR_VER@~=26.9.0",
+    "cuquantum-python-cu@CUDA_MAJOR_VER@~=26.11.0",
     "jax[cuda@CUDA_MAJOR_VER@-local]@JAX_VERSION_SPEC@",
 ]
 

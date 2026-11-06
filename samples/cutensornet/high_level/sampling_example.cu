@@ -141,6 +141,8 @@ int main()
   assert(worksize > 0);
 
   void *d_scratch {nullptr};
+  void *h_scratch{nullptr};  // host scratch workspace buffer (attached if the prepare call reports a need)
+  int64_t hostWorksize{0};
   if(worksize <= workSizeAvailable) {
     HANDLE_CUDA_ERROR(cudaMalloc(&d_scratch, worksize));
     std::cout << "Allocated " << worksize << " bytes of scratch memory on GPU: "
@@ -151,6 +153,17 @@ int main()
   }else{
     std::cout << "ERROR: Insufficient workspace size on Device!\n";
     std::abort();
+  }
+
+  // Query the host scratch workspace size and attach a host scratch buffer if one is required
+  HANDLE_CUTN_ERROR(cutensornetWorkspaceGetMemorySize(cutnHandle, workDesc, CUTENSORNET_WORKSIZE_PREF_RECOMMENDED,
+                                                      CUTENSORNET_MEMSPACE_HOST, CUTENSORNET_WORKSPACE_SCRATCH, &hostWorksize));
+  std::cout << "Scratch Host workspace size (bytes) = " << hostWorksize << std::endl;
+  if(hostWorksize > 0) {
+    h_scratch = std::realloc(h_scratch, hostWorksize);
+    if(h_scratch == nullptr) { std::cout << "ERROR: Host scratch allocation failed!\n"; std::abort(); }
+    HANDLE_CUTN_ERROR(cutensornetWorkspaceSetMemory(cutnHandle, workDesc, CUTENSORNET_MEMSPACE_HOST,
+                      CUTENSORNET_WORKSPACE_SCRATCH, h_scratch, hostWorksize));
   }
 
   int64_t reqCacheSize {0};
@@ -203,6 +216,7 @@ int main()
   HANDLE_CUTN_ERROR(cutensornetDestroyState(quantumState));
   std::cout << "Destroyed the quantum circuit state\n";
 
+  std::free(h_scratch);
   HANDLE_CUDA_ERROR(cudaFree(d_scratch));
   HANDLE_CUDA_ERROR(cudaFree(d_cache));
   HANDLE_CUDA_ERROR(cudaFree(d_gateCX));

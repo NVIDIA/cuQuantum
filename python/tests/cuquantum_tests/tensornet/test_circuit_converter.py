@@ -1,8 +1,9 @@
-# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
-#
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
 import contextlib
+import sys
+import types
 import warnings
 
 import pytest
@@ -10,6 +11,7 @@ import numpy as np
 
 from nvmath.internal import utils, tensor_wrapper
 from cuquantum.tensornet import contract, CircuitToEinsum, CirqParserOptions, QiskitParserOptions
+from cuquantum.tensornet._internal import circuit_converter_utils
 
 from .utils.circuit_matrix import CircuitMatrix, QiskitCircuitMatrix, CirqCircuitMatrix
 from .utils.circuit_ifc import CircuitHelper, PropertyComputeHelper
@@ -28,7 +30,7 @@ class TestParserOptions:
         assert options.check_diagonal == check_diagonal
         with pytest.raises(TypeError):
             options = CirqParserOptions(decompose_gates=True)
-    
+
     @pytest.mark.parametrize("decompose_gates", (True, False))
     @pytest.mark.parametrize("check_diagonal", (True, False))
     def test_qiskit_parser_options(self, decompose_gates, check_diagonal):
@@ -74,8 +76,8 @@ class TestCircuitToEinsumFunctionality:
             assert gates_are_diagonal is not None
             assert len(gates) == len(gates_are_diagonal)
             assert converter.qubits is not None
-            
-    
+
+
     @pytest.mark.parametrize("circuit", QiskitCircuitMatrix.L1()) # only qiskit circuits support decompose_gates option
     def test_decompose_gates_option(self, circuit):
         converter_1 = CircuitToEinsum(circuit, dtype='complex64', backend="numpy", options={'decompose_gates': True})
@@ -86,7 +88,7 @@ class TestCircuitToEinsumFunctionality:
         gates_are_diagonal_2 = converter_2._gates_are_diagonal
         assert len(gates_1) >= len(gates_2)
         assert len(gates_are_diagonal_1) >= len(gates_are_diagonal_2)
-        
+
     @pytest.mark.parametrize("circuit", CircuitMatrix.L1())
     def test_check_diagonal_option(self, circuit):
         converter_1 = CircuitToEinsum(circuit, dtype='complex64', backend="numpy", options={'check_diagonal': True})
@@ -126,7 +128,7 @@ class TestCircuitToEinsumFunctionality:
         assert expr == expr1
         for o1, o2 in zip(operands, operands1):
             assert np.allclose(o1, o2)
-    
+
     @pytest.mark.parametrize("backend", ARRAY_BACKENDS)
     @pytest.mark.parametrize("dtype", ("float32", "float64", "complex64", "complex128"))
     def test_real_circuit(self, real_circuit, real_circuit_sv, backend, dtype):
@@ -145,12 +147,12 @@ class TestCircuitToEinsumFunctionality:
             exp = contract(expr, *operands)
             exp_ref = PropertyComputeHelper.expectation_from_sv(real_circuit_sv, pauli_string)
             assert TensorBackend.verify_close(exp, exp_ref)
-        
+
         if dtype.startswith("float"):
             with pytest.raises(ValueError) as e:
                 expr, operands = converter.expectation('Y' * n_qubits)
             assert "Pauli Y operator" in str(e.value)
-    
+
     @pytest.mark.parametrize("circuit", CircuitMatrix.complexL0())
     @pytest.mark.parametrize("dtype", ("float32", "float64"))
     def test_negative_complex_circuit(self, circuit, dtype):
@@ -179,24 +181,24 @@ class TestQiskitCorrectness(BaseCircuitToEinsumTester):
 
     def test_state_vector(self, qiskit_circuit, option, qiskit_sv):
         self._test_state_vector(qiskit_circuit, option, qiskit_sv)
-    
+
     def test_amplitude(self, qiskit_circuit, option, qiskit_sv):
         self._test_amplitude(qiskit_circuit, option, qiskit_sv)
-    
+
     def test_batched_amplitudes(self, qiskit_circuit, option, qiskit_sv):
         self._test_batched_amplitudes(qiskit_circuit, option, qiskit_sv)
-    
+
     @pytest.mark.parametrize("lightcone", (True, False))
     def test_rdm_and_probability(self, qiskit_circuit, option, qiskit_sv, lightcone):
         self._test_rdm_and_probability(qiskit_circuit, option, qiskit_sv, lightcone)
-    
+
     @pytest.mark.parametrize("lightcone", (True, False))
     def test_expectation(self, qiskit_circuit, option, qiskit_sv, lightcone):
         self._test_expectation(qiskit_circuit, option, qiskit_sv, lightcone)
-    
+
     def test_backend_dtype_consistency(self, qiskit_circuit, option):
         self._test_backend_dtype_consistency(qiskit_circuit, option)
-    
+
     def test_auto_backend(self, qiskit_circuit, option):
         self._test_auto_backend(qiskit_circuit, "complex64", option)
 
@@ -219,21 +221,21 @@ class TestCirqCorrectness(BaseCircuitToEinsumTester):
 
     def test_state_vector(self, cirq_circuit, option, cirq_sv):
         self._test_state_vector(cirq_circuit, option, cirq_sv)
-    
+
     def test_amplitude(self, cirq_circuit, option, cirq_sv):
         self._test_amplitude(cirq_circuit, option, cirq_sv)
-    
+
     def test_batched_amplitudes(self, cirq_circuit, option, cirq_sv):
         self._test_batched_amplitudes(cirq_circuit, option, cirq_sv)
-    
+
     @pytest.mark.parametrize("lightcone", (True, False))
     def test_rdm_and_probability(self, cirq_circuit, option, cirq_sv, lightcone):
         self._test_rdm_and_probability(cirq_circuit, option, cirq_sv, lightcone)
-    
-    @pytest.mark.parametrize("lightcone", (True, False))    
+
+    @pytest.mark.parametrize("lightcone", (True, False))
     def test_expectation(self, cirq_circuit, option, cirq_sv, lightcone):
         self._test_expectation(cirq_circuit, option, cirq_sv, lightcone)
-    
+
     def test_backend_dtype_consistency(self, cirq_circuit, option):
         self._test_backend_dtype_consistency(cirq_circuit, option)
 
@@ -996,3 +998,23 @@ class TestCircuitToEinsumChannels:
             np.testing.assert_allclose(rdm_lc, rdm_no, atol=1e-10)
         except ImportError:
             pytest.skip("cirq not available")
+
+
+@pytest.mark.parametrize("framework, partial", [("cirq", "qiskit"), ("qiskit", "cirq")])
+def test_infer_parser_ignores_partially_initialized_framework(monkeypatch, framework, partial):
+    """A framework that another thread is still importing must not block the other."""
+    package = pytest.importorskip(framework)
+    circuit = package.Circuit() if framework == "cirq" else package.QuantumCircuit(1)
+    real = pytest.importorskip(partial)
+
+    class Initializing(types.ModuleType):
+        def __getattr__(self, name):
+            # The other thread finishes the import after this first look.
+            sys.modules[partial] = real
+            raise AttributeError(name)
+
+    monkeypatch.setitem(sys.modules, partial, Initializing(partial))
+
+    parser = circuit_converter_utils.infer_parser(circuit)
+
+    assert parser.__name__.endswith(f"circuit_parser_utils_{framework}")

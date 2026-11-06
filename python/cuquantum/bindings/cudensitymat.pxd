@@ -2,7 +2,19 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 26.06.0 to 26.11.0. Do not modify it directly.
+
+
+# <<<< PREAMBLE CONTENT >>>>
+
+from libc.stdint cimport (
+    int32_t,
+    int64_t,
+    intptr_t,
+)
+
+
+# <<<< END OF PREAMBLE CONTENT >>>>
 
 from libc.stdint cimport intptr_t
 
@@ -116,7 +128,7 @@ ctypedef cudensitymatWorkspaceKind_t _WorkspaceKind
 # Functions
 ###############################################################################
 
-cpdef get_version()
+cpdef size_t get_version() except? 0
 cpdef intptr_t create() except? 0
 cpdef destroy(intptr_t handle)
 cpdef reset_distributed_configuration(intptr_t handle, int provider, intptr_t comm_ptr, size_t comm_size)

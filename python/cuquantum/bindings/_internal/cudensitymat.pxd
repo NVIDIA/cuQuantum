@@ -2,7 +2,18 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 26.06.0 to 26.11.0. Do not modify it directly.
+
+
+# <<<< PREAMBLE CONTENT >>>>
+
+from libc.stdint cimport (
+    int32_t,
+    int64_t,
+)
+
+
+# <<<< END OF PREAMBLE CONTENT >>>>
 
 from ..cycudensitymat cimport *
 

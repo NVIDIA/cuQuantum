@@ -2,17 +2,25 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 26.09.0 to 26.11.0. Do not modify it directly.
 
 
 # <<<< PREAMBLE CONTENT >>>>
 
+from cuquantum.bindings._utils cimport (
+    get_nested_resource_ptr as _cyb_get_nested_resource_ptr,
+    get_resource_ptr as _cyb_get_resource_ptr,
+    get_resource_ptrs as _cyb_get_resource_ptrs,
+    nested_resource as _cyb_nested_resource,
+    nullable_unique_ptr as _cyb_nullable_unique_ptr,
+)
 from libc.stdint cimport (
     int32_t,
     int64_t,
     intptr_t,
     uint32_t,
 )
+from libcpp.vector cimport vector as _cyb_vector
 
 from enum import IntEnum as _cyb_IntEnum
 
@@ -331,7 +339,6 @@ cpdef tuple communicator_get_size_and_rank():
 
     Returns:
         A 3-tuple containing:
-
         - int32_t: global number of processes.
         - int32_t: global rank of the calling process.
         - int: status from communicator operations.
@@ -383,10 +390,10 @@ cpdef intptr_t configure_state_vector_single_device(int sv_data_type, int32_t nu
         num_wires (int32_t): number of wires of state vector.
         num_device_wires (int32_t): number of wires of state vector on
             device.
-        device_id (int32_t): device id where the entire state vector
-            will be allocated.
-        capability (uint32_t): bit mask to specify optional features
-            of state vector.
+        device_id (int32_t): device id where the entire state vector will
+            be allocated.
+        capability (uint32_t): bit mask to specify optional features of
+            state vector.
 
     Returns:
         intptr_t: dictionary instance that holds state vector
@@ -413,11 +420,10 @@ cpdef intptr_t configure_state_vector_multi_device(int sv_data_type, int32_t num
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_devices (int32_t): number of devices.
         network_type (int): device network topology type.
-        capability (uint32_t): bit mask to specify optional features
-            of state vector.
+        capability (uint32_t): bit mask to specify optional features of
+            state vector.
 
     Returns:
         intptr_t: dictionary instance that holds state vector
@@ -425,8 +431,8 @@ cpdef intptr_t configure_state_vector_multi_device(int sv_data_type, int32_t num
 
     .. seealso:: `custatevecExConfigureStateVectorMultiDevice`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _device_ids_
-    get_resource_ptr[int32_t](_device_ids_, device_ids, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _device_ids_
+    _cyb_get_resource_ptr[int32_t](_device_ids_, device_ids, <int32_t*>NULL)
     cdef DictionaryDescriptor sv_config
     with nogil:
         __status__ = custatevecExConfigureStateVectorMultiDevice(&sv_config, <DataType>sv_data_type, num_wires, num_device_wires, <const int32_t*>(_device_ids_.data()), num_devices, <custatevecDeviceNetworkType_t>network_type, capability)
@@ -443,27 +449,25 @@ cpdef intptr_t configure_state_vector_multi_process(int sv_data_type, int32_t nu
         num_device_wires (int32_t): number of wires of state vector on
             each device.
         device_id (int32_t): device id for this process.
-        memory_sharing_method (MemorySharingMethod): method for
-            sharing GPU virtual device memory between processes.
+        memory_sharing_method (MemorySharingMethod): method for sharing
+            GPU virtual device memory between processes.
         global_index_bit_classes (object): host pointer to an array of
             global index bit classes for each layer. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``_GlobalIndexBitClass``.
-
-        num_global_index_bits_per_layer (object): host pointer to an
-            array specifying number of global index bits per layer. It can be:
+        num_global_index_bits_per_layer (object): host pointer to an array
+            specifying number of global index bits per layer. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        num_global_index_bit_layers (int32_t): number of global index
-            bit layers.
+        num_global_index_bit_layers (int32_t): number of global index bit
+            layers.
         transfer_workspace_size_in_bytes (size_t): size in bytes of
             workspace memory for inter-process data transfers.
         aux_config (intptr_t): pointer to auxiliary configuration.
-        capability (uint32_t): bit mask to specify optional features
-            of state vector.
+        capability (uint32_t): bit mask to specify optional features of
+            state vector.
 
     Returns:
         intptr_t: dictionary instance that holds state vector
@@ -471,10 +475,10 @@ cpdef intptr_t configure_state_vector_multi_process(int sv_data_type, int32_t nu
 
     .. seealso:: `custatevecExConfigureStateVectorMultiProcess`
     """
-    cdef nullable_unique_ptr[ vector[int] ] _global_index_bit_classes_
-    get_resource_ptr[int](_global_index_bit_classes_, global_index_bit_classes, <int*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _num_global_index_bits_per_layer_
-    get_resource_ptr[int32_t](_num_global_index_bits_per_layer_, num_global_index_bits_per_layer, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int] ] _global_index_bit_classes_
+    _cyb_get_resource_ptr[int](_global_index_bit_classes_, global_index_bit_classes, <int*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _num_global_index_bits_per_layer_
+    _cyb_get_resource_ptr[int32_t](_num_global_index_bits_per_layer_, num_global_index_bits_per_layer, <int32_t*>NULL)
     cdef DictionaryDescriptor sv_config
     with nogil:
         __status__ = custatevecExConfigureStateVectorMultiProcess(&sv_config, <DataType>sv_data_type, num_wires, num_device_wires, device_id, <_MemorySharingMethod>memory_sharing_method, <const _GlobalIndexBitClass*>(_global_index_bit_classes_.data()), <const int32_t*>(_num_global_index_bits_per_layer_.data()), num_global_index_bit_layers, transfer_workspace_size_in_bytes, <const void*>aux_config, capability)
@@ -493,9 +497,8 @@ cpdef intptr_t state_vector_create_single_process(intptr_t sv_config, streams, i
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``intptr_t``.
-
-        num_streams (int32_t): the number of streams given by the
-            streams argument.
+        num_streams (int32_t): the number of streams given by the streams
+            argument.
         resource_manager (intptr_t): resource manager.
 
     Returns:
@@ -503,8 +506,8 @@ cpdef intptr_t state_vector_create_single_process(intptr_t sv_config, streams, i
 
     .. seealso:: `custatevecExStateVectorCreateSingleProcess`
     """
-    cdef nullable_unique_ptr[ vector[intptr_t] ] _streams_
-    get_resource_ptr[intptr_t](_streams_, streams, <intptr_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[intptr_t] ] _streams_
+    _cyb_get_resource_ptr[intptr_t](_streams_, streams, <intptr_t*>NULL)
     cdef StateVectorDescriptor state_vector
     with nogil:
         __status__ = custatevecExStateVectorCreateSingleProcess(&state_vector, <const DictionaryDescriptor>sv_config, <const Stream*>(_streams_.data()), num_streams, <ResourceManagerDescriptor>resource_manager)
@@ -555,8 +558,8 @@ cpdef state_vector_get_property(intptr_t state_vector, int property, intptr_t va
         state_vector (intptr_t): state vector instance.
         property (StateVectorProperty): a value of
             ``custatevecExStateVectorProperty_t``.
-        value (intptr_t): host pointer to a host buffer that receives
-            the value of the specified property.
+        value (intptr_t): host pointer to a host buffer that receives the
+            value of the specified property.
         size_in_bytes (size_t): byte size of the value buffer.
 
     .. seealso:: `custatevecExStateVectorGetProperty`
@@ -604,8 +607,7 @@ cpdef state_vector_get_state(intptr_t state_vector, intptr_t state, int data_typ
         data_type (int): data_type of the state vector elements.
         begin (int64_t): index of state vector element where the copy
             begins.
-        end (int64_t): index of state vector element where the copy
-            ends.
+        end (int64_t): index of state vector element where the copy ends.
         max_num_concurrent_copies (int32_t): Max number of parallel
             copies.
 
@@ -625,8 +627,7 @@ cpdef state_vector_set_state(intptr_t state_vector, intptr_t state, int data_typ
         data_type (int): data_type of the state vector elements.
         begin (int64_t): index of state vector element where the copy
             begins.
-        end (int64_t): index of state vector element where the copy
-            ends.
+        end (int64_t): index of state vector element where the copy ends.
         max_num_concurrent_copies (int32_t): Max number of parallel
             copies.
 
@@ -642,18 +643,17 @@ cpdef state_vector_reassign_wire_ordering(intptr_t state_vector, wire_ordering, 
 
     Args:
         state_vector (intptr_t): state vector instance.
-        wire_ordering (object): the pointer to a integer host array
-            that holds wire ordering. It can be:
+        wire_ordering (object): the pointer to a integer host array that
+            holds wire ordering. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         wire_ordering_len (int32_t): the length of wire ordering.
 
     .. seealso:: `custatevecExStateVectorReassignWireOrdering`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _wire_ordering_
-    get_resource_ptr[int32_t](_wire_ordering_, wire_ordering, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _wire_ordering_
+    _cyb_get_resource_ptr[int32_t](_wire_ordering_, wire_ordering, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExStateVectorReassignWireOrdering(<StateVectorDescriptor>state_vector, <const int32_t*>(_wire_ordering_.data()), wire_ordering_len)
     check_status(__status__)
@@ -669,15 +669,14 @@ cpdef state_vector_permute_index_bits(intptr_t state_vector, permutation, int32_
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         permutation_len (int32_t): length of the permutation.
-        permutation_type (PermutationType): permutation type (scatter
-            or gather).
+        permutation_type (PermutationType): permutation type (scatter or
+            gather).
 
     .. seealso:: `custatevecExStateVectorPermuteIndexBits`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _permutation_
-    get_resource_ptr[int32_t](_permutation_, permutation, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _permutation_
+    _cyb_get_resource_ptr[int32_t](_permutation_, permutation, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExStateVectorPermuteIndexBits(<StateVectorDescriptor>state_vector, <const int32_t*>(_permutation_.data()), permutation_len, <_PermutationType>permutation_type)
     check_status(__status__)
@@ -748,11 +747,11 @@ cpdef state_vector_add_wires(intptr_t state_vector, int index_bit_domain, int32_
         index_bit_domain (IndexBitDomain): the domain of index bits to
             which the new wires are assigned.
         num_wires_to_add (int32_t): the number of wires to add.
-        wire_init_mode (WireInitMode): initialization mode applied to
-            each newly added wire.
+        wire_init_mode (WireInitMode): initialization mode applied to each
+            newly added wire.
         wires_added (intptr_t): host pointer to an int32_t array that
-            receives the IDs of the newly added wires. The array
-            length must be at least ``num_wires_to_add``.
+            receives the IDs of the newly added wires. The array length
+            must be at least ``num_wires_to_add``.
 
     .. seealso:: `custatevecExStateVectorAddWires`
     """
@@ -766,37 +765,34 @@ cpdef abs2sum_array(intptr_t state_vector, intptr_t abs2sum, output_ordering, in
 
     Args:
         state_vector (intptr_t): StateVector instance.
-        abs2sum (intptr_t): pointer to a host or device array of sums
-            of squared absolute values.
-        output_ordering (object): pointer to a host array of output
-            tensor ordering. It can be:
+        abs2sum (intptr_t): pointer to a host or device array of sums of
+            squared absolute values.
+        output_ordering (object): pointer to a host array of output tensor
+            ordering. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         output_ordering_len (int32_t): the length of output_ordering.
-        mask_bit_string (object): pointer to a host array for a bit
-            string to specify mask bits. It can be:
+        mask_bit_string (object): pointer to a host array for a bit string
+            to specify mask bits. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         mask_wire_ordering (object): pointer to a host array that
             specifies the wire ordering of mask_bit_string. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         mask_len (int32_t): the length of mask.
 
     .. seealso:: `custatevecExAbs2SumArray`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _output_ordering_
-    get_resource_ptr[int32_t](_output_ordering_, output_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_bit_string_
-    get_resource_ptr[int32_t](_mask_bit_string_, mask_bit_string, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _mask_wire_ordering_
-    get_resource_ptr[int32_t](_mask_wire_ordering_, mask_wire_ordering, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _output_ordering_
+    _cyb_get_resource_ptr[int32_t](_output_ordering_, output_ordering, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _mask_bit_string_
+    _cyb_get_resource_ptr[int32_t](_mask_bit_string_, mask_bit_string, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _mask_wire_ordering_
+    _cyb_get_resource_ptr[int32_t](_mask_wire_ordering_, mask_wire_ordering, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExAbs2SumArray(<StateVectorDescriptor>state_vector, <double*>abs2sum, <const int32_t*>(_output_ordering_.data()), output_ordering_len, <const int32_t*>(_mask_bit_string_.data()), <const int32_t*>(_mask_wire_ordering_.data()), mask_len)
     check_status(__status__)
@@ -812,21 +808,19 @@ cpdef int64_t measure(intptr_t state_vector, bit_string_ordering, int32_t bit_st
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        bit_string_ordering_len (int32_t): length of
-            bit_stringOrdering.
+        bit_string_ordering_len (int32_t): length of bit_stringOrdering.
         randnum (double): random number, [0, 1).
         collapse (int): Collapse operation.
-        reserved (intptr_t): Reserved argument. A null pointer should
-            be passed.
+        reserved (intptr_t): Reserved argument. A null pointer should be
+            passed.
 
     Returns:
         int64_t: measured bit string.
 
     .. seealso:: `custatevecExMeasure`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_string_ordering_
-    get_resource_ptr[int32_t](_bit_string_ordering_, bit_string_ordering, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _bit_string_ordering_
+    _cyb_get_resource_ptr[int32_t](_bit_string_ordering_, bit_string_ordering, <int32_t*>NULL)
     cdef custatevecIndex_t bit_string
     with nogil:
         __status__ = custatevecExMeasure(<StateVectorDescriptor>state_vector, &bit_string, <const int32_t*>(_bit_string_ordering_.data()), bit_string_ordering_len, randnum, <custatevecCollapseOp_t>collapse, <const void*>reserved)
@@ -839,38 +833,34 @@ cpdef sample(intptr_t state_vector, intptr_t bit_strings, bit_string_ordering, i
 
     Args:
         state_vector (intptr_t): State vector instance.
-        bit_strings (intptr_t): pointer to a host array to store
-            sampled bit strings.
+        bit_strings (intptr_t): pointer to a host array to store sampled
+            bit strings.
         bit_string_ordering (object): pointer to a host array of bit
             string ordering for sampling. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        bit_string_ordering_len (int32_t): length of
-            bit_string_ordering.
+        bit_string_ordering_len (int32_t): length of bit_string_ordering.
         randnums (object): pointer to an array of random numbers. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``float``.
-
         num_shots (int32_t): the number of shots.
         output (int): the order of sampled bit strings.
-        abs2sums (object): pointer to a host array of abs2 sums for
-            each sub state vector, or null. It can be:
+        abs2sums (object): pointer to a host array of abs2 sums for each
+            sub state vector, or null. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``float``.
 
-
     .. seealso:: `custatevecExSample`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _bit_string_ordering_
-    get_resource_ptr[int32_t](_bit_string_ordering_, bit_string_ordering, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[double] ] _randnums_
-    get_resource_ptr[double](_randnums_, randnums, <double*>NULL)
-    cdef nullable_unique_ptr[ vector[double] ] _abs2sums_
-    get_resource_ptr[double](_abs2sums_, abs2sums, <double*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _bit_string_ordering_
+    _cyb_get_resource_ptr[int32_t](_bit_string_ordering_, bit_string_ordering, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[double] ] _randnums_
+    _cyb_get_resource_ptr[double](_randnums_, randnums, <double*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[double] ] _abs2sums_
+    _cyb_get_resource_ptr[double](_abs2sums_, abs2sums, <double*>NULL)
     with nogil:
         __status__ = custatevecExSample(<StateVectorDescriptor>state_vector, <custatevecIndex_t*>bit_strings, <const int32_t*>(_bit_string_ordering_.data()), bit_string_ordering_len, <const double*>(_randnums_.data()), num_shots, <custatevecSamplerOutput_t>output, <const double*>(_abs2sums_.data()))
     check_status(__status__)
@@ -881,40 +871,36 @@ cpdef apply_matrix(intptr_t state_vector, intptr_t matrix, int matrix_data_type,
 
     Args:
         state_vector (intptr_t): state vector instance.
-        matrix (intptr_t): pointer to a buffer that holds matrix
-            elements.
+        matrix (intptr_t): pointer to a buffer that holds matrix elements.
         matrix_data_type (int): data type of matrix.
-        ex_matrix_type (MatrixType): enumerator specifying the matrix
-            type and layout.
+        ex_matrix_type (MatrixType): enumerator specifying the matrix type
+            and layout.
         layout (int): enumerator specifying the matrix layout.
         adjoint (int32_t): apply adjoint of matrix.
         targets (object): pointer to a host array of target wires. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_targets (int32_t): the number of target wires.
         controls (object): pointer to a host array of control wires. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        control_bit_values (object): pointer to a host array of
-            control bit values. It can be:
+        control_bit_values (object): pointer to a host array of control
+            bit values. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_controls (int32_t): the number of control wires.
 
     .. seealso:: `custatevecExApplyMatrix`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_
-    get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_
-    get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_
-    get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _targets_
+    _cyb_get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _controls_
+    _cyb_get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _control_bit_values_
+    _cyb_get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExApplyMatrix(<StateVectorDescriptor>state_vector, <const void*>matrix, <DataType>matrix_data_type, <_MatrixType>ex_matrix_type, <custatevecMatrixLayout_t>layout, adjoint, <const int32_t*>(_targets_.data()), num_targets, <const int32_t*>(_controls_.data()), <const int32_t*>(_control_bit_values_.data()), num_controls)
     check_status(__status__)
@@ -930,36 +916,32 @@ cpdef apply_pauli_rotation(intptr_t state_vector, double theta, paulis, targets,
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``custatevecPauli_t``.
-
         targets (object): pointer to a host array of target wires. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_targets (int32_t): the number of target wires.
         controls (object): pointer to a host array of control wires. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        control_bit_values (object): pointer to a host array of
-            control bit values. It can be:
+        control_bit_values (object): pointer to a host array of control
+            bit values. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_controls (int32_t): the number of control wires.
 
     .. seealso:: `custatevecExApplyPauliRotation`
     """
-    cdef nullable_unique_ptr[ vector[custatevecPauli_t] ] _paulis_
-    get_resource_ptr[custatevecPauli_t](_paulis_, paulis, <custatevecPauli_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_
-    get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_
-    get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_
-    get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[custatevecPauli_t] ] _paulis_
+    _cyb_get_resource_ptr[custatevecPauli_t](_paulis_, paulis, <custatevecPauli_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _targets_
+    _cyb_get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _controls_
+    _cyb_get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _control_bit_values_
+    _cyb_get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExApplyPauliRotation(<StateVectorDescriptor>state_vector, theta, <const custatevecPauli_t*>(_paulis_.data()), <const int32_t*>(_targets_.data()), num_targets, <const int32_t*>(_controls_.data()), <const int32_t*>(_control_bit_values_.data()), num_controls)
     check_status(__status__)
@@ -970,40 +952,37 @@ cpdef compute_expectation_on_pauli_basis(intptr_t state_vector, intptr_t expecta
 
     Args:
         state_vector (intptr_t): state vector instance.
-        expectation_values (intptr_t): pointer to a host array to
-            store expectation values.
-        pauli_operator_arrays (object): pointer to a host array of
-            Pauli operator arrays. It can be:
+        expectation_values (intptr_t): pointer to a host array to store
+            expectation values.
+        pauli_operator_arrays (object): pointer to a host array of Pauli
+            operator arrays. It can be:
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
               to a valid sequence of 'custatevecPauli_t', or
             - a nested Python sequence of ``custatevecPauli_t``.
-
-        num_pauli_operator_arrays (int32_t): the number of Pauli
-            operator arrays.
+        num_pauli_operator_arrays (int32_t): the number of Pauli operator
+            arrays.
         basis_wires_array (object): host array of basis wire arrays. It can be:
 
             - an :class:`int` as the pointer address to the nested sequence, or
             - a Python sequence of :class:`int`\s, each of which is a pointer address
               to a valid sequence of 'int32_t', or
             - a nested Python sequence of ``int32_t``.
-
-        num_basis_wires_array (object): host array of the number of
-            basis wires. It can be:
+        num_basis_wires_array (object): host array of the number of basis
+            wires. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
 
-
     .. seealso:: `custatevecExComputeExpectationOnPauliBasis`
     """
-    cdef nested_resource[ custatevecPauli_t ] _pauli_operator_arrays_
-    get_nested_resource_ptr[custatevecPauli_t](_pauli_operator_arrays_, pauli_operator_arrays, <custatevecPauli_t*>NULL)
-    cdef nested_resource[ int32_t ] _basis_wires_array_
-    get_nested_resource_ptr[int32_t](_basis_wires_array_, basis_wires_array, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _num_basis_wires_array_
-    get_resource_ptr[int32_t](_num_basis_wires_array_, num_basis_wires_array, <int32_t*>NULL)
+    cdef _cyb_nested_resource[ custatevecPauli_t ] _pauli_operator_arrays_
+    _cyb_get_nested_resource_ptr[custatevecPauli_t](_pauli_operator_arrays_, pauli_operator_arrays, <custatevecPauli_t*>NULL)
+    cdef _cyb_nested_resource[ int32_t ] _basis_wires_array_
+    _cyb_get_nested_resource_ptr[int32_t](_basis_wires_array_, basis_wires_array, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _num_basis_wires_array_
+    _cyb_get_resource_ptr[int32_t](_num_basis_wires_array_, num_basis_wires_array, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExComputeExpectationOnPauliBasis(<StateVectorDescriptor>state_vector, <double*>expectation_values, <const custatevecPauli_t**>(_pauli_operator_arrays_.ptrs.data()), num_pauli_operator_arrays, <const int32_t**>(_basis_wires_array_.ptrs.data()), <const int32_t*>(_num_basis_wires_array_.data()))
     check_status(__status__)
@@ -1014,25 +993,23 @@ cpdef compute_expectation(intptr_t state_vector, intptr_t expectation_values, in
 
     Args:
         state_vector (intptr_t): state vector instance.
-        expectation_values (intptr_t): pointer to a host array to
-            store expectation values.
+        expectation_values (intptr_t): pointer to a host array to store
+            expectation values.
         matrices (intptr_t): pointer to a buffer that holds matrix
             observables.
         matrix_data_type (int): data type of matrices.
-        layout (int): enumerator specifying the memory layout of
-            matrices.
+        layout (int): enumerator specifying the memory layout of matrices.
         num_matrices (int32_t): the number of matrix observables.
         basis_wires (object): pointer to a host array of basis wires. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_basis_wires (int32_t): the number of basis wires.
 
     .. seealso:: `custatevecExComputeExpectation`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _basis_wires_
-    get_resource_ptr[int32_t](_basis_wires_, basis_wires, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _basis_wires_
+    _cyb_get_resource_ptr[int32_t](_basis_wires_, basis_wires, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExComputeExpectation(<StateVectorDescriptor>state_vector, <double2*>expectation_values, <const void*>matrices, <DataType>matrix_data_type, <custatevecMatrixLayout_t>layout, num_matrices, <const int32_t*>(_basis_wires_.data()), num_basis_wires)
     check_status(__status__)
@@ -1099,29 +1076,26 @@ cpdef sv_updater_enqueue_matrix(intptr_t sv_updater, intptr_t matrix, int matrix
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_targets (int32_t): the number of target wires.
         controls (object): pointer to a host array of control wires. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
-        control_bit_values (object): pointer to a host array of
-            control bit values. It can be:
+        control_bit_values (object): pointer to a host array of control
+            bit values. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_controls (int32_t): the number of control wires.
 
     .. seealso:: `custatevecExSVUpdaterEnqueueMatrix`
     """
-    cdef nullable_unique_ptr[ vector[int32_t] ] _targets_
-    get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _controls_
-    get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _control_bit_values_
-    get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _targets_
+    _cyb_get_resource_ptr[int32_t](_targets_, targets, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _controls_
+    _cyb_get_resource_ptr[int32_t](_controls_, controls, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _control_bit_values_
+    _cyb_get_resource_ptr[int32_t](_control_bit_values_, control_bit_values, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExSVUpdaterEnqueueMatrix(<SVUpdaterDescriptor>sv_updater, <const void*>matrix, <DataType>matrix_data_type, <_MatrixType>ex_matrix_type, <custatevecMatrixLayout_t>layout, adjoint, <const int32_t*>(_targets_.data()), num_targets, <const int32_t*>(_controls_.data()), <const int32_t*>(_control_bit_values_.data()), num_controls)
     check_status(__status__)
@@ -1137,41 +1111,36 @@ cpdef sv_updater_enqueue_unitary_channel(intptr_t sv_updater, unitaries, int uni
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
         unitaries_data_type (int): dataType of the specified unitary
             matrices.
-        ex_matrix_types (object): matrix types of the specified
-            unitary matrices. It can be:
+        ex_matrix_types (object): matrix types of the specified unitary
+            matrices. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``_MatrixType``.
-
         num_unitaries (int32_t): the number of matrices.
         layout (int): layout of the specified unitary matrices.
-        probabilities (object): host array that holds the
-            probabilities. It can be:
+        probabilities (object): host array that holds the probabilities. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``float``.
-
         channel_wires (object): wires that sampled unitary channel is
             applied. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_channel_wires (int32_t): the number of wires.
 
     .. seealso:: `custatevecExSVUpdaterEnqueueUnitaryChannel`
     """
-    cdef nullable_unique_ptr[ vector[void*] ] _unitaries_
-    get_resource_ptrs[void](_unitaries_, unitaries, <void*>NULL)
-    cdef nullable_unique_ptr[ vector[int] ] _ex_matrix_types_
-    get_resource_ptr[int](_ex_matrix_types_, ex_matrix_types, <int*>NULL)
-    cdef nullable_unique_ptr[ vector[double] ] _probabilities_
-    get_resource_ptr[double](_probabilities_, probabilities, <double*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _channel_wires_
-    get_resource_ptr[int32_t](_channel_wires_, channel_wires, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[void*] ] _unitaries_
+    _cyb_get_resource_ptrs[void](_unitaries_, unitaries, <void*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int] ] _ex_matrix_types_
+    _cyb_get_resource_ptr[int](_ex_matrix_types_, ex_matrix_types, <int*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[double] ] _probabilities_
+    _cyb_get_resource_ptr[double](_probabilities_, probabilities, <double*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _channel_wires_
+    _cyb_get_resource_ptr[int32_t](_channel_wires_, channel_wires, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExSVUpdaterEnqueueUnitaryChannel(<SVUpdaterDescriptor>sv_updater, <const void* const*>(_unitaries_.data()), <DataType>unitaries_data_type, <const _MatrixType*>(_ex_matrix_types_.data()), num_unitaries, <custatevecMatrixLayout_t>layout, <const double*>(_probabilities_.data()), <const int32_t*>(_channel_wires_.data()), num_channel_wires)
     check_status(__status__)
@@ -1182,37 +1151,31 @@ cpdef sv_updater_enqueue_general_channel(intptr_t sv_updater, matrices, int matr
 
     Args:
         sv_updater (intptr_t): SVUpdater instance.
-        matrices (object): host pointer to an array of matrix
-            elements. It can be:
+        matrices (object): host pointer to an array of matrix elements. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of :class:`int`\s (as pointer addresses).
-
         matrix_data_type (int): dataType of the matrices.
-        ex_matrix_types (object): matrix types of the specified
-            matrices. It can be:
+        ex_matrix_types (object): matrix types of the specified matrices. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``_MatrixType``.
-
         num_matrices (int32_t): the number of matrices.
         layout (int): layout of the matrices.
-        channel_wires (object): wires that the general channel is
-            applied. It can be:
+        channel_wires (object): wires that the general channel is applied. It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``int32_t``.
-
         num_channel_wires (int32_t): the number of wires.
 
     .. seealso:: `custatevecExSVUpdaterEnqueueGeneralChannel`
     """
-    cdef nullable_unique_ptr[ vector[void*] ] _matrices_
-    get_resource_ptrs[void](_matrices_, matrices, <void*>NULL)
-    cdef nullable_unique_ptr[ vector[int] ] _ex_matrix_types_
-    get_resource_ptr[int](_ex_matrix_types_, ex_matrix_types, <int*>NULL)
-    cdef nullable_unique_ptr[ vector[int32_t] ] _channel_wires_
-    get_resource_ptr[int32_t](_channel_wires_, channel_wires, <int32_t*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[void*] ] _matrices_
+    _cyb_get_resource_ptrs[void](_matrices_, matrices, <void*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int] ] _ex_matrix_types_
+    _cyb_get_resource_ptr[int](_ex_matrix_types_, ex_matrix_types, <int*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[int32_t] ] _channel_wires_
+    _cyb_get_resource_ptr[int32_t](_channel_wires_, channel_wires, <int32_t*>NULL)
     with nogil:
         __status__ = custatevecExSVUpdaterEnqueueGeneralChannel(<SVUpdaterDescriptor>sv_updater, <const void* const*>(_matrices_.data()), <DataType>matrix_data_type, <const _MatrixType*>(_ex_matrix_types_.data()), num_matrices, <custatevecMatrixLayout_t>layout, <const int32_t*>(_channel_wires_.data()), num_channel_wires)
     check_status(__status__)
@@ -1242,18 +1205,17 @@ cpdef sv_updater_apply(intptr_t sv_updater, intptr_t state_vector, randnums, int
     Args:
         sv_updater (intptr_t): SVUpdater instance.
         state_vector (intptr_t): state vector instance.
-        randnums (object): a host pointer to an array of random
-            numbers in the range [0, 1). It can be:
+        randnums (object): a host pointer to an array of random numbers in
+            the range [0, 1). It can be:
 
             - an :class:`int` as the pointer address to the array, or
             - a Python sequence of ``float``.
-
         num_randnums (int32_t): the number of random numbers.
 
     .. seealso:: `custatevecExSVUpdaterApply`
     """
-    cdef nullable_unique_ptr[ vector[double] ] _randnums_
-    get_resource_ptr[double](_randnums_, randnums, <double*>NULL)
+    cdef _cyb_nullable_unique_ptr[ _cyb_vector[double] ] _randnums_
+    _cyb_get_resource_ptr[double](_randnums_, randnums, <double*>NULL)
     with nogil:
         __status__ = custatevecExSVUpdaterApply(<SVUpdaterDescriptor>sv_updater, <StateVectorDescriptor>state_vector, <const double*>(_randnums_.data()), num_randnums)
     check_status(__status__)

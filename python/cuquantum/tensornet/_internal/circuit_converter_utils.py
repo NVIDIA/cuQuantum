@@ -1,9 +1,10 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
-#
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
 import collections.abc
 import importlib
+import importlib.metadata
+import sys
 import types
 from dataclasses import dataclass
 
@@ -30,18 +31,6 @@ class GateEntry:
     qubits: tuple
     is_diagonal: bool = False
     probabilities: tuple = None
-
-
-try:
-    import cirq
-    from . import circuit_parser_utils_cirq
-except ImportError:
-    cirq = circuit_parser_utils_cirq = None
-try:
-    import qiskit
-    from . import circuit_parser_utils_qiskit
-except ImportError:
-    qiskit = circuit_parser_utils_qiskit = None
 
 
 EINSUM_SYMBOLS_BASE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -98,22 +87,54 @@ def infer_parser(circuit):
     """
     Infer the package that defines the circuit object.
     """
-    if qiskit and isinstance(circuit, qiskit.QuantumCircuit):
-        import importlib.metadata
-        qiskit_version = importlib.metadata.version('qiskit') # qiskit metapackage version
-        check_version('qiskit', qiskit_version, QISKIT_MIN_VERSION)
+
+    def import_package(name):
+        try:
+            return importlib.import_module(name)
+        except ImportError:
+            return None
+
+    def find_package(get_package):
+        qiskit = get_package("qiskit")
+        if qiskit is not None and isinstance(circuit, qiskit.QuantumCircuit):
+            return qiskit
+        cirq = get_package("cirq")
+        if cirq is not None and isinstance(circuit, cirq.Circuit):
+            return cirq
+        return None
+
+    # Fast path: only check packages that are already imported. Covers common case and
+    # means cirq users won't have to import qiskit. sys.modules could contain a partially
+    # loaded package (no thread lock), so protect with AttributeError.
+    try:
+        package = find_package(sys.modules.get)
+    except AttributeError:
+        package = None
+    # Fall back: import the packages, e.g. for re-exported or virtual-subclass types.
+    # Catches partially imported cases due to import lock.
+    if package is None:
+        package = find_package(import_package)
+
+    if package is None:
+        base = circuit.__module__.split(".")[0]
+        raise NotImplementedError(f"circuit from {base} not supported")
+
+    if package.__name__ == "qiskit":
+        qiskit_version = importlib.metadata.version("qiskit")  # qiskit metapackage version
+        check_version("qiskit", qiskit_version, QISKIT_MIN_VERSION)
+        from . import circuit_parser_utils_qiskit
+
         return circuit_parser_utils_qiskit
-    elif cirq and isinstance(circuit, cirq.Circuit):
-        cirq_version  = cirq.__version__
-        check_version('cirq', cirq_version, CIRQ_MIN_VERSION)
+    if package.__name__ == "cirq":
+        check_version("cirq", package.__version__, CIRQ_MIN_VERSION)
+        from . import circuit_parser_utils_cirq
+
         return circuit_parser_utils_cirq
-    else:
-        base = circuit.__module__.split('.')[0]
-        raise NotImplementedError(f'circuit from {base} not supported')
+    raise AssertionError(f"no parser for circuit package {package.__name__}")
 
 def parse_inputs(qubits, gate_entries, dtype, backend):
     """
-    Given a sequence of qubits and gate entries, generate the mode labels, 
+    Given a sequence of qubits and gate entries, generate the mode labels,
     tensor operands and qubits_frontier map for the initial states and gate operations.
     """
     n_qubits = len(qubits)
@@ -122,7 +143,7 @@ def parse_inputs(qubits, gate_entries, dtype, backend):
     gate_mode_labels, gate_operands = parse_gates_to_mode_labels_operands(
         gate_entries, qubits_frontier, next_frontier)
     mode_labels += gate_mode_labels
-    operands += gate_operands                                         
+    operands += gate_operands
     return mode_labels, operands, qubits_frontier
 
 def parse_bitstring(bitstring, n_qubits=None):
@@ -234,7 +255,7 @@ def get_bitstring_tensors(bitstring, backend, dtype):
 
     basis_map = {'0': state_0,
                  '1': state_1}
-    
+
     operands = [basis_map[ibit] for ibit in bitstring]
     return operands
 
@@ -248,7 +269,7 @@ def convert_mode_labels_to_expression(input_mode_labels, output_mode_labels):
 
     Returns:
         An Einsum expression in explicit form.
-    """    
+    """
     input_symbols = [''.join(map(_get_symbol, idx)) for idx in input_mode_labels]
     expression = ','.join(input_symbols) + '->' + ''.join(map(_get_symbol, output_mode_labels))
     return expression
@@ -258,7 +279,7 @@ def get_pauli_gates(pauli_map, backend, dtype):
     Populate the gates for all pauli operators.
 
     Args:
-        pauli_map: A dictionary mapping qubits to pauli operators. 
+        pauli_map: A dictionary mapping qubits to pauli operators.
         dtype: Data type for the tensor operands.
         backend: The package the tensor operands belong to.
 
@@ -270,7 +291,7 @@ def get_pauli_gates(pauli_map, backend, dtype):
     pauli_i = asarray([[1,0], [0,1]], dtype=dtype)
     pauli_x = asarray([[0,1], [1,0]], dtype=dtype)
     pauli_z = asarray([[1,0], [0,-1]], dtype=dtype)
-    
+
     operand_map = {'I': pauli_i,
                    'X': pauli_x,
                    'Z': pauli_z}
@@ -301,7 +322,7 @@ def parse_gates_to_mode_labels_operands(gate_entries, qubits_frontier, next_fron
     """
     mode_labels = []
     operands = []
-    
+
     if not gate_entries:
         return mode_labels, operands
 

@@ -1,6 +1,6 @@
-# Copyright (c) 2024-2026, NVIDIA CORPORATION & AFFILIATES
-#
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
+
 from logging import Logger
 import weakref
 import collections
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     import mpi4py.MPI
 
 from nvmath.internal import utils as nvmath_utils
-from cuquantum._internal import utils as cutn_utils
+from cuquantum._internal import mpi_utils
 
 from cuquantum.bindings import cudensitymat as cudm
 from . import utils
@@ -96,12 +96,12 @@ class LibraryHandle:
         -----------
         comm:
             The communicator instance. Accepted types depend on the provider:
-            
+
             - For "MPI": an ``mpi4py.MPI.Comm`` instance, an integer pointer, or a tuple of (pointer, size).
             - For "NCCL":
                 - An integer pointer or a tuple of (pointer, size) is required and is assumed to be an ``ncclComm_t`` pointer.
             - For "None": comm should be ``None``.
-            
+
         provider: str
             The communication backend: "None", "MPI", or "NCCL".
         """
@@ -144,7 +144,7 @@ class LibraryHandle:
             _comm_ptr = comm
             _size = np.dtype(np.intp).itemsize
         else:
-            _comm_ptr, _size = cutn_utils.get_mpi_comm_pointer(comm)
+            _comm_ptr, _size = mpi_utils.get_mpi_comm_pointer(comm)
         cudm.reset_distributed_configuration(
             self._validated_ptr, _comm_provider_map["MPI"], _comm_ptr, _size
         )
