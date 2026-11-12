@@ -140,6 +140,8 @@ class MPS:
             max_shared_extent = min(math.prod(self.state_dims[:i+1]), math.prod(self.state_dims[i+1:]))
             extent = max_shared_extent if max_extent is None else min(max_extent, max_shared_extent)
             self.max_extents.append(extent)
+        # As in the library: intermediate extents while operators are applied are limited to the largest target.
+        self.intermediate_extent_limit = max(self.max_extents) if self.max_extents else None
 
         assert mpo_application in {'exact', 'approximate'}
         self.mpo_application = mpo_application
@@ -220,8 +222,56 @@ class MPS:
             self.sv =  oe.contract(*inputs)
         return self.sv
     
-    def _swap(self, i, direction, exact=False):
-        # swap function absorbing all 3 gauges instead of only common neighbor 
+    def _mid_extent_bound(self, cut, open_mpo_extent, dims_after, carrier):
+        """Extent bound for a swap or split across bond `cut`.
+
+        ``self.max_extents[cut]`` bounds the final MPS. Where it is the physical bound in the original order (no
+        truncation requested), the bond may grow to what the order the operation leaves behind (physical extents
+        ``dims_after``) can need, with an open MPO bond of extent ``open_mpo_extent`` on the side of the tensor carrying
+        it (position ``carrier``, None if none). Where the target is a requested truncation, a target below the physical
+        bound in the current order is the zip-up truncation and is kept; otherwise the bound is at most
+        ``target * open_mpo_extent``. Mirrors the library.
+        """
+        target = self.max_extents[cut]
+        open_extent = open_mpo_extent if carrier is not None else 1
+        cap = None
+        if not self._target_is_physical(cut):
+            if open_extent <= 1:
+                return target
+            phys = [self[p].shape[1] for p in range(self.n)]
+            physical = min(math.prod(phys[:cut+1]), math.prod(phys[cut+1:]))
+            if target < physical:
+                return target
+            cap = target * open_extent
+        left, right = math.prod(dims_after[:cut+1]), math.prod(dims_after[cut+1:])
+        if carrier is not None:
+            if carrier <= cut:
+                left *= open_extent
+            else:
+                right *= open_extent
+        return self._limit_intermediate(min(left, right) if cap is None else min(cap, left, right), target)
+
+    def _limit_intermediate(self, bound, target):
+        """Limit an intermediate extent bound (None: no bound) to the intermediate extent limit, never below target."""
+        if self.intermediate_extent_limit is None:
+            return bound
+        limit = max(target, self.intermediate_extent_limit)
+        return limit if bound is None else min(bound, limit)
+
+    def _target_is_physical(self, cut):
+        """Whether the final extent of bond `cut` is its physical bound in the original order, not a requested cap."""
+        dims = self.state_dims
+        return self.max_extents[cut] == min(math.prod(dims[:cut+1]), math.prod(dims[cut+1:]))
+
+    def _swap(self, i, direction, exact=False, open_mpo_extent=1, uncap_physical=False, carrier=None):
+        """Swap the qudits at i and its neighbour in `direction`; returns the extent bound used (None if exact).
+
+        With ``uncap_physical``, a swap whose final target is the physical bound is bounded only by the intermediate
+        extent limit (as the library does for the order-restoring swaps after an MPO sweep that left bonds above their
+        targets). ``carrier`` is the position, after the swap, of the tensor holding an open MPO bond of extent
+        ``open_mpo_extent``.
+        """
+        # swap function absorbing all 3 gauges instead of only common neighbor
         assert direction in {'left', 'right'}
         if direction == 'left':
             a, b = i-1, i
@@ -250,11 +300,19 @@ class MPS:
         size_dict = dict(zip(input_a, self[a].shape))
         size_dict.update(dict(zip(input_b, self[b].shape)))
         mid_extent = compute_mid_extent(size_dict, (input_a, input_b), (output_a, output_b))
+        bound = None
         if exact:
             svd_options = {'max_extent': mid_extent, 'partition': None if self.gauge_option == 'simple' else 'UV'}
         else:
             svd_options = self.svd_options.copy()
-            svd_options['max_extent'] = min(self.max_extents[a], mid_extent)
+            # physical extents after the swap
+            dims_after = [self[p].shape[1] for p in range(self.n)]
+            dims_after[a], dims_after[b] = dims_after[b], dims_after[a]
+            if uncap_physical and self._target_is_physical(a):
+                svd_options['max_extent'] = min(mid_extent, self._limit_intermediate(None, self.max_extents[a]) or mid_extent)
+            else:
+                bound = self._mid_extent_bound(a, open_mpo_extent, dims_after, carrier)
+                svd_options['max_extent'] = min(bound, mid_extent)
 
         self[a], s, self[b] = tensor_decompose(decompose_expr, tmp, method='svd', **svd_options)
         if s is not None:
@@ -264,6 +322,7 @@ class MPS:
         self.mps_tensor_absorb_gauge(a, s_left, direction='left', inverse=True)
         self.mps_tensor_absorb_gauge(b, s_right, direction='right', inverse=True)
         self._check_nonzero_norms("swap", qudits=(self.qudits[a], self.qudits[b]))
+        return bound
 
     def _canonicalize_site(self, i, direction, max_extent=None, **svd_options):
         if direction not in {'right', 'left'}:
@@ -279,6 +338,9 @@ class MPS:
             # absorb the shared gauge
             gauge = self.gauges.pop(i+1, None) # remove this gauge from the state
             self.mps_tensor_absorb_gauge(i+1, gauge, direction='left')
+            # far-side gauge of the pair: on the bond right of site i+1, stays in the state
+            far_site, far_direction = right, 'right'
+            far_gauge = self.gauges.get(i+2, None)
         else: # direction == 'left'
             assert i > 0 and i <= self.n - 1
             left, right = i-1, i
@@ -289,6 +351,9 @@ class MPS:
             # absorb the shared gauge
             gauge = self.gauges.pop(i, None) # remove this gauge from the state
             self.mps_tensor_absorb_gauge(i-1, gauge, direction='right')
+            # far-side gauge of the pair: on the bond left of site i-1, stays in the state
+            far_site, far_direction = left, 'left'
+            far_gauge = self.gauges.get(i-1, None)
 
         ti, tj = self[left], self[right]
         qr_min_extent_left = min(math.prod(ti.shape[:2]), ti.shape[-1])
@@ -303,9 +368,20 @@ class MPS:
             self[right], r = tensor_decompose('jql->xql,jx', tj, method='qr')
             self[left] = self.backend.einsum('jx,ipj->ipx', r, ti)
         else:
+            # Truncating SVD. With simple-update gauges the pair is the orthogonality
+            # center only once every gauge adjacent to it has been absorbed, so the
+            # far-side outer gauge is borrowed for the decomposition and divided back
+            # out of the output tensor that carries its bond afterwards; the stored
+            # gauge itself is left untouched. Without this the singular values being
+            # truncated are not the Schmidt values of the state across this bond.
+            # The exact QR branches above are unaffected by an outer gauge and are
+            # left byte-identical by skipping the borrow there.
+            self.mps_tensor_absorb_gauge(far_site, far_gauge, direction=far_direction)
+            ti, tj = self[left], self[right]
             svd_options['partition'] = partition
             tmp = self.backend.einsum('ipj,jql->ipql', ti, tj)
             self[left], _, self[right] = tensor_decompose('ipql->ipj,jql', tmp, method='svd', max_extent=max_extent, **svd_options)
+            self.mps_tensor_absorb_gauge(far_site, far_gauge, direction=far_direction, inverse=True)
         self._check_nonzero_norms("canonicalize_site", qudits=(self.qudits[left], self.qudits[right]))
     
     def _compress_with_gauges(self, i, direction, max_extent=None, **svd_options):
@@ -449,7 +525,7 @@ class MPS:
                 shapes += operand.shape
             size_dict = dict(zip('ipjjqkPQpq', shapes))
             mid_extent = compute_mid_extent(size_dict, ('ipj','jqk','PQpq'), ('iPj','jQk'))
-            max_extent = min(mid_extent, self.max_extents[i]) 
+            max_extent = min(mid_extent, self.max_extents[i])
 
             # Only the expression changes based on whether the gate is diagonal
             if is_diagonal:
@@ -466,7 +542,7 @@ class MPS:
             self._check_nonzero_norms("apply_gate_2q_adjacent", qudits=(self.qudits[i], self.qudits[j]))
 
         else:
-            # insert swap gates recursively
+            # insert swap gates recursively; every swap is bounded by the order it leaves behind, as in the library
             swaps = []
             while (j != i+1):
                 self._swap(i, 'right', exact=self.is_exact_mps)
@@ -534,6 +610,10 @@ class MPS:
         #    | / |   |   |     ->    |   | / |   |
         # ---a---B---C---D---     ---a---b---C---D---
         num_mpo_sites = len(qudits)
+        # whether any swap or split was allowed to exceed its target extent; decides the uncapped order-restoring swaps
+        bound_above_target = False
+        # bonds that may be left above their targets; decide the range of the post-sweep compression
+        above_target = []
         for i in range(num_mpo_sites-1):
             operand = mpo_operands[i+1]
             qa = sites[i]
@@ -541,14 +621,29 @@ class MPS:
             q0 = qudits_order.index(qa)
             q1 = qudits_order.index(qb)
             forward_order = q1 > q0
+            # MPO bond carried by qa's tensor; it stays open across every swap below, as in the library
+            open_in = math.prod(self[q0].shape[2:-1])
+
+            def carrier_after_swap(a, b):
+                # position of qa's tensor after swapping positions a and b
+                pos = qudits_order.index(qa)
+                return b if pos == a else a if pos == b else pos
             q0, q1 = sorted([q0, q1])
             while (q1 != q0 + 1):
-                self._swap(q0, 'right', exact=exact_mpo)
+                bound = self._swap(q0, 'right', exact=exact_mpo, open_mpo_extent=open_in,
+                                   carrier=carrier_after_swap(q0, q0 + 1))
+                if bound is not None and bound > self.max_extents[q0]:
+                    bound_above_target = True
+                    above_target.append(q0)
                 record_swap(q0, 'right')
                 q0 += 1
                 if (q1 == q0+1):
                     break
-                self._swap(q1, 'left', exact=exact_mpo)
+                bound = self._swap(q1, 'left', exact=exact_mpo, open_mpo_extent=open_in,
+                                   carrier=carrier_after_swap(q1 - 1, q1))
+                if bound is not None and bound > self.max_extents[q1-1]:
+                    bound_above_target = True
+                    above_target.append(q1-1)
                 record_swap(q1, 'left')
                 q1 -= 1
             if not forward_order:
@@ -597,7 +692,19 @@ class MPS:
             if exact_mpo:
                 max_extent = mid_extent
             else:
-                max_extent = min(mid_extent, self.max_extents[min(q0,q1)])
+                # the split leaves qa (at q0) and qb (at q1) exchanged if explict_swap; qb's tensor carries the
+                # next open MPO bond
+                open_mpo_extent = operand.shape[2] if operand.ndim == 4 else 1
+                dims_after = [self[p].shape[1] for p in range(self.n)]
+                carrier = q1
+                if explict_swap:
+                    dims_after[q0], dims_after[q1] = dims_after[q1], dims_after[q0]
+                    carrier = q0
+                bound = self._mid_extent_bound(min(q0,q1), open_mpo_extent, dims_after, carrier)
+                if bound > self.max_extents[min(q0,q1)]:
+                    bound_above_target = True
+                    above_target.append(min(q0,q1))
+                max_extent = min(mid_extent, bound)
 
             self[q0], s, self[q1] = tensor_decompose(decompose_expr, tmp, method='svd', max_extent=max_extent, **svd_options)
             if s is not None:
@@ -610,7 +717,10 @@ class MPS:
         for i in range(self.n):
             site = qudits_order.index(i)
             while (site != i):
-                self._swap(site, 'left', exact=exact_mpo)
+                # bonds may still exceed their targets; as in the library, the compression below truncates them
+                if bound_above_target and self._target_is_physical(site - 1):
+                    above_target.append(site - 1)
+                self._swap(site, 'left', exact=exact_mpo, uncap_physical=bound_above_target)
                 record_swap(site, 'left')
                 site -= 1
         # sanity check to make sure original ordering is obtained
@@ -620,6 +730,14 @@ class MPS:
             # TODO: Handle rare case where mpo_application is exact for MPS-MPO contraction but not for gate application process
             keep_gauges = self.gauge_option == 'simple'
             self._minimal_compression(min(qudits), max(qudits), keep_gauges, check_minimal=False)
+        else:
+            # splits made with an open MPO bond may exceed the final extents where those are physical bounds;
+            # the final state fits them, so this compression is lossless
+            keep_gauges = self.gauge_option == 'simple'
+            # same trigger and range as the library: decided from the bounds, not from the extents left after
+            # truncation
+            if above_target:
+                self._minimal_compression(min(above_target), max(above_target) + 1, keep_gauges, check_minimal=False)
         # A non-unitary MPO changes the Schmidt spectra across every bond, but the
         # sweep only rewrites tensors inside its span, so truncations away from the
         # span would otherwise consume gauges describing the pre-MPO state -- same

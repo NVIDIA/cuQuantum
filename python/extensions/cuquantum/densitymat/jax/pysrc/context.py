@@ -300,46 +300,40 @@ class StateContext:
         )
         self.logger.debug(f"Created output state at {hex(self._state_out)}")
 
-        # The state adjoints are to be set in create_adjoint_buffers when backward rule is called.
+        # The state adjoints are created by the first backward rule, in create_adjoint_buffers.
         self._state_in_adj = None
         self._state_out_adj = None
 
     def create_adjoint_buffers(self):
         """
-        Create adjoint buffers for the input and output states.
+        Create the input and output state adjoints once per config; later backward passes reuse them.
 
-        Frees any previously allocated adjoint handles before allocating new
-        ones so that repeated backward passes do not leak C-side GPU memory.
+        Like the input and output handles, the adjoint handles are config-only (buffers are attached
+        on every call), and traced backward primitives embed their addresses as static parameters.
+        They must therefore live as long as this context: destroying them here would leave earlier
+        traced or compiled backward actions pointing at freed handles. free() releases them.
         """
-        if self._state_in_adj is not None:
-            cudm.destroy_state(self._state_in_adj)
-            self.logger.debug(f"Destroyed stale input state adjoint at {hex(self._state_in_adj)}")
-            self._state_in_adj = None
+        if self._state_in_adj is None:
+            self._state_in_adj = cudm.create_state(
+                CudensitymatContext._handle,
+                self.state_purity,
+                len(self._space_mode_extents),
+                self._space_mode_extents,
+                self.batch_size,
+                self._data_type
+            )
+            self.logger.debug(f"Created input state adjoint at {hex(self._state_in_adj)}")
 
-        if self._state_out_adj is not None:
-            cudm.destroy_state(self._state_out_adj)
-            self.logger.debug(f"Destroyed stale output state adjoint at {hex(self._state_out_adj)}")
-            self._state_out_adj = None
-
-        self._state_in_adj = cudm.create_state(
-            CudensitymatContext._handle,
-            self.state_purity,
-            len(self._space_mode_extents),
-            self._space_mode_extents,
-            self.batch_size,
-            self._data_type
-        )
-        self.logger.debug(f"Created input state adjoint at {hex(self._state_in_adj)}")
-
-        self._state_out_adj = cudm.create_state(
-            CudensitymatContext._handle,
-            self.state_purity,
-            len(self._space_mode_extents),
-            self._space_mode_extents,
-            self.batch_size,
-            self._data_type
-        )
-        self.logger.debug(f"Created output state adjoint at {hex(self._state_out_adj)}")
+        if self._state_out_adj is None:
+            self._state_out_adj = cudm.create_state(
+                CudensitymatContext._handle,
+                self.state_purity,
+                len(self._space_mode_extents),
+                self._space_mode_extents,
+                self.batch_size,
+                self._data_type
+            )
+            self.logger.debug(f"Created output state adjoint at {hex(self._state_out_adj)}")
 
     def free(self):
         """

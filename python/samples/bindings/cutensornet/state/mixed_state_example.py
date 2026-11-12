@@ -99,6 +99,14 @@ def prepare_and_compute(marginal_handle, out_array, label):
         raise RuntimeError(f"Insufficient workspace size on Device for {label}")
     cutn.workspace_set_memory(handle, work_desc, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH,
         scratch_space.ptr, workspace_size_d)
+
+    # Query the host scratch workspace size and attach a host scratch buffer if one is required
+    workspace_size_h = cutn.workspace_get_memory_size(handle,
+        work_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH)
+    print(f"Scratch Host workspace size (bytes) = {workspace_size_h}")
+    if workspace_size_h > 0:
+        scratch_space_h = np.empty(workspace_size_h, dtype=np.int8)  # must stay alive until the computation completes
+        cutn.workspace_set_memory(handle, work_desc, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH, scratch_space_h.ctypes.data, workspace_size_h)
     cutn.marginal_compute(handle, marginal_handle, 0, work_desc, out_array.data.ptr, stream.ptr)
     stream.synchronize()
     cutn.destroy_workspace_descriptor(work_desc)

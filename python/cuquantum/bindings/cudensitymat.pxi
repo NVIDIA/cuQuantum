@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 26.06.0 to 26.11.0. Do not modify it directly.
 
 from cpython.memoryview cimport PyMemoryView_FromMemory
 from cpython.buffer cimport PyBUF_READ, PyBUF_WRITE

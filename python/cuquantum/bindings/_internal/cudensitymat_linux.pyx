@@ -2,11 +2,17 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.06.0. Do not modify it directly.
+# This code was automatically generated across versions from 26.06.0 to 26.11.0. Do not modify it directly.
 
 
 
 # <<<< PREAMBLE CONTENT >>>>
+
+from libc.stdint cimport (
+    int32_t,
+    int64_t,
+    intptr_t,
+)
 
 cdef extern from * nogil:
     """
@@ -43,8 +49,6 @@ cdef extern from * nogil:
 cdef extern from "<dlfcn.h>":
     void* _cyb_dlsym "dlsym"(void*, const char*) nogil
     const void * _cyb_RTLD_DEFAULT "RTLD_DEFAULT"
-
-from libc.stdint cimport intptr_t as _cyb_intptr_t
 
 import threading as _cyb_threading
 
@@ -970,334 +974,334 @@ cpdef dict _inspect_function_pointers():
     _check_or_init_cudensitymat()
     cdef dict data = {}
     global __cudensitymatGetVersion
-    data["__cudensitymatGetVersion"] = <_cyb_intptr_t>__cudensitymatGetVersion
+    data["__cudensitymatGetVersion"] = <intptr_t>__cudensitymatGetVersion
 
     global __cudensitymatCreate
-    data["__cudensitymatCreate"] = <_cyb_intptr_t>__cudensitymatCreate
+    data["__cudensitymatCreate"] = <intptr_t>__cudensitymatCreate
 
     global __cudensitymatDestroy
-    data["__cudensitymatDestroy"] = <_cyb_intptr_t>__cudensitymatDestroy
+    data["__cudensitymatDestroy"] = <intptr_t>__cudensitymatDestroy
 
     global __cudensitymatResetDistributedConfiguration
-    data["__cudensitymatResetDistributedConfiguration"] = <_cyb_intptr_t>__cudensitymatResetDistributedConfiguration
+    data["__cudensitymatResetDistributedConfiguration"] = <intptr_t>__cudensitymatResetDistributedConfiguration
 
     global __cudensitymatGetNumRanks
-    data["__cudensitymatGetNumRanks"] = <_cyb_intptr_t>__cudensitymatGetNumRanks
+    data["__cudensitymatGetNumRanks"] = <intptr_t>__cudensitymatGetNumRanks
 
     global __cudensitymatGetProcRank
-    data["__cudensitymatGetProcRank"] = <_cyb_intptr_t>__cudensitymatGetProcRank
+    data["__cudensitymatGetProcRank"] = <intptr_t>__cudensitymatGetProcRank
 
     global __cudensitymatResetRandomSeed
-    data["__cudensitymatResetRandomSeed"] = <_cyb_intptr_t>__cudensitymatResetRandomSeed
+    data["__cudensitymatResetRandomSeed"] = <intptr_t>__cudensitymatResetRandomSeed
 
     global __cudensitymatCreateState
-    data["__cudensitymatCreateState"] = <_cyb_intptr_t>__cudensitymatCreateState
+    data["__cudensitymatCreateState"] = <intptr_t>__cudensitymatCreateState
 
     global __cudensitymatCreateStateMPS
-    data["__cudensitymatCreateStateMPS"] = <_cyb_intptr_t>__cudensitymatCreateStateMPS
+    data["__cudensitymatCreateStateMPS"] = <intptr_t>__cudensitymatCreateStateMPS
 
     global __cudensitymatStateMPSSetCurrentBondExtents
-    data["__cudensitymatStateMPSSetCurrentBondExtents"] = <_cyb_intptr_t>__cudensitymatStateMPSSetCurrentBondExtents
+    data["__cudensitymatStateMPSSetCurrentBondExtents"] = <intptr_t>__cudensitymatStateMPSSetCurrentBondExtents
 
     global __cudensitymatStateMPSGetCurrentBondExtents
-    data["__cudensitymatStateMPSGetCurrentBondExtents"] = <_cyb_intptr_t>__cudensitymatStateMPSGetCurrentBondExtents
+    data["__cudensitymatStateMPSGetCurrentBondExtents"] = <intptr_t>__cudensitymatStateMPSGetCurrentBondExtents
 
     global __cudensitymatDestroyState
-    data["__cudensitymatDestroyState"] = <_cyb_intptr_t>__cudensitymatDestroyState
+    data["__cudensitymatDestroyState"] = <intptr_t>__cudensitymatDestroyState
 
     global __cudensitymatStateGetNumComponents
-    data["__cudensitymatStateGetNumComponents"] = <_cyb_intptr_t>__cudensitymatStateGetNumComponents
+    data["__cudensitymatStateGetNumComponents"] = <intptr_t>__cudensitymatStateGetNumComponents
 
     global __cudensitymatStateGetComponentStorageSize
-    data["__cudensitymatStateGetComponentStorageSize"] = <_cyb_intptr_t>__cudensitymatStateGetComponentStorageSize
+    data["__cudensitymatStateGetComponentStorageSize"] = <intptr_t>__cudensitymatStateGetComponentStorageSize
 
     global __cudensitymatStateAttachComponentStorage
-    data["__cudensitymatStateAttachComponentStorage"] = <_cyb_intptr_t>__cudensitymatStateAttachComponentStorage
+    data["__cudensitymatStateAttachComponentStorage"] = <intptr_t>__cudensitymatStateAttachComponentStorage
 
     global __cudensitymatStateGetComponentNumModes
-    data["__cudensitymatStateGetComponentNumModes"] = <_cyb_intptr_t>__cudensitymatStateGetComponentNumModes
+    data["__cudensitymatStateGetComponentNumModes"] = <intptr_t>__cudensitymatStateGetComponentNumModes
 
     global __cudensitymatStateGetComponentInfo
-    data["__cudensitymatStateGetComponentInfo"] = <_cyb_intptr_t>__cudensitymatStateGetComponentInfo
+    data["__cudensitymatStateGetComponentInfo"] = <intptr_t>__cudensitymatStateGetComponentInfo
 
     global __cudensitymatStateInitializeZero
-    data["__cudensitymatStateInitializeZero"] = <_cyb_intptr_t>__cudensitymatStateInitializeZero
+    data["__cudensitymatStateInitializeZero"] = <intptr_t>__cudensitymatStateInitializeZero
 
     global __cudensitymatStateComputeScaling
-    data["__cudensitymatStateComputeScaling"] = <_cyb_intptr_t>__cudensitymatStateComputeScaling
+    data["__cudensitymatStateComputeScaling"] = <intptr_t>__cudensitymatStateComputeScaling
 
     global __cudensitymatStateComputeNorm
-    data["__cudensitymatStateComputeNorm"] = <_cyb_intptr_t>__cudensitymatStateComputeNorm
+    data["__cudensitymatStateComputeNorm"] = <intptr_t>__cudensitymatStateComputeNorm
 
     global __cudensitymatStateComputeTrace
-    data["__cudensitymatStateComputeTrace"] = <_cyb_intptr_t>__cudensitymatStateComputeTrace
+    data["__cudensitymatStateComputeTrace"] = <intptr_t>__cudensitymatStateComputeTrace
 
     global __cudensitymatStateComputeAccumulation
-    data["__cudensitymatStateComputeAccumulation"] = <_cyb_intptr_t>__cudensitymatStateComputeAccumulation
+    data["__cudensitymatStateComputeAccumulation"] = <intptr_t>__cudensitymatStateComputeAccumulation
 
     global __cudensitymatStateComputeInnerProduct
-    data["__cudensitymatStateComputeInnerProduct"] = <_cyb_intptr_t>__cudensitymatStateComputeInnerProduct
+    data["__cudensitymatStateComputeInnerProduct"] = <intptr_t>__cudensitymatStateComputeInnerProduct
 
     global __cudensitymatCreateElementaryOperator
-    data["__cudensitymatCreateElementaryOperator"] = <_cyb_intptr_t>__cudensitymatCreateElementaryOperator
+    data["__cudensitymatCreateElementaryOperator"] = <intptr_t>__cudensitymatCreateElementaryOperator
 
     global __cudensitymatCreateElementaryOperatorBatch
-    data["__cudensitymatCreateElementaryOperatorBatch"] = <_cyb_intptr_t>__cudensitymatCreateElementaryOperatorBatch
+    data["__cudensitymatCreateElementaryOperatorBatch"] = <intptr_t>__cudensitymatCreateElementaryOperatorBatch
 
     global __cudensitymatDestroyElementaryOperator
-    data["__cudensitymatDestroyElementaryOperator"] = <_cyb_intptr_t>__cudensitymatDestroyElementaryOperator
+    data["__cudensitymatDestroyElementaryOperator"] = <intptr_t>__cudensitymatDestroyElementaryOperator
 
     global __cudensitymatCreateMatrixOperatorDenseLocal
-    data["__cudensitymatCreateMatrixOperatorDenseLocal"] = <_cyb_intptr_t>__cudensitymatCreateMatrixOperatorDenseLocal
+    data["__cudensitymatCreateMatrixOperatorDenseLocal"] = <intptr_t>__cudensitymatCreateMatrixOperatorDenseLocal
 
     global __cudensitymatCreateMatrixOperatorDenseLocalBatch
-    data["__cudensitymatCreateMatrixOperatorDenseLocalBatch"] = <_cyb_intptr_t>__cudensitymatCreateMatrixOperatorDenseLocalBatch
+    data["__cudensitymatCreateMatrixOperatorDenseLocalBatch"] = <intptr_t>__cudensitymatCreateMatrixOperatorDenseLocalBatch
 
     global __cudensitymatDestroyMatrixOperator
-    data["__cudensitymatDestroyMatrixOperator"] = <_cyb_intptr_t>__cudensitymatDestroyMatrixOperator
+    data["__cudensitymatDestroyMatrixOperator"] = <intptr_t>__cudensitymatDestroyMatrixOperator
 
     global __cudensitymatCreateMatrixProductOperator
-    data["__cudensitymatCreateMatrixProductOperator"] = <_cyb_intptr_t>__cudensitymatCreateMatrixProductOperator
+    data["__cudensitymatCreateMatrixProductOperator"] = <intptr_t>__cudensitymatCreateMatrixProductOperator
 
     global __cudensitymatDestroyMatrixProductOperator
-    data["__cudensitymatDestroyMatrixProductOperator"] = <_cyb_intptr_t>__cudensitymatDestroyMatrixProductOperator
+    data["__cudensitymatDestroyMatrixProductOperator"] = <intptr_t>__cudensitymatDestroyMatrixProductOperator
 
     global __cudensitymatCreateOperatorTerm
-    data["__cudensitymatCreateOperatorTerm"] = <_cyb_intptr_t>__cudensitymatCreateOperatorTerm
+    data["__cudensitymatCreateOperatorTerm"] = <intptr_t>__cudensitymatCreateOperatorTerm
 
     global __cudensitymatDestroyOperatorTerm
-    data["__cudensitymatDestroyOperatorTerm"] = <_cyb_intptr_t>__cudensitymatDestroyOperatorTerm
+    data["__cudensitymatDestroyOperatorTerm"] = <intptr_t>__cudensitymatDestroyOperatorTerm
 
     global __cudensitymatOperatorTermAppendElementaryProduct
-    data["__cudensitymatOperatorTermAppendElementaryProduct"] = <_cyb_intptr_t>__cudensitymatOperatorTermAppendElementaryProduct
+    data["__cudensitymatOperatorTermAppendElementaryProduct"] = <intptr_t>__cudensitymatOperatorTermAppendElementaryProduct
 
     global __cudensitymatOperatorTermAppendElementaryProductBatch
-    data["__cudensitymatOperatorTermAppendElementaryProductBatch"] = <_cyb_intptr_t>__cudensitymatOperatorTermAppendElementaryProductBatch
+    data["__cudensitymatOperatorTermAppendElementaryProductBatch"] = <intptr_t>__cudensitymatOperatorTermAppendElementaryProductBatch
 
     global __cudensitymatOperatorTermAppendMatrixProduct
-    data["__cudensitymatOperatorTermAppendMatrixProduct"] = <_cyb_intptr_t>__cudensitymatOperatorTermAppendMatrixProduct
+    data["__cudensitymatOperatorTermAppendMatrixProduct"] = <intptr_t>__cudensitymatOperatorTermAppendMatrixProduct
 
     global __cudensitymatOperatorTermAppendMatrixProductBatch
-    data["__cudensitymatOperatorTermAppendMatrixProductBatch"] = <_cyb_intptr_t>__cudensitymatOperatorTermAppendMatrixProductBatch
+    data["__cudensitymatOperatorTermAppendMatrixProductBatch"] = <intptr_t>__cudensitymatOperatorTermAppendMatrixProductBatch
 
     global __cudensitymatOperatorTermAppendMPOProduct
-    data["__cudensitymatOperatorTermAppendMPOProduct"] = <_cyb_intptr_t>__cudensitymatOperatorTermAppendMPOProduct
+    data["__cudensitymatOperatorTermAppendMPOProduct"] = <intptr_t>__cudensitymatOperatorTermAppendMPOProduct
 
     global __cudensitymatCreateOperator
-    data["__cudensitymatCreateOperator"] = <_cyb_intptr_t>__cudensitymatCreateOperator
+    data["__cudensitymatCreateOperator"] = <intptr_t>__cudensitymatCreateOperator
 
     global __cudensitymatDestroyOperator
-    data["__cudensitymatDestroyOperator"] = <_cyb_intptr_t>__cudensitymatDestroyOperator
+    data["__cudensitymatDestroyOperator"] = <intptr_t>__cudensitymatDestroyOperator
 
     global __cudensitymatOperatorAppendTerm
-    data["__cudensitymatOperatorAppendTerm"] = <_cyb_intptr_t>__cudensitymatOperatorAppendTerm
+    data["__cudensitymatOperatorAppendTerm"] = <intptr_t>__cudensitymatOperatorAppendTerm
 
     global __cudensitymatOperatorAppendTermBatch
-    data["__cudensitymatOperatorAppendTermBatch"] = <_cyb_intptr_t>__cudensitymatOperatorAppendTermBatch
+    data["__cudensitymatOperatorAppendTermBatch"] = <intptr_t>__cudensitymatOperatorAppendTermBatch
 
     global __cudensitymatAttachBatchedCoefficients
-    data["__cudensitymatAttachBatchedCoefficients"] = <_cyb_intptr_t>__cudensitymatAttachBatchedCoefficients
+    data["__cudensitymatAttachBatchedCoefficients"] = <intptr_t>__cudensitymatAttachBatchedCoefficients
 
     global __cudensitymatCreateStateFittingScopeSplitALSConfig
-    data["__cudensitymatCreateStateFittingScopeSplitALSConfig"] = <_cyb_intptr_t>__cudensitymatCreateStateFittingScopeSplitALSConfig
+    data["__cudensitymatCreateStateFittingScopeSplitALSConfig"] = <intptr_t>__cudensitymatCreateStateFittingScopeSplitALSConfig
 
     global __cudensitymatDestroyStateFittingScopeSplitALSConfig
-    data["__cudensitymatDestroyStateFittingScopeSplitALSConfig"] = <_cyb_intptr_t>__cudensitymatDestroyStateFittingScopeSplitALSConfig
+    data["__cudensitymatDestroyStateFittingScopeSplitALSConfig"] = <intptr_t>__cudensitymatDestroyStateFittingScopeSplitALSConfig
 
     global __cudensitymatStateFittingScopeSplitALSConfigSetAttribute
-    data["__cudensitymatStateFittingScopeSplitALSConfigSetAttribute"] = <_cyb_intptr_t>__cudensitymatStateFittingScopeSplitALSConfigSetAttribute
+    data["__cudensitymatStateFittingScopeSplitALSConfigSetAttribute"] = <intptr_t>__cudensitymatStateFittingScopeSplitALSConfigSetAttribute
 
     global __cudensitymatStateFittingScopeSplitALSConfigGetAttribute
-    data["__cudensitymatStateFittingScopeSplitALSConfigGetAttribute"] = <_cyb_intptr_t>__cudensitymatStateFittingScopeSplitALSConfigGetAttribute
+    data["__cudensitymatStateFittingScopeSplitALSConfigGetAttribute"] = <intptr_t>__cudensitymatStateFittingScopeSplitALSConfigGetAttribute
 
     global __cudensitymatCreateStateFittingApproachLinSolveConfig
-    data["__cudensitymatCreateStateFittingApproachLinSolveConfig"] = <_cyb_intptr_t>__cudensitymatCreateStateFittingApproachLinSolveConfig
+    data["__cudensitymatCreateStateFittingApproachLinSolveConfig"] = <intptr_t>__cudensitymatCreateStateFittingApproachLinSolveConfig
 
     global __cudensitymatDestroyStateFittingApproachLinSolveConfig
-    data["__cudensitymatDestroyStateFittingApproachLinSolveConfig"] = <_cyb_intptr_t>__cudensitymatDestroyStateFittingApproachLinSolveConfig
+    data["__cudensitymatDestroyStateFittingApproachLinSolveConfig"] = <intptr_t>__cudensitymatDestroyStateFittingApproachLinSolveConfig
 
     global __cudensitymatStateFittingApproachLinSolveConfigSetAttribute
-    data["__cudensitymatStateFittingApproachLinSolveConfigSetAttribute"] = <_cyb_intptr_t>__cudensitymatStateFittingApproachLinSolveConfigSetAttribute
+    data["__cudensitymatStateFittingApproachLinSolveConfigSetAttribute"] = <intptr_t>__cudensitymatStateFittingApproachLinSolveConfigSetAttribute
 
     global __cudensitymatStateFittingApproachLinSolveConfigGetAttribute
-    data["__cudensitymatStateFittingApproachLinSolveConfigGetAttribute"] = <_cyb_intptr_t>__cudensitymatStateFittingApproachLinSolveConfigGetAttribute
+    data["__cudensitymatStateFittingApproachLinSolveConfigGetAttribute"] = <intptr_t>__cudensitymatStateFittingApproachLinSolveConfigGetAttribute
 
     global __cudensitymatOperatorPrepareAction
-    data["__cudensitymatOperatorPrepareAction"] = <_cyb_intptr_t>__cudensitymatOperatorPrepareAction
+    data["__cudensitymatOperatorPrepareAction"] = <intptr_t>__cudensitymatOperatorPrepareAction
 
     global __cudensitymatOperatorComputeAction
-    data["__cudensitymatOperatorComputeAction"] = <_cyb_intptr_t>__cudensitymatOperatorComputeAction
+    data["__cudensitymatOperatorComputeAction"] = <intptr_t>__cudensitymatOperatorComputeAction
 
     global __cudensitymatOperatorPrepareActionBackwardDiff
-    data["__cudensitymatOperatorPrepareActionBackwardDiff"] = <_cyb_intptr_t>__cudensitymatOperatorPrepareActionBackwardDiff
+    data["__cudensitymatOperatorPrepareActionBackwardDiff"] = <intptr_t>__cudensitymatOperatorPrepareActionBackwardDiff
 
     global __cudensitymatOperatorComputeActionBackwardDiff
-    data["__cudensitymatOperatorComputeActionBackwardDiff"] = <_cyb_intptr_t>__cudensitymatOperatorComputeActionBackwardDiff
+    data["__cudensitymatOperatorComputeActionBackwardDiff"] = <intptr_t>__cudensitymatOperatorComputeActionBackwardDiff
 
     global __cudensitymatCreateOperatorAction
-    data["__cudensitymatCreateOperatorAction"] = <_cyb_intptr_t>__cudensitymatCreateOperatorAction
+    data["__cudensitymatCreateOperatorAction"] = <intptr_t>__cudensitymatCreateOperatorAction
 
     global __cudensitymatDestroyOperatorAction
-    data["__cudensitymatDestroyOperatorAction"] = <_cyb_intptr_t>__cudensitymatDestroyOperatorAction
+    data["__cudensitymatDestroyOperatorAction"] = <intptr_t>__cudensitymatDestroyOperatorAction
 
     global __cudensitymatOperatorActionConfigure
-    data["__cudensitymatOperatorActionConfigure"] = <_cyb_intptr_t>__cudensitymatOperatorActionConfigure
+    data["__cudensitymatOperatorActionConfigure"] = <intptr_t>__cudensitymatOperatorActionConfigure
 
     global __cudensitymatOperatorActionPrepare
-    data["__cudensitymatOperatorActionPrepare"] = <_cyb_intptr_t>__cudensitymatOperatorActionPrepare
+    data["__cudensitymatOperatorActionPrepare"] = <intptr_t>__cudensitymatOperatorActionPrepare
 
     global __cudensitymatOperatorActionCompute
-    data["__cudensitymatOperatorActionCompute"] = <_cyb_intptr_t>__cudensitymatOperatorActionCompute
+    data["__cudensitymatOperatorActionCompute"] = <intptr_t>__cudensitymatOperatorActionCompute
 
     global __cudensitymatCreateExpectation
-    data["__cudensitymatCreateExpectation"] = <_cyb_intptr_t>__cudensitymatCreateExpectation
+    data["__cudensitymatCreateExpectation"] = <intptr_t>__cudensitymatCreateExpectation
 
     global __cudensitymatDestroyExpectation
-    data["__cudensitymatDestroyExpectation"] = <_cyb_intptr_t>__cudensitymatDestroyExpectation
+    data["__cudensitymatDestroyExpectation"] = <intptr_t>__cudensitymatDestroyExpectation
 
     global __cudensitymatExpectationPrepare
-    data["__cudensitymatExpectationPrepare"] = <_cyb_intptr_t>__cudensitymatExpectationPrepare
+    data["__cudensitymatExpectationPrepare"] = <intptr_t>__cudensitymatExpectationPrepare
 
     global __cudensitymatExpectationCompute
-    data["__cudensitymatExpectationCompute"] = <_cyb_intptr_t>__cudensitymatExpectationCompute
+    data["__cudensitymatExpectationCompute"] = <intptr_t>__cudensitymatExpectationCompute
 
     global __cudensitymatCreateOperatorSpectrum
-    data["__cudensitymatCreateOperatorSpectrum"] = <_cyb_intptr_t>__cudensitymatCreateOperatorSpectrum
+    data["__cudensitymatCreateOperatorSpectrum"] = <intptr_t>__cudensitymatCreateOperatorSpectrum
 
     global __cudensitymatDestroyOperatorSpectrum
-    data["__cudensitymatDestroyOperatorSpectrum"] = <_cyb_intptr_t>__cudensitymatDestroyOperatorSpectrum
+    data["__cudensitymatDestroyOperatorSpectrum"] = <intptr_t>__cudensitymatDestroyOperatorSpectrum
 
     global __cudensitymatOperatorSpectrumConfigure
-    data["__cudensitymatOperatorSpectrumConfigure"] = <_cyb_intptr_t>__cudensitymatOperatorSpectrumConfigure
+    data["__cudensitymatOperatorSpectrumConfigure"] = <intptr_t>__cudensitymatOperatorSpectrumConfigure
 
     global __cudensitymatOperatorSpectrumPrepare
-    data["__cudensitymatOperatorSpectrumPrepare"] = <_cyb_intptr_t>__cudensitymatOperatorSpectrumPrepare
+    data["__cudensitymatOperatorSpectrumPrepare"] = <intptr_t>__cudensitymatOperatorSpectrumPrepare
 
     global __cudensitymatOperatorSpectrumCompute
-    data["__cudensitymatOperatorSpectrumCompute"] = <_cyb_intptr_t>__cudensitymatOperatorSpectrumCompute
+    data["__cudensitymatOperatorSpectrumCompute"] = <intptr_t>__cudensitymatOperatorSpectrumCompute
 
     global __cudensitymatCreateTimePropagationScopeSplitTDVPConfig
-    data["__cudensitymatCreateTimePropagationScopeSplitTDVPConfig"] = <_cyb_intptr_t>__cudensitymatCreateTimePropagationScopeSplitTDVPConfig
+    data["__cudensitymatCreateTimePropagationScopeSplitTDVPConfig"] = <intptr_t>__cudensitymatCreateTimePropagationScopeSplitTDVPConfig
 
     global __cudensitymatDestroyTimePropagationScopeSplitTDVPConfig
-    data["__cudensitymatDestroyTimePropagationScopeSplitTDVPConfig"] = <_cyb_intptr_t>__cudensitymatDestroyTimePropagationScopeSplitTDVPConfig
+    data["__cudensitymatDestroyTimePropagationScopeSplitTDVPConfig"] = <intptr_t>__cudensitymatDestroyTimePropagationScopeSplitTDVPConfig
 
     global __cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute
-    data["__cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute"] = <_cyb_intptr_t>__cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute
+    data["__cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute"] = <intptr_t>__cudensitymatTimePropagationScopeSplitTDVPConfigSetAttribute
 
     global __cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute
-    data["__cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute"] = <_cyb_intptr_t>__cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute
+    data["__cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute"] = <intptr_t>__cudensitymatTimePropagationScopeSplitTDVPConfigGetAttribute
 
     global __cudensitymatCreateTimePropagationApproachKrylovConfig
-    data["__cudensitymatCreateTimePropagationApproachKrylovConfig"] = <_cyb_intptr_t>__cudensitymatCreateTimePropagationApproachKrylovConfig
+    data["__cudensitymatCreateTimePropagationApproachKrylovConfig"] = <intptr_t>__cudensitymatCreateTimePropagationApproachKrylovConfig
 
     global __cudensitymatDestroyTimePropagationApproachKrylovConfig
-    data["__cudensitymatDestroyTimePropagationApproachKrylovConfig"] = <_cyb_intptr_t>__cudensitymatDestroyTimePropagationApproachKrylovConfig
+    data["__cudensitymatDestroyTimePropagationApproachKrylovConfig"] = <intptr_t>__cudensitymatDestroyTimePropagationApproachKrylovConfig
 
     global __cudensitymatTimePropagationApproachKrylovConfigSetAttribute
-    data["__cudensitymatTimePropagationApproachKrylovConfigSetAttribute"] = <_cyb_intptr_t>__cudensitymatTimePropagationApproachKrylovConfigSetAttribute
+    data["__cudensitymatTimePropagationApproachKrylovConfigSetAttribute"] = <intptr_t>__cudensitymatTimePropagationApproachKrylovConfigSetAttribute
 
     global __cudensitymatTimePropagationApproachKrylovConfigGetAttribute
-    data["__cudensitymatTimePropagationApproachKrylovConfigGetAttribute"] = <_cyb_intptr_t>__cudensitymatTimePropagationApproachKrylovConfigGetAttribute
+    data["__cudensitymatTimePropagationApproachKrylovConfigGetAttribute"] = <intptr_t>__cudensitymatTimePropagationApproachKrylovConfigGetAttribute
 
     global __cudensitymatCreateTimePropagation
-    data["__cudensitymatCreateTimePropagation"] = <_cyb_intptr_t>__cudensitymatCreateTimePropagation
+    data["__cudensitymatCreateTimePropagation"] = <intptr_t>__cudensitymatCreateTimePropagation
 
     global __cudensitymatDestroyTimePropagation
-    data["__cudensitymatDestroyTimePropagation"] = <_cyb_intptr_t>__cudensitymatDestroyTimePropagation
+    data["__cudensitymatDestroyTimePropagation"] = <intptr_t>__cudensitymatDestroyTimePropagation
 
     global __cudensitymatTimePropagationConfigure
-    data["__cudensitymatTimePropagationConfigure"] = <_cyb_intptr_t>__cudensitymatTimePropagationConfigure
+    data["__cudensitymatTimePropagationConfigure"] = <intptr_t>__cudensitymatTimePropagationConfigure
 
     global __cudensitymatTimePropagationPrepare
-    data["__cudensitymatTimePropagationPrepare"] = <_cyb_intptr_t>__cudensitymatTimePropagationPrepare
+    data["__cudensitymatTimePropagationPrepare"] = <intptr_t>__cudensitymatTimePropagationPrepare
 
     global __cudensitymatTimePropagationCompute
-    data["__cudensitymatTimePropagationCompute"] = <_cyb_intptr_t>__cudensitymatTimePropagationCompute
+    data["__cudensitymatTimePropagationCompute"] = <intptr_t>__cudensitymatTimePropagationCompute
 
     global __cudensitymatCreateSVDConfig
-    data["__cudensitymatCreateSVDConfig"] = <_cyb_intptr_t>__cudensitymatCreateSVDConfig
+    data["__cudensitymatCreateSVDConfig"] = <intptr_t>__cudensitymatCreateSVDConfig
 
     global __cudensitymatDestroySVDConfig
-    data["__cudensitymatDestroySVDConfig"] = <_cyb_intptr_t>__cudensitymatDestroySVDConfig
+    data["__cudensitymatDestroySVDConfig"] = <intptr_t>__cudensitymatDestroySVDConfig
 
     global __cudensitymatSVDConfigSetAttribute
-    data["__cudensitymatSVDConfigSetAttribute"] = <_cyb_intptr_t>__cudensitymatSVDConfigSetAttribute
+    data["__cudensitymatSVDConfigSetAttribute"] = <intptr_t>__cudensitymatSVDConfigSetAttribute
 
     global __cudensitymatSVDConfigGetAttribute
-    data["__cudensitymatSVDConfigGetAttribute"] = <_cyb_intptr_t>__cudensitymatSVDConfigGetAttribute
+    data["__cudensitymatSVDConfigGetAttribute"] = <intptr_t>__cudensitymatSVDConfigGetAttribute
 
     global __cudensitymatCreateEigenDecompositionScopeSplitDMRGConfig
-    data["__cudensitymatCreateEigenDecompositionScopeSplitDMRGConfig"] = <_cyb_intptr_t>__cudensitymatCreateEigenDecompositionScopeSplitDMRGConfig
+    data["__cudensitymatCreateEigenDecompositionScopeSplitDMRGConfig"] = <intptr_t>__cudensitymatCreateEigenDecompositionScopeSplitDMRGConfig
 
     global __cudensitymatDestroyEigenDecompositionScopeSplitDMRGConfig
-    data["__cudensitymatDestroyEigenDecompositionScopeSplitDMRGConfig"] = <_cyb_intptr_t>__cudensitymatDestroyEigenDecompositionScopeSplitDMRGConfig
+    data["__cudensitymatDestroyEigenDecompositionScopeSplitDMRGConfig"] = <intptr_t>__cudensitymatDestroyEigenDecompositionScopeSplitDMRGConfig
 
     global __cudensitymatEigenDecompositionScopeSplitDMRGConfigSetAttribute
-    data["__cudensitymatEigenDecompositionScopeSplitDMRGConfigSetAttribute"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionScopeSplitDMRGConfigSetAttribute
+    data["__cudensitymatEigenDecompositionScopeSplitDMRGConfigSetAttribute"] = <intptr_t>__cudensitymatEigenDecompositionScopeSplitDMRGConfigSetAttribute
 
     global __cudensitymatEigenDecompositionScopeSplitDMRGConfigGetAttribute
-    data["__cudensitymatEigenDecompositionScopeSplitDMRGConfigGetAttribute"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionScopeSplitDMRGConfigGetAttribute
+    data["__cudensitymatEigenDecompositionScopeSplitDMRGConfigGetAttribute"] = <intptr_t>__cudensitymatEigenDecompositionScopeSplitDMRGConfigGetAttribute
 
     global __cudensitymatCreateEigenDecompositionApproachKrylovConfig
-    data["__cudensitymatCreateEigenDecompositionApproachKrylovConfig"] = <_cyb_intptr_t>__cudensitymatCreateEigenDecompositionApproachKrylovConfig
+    data["__cudensitymatCreateEigenDecompositionApproachKrylovConfig"] = <intptr_t>__cudensitymatCreateEigenDecompositionApproachKrylovConfig
 
     global __cudensitymatDestroyEigenDecompositionApproachKrylovConfig
-    data["__cudensitymatDestroyEigenDecompositionApproachKrylovConfig"] = <_cyb_intptr_t>__cudensitymatDestroyEigenDecompositionApproachKrylovConfig
+    data["__cudensitymatDestroyEigenDecompositionApproachKrylovConfig"] = <intptr_t>__cudensitymatDestroyEigenDecompositionApproachKrylovConfig
 
     global __cudensitymatEigenDecompositionApproachKrylovConfigSetAttribute
-    data["__cudensitymatEigenDecompositionApproachKrylovConfigSetAttribute"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionApproachKrylovConfigSetAttribute
+    data["__cudensitymatEigenDecompositionApproachKrylovConfigSetAttribute"] = <intptr_t>__cudensitymatEigenDecompositionApproachKrylovConfigSetAttribute
 
     global __cudensitymatEigenDecompositionApproachKrylovConfigGetAttribute
-    data["__cudensitymatEigenDecompositionApproachKrylovConfigGetAttribute"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionApproachKrylovConfigGetAttribute
+    data["__cudensitymatEigenDecompositionApproachKrylovConfigGetAttribute"] = <intptr_t>__cudensitymatEigenDecompositionApproachKrylovConfigGetAttribute
 
     global __cudensitymatCreateEigenDecompositionApproachLinearConfig
-    data["__cudensitymatCreateEigenDecompositionApproachLinearConfig"] = <_cyb_intptr_t>__cudensitymatCreateEigenDecompositionApproachLinearConfig
+    data["__cudensitymatCreateEigenDecompositionApproachLinearConfig"] = <intptr_t>__cudensitymatCreateEigenDecompositionApproachLinearConfig
 
     global __cudensitymatDestroyEigenDecompositionApproachLinearConfig
-    data["__cudensitymatDestroyEigenDecompositionApproachLinearConfig"] = <_cyb_intptr_t>__cudensitymatDestroyEigenDecompositionApproachLinearConfig
+    data["__cudensitymatDestroyEigenDecompositionApproachLinearConfig"] = <intptr_t>__cudensitymatDestroyEigenDecompositionApproachLinearConfig
 
     global __cudensitymatEigenDecompositionApproachLinearConfigSetAttribute
-    data["__cudensitymatEigenDecompositionApproachLinearConfigSetAttribute"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionApproachLinearConfigSetAttribute
+    data["__cudensitymatEigenDecompositionApproachLinearConfigSetAttribute"] = <intptr_t>__cudensitymatEigenDecompositionApproachLinearConfigSetAttribute
 
     global __cudensitymatEigenDecompositionApproachLinearConfigGetAttribute
-    data["__cudensitymatEigenDecompositionApproachLinearConfigGetAttribute"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionApproachLinearConfigGetAttribute
+    data["__cudensitymatEigenDecompositionApproachLinearConfigGetAttribute"] = <intptr_t>__cudensitymatEigenDecompositionApproachLinearConfigGetAttribute
 
     global __cudensitymatCreateEigenDecomposition
-    data["__cudensitymatCreateEigenDecomposition"] = <_cyb_intptr_t>__cudensitymatCreateEigenDecomposition
+    data["__cudensitymatCreateEigenDecomposition"] = <intptr_t>__cudensitymatCreateEigenDecomposition
 
     global __cudensitymatDestroyEigenDecomposition
-    data["__cudensitymatDestroyEigenDecomposition"] = <_cyb_intptr_t>__cudensitymatDestroyEigenDecomposition
+    data["__cudensitymatDestroyEigenDecomposition"] = <intptr_t>__cudensitymatDestroyEigenDecomposition
 
     global __cudensitymatEigenDecompositionConfigure
-    data["__cudensitymatEigenDecompositionConfigure"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionConfigure
+    data["__cudensitymatEigenDecompositionConfigure"] = <intptr_t>__cudensitymatEigenDecompositionConfigure
 
     global __cudensitymatEigenDecompositionPrepare
-    data["__cudensitymatEigenDecompositionPrepare"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionPrepare
+    data["__cudensitymatEigenDecompositionPrepare"] = <intptr_t>__cudensitymatEigenDecompositionPrepare
 
     global __cudensitymatEigenDecompositionCompute
-    data["__cudensitymatEigenDecompositionCompute"] = <_cyb_intptr_t>__cudensitymatEigenDecompositionCompute
+    data["__cudensitymatEigenDecompositionCompute"] = <intptr_t>__cudensitymatEigenDecompositionCompute
 
     global __cudensitymatCreateWorkspace
-    data["__cudensitymatCreateWorkspace"] = <_cyb_intptr_t>__cudensitymatCreateWorkspace
+    data["__cudensitymatCreateWorkspace"] = <intptr_t>__cudensitymatCreateWorkspace
 
     global __cudensitymatDestroyWorkspace
-    data["__cudensitymatDestroyWorkspace"] = <_cyb_intptr_t>__cudensitymatDestroyWorkspace
+    data["__cudensitymatDestroyWorkspace"] = <intptr_t>__cudensitymatDestroyWorkspace
 
     global __cudensitymatWorkspaceGetMemorySize
-    data["__cudensitymatWorkspaceGetMemorySize"] = <_cyb_intptr_t>__cudensitymatWorkspaceGetMemorySize
+    data["__cudensitymatWorkspaceGetMemorySize"] = <intptr_t>__cudensitymatWorkspaceGetMemorySize
 
     global __cudensitymatWorkspaceSetMemory
-    data["__cudensitymatWorkspaceSetMemory"] = <_cyb_intptr_t>__cudensitymatWorkspaceSetMemory
+    data["__cudensitymatWorkspaceSetMemory"] = <intptr_t>__cudensitymatWorkspaceSetMemory
 
     global __cudensitymatWorkspaceGetMemory
-    data["__cudensitymatWorkspaceGetMemory"] = <_cyb_intptr_t>__cudensitymatWorkspaceGetMemory
+    data["__cudensitymatWorkspaceGetMemory"] = <intptr_t>__cudensitymatWorkspaceGetMemory
 
     global __cudensitymatElementaryOperatorAttachBuffer
-    data["__cudensitymatElementaryOperatorAttachBuffer"] = <_cyb_intptr_t>__cudensitymatElementaryOperatorAttachBuffer
+    data["__cudensitymatElementaryOperatorAttachBuffer"] = <intptr_t>__cudensitymatElementaryOperatorAttachBuffer
 
     global __cudensitymatMatrixOperatorDenseLocalAttachBuffer
-    data["__cudensitymatMatrixOperatorDenseLocalAttachBuffer"] = <_cyb_intptr_t>__cudensitymatMatrixOperatorDenseLocalAttachBuffer
+    data["__cudensitymatMatrixOperatorDenseLocalAttachBuffer"] = <intptr_t>__cudensitymatMatrixOperatorDenseLocalAttachBuffer
     _cyb_func_ptrs = data
     return data
 

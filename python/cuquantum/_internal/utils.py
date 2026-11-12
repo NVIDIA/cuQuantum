@@ -1,5 +1,4 @@
-# Copyright (c) 2021-2025, NVIDIA CORPORATION & AFFILIATES
-#
+# SPDX-FileCopyrightText: Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
@@ -19,6 +18,10 @@ from nvmath.internal import package_wrapper
 from nvmath.internal.tensor_wrapper import maybe_register_package
 
 from .package_ifc import StreamHolder
+
+# Temporary  compatibility: The canonical module path is not public API, but keep until
+# next release.
+from .mpi_utils import get_mpi_comm_pointer as get_mpi_comm_pointer
 
 
 def _create_stream_ctx_ptr_cupy_stream(package_ifc, stream):
@@ -148,30 +151,10 @@ def cuda_call_ctx(stream_holder, blocking=True, timing=True):
         time.data = cp.cuda.get_elapsed_time(start, end)
 
 
-def get_mpi_comm_pointer(comm):
-    """Simple helper to get the address to and size of a ``MPI_Comm`` handle.
-
-    Args:
-        comm (mpi4py.MPI.Comm): An MPI communicator.
-
-    Returns:
-        tuple: A pair of int values representing the address and the size.
-    """
-    try:
-        from mpi4py import MPI  # init!
-    except ImportError as e:
-        raise RuntimeError("please install mpi4py") from e
-
-    if not isinstance(comm, MPI.Comm):
-        raise ValueError("invalid MPI communicator")
-    comm_ptr = MPI._addressof(comm)  # = MPI_Comm*
-    mpi_comm_size = MPI._sizeof(MPI.Comm)
-    return comm_ptr, mpi_comm_size
-
 def deprecate_function(my_func, message, deprecation_class):
     def add_deprecation_warning(message):
         def decorator(func):
-            @functools.wraps(func) 
+            @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 warnings.warn(message, deprecation_class, stacklevel=2)
                 return func(*args, **kwargs)

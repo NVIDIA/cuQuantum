@@ -109,9 +109,8 @@ class DMRGConfig:
     Args:
         num_sites: Number of sites swept per local update. ``1`` for 1-site
             DMRG, ``2`` for 2-site DMRG. Defaults to ``1`` when ``None``.
-            Shift-invert supports both values, but its 2-site path currently
-            requires at least three MPS tensors; 1-site remains supported for
-            a two-tensor MPS.
+            Shift-invert supports both values for MPS containing at least two
+            tensors.
         svd_config: SVD truncation policy for the 2-site sweep
             (:class:`SVDConfig`).
         max_sweeps: Maximum number of full L-R-L sweeps. For shift-invert,

@@ -56,7 +56,7 @@ xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
             FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
         }
 
-        // Attach storage to input state.
+        // Process buffers for all inputs, including input state, elementary/matrix operators and coefficients.
         std::vector<void*> stateInComponentBufs;
         std::vector<size_t> stateInComponentSizes;
         for (int i = 0; i < inBufs.size(); ++i) {
@@ -103,6 +103,7 @@ xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
             FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
         }
 
+        // Attach storage to input state.
         FFI_CUDM_ERROR_CHECK(cudensitymatStateAttachComponentStorage(handle,
                                                                      stateIn,
                                                                      numStateComponents,
@@ -147,9 +148,6 @@ xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
             stateOutComponentSizes.data())
         );
 
-
-        // Execute operator action.
-
         // Attach batched coefficients if needed.
         if (operatorTermBatchedCoeffsPtrs.size() > 0 || operatorProductBatchedCoeffsPtrs.size() > 0) {
             FFI_CUDM_ERROR_CHECK(cudensitymatAttachBatchedCoefficients(
@@ -166,8 +164,7 @@ xla::ffi::Error OperatorActionImpl(cudaStream_t stream,
         // Initialize output state to zero.
         FFI_CUDM_ERROR_CHECK(cudensitymatStateInitializeZero(handle, stateOut, stream));
 
-        FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(stream));
-
+        // Execute operator action.
         FFI_CUDM_ERROR_CHECK(cudensitymatOperatorComputeAction(handle,
                                                                superoperator,
                                                                0.0, // time
@@ -193,8 +190,8 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     OperatorActionImpl,
     xla::ffi::Ffi::Bind()
         .Ctx<xla::ffi::PlatformStream<cudaStream_t>>()
-        .RemainingArgs() // all input buffers
-        .RemainingRets() // all output buffers (workspace first, then state out components)
+        .RemainingArgs() // all input buffers (state_in components, elementary/matrix operators, coefficients)
+        .RemainingRets() // all output buffers (workspace first, then state_out components)
         .Attr<xla::ffi::Span<const int64_t>>("other_in_types")
         .Attr<xla::ffi::Span<const int64_t>>("other_in_ptrs")
         .Attr<int64_t>("batch_size")
@@ -316,7 +313,6 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
                                                                      stateOutAdjComponentSizes.data()));
 
         // Attach storage to output state.
-        // outBufs layout: [workspace, state in adj components..., grad bufs...]
         std::vector<void*> stateInAdjComponentBufs;
         std::vector<size_t> stateInAdjComponentSizes;
 
@@ -353,10 +349,18 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
                                                             workspacePtrAligned,
                                                             workspaceSizeAligned));
 
-        // Initialize output state to zero.
+        // Initialize state_in_adj to zero.
         FFI_CUDM_ERROR_CHECK(cudensitymatStateInitializeZero(handle, stateInAdj, stream));
 
-        // Execute operator action backward differentiation.
+        // Zero out the persistent gradient buffers.
+        for (int i = 0; i < otherOutPtrs.size(); ++i) {
+            xla::ffi::Result<xla::ffi::AnyBuffer> resBuf =
+                outBufs.get<xla::ffi::AnyBuffer>(i + numStateComponents + 1).value();
+            FFI_CUDA_ERROR_CHECK(cudaMemsetAsync(reinterpret_cast<void*>(otherOutPtrs[i]),
+                                                 0,
+                                                 resBuf->size_bytes(),
+                                                 stream));
+        }
 
         // Attach batched coefficients if needed.
         if (operatorTermBatchedCoeffsPtrs.size() > 0 || operatorProductBatchedCoeffsPtrs.size() > 0) {
@@ -371,6 +375,7 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
                 operatorProductBatchedCoeffs.data()));
         }
 
+        // Execute operator action backward differentiation.
         FFI_CUDM_ERROR_CHECK(cudensitymatOperatorComputeActionBackwardDiff(handle,
                                                                            superoperator,
                                                                            0.0, // time
@@ -384,13 +389,7 @@ xla::ffi::Error OperatorActionBackwardDiffImpl(cudaStream_t stream,
                                                                            workspaceDesc,
                                                                            stream));
 
-        // The Python gradient callbacks (for both scalar and tensor operators) dispatch
-        // their += accumulation operations on CuPy's default CUDA stream, which may differ
-        // from the XLA FFI stream used here. Synchronize the default stream before copying
-        // so that all callback writes are guaranteed to be visible to the memcpy below.
-        FFI_CUDA_ERROR_CHECK(cudaStreamSynchronize(cudaStreamDefault));
-
-        // outBufs layout (after workspace and numStateComponents state adj bufs): [grad bufs].
+        // Copy gradient buffers from CuPy arrays to XLA buffers.
         for (int i = 0; i < otherOutPtrs.size(); ++i) {
             xla::ffi::Result<xla::ffi::AnyBuffer> resBuf =
                 outBufs.get<xla::ffi::AnyBuffer>(i + numStateComponents + 1).value();
@@ -418,8 +417,9 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     OperatorActionBackwardDiffImpl,
     xla::ffi::Ffi::Bind()
         .Ctx<xla::ffi::PlatformStream<cudaStream_t>>()
-        .RemainingArgs() // all input buffers
-        .RemainingRets() // all output buffers (workspace first, then state in adj components, then grad bufs)
+        .RemainingArgs() // all input buffers (state_in components, state_out_adj components,
+                         // elementary/matrix operators, coefficients)
+        .RemainingRets() // all output buffers (workspace first, then state_in_adj components, then grad bufs)
         .Attr<xla::ffi::Span<const int64_t>>("other_in_types")
         .Attr<xla::ffi::Span<const int64_t>>("other_in_ptrs")
         .Attr<xla::ffi::Span<const int64_t>>("other_out_ptrs")

@@ -13,7 +13,9 @@ It is also used in cusvsim ubackend tests, so the same API can be used for futur
 
 If you want to specialize parameters for some particular test, redefine the fixtures in the corresponding test file.
 
-The test_* files are identical to the corresponding test files in cusvsim ubackend
+The test_* files started out identical to the corresponding test files in cusvsim ubackend;
+sections that rely on cuTensorNet-only features (mixed-state simulation, general channels
+with non-symmetric Kraus operators) have since been added to them.
 """
 
 import pytest

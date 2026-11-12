@@ -282,15 +282,24 @@ int main()
                                                            gateAlgo, 
                                                            svdConfig, typeCompute, 
                                                            workDesc) );
-   int64_t requiredWorkspaceSize = 0;
+   int64_t requiredWorkspaceSize = 0, hostWorkspaceSize = 0;
    HANDLE_ERROR( cutensornetWorkspaceGetMemorySize(handle,
                                                    workDesc,
                                                    CUTENSORNET_WORKSIZE_PREF_MIN,
                                                    CUTENSORNET_MEMSPACE_DEVICE,
                                                    CUTENSORNET_WORKSPACE_SCRATCH,
                                                    &requiredWorkspaceSize) );
-   void *work = nullptr;
+   HANDLE_ERROR( cutensornetWorkspaceGetMemorySize(handle,
+                                                   workDesc,
+                                                   CUTENSORNET_WORKSIZE_PREF_MIN,
+                                                   CUTENSORNET_MEMSPACE_HOST,
+                                                   CUTENSORNET_WORKSPACE_SCRATCH,
+                                                   &hostWorkspaceSize) );
+   void *work = nullptr, *hostWork = nullptr;
    HANDLE_CUDA_ERROR( cudaMalloc(&work, requiredWorkspaceSize) );
+   if (hostWorkspaceSize > 0) {
+      hostWork = malloc(hostWorkspaceSize);
+   }
 
    HANDLE_ERROR( cutensornetWorkspaceSetMemory(handle,
                                                workDesc,
@@ -298,6 +307,12 @@ int main()
                                                CUTENSORNET_WORKSPACE_SCRATCH,
                                                work,
                                                requiredWorkspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceSetMemory(handle,
+                                               workDesc,
+                                               CUTENSORNET_MEMSPACE_HOST,
+                                               CUTENSORNET_WORKSPACE_SCRATCH,
+                                               hostWork,
+                                               hostWorkspaceSize) );
 
    printf("Allocate workspace.\n");
    
@@ -382,6 +397,7 @@ int main()
    if (D_BOut) cudaFree(D_BOut);
    if (D_S) cudaFree(D_S);
    if (work) cudaFree(work);
+   if (hostWork) free(hostWork);
 
    printf("Free resource and exit.\n");
 

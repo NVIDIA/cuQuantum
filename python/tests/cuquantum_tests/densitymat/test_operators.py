@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+from types import SimpleNamespace
+
 import numpy as np
 import cupy as cp
 import pytest
@@ -13,6 +15,7 @@ from cuquantum.densitymat import (
     Operator,
     OperatorTerm,
     OperatorAction,
+    DensePureState,
     WorkStream,
     CPUCallback,
     GPUCallback
@@ -46,6 +49,20 @@ def get_dense_example(hilbert_space_dims, batch_size_ops = (1,1), batch_size_ter
 
 class TestOperators:
 
+    @pytest.fixture
+    def callback_operator(self, work_stream):
+        def create_operator(batch_size):
+            hilbert_space_dims = (2,)
+            elem_op = DenseOperator(np.eye(2, dtype=np.complex128))
+            term = tensor_product(
+                (elem_op, (0,)),
+                coeff=CPUCallback(lambda t, args: args[0], is_inplace=False),
+                batch_size=batch_size,
+            )
+            return work_stream, hilbert_space_dims, Operator(hilbert_space_dims, (term,))
+
+        return create_operator
+
     def test_operator_term_append_empty_scalar_product(self):
         matrix_term = OperatorTerm(dtype="complex128")
         matrix_term.append_matrix_product([], [], [], coeff=2.0)
@@ -69,6 +86,114 @@ class TestOperators:
         term.append_elementary_product([complex_op], [(0,)], [(False,)])
         with pytest.raises(TypeError, match="same data type"):
             term.append_elementary_product([float_op], [(1,)], [(False,)])
+
+    def test_operator_term_iadd_infers_dtype(self) -> None:
+        """Infer the dtype from the appended term when the destination is empty."""
+        op = DenseOperator(np.eye(2, dtype=np.complex128))
+        other = OperatorTerm(dtype="complex128")
+        other.append_elementary_product([op], [(0,)], [(False,)])
+
+        term = OperatorTerm()
+        term += other
+
+        assert term.dtype == other.dtype
+        assert term.terms == other.terms
+
+    def test_operator_term_iadd_keeps_two_untyped_empty_terms_empty(self) -> None:
+        """Treat adding two empty, untyped terms as a no-op."""
+        term = OperatorTerm()
+
+        term += OperatorTerm()
+
+        assert term.dtype is None
+        assert term.terms == []
+        assert term.modes == []
+        assert term.duals == []
+        assert term._conjugations == []
+
+    def test_operator_term_iadd_rejects_mismatched_dtype(self) -> None:
+        """Reject in-place addition of terms with different dtypes."""
+        complex_op = DenseOperator(np.eye(2, dtype=np.complex128))
+        float_op = DenseOperator(np.eye(2, dtype=np.float64))
+        term = OperatorTerm(dtype="complex128")
+        term.append_elementary_product([complex_op], [(0,)], [(False,)])
+        other = OperatorTerm(dtype="float64")
+        other.append_elementary_product([float_op], [(0,)], [(False,)])
+
+        with pytest.raises(TypeError, match="dtype"):
+            term += other
+
+        assert term.dtype == "complex128"
+        assert len(term.terms) == 1
+
+    def test_operator_action_dtype_check_requires_matching_dtype(self) -> None:
+        """Exercise the existing-dtype validation branch directly."""
+        # The public constructor starts with no dtype and cannot reach this branch.
+        action = OperatorAction.__new__(OperatorAction)
+        action._dtype = "complex128"
+
+        action._set_or_check_dtype([SimpleNamespace(dtype="complex128")])
+        with pytest.raises(TypeError, match="same dtype"):
+            action._set_or_check_dtype([SimpleNamespace(dtype="float64")])
+
+    def test_operator_action_rejects_mixed_dtype_operators(self, work_stream) -> None:
+        """Reject mixed-dtype operators through the public constructor."""
+        hilbert_space_dims = (2,)
+        complex_term = tensor_product(
+            (DenseOperator(np.eye(2, dtype=np.complex128)), (0,))
+        )
+        float_term = tensor_product(
+            (DenseOperator(np.eye(2, dtype=np.float64)), (0,))
+        )
+        operators = [
+            Operator(hilbert_space_dims, (complex_term,)),
+            Operator(hilbert_space_dims, (float_term,)),
+        ]
+
+        with pytest.raises(ValueError, match="more than one dtype"):
+            OperatorAction(work_stream, operators)
+
+    @pytest.mark.parametrize(
+        "params, expected_batch_values",
+        [
+            ([0.25], np.array([0.25])),
+            (np.array([[0.25, 0.75]]), np.array([0.25, 0.75])),
+        ],
+    )
+    def test_operator_compute_action_accepts_callback_params(
+        self, callback_operator, params, expected_batch_values
+    ) -> None:
+        """Pass a single-batch sequence and batched 2-D array through the public API."""
+        batch_size = expected_batch_values.size
+        ctx, hilbert_space_dims, operator = callback_operator(batch_size)
+        state_in = DensePureState(ctx, hilbert_space_dims, batch_size, "complex128")
+        state_out = DensePureState(ctx, hilbert_space_dims, batch_size, "complex128")
+        state_in.attach_storage(cp.ones((2, batch_size), dtype=cp.complex128, order="F"))
+        state_out.attach_storage(cp.zeros((2, batch_size), dtype=cp.complex128, order="F"))
+
+        operator.prepare_action(ctx, state_in)
+        operator.compute_action(0.0, params, state_in, state_out)
+
+        expected = np.broadcast_to(expected_batch_values, (2, batch_size))
+        np.testing.assert_allclose(state_out.storage.get(), expected)
+
+    @pytest.mark.parametrize(
+        "params",
+        [np.array(0.1), np.array([0.1]), np.zeros((2, 3, 4))],
+    )
+    def test_operator_compute_action_rejects_invalid_callback_param_dimensions(
+        self, callback_operator, params
+    ) -> None:
+        """Reject invalid parameter ranks through the public operator action API."""
+        ctx, hilbert_space_dims, operator = callback_operator(1)
+        state_in = DensePureState(ctx, hilbert_space_dims, 1, "complex128")
+        state_out = DensePureState(ctx, hilbert_space_dims, 1, "complex128")
+        state_in.attach_storage(cp.ones(2, dtype=cp.complex128))
+        state_out.attach_storage(cp.zeros(2, dtype=cp.complex128))
+        operator.prepare_action(ctx, state_in)
+
+        with pytest.raises(ValueError, match="2-D array"):
+            operator.compute_action(0.0, params, state_in, state_out)
 
     @pytest.mark.parametrize("hilbert_space_dims", [(4, 5, 2, 6, 3, 7)])
     @pytest.mark.parametrize("batch_sizes", ([(1,1),(1,1),1,1],

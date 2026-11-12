@@ -37,10 +37,10 @@ install_requires = [
     'nvmath-python>=1.0.0, <2.0.0',  # ">=1.0.0,<2.0.0"
     'cuda-pathfinder>=1.6.0, <2',  # ">=1.6.0,<2"
     # 'torch', # <-- PyTorch is optional; also, the PyPI version does not support GPU...
-    f'custatevec-cu{utils.cuda_major_ver}>=1.15.0, <2',  # ">=1.15.0,<2"
-    f'cutensornet-cu{utils.cuda_major_ver}>=2.14.0, <3',  # ">=2.14.0,<3"
-    f'cudensitymat-cu{utils.cuda_major_ver}>=0.7.0, <0.8',  # ">=0.7.0,<0.8.0"
-    f'cupauliprop-cu{utils.cuda_major_ver}>=0.5.0, <0.6',  # ">=0.5.0,<0.6.0"
+    f'custatevec-cu{utils.cuda_major_ver}>=1.15.1, <2',  # ">=1.15.1,<2"
+    f'cutensornet-cu{utils.cuda_major_ver}>=2.15.0, <3',  # ">=2.15.0,<3"
+    f'cudensitymat-cu{utils.cuda_major_ver}>=0.7.1, <0.8',  # ">=0.7.1,<0.8.0"
+    f'cupauliprop-cu{utils.cuda_major_ver}>=0.5.1, <0.6',  # ">=0.5.1,<0.6.0"
     f'custabilizer-cu{utils.cuda_major_ver}>=0.5.0, <0.6',  # ">=0.5.0,<0.6.0"
 ]
 if utils.cuda_major_ver == '12':

@@ -18,7 +18,7 @@ import cuquantum.bindings.cupauliprop as cupp
 from cuquantum.bindings.cupauliprop import SortOrder
 from ._internal import typemaps
 from ._internal.utils import (
-    is_all_zeros, is_contiguous, create_truncation_strategies, convert_truncation_strategies, 
+    is_all_zeros, is_c_contiguous, create_truncation_strategies, convert_truncation_strategies,
     register_finalizer, SortOrderLiteral, sort_order_to_cupp, sort_order_from_cupp
 )
 from ._internal.work import Workspace
@@ -38,10 +38,13 @@ __all__ = [
 class PauliExpansionOptions:
     """
     Options controlling Pauli expansion construction and execution.
+
+    In multi-process execution, ``memory_limit`` and allocations made by
+    ``allocator`` apply independently to the calling process.
     """
     allocator: nvmath_memory.BaseCUDAMemoryManagerAsync | None = None
     memory_limit: int | str = "80%"
-    blocking: bool = False
+    blocking: bool | None = None
 
     def __post_init__(self):
         check_memory_str(self.memory_limit, "memory limit")
@@ -52,13 +55,18 @@ class PauliExpansionOptions:
             raise ValueError("memory_limit must be non-negative.")
         if self.allocator is not None and not isinstance(self.allocator, nvmath_memory.BaseCUDAMemoryManagerAsync):
             raise TypeError("allocator must fulfill the BaseCUDAMemoryManagerAsync protocol.")
-        if not isinstance(self.blocking, bool):
+        # ``None`` means "not set": expansions default to non-blocking, and a view
+        # inherits its base.
+        if self.blocking is not None and not isinstance(self.blocking, bool):
             raise TypeError("blocking must be a boolean value.")
 
 @dataclass
 class RehearsalInfo:
     """
     Information about the required resources for a rehearsed operation.
+
+    In multi-process execution, workspace requirements are process-local and
+    may differ between processes.
     """
     device_scratch_workspace_required: int
     host_scratch_workspace_required: int
@@ -108,6 +116,9 @@ class TraceBackwardRehearsalInfo(RehearsalInfo):
     Rehearsal information for backward differentiation of a trace operation.
 
     Includes the required number of terms for the cotangent expansion output(s).
+
+    Backward differentiation does not presently support multi-process
+    execution.
     """
     cotangent_num_terms: int
 
@@ -143,6 +154,9 @@ class ProductTraceBackwardRehearsalInfo(RehearsalInfo):
     Rehearsal information for backward differentiation of a product trace operation.
 
     Includes the required number of terms for both cotangent expansion outputs.
+
+    Backward differentiation does not presently support multi-process
+    execution.
     """
     cotangent_num_terms1: int
     cotangent_num_terms2: int
@@ -180,6 +194,11 @@ class ProductTraceBackwardRehearsalInfo(RehearsalInfo):
 class GateApplicationRehearsalInfo(RehearsalInfo):
     """
     Information about the required resources for a gate application rehearsal.
+
+    In multi-process execution, ``num_terms_required`` and the workspace
+    requirements apply to the calling process. For operations that redistribute
+    terms, very unlikely inter-process imbalances can require more capacity or
+    workspace at compute time than rehearsal reports.
     """
     num_terms_required: int
     
@@ -223,14 +242,29 @@ class PauliExpansion:
     
     This is a container for a set of Pauli strings and their coefficients, to which quantum operators can be applied.
 
+    When the library handle is configured for multi-process execution, this
+    object represents a distributed expansion. Its buffers and ``num_terms``
+    describe only the calling process's local segment.
+
     Args:
         library_handle: The library handle.
         num_qubits: The number of qubits.
-        num_terms: The number of terms.
-        xz_bits: The XZ bits buffer.
-        coeffs: The coefficients buffer.
-        sort_order: The sort order of the expansion (``None``, ``"internal"``, or ``"little_endian_bitwise"``).
-        has_duplicates: Whether the expansion may contain duplicate Pauli strings.
+        num_terms: The number of valid local terms. In multi-process execution,
+            this is the calling process's share of the full expansion.
+        xz_bits: The process-local XZ bits buffer: a ``uint64`` buffer holding
+            ``2 * get_num_packed_integers(num_qubits)`` packed integers per term, term after
+            term, such as an array of shape ``(capacity, 2 * get_num_packed_integers(num_qubits))``.
+            It must be contiguous in row-major (C) order.
+        coeffs: The process-local coefficients buffer, holding one coefficient per
+            term. It must be contiguous in row-major (C) order.
+        sort_order: The local sort order of the expansion (``None``,
+            ``"internal"``, or ``"little_endian_bitwise"``). In multi-process
+            execution, every process must pass the same value; local sorting
+            does not establish a global sort order.
+        has_duplicates: Whether duplicate Pauli strings may exist globally.
+            In multi-process execution, ``False`` guarantees uniqueness both
+            within and across processes, and every process must pass the same
+            value.
         options: Either a :class:`PauliExpansionOptions` object or a ``dict`` with
             matching keywords (``allocator``, ``memory_limit``, ``blocking``).
     """
@@ -239,15 +273,18 @@ class PauliExpansion:
         self._xz_bits = xz_bits if isinstance(xz_bits, TensorHolder) else wrap_operand(xz_bits)
         self._coefs = coeffs if isinstance(coeffs, TensorHolder) else wrap_operand(coeffs)
         
-        # Verify buffers are contiguous (any layout)
-        if not is_contiguous(self._xz_bits.shape, self._xz_bits.strides):
-            raise ValueError("xz_bits buffer must be contiguous")
-        if not is_contiguous(self._coefs.shape, self._coefs.strides):
-            raise ValueError("coefs buffer must be contiguous")
+        # C reads each buffer in memory order, so a column-major one would have its terms scrambled.
+        if not is_c_contiguous(self._xz_bits.shape, self._xz_bits.strides):
+            raise ValueError("xz_bits buffer must be contiguous in row-major (C) order")
+        if not is_c_contiguous(self._coefs.shape, self._coefs.strides):
+            raise ValueError("coefs buffer must be contiguous in row-major (C) order")
         
         if self._xz_bits.name != self._coefs.name:
             raise TypeError(f"xz_bits_buffer and coef_buffer must have the same package, got {self._xz_bits.name} and {self._coefs.name}")
-        
+        # C sees only the byte size, so a buffer of another dtype would be reinterpreted as packed bits.
+        if self._xz_bits.dtype != "uint64":
+            raise TypeError(f"xz_bits buffer must have dtype uint64, got {self._xz_bits.dtype}")
+
         # Infer array package from tensor type
         # Map "nvmath" to "cuda" (nvmath wraps cuda.ndarray internally)
         detected_package = self._xz_bits.name
@@ -278,7 +315,7 @@ class PauliExpansion:
                 maybe_register_package(allocator_package)
                 allocator = nvmath_memory._MEMORY_MANAGER[allocator_package](self._library_handle.device_id, self._library_handle._logger)
             self._workspace = Workspace(self._library_handle, allocator, options.memory_limit)
-            self._blocking = options.blocking
+            self._blocking = False if options.blocking is None else options.blocking
             # Register cleanup finalizer for safe resource release
             self._finalizer = register_finalizer(self, cupp.destroy_pauli_expansion, self._ptr, self._logger, "PauliExpansion")
         except Exception:
@@ -309,10 +346,14 @@ class PauliExpansion:
         Args:
             library_handle: The library handle.
             num_qubits: The number of qubits.
-            num_terms: The number of terms (used for rehearsal calculations).
+            num_terms: The process-local number of terms used for rehearsal
+                calculations.
             dtype: The data type for coefficients (defaults to "complex128").
-            sort_order: The sort order of the expansion (defaults to ``None``).
-            has_duplicates: Whether the expansion may contain duplicate Pauli strings (defaults to True).
+            sort_order: The local sort order of the expansion (defaults to
+                ``None``). Every process must use the same value.
+            has_duplicates: Whether the expansion may contain duplicate Pauli
+                strings globally (defaults to True). Every process must use the
+                same value.
             options: Either a :class:`PauliExpansionOptions` object or a ``dict`` with
                 matching keywords.
         
@@ -363,7 +404,7 @@ class PauliExpansion:
             else:
                 allocator = nvmath_memory._MEMORY_MANAGER["cuda"](library_handle.device_id, library_handle._logger)
             expansion._workspace = Workspace(library_handle, allocator, options.memory_limit)
-            expansion._blocking = options.blocking
+            expansion._blocking = False if options.blocking is None else options.blocking
             expansion._finalizer = register_finalizer(expansion, cupp.destroy_pauli_expansion, expansion._ptr, expansion._logger, "PauliExpansion")
         except Exception:
             cupp.destroy_pauli_expansion(expansion._ptr)
@@ -390,11 +431,13 @@ class PauliExpansion:
         (non-rehearsal) expansion backed by real buffers.
 
         Args:
-            xz_bits: The XZ bits buffer.
-            coefs: The coefficient buffer.
-            num_terms: The initial number of valid terms (defaults to 0).
-            sort_order: The sort order of the expansion (defaults to the rehearsal expansion's sort_order).
-            has_duplicates: Whether the expansion may contain duplicate Pauli strings (defaults to the rehearsal expansion's value).
+            xz_bits: The process-local XZ bits buffer.
+            coefs: The process-local coefficient buffer.
+            num_terms: The initial number of valid local terms (defaults to 0).
+            sort_order: The local sort order of the expansion (defaults to the
+                rehearsal expansion's sort_order).
+            has_duplicates: Whether duplicate Pauli strings may exist globally
+                (defaults to the rehearsal expansion's value).
             options: Either a :class:`PauliExpansionOptions` object or a ``dict`` with
                 matching keywords. If not provided, uses the original options passed
                 to :meth:`empty` (which may be ``None`` or partial). The constructor
@@ -459,22 +502,31 @@ class PauliExpansion:
     @property
     def xz_bits(self):
         """
-        The XZ bits buffer.
+        The process-local XZ bits buffer.
         """
         if self.package == "cuda":
             raise RuntimeError("Cannot access XZ bits buffer on GPU for \"cuda\" package. Transfer to CPU first using .to(device, package=...)")
         return self._xz_bits.tensor
 
+    @property
     def valid_xz_bits(self):
         """
-        A view on the XZ bits buffer that only contains the valid terms.
+        A view on the process-local XZ bits buffer containing only the valid local terms:
+        the first :attr:`num_terms` rows of a buffer with one row per term, otherwise the first
+        ``num_terms * 2 * get_num_packed_integers(num_qubits)`` integers of the flattened buffer.
         """
-        raise NotImplementedError
+        self._check_has_term_buffers()
+        xz_bits = self.xz_bits
+        ints_per_term = 2 * cupp.get_num_packed_integers(self.num_qubits)
+        shape = self._xz_bits.shape
+        if len(shape) >= 2 and math.prod(shape[1:]) == ints_per_term:
+            return xz_bits[:self.num_terms]
+        return xz_bits.reshape(-1)[:self.num_terms * ints_per_term]
 
     @property
     def capacity(self) -> int:
         """
-        The maximum number of terms that the Pauli expansion can accommodate.
+        The maximum number of terms the calling process's local segment can accommodate.
         """
         # XZ bits may be stored as 1D or 2D; use the wrapper's unified size and ints-per-term.
         xz_elems = self._xz_bits.size
@@ -488,7 +540,7 @@ class PauliExpansion:
     @property
     def coeffs(self):
         """
-        The coefficient buffer.
+        The process-local coefficient buffer.
         """
         if self.package == "cuda":
             raise RuntimeError("Cannot access coefficient buffer on GPU for \"cuda\" package. Transfer to CPU first using .to(device, package=...)")
@@ -497,9 +549,23 @@ class PauliExpansion:
     @property
     def valid_coeffs(self):
         """
-        A view on the coefficients buffer that only contains the valid terms.
+        A view on the process-local coefficients buffer containing only the valid local terms:
+        the first :attr:`num_terms` rows of a buffer with one row per term, otherwise the first
+        :attr:`num_terms` coefficients of the flattened buffer.
         """
-        raise NotImplementedError
+        self._check_has_term_buffers()
+        coeffs = self.coeffs
+        shape = self._coefs.shape
+        if len(shape) >= 2 and math.prod(shape[1:]) == 1:
+            return coeffs[:self.num_terms]
+        return coeffs.reshape(-1)[:self.num_terms]
+
+    def _check_has_term_buffers(self) -> None:
+        if self._is_rehearsal:
+            raise RuntimeError(
+                "A rehearsal expansion has placeholder buffers that hold no terms. "
+                "Create a non-rehearsal expansion using rehearsal_expansion.from_empty(...)."
+            )
 
     @property
     def num_qubits(self) -> int:
@@ -512,7 +578,10 @@ class PauliExpansion:
     @property
     def num_terms(self) -> int:
         """
-        The current number of valid terms in the Pauli expansion.
+        The current number of valid local terms.
+
+        In multi-process execution, this is the number on the calling process,
+        not the total across all processes.
         """
         return self._get_num_terms()
 
@@ -526,14 +595,19 @@ class PauliExpansion:
     @property
     def is_sorted(self) -> bool:
         """
-        Returns whether the Pauli expansion is sorted (any sort order).
+        Returns whether the Pauli expansion has a global sort order.
+
+        In multi-process execution, rank-local sorting alone returns ``False``.
         """
         return self._get_sort_order() != cupp.SortOrder.NONE
     
     @property
     def sort_order(self) -> SortOrderLiteral:
         """
-        Returns the sort order of the Pauli expansion.
+        Returns the global sort order of the Pauli expansion.
+
+        In multi-process execution, rank-local sorting alone is reported as
+        ``None``.
         
         Returns:
             ``None``, ``"internal"``, or ``"little_endian_bitwise"``.
@@ -543,7 +617,10 @@ class PauliExpansion:
     @property
     def has_duplicates(self) -> bool:
         """
-        Returns whether the Pauli expansion may contain duplicate Pauli strings.
+        Returns whether the Pauli expansion may contain duplicate Pauli strings globally.
+
+        In multi-process execution, ``False`` guarantees that no Pauli string
+        is duplicated either within or across processes.
         
         After calling :meth:`deduplicate`, this will return ``False``.
         """
@@ -569,6 +646,10 @@ class PauliExpansion:
     def to(self, device: Literal["cpu"] | Literal["gpu"], package: Literal["cupy", "torch", "cuda"], stream=None, *, options: PauliExpansionOptions | dict | None = None) -> "PauliExpansion":
         """
         Copy the Pauli expansion to the specified device.
+
+        In multi-process execution, each process copies only its local segment.
+        Call this method on every process to transfer the full distributed
+        expansion while preserving its global properties.
 
         Args:
             device: Target device. Use ``"cpu"`` for host memory, or the library handle's
@@ -671,6 +752,11 @@ class PauliExpansion:
         """
         Write coefficients and xzbits from another Pauli expansion to this Pauli expansion or Pauli expansion view.
         This will reset the number of valid terms to the number of terms in the other Pauli expansion or Pauli expansion view.
+
+        In multi-process execution, each process copies its local input view to
+        its local output segment. Call this method on every process with
+        identical local sortedness and deduplication properties; global
+        properties inherited from the source are preserved.
         
         Raises:
             RuntimeError: If this expansion is a rehearsal expansion.
@@ -714,6 +800,10 @@ class PauliExpansion:
         """
         Creates a non-owning view on a contiguous range of Pauli terms inside a Pauli operator expansion.
 
+        In multi-process execution, the indices select from the calling
+        process's local segment and are validated against its local term count.
+        Different processes may select different local ranges.
+
         Args:
             start_index: The start index of the view (inclusive). If not specified, the view will start at the beginning of the Pauli expansion.
             end_index: The end index of the view (exclusive, one past the last element). If not specified, the view will end at the end of the currently valid terms in the Pauli expansion.
@@ -739,7 +829,7 @@ class PauliExpansion:
     @property
     def storage_location(self) -> Literal["cpu", "gpu"]:
         """
-        The storage location of the Pauli expansion.
+        The storage location of the calling process's local expansion segment.
         """
         ret = cupp.pauli_expansion_get_storage_buffer(int(self._library_handle), int(self))
         storage_location = ret[-1]
@@ -771,6 +861,14 @@ class PauliExpansion:
 
         This is a convenience method that creates a default view covering all terms
         and delegates to :meth:`PauliExpansionView.apply_gate`.
+
+        In multi-process execution, the result and all rehearsed resource
+        requirements are process-local. This operation is collective: all
+        processes must use equivalent gates and the same ``truncation``,
+        ``sort_order``, and ``keep_duplicates`` values. Completion includes
+        communication needed for the local result but is not a separate
+        cross-process barrier. See
+        :meth:`PauliExpansionView.apply_gate` for the distributed semantics.
 
         Args:
             gate: The gate to apply.
@@ -820,6 +918,10 @@ class PauliExpansion:
 
         This is a convenience method that creates a default view covering all terms
         and delegates to :meth:`PauliExpansionView.trace_with_zero_state`.
+
+        In multi-process execution, this is a collective operation over the
+        full distributed expansion and returns the same global result on every
+        process. Rehearsed workspace requirements remain process-local.
 
         Args:
             rehearse: If True, only rehearse the operation to determine resource requirements.
@@ -873,6 +975,11 @@ class PauliExpansion:
         This is a convenience method that creates default views covering all terms
         and delegates to :meth:`PauliExpansionView.product_trace`.
 
+        In multi-process execution, this is a collective operation over both
+        full distributed expansions and returns the same global result on every
+        process. Both expansions must be globally deduplicated. Rehearsed
+        workspace requirements remain process-local.
+
         Args:
             other: The other Pauli expansion (or view) to compute the product trace with.
             adjoint: If True, computes Tr(self^† * other). If False, computes Tr(self * other). Defaults to False.
@@ -903,6 +1010,10 @@ class PauliExpansion:
 
         This is a convenience method that creates a default view covering all terms
         and delegates to :meth:`PauliExpansionView.sort`.
+
+        In multi-process execution, sorting is process-local and does not
+        establish a global order. Every process must use the same
+        ``sort_order``.
 
         Args:
             expansion_out: The Pauli expansion to write the sorted result to. If not provided,
@@ -938,6 +1049,12 @@ class PauliExpansion:
         This is a convenience method that creates a default view covering all terms
         and delegates to :meth:`PauliExpansionView.deduplicate`.
 
+        In multi-process execution, duplicates are removed globally, including
+        across processes. This operation is collective, but its completion does
+        not imply a separate cross-process barrier. Deduplication may
+        redistribute terms and increase one process's local term count. Every
+        process must use the same ``sort_order``.
+
         Args:
             expansion_out: The Pauli expansion to write the deduplicated result to. If not provided,
                 a new expansion will be allocated with the required capacity.
@@ -970,6 +1087,10 @@ class PauliExpansion:
 
         This is a convenience method that creates a default view covering all terms
         and delegates to :meth:`PauliExpansionView.truncate`.
+
+        In multi-process execution, each process truncates its local terms
+        independently. Every process must use the same truncation strategy.
+        Blocking completion applies only on the calling process.
 
         Args:
             expansion_out: The Pauli expansion to write the truncated result to. If not provided,
@@ -1011,6 +1132,9 @@ class PauliExpansion:
         Convenience method that creates a default view and delegates to
         :meth:`PauliExpansionView.trace_with_zero_state_backward_diff`.
 
+        .. warning::
+            This method does not presently support multi-process execution.
+
         Args:
             cotangent_trace: Scalar cotangent :math:`\\tilde{t} = dL/dt`.
             cotangent_trace_exponent: Scalar cotangent for the trace-exponent
@@ -1048,6 +1172,9 @@ class PauliExpansion:
 
         Convenience method that creates default views and delegates to
         :meth:`PauliExpansionView.product_trace_backward_diff`.
+
+        .. warning::
+            This method does not presently support multi-process execution.
 
         Args:
             other: The other Pauli expansion (or view).
@@ -1096,14 +1223,18 @@ class PauliExpansion:
         Convenience method that creates a default view and delegates to
         :meth:`PauliExpansionView.apply_gate_backward_diff`.
 
+        .. warning::
+            This method does not presently support multi-process execution.
+
         Args:
             gate: The quantum operator (must match the forward call).
             cotangent_out: Cotangent of the forward output.
             truncation: Must match the forward call.
             cotangent_in: Pre-allocated expansion for the input cotangent, or None.
-            param_grads_out: A numpy array to accumulate parameter gradients into
-                (shape ``(gate.num_differentiable_params,)`` and the coefficient
-                dtype), or ``None`` to auto-allocate one.
+                It must not be this expansion or the one *cotangent_out* is based on.
+            param_grads_out: A writeable numpy array to accumulate parameter gradients into
+                (shape ``(gate.num_differentiable_params,)`` and the coefficient dtype), or
+                ``None`` to auto-allocate one.
             adjoint: Must match the forward call.
             sort_order: Sort order for the cotangent expansion.
             keep_duplicates: Whether duplicates are allowed.
@@ -1135,10 +1266,14 @@ class PauliExpansionView:
     """
     A view on a contiguous range of Pauli terms inside a Pauli operator expansion.
 
+    In multi-process execution, a view selects a range from the calling
+    process's local expansion segment. Different processes may use different
+    local ranges.
+
     Args:
         pauli_expansion: The Pauli expansion.
-        start_index: The start index of the view.
-        end_index: The end index of the view.
+        start_index: The process-local start index of the view.
+        end_index: The process-local end index of the view.
         options: Either a :class:`PauliExpansionOptions` object or a ``dict`` with
             matching keywords (``allocator``, ``memory_limit``, ``blocking``). If not
             provided, defaults inherit from the parent expansion.
@@ -1201,7 +1336,9 @@ class PauliExpansionView:
         across handles/devices, storage locations, or dtypes is undefined behavior at
         the C layer, so reject it early with a clear error. A view operand whose base
         was mutated after it was created (``is_valid`` False) is likewise rejected, so a
-        stale view is not silently forwarded to C."""
+        stale view is not silently forwarded to C. A rehearsal expansion has placeholder
+        host buffers, so the storage location is not compared when either side is one:
+        rehearsing needs no buffers, and computing with one is refused by the caller."""
         if isinstance(operand, PauliExpansionView) and not operand.is_valid:
             raise ValueError(
                 f"{name} is a stale PauliExpansionView (its base expansion was mutated "
@@ -1214,20 +1351,32 @@ class PauliExpansionView:
             raise ValueError(f"{name} must have the same data type as the view, got {base.dtype} and {self.base.dtype}")
         if base._library_handle != self.base._library_handle:
             raise ValueError(f"{name} must share the same LibraryHandle/device as the view; transfer it with .to(...) first.")
+        if base._is_rehearsal or self.base._is_rehearsal:
+            return
         if base.storage_location != self.base.storage_location:
             raise ValueError(f"{name} must be on the same storage location as the view, got {base.storage_location} and {self.base.storage_location}; transfer it with .to(...) first.")
+
+    def _check_output_compatible(self, expansion_out: "PauliExpansion", name: str) -> None:
+        """:meth:`_check_operand_compatible` for an output buffer. Outputs are only written when
+        computing, so a rehearsal expansion (placeholder buffers) is refused."""
+        if expansion_out._is_rehearsal:
+            raise RuntimeError(
+                f"Cannot write {name} into a rehearsal expansion. "
+                "Create a non-rehearsal expansion using rehearsal_expansion.from_empty(...)."
+            )
+        self._check_operand_compatible(expansion_out, name)
 
     @property
     def start_index(self) -> int:
         """
-        The start index (inclusive) of the view.
+        The process-local start index (inclusive) of the view.
         """
         return self._start_index
     
     @property
     def end_index(self) -> int:
         """
-        The end index (exclusive) of the view.
+        The process-local end index (exclusive) of the view.
         """
         return self._end_index
 
@@ -1241,18 +1390,21 @@ class PauliExpansionView:
     @property
     def is_sorted(self) -> bool:
         """
-        Returns whether the underlying Pauli expansion is sorted.
+        Returns whether the underlying Pauli expansion has a global sort order.
         
         Note: This reflects the sort status of the entire base expansion, not just the view's range.
+        In multi-process execution, rank-local sorting alone returns ``False``.
         """
         return self.base.is_sorted
 
     @property
     def sort_order(self) -> SortOrderLiteral:
         """
-        Returns the sort order of the underlying Pauli expansion.
+        Returns the global sort order of the underlying Pauli expansion.
         
         Note: This reflects the sort order of the entire base expansion, not just the view's range.
+        In multi-process execution, rank-local sorting alone is reported as
+        ``None``.
         
         Returns:
             ``None``, ``"internal"``, or ``"little_endian_bitwise"``.
@@ -1285,6 +1437,8 @@ class PauliExpansionView:
         backend = self.base.package
         if backend == "numpy":
             raise RuntimeError("Cannot allocate expansion: base expansion is on CPU. Transfer to GPU first using .to(device, package=...)")
+        # A zero-term result still needs one aligned slot. create_pauli_expansion rejects a zero-size buffer.
+        num_terms = max(int(num_terms), 1)
         # Get the tensor holder type for the backend
         tensor_type = tensor_wrapper._TENSOR_TYPES[backend]
         
@@ -1333,6 +1487,19 @@ class PauliExpansionView:
         The truncation is applied during gate application.
         
         If ``rehearse=True``, only the prepare phase is executed to determine resource requirements.
+
+        In multi-process execution, ``expansion_out`` receives the calling
+        process's local result, and rehearsed capacity and workspace
+        requirements are process-local. This operation is collective: all
+        processes must use equivalent gates and the same ``adjoint``,
+        ``truncation``, ``sort_order``, and ``keep_duplicates`` values.
+        ``sort_order`` describes local ordering, while
+        ``keep_duplicates=False`` guarantees global deduplication. Duplicate
+        coefficients are combined across processes before truncation; when
+        duplicates are kept, truncation is process-local. Completion includes
+        communication needed for the local result but is not a separate
+        cross-process barrier. Very unlikely load imbalances can require more
+        local capacity than rehearsal reports.
         
         Args:
             gate: The gate to apply.
@@ -1406,11 +1573,11 @@ class PauliExpansionView:
             if expansion_out is None:
                 self._logger.debug(f"Allocating output expansion with capacity {num_terms}")
                 expansion_out = self._allocate_expansion(num_terms)
-            elif expansion_out.capacity < num_terms:
-                raise ValueError(f"Expansion out capacity is too small, required {num_terms} terms, got {expansion_out.capacity} terms")
-            
-            if host_ws > 0 and not self._blocking:
-                raise RuntimeError("Host workspace requires blocking execution.")
+            else:
+                # A narrower X/Z-bit row is undefined at the C layer (it is asserted, not returned).
+                self._check_output_compatible(expansion_out, "expansion_out")
+                if expansion_out.capacity < num_terms:
+                    raise ValueError(f"Expansion out capacity is too small, required {num_terms} terms, got {expansion_out.capacity} terms")
             
             timing = bool(self._logger.handlers)
             with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
@@ -1448,14 +1615,14 @@ class PauliExpansionView:
     @property
     def num_terms(self) -> int:
         """
-        The number of terms in the Pauli expansion view.
+        The number of terms in the calling process's local view.
         """
         return cupp.pauli_expansion_view_get_num_terms(int(self._library_handle), self._ptr)
     
     @property
     def storage_location(self) -> Literal["cpu", "gpu"]:
         """
-        The storage location of the Pauli expansion view.
+        The storage location of the calling process's local view.
 
         Returns:
             Either ``"cpu"`` or ``"gpu"``. This is inherited from the base expansion.
@@ -1483,6 +1650,11 @@ class PauliExpansionView:
         This computes :math:`\\langle 0 | \\rho | 0 \\rangle` where :math:`\\rho` is the operator
         represented by the terms in this view and :math:`|0\\rangle = |0...0\\rangle` is the
         all-zeros computational basis state.
+
+        In multi-process execution, this is a collective operation that
+        combines all process-local contributions and returns the same global
+        result on every process. Rehearsed workspace requirements are local to
+        the calling process.
 
         Args:
             rehearse: If True, only rehearse the operation to determine resource requirements.
@@ -1570,9 +1742,6 @@ class PauliExpansionView:
             return RehearsalInfo(device_ws, host_ws)
         
         # Compute phase
-        if host_ws > 0 and not self._blocking:
-            raise RuntimeError("Host workspace requires blocking execution.")
-        
         timing = bool(self._logger.handlers)
         with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
             # Allocate output buffers on host: trace significand and base-2 exponent.
@@ -1607,6 +1776,12 @@ class PauliExpansionView:
         4. Multiplying the coefficients of matching pairs (with optional adjoint) and summing them
         
         If ``rehearse=True``, only the prepare phase is executed to determine resource requirements.
+
+        In multi-process execution, both input views must be globally
+        deduplicated. This collective operation combines all process-local
+        contributions and returns the same global result on every process.
+        Rehearsed workspace requirements are process-local; very unlikely
+        redistribution imbalances can require more workspace at compute time.
         
         Args:
             other: The other Pauli expansion view to compute the product trace with.
@@ -1656,7 +1831,9 @@ class PauliExpansionView:
             raise ValueError(f"Views must have the same data type, got {self.base.dtype} and {other.base.dtype}")
         if self.base._library_handle != other.base._library_handle:
             raise ValueError("product_trace operands must share the same LibraryHandle/device; transfer one with .to(...) first.")
-        if self.base.storage_location != other.base.storage_location:
+        # A rehearsal expansion has placeholder host buffers and no storage location to compare.
+        if (not (self.base._is_rehearsal or other.base._is_rehearsal)
+                and self.base.storage_location != other.base.storage_location):
             raise ValueError(
                 f"product_trace operands must be on the same storage location, got "
                 f"{self.base.storage_location} and {other.base.storage_location}; transfer one with .to(...) first."
@@ -1679,9 +1856,6 @@ class PauliExpansionView:
             return RehearsalInfo(device_ws, host_ws)
         
         # Compute phase
-        if host_ws > 0 and not self._blocking:
-            raise RuntimeError("Host workspace requires blocking execution.")
-        
         timing = bool(self._logger.handlers)
         with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
             # Allocate output buffers on host: trace significand and base-2 exponent.
@@ -1711,6 +1885,11 @@ class PauliExpansionView:
         Sorts the Pauli expansion view by the specified sorting order and writes the result to the output expansion.
         
         If ``rehearse=True``, only the prepare phase is executed to determine resource requirements.
+
+        In multi-process execution, every process sorts only its local view and
+        must use the same ``sort_order``. The operation does not establish a
+        global order, so the output expansion's global ``sort_order`` is
+        ``None``. Rehearsed workspace requirements are process-local.
         
         Args:
             expansion_out: The Pauli expansion to write the sorted result to. If not provided,
@@ -1774,9 +1953,8 @@ class PauliExpansionView:
         if expansion_out is None:
             self._logger.debug(f"Allocating output expansion with capacity {num_terms}")
             expansion_out = self._allocate_expansion(num_terms)
-        
-        if host_ws > 0 and not self._blocking:
-            raise RuntimeError("Host workspace requires blocking execution.")
+        else:
+            self._check_output_compatible(expansion_out, "expansion_out")
         
         timing = bool(self._logger.handlers)
         with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
@@ -1804,6 +1982,15 @@ class PauliExpansionView:
         sums their coefficients) and writes the result to the output expansion.
         
         If ``rehearse=True``, only the prepare phase is executed to determine resource requirements.
+
+        In multi-process execution, duplicates are removed both within and
+        across processes, and each process receives its local output segment.
+        This operation is collective, but its completion does not imply a
+        separate cross-process barrier. Every process must use the same
+        ``sort_order``; it specifies only local ordering, and the output has no
+        global sort-order guarantee. Redistribution can increase one process's
+        local term count, so the output capacity reported by rehearsal is not
+        guaranteed to be sufficient for pathologically imbalanced inputs.
         
         Args:
             expansion_out: The Pauli expansion to write the deduplicated result to. If not provided,
@@ -1872,9 +2059,8 @@ class PauliExpansionView:
         if expansion_out is None:
             self._logger.debug(f"Allocating output expansion with capacity {required_terms}")
             expansion_out = self._allocate_expansion(required_terms)
-        
-        if host_ws > 0 and not self._blocking:
-            raise RuntimeError("Host workspace requires blocking execution.")
+        else:
+            self._check_output_compatible(expansion_out, "expansion_out")
         
         timing = bool(self._logger.handlers)
         with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
@@ -1901,6 +2087,13 @@ class PauliExpansionView:
         and writes the result to the output expansion.
         
         If ``rehearse=True``, only the prepare phase is executed to determine resource requirements.
+
+        In multi-process execution, every process applies the same truncation
+        strategy independently to its local terms and receives a local output
+        segment. Removing terms preserves global sortedness and deduplication
+        guarantees held by the input. Rehearsed workspace requirements are
+        process-local. Blocking completion applies only on the calling process
+        and does not synchronize other ranks.
         
         Args:
             expansion_out: The Pauli expansion to write the truncated result to. If not provided,
@@ -1961,9 +2154,8 @@ class PauliExpansionView:
         if expansion_out is None:
             self._logger.debug(f"Allocating output expansion with capacity {num_terms_in}")
             expansion_out = self._allocate_expansion(num_terms_in)
-        
-        if host_ws > 0 and not self._blocking:
-            raise RuntimeError("Host workspace requires blocking execution.")
+        else:
+            self._check_output_compatible(expansion_out, "expansion_out")
         
         timing = bool(self._logger.handlers)
         with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
@@ -2003,13 +2195,17 @@ class PauliExpansionView:
         Propagates the scalar cotangent of the trace value back to coefficient
         cotangents of this view.
 
+        .. warning::
+            This method does not presently support multi-process execution.
+
         Args:
             cotangent_trace: Scalar cotangent :math:`\\tilde{t} = dL/dt` (same dtype
                 as the expansion coefficients).  Can be a Python scalar or a
                 1-element numpy array.
             cotangent_trace_exponent: Scalar cotangent for the trace-exponent output.
             cotangent_expansion: Pre-allocated :class:`PauliExpansion` to receive the
-                coefficient cotangents, or ``None`` to auto-allocate.
+                coefficient cotangents, or ``None`` to auto-allocate. It must not be
+                the expansion this view is based on.
             rehearse: If True, only the prepare phase runs (returns workspace
                 requirements).  If None (default), automatically set based on the
                 base expansion's rehearsal status.
@@ -2019,6 +2215,8 @@ class PauliExpansionView:
             If ``rehearse=True``: a :class:`TraceBackwardRehearsalInfo`.
             If ``rehearse=False``: the cotangent :class:`PauliExpansion`.
         """
+        if cotangent_expansion is self.base:
+            raise ValueError("cotangent_expansion must not alias the input expansion (got cotangent_expansion is view.base)")
         if rehearse is None:
             rehearse = self.base._is_rehearsal
         if self.base._is_rehearsal and not rehearse:
@@ -2058,16 +2256,13 @@ class PauliExpansionView:
             self._logger.debug(f"Allocating cotangent_expansion with capacity {alloc_capacity}")
             cotangent_expansion = self._allocate_expansion(alloc_capacity, stream=stream)
         else:
-            self._check_operand_compatible(cotangent_expansion, "cotangent_expansion")
+            self._check_output_compatible(cotangent_expansion, "cotangent_expansion")
             if cotangent_expansion.capacity < required_terms:
                 raise ValueError(
                     f"cotangent_expansion capacity is too small, required {required_terms} terms, got {cotangent_expansion.capacity} terms"
                 )
 
         # Compute
-        if host_ws > 0 and not self._blocking:
-            raise RuntimeError("Host workspace requires blocking execution.")
-
         # Ensure cotangents are host buffers with correct dtype.
         cotangent_trace_significand_buf = np.array([cotangent_trace], dtype=self.base.dtype).ravel()
         cotangent_trace_exponent_buf = np.array([cotangent_trace_exponent], dtype=np.float64).ravel()
@@ -2089,6 +2284,7 @@ class PauliExpansionView:
         else:
             self._logger.info("trace_with_zero_state_backward_diff completed")
 
+        cotangent_expansion._update_stamp += 1
         return cotangent_expansion
 
     def product_trace_backward_diff(
@@ -2108,6 +2304,9 @@ class PauliExpansionView:
         Propagates the scalar cotangent of the product-trace value back to
         coefficient cotangents for both input views.
 
+        .. warning::
+            This method does not presently support multi-process execution.
+
         Args:
             other: The other Pauli expansion view (same as in the forward
                 :meth:`product_trace` call).
@@ -2117,6 +2316,7 @@ class PauliExpansionView:
                 coefficient cotangents for ``self``, or ``None`` to auto-allocate.
             cotangent_expansion2: Pre-allocated :class:`PauliExpansion` to receive
                 coefficient cotangents for ``other``, or ``None`` to auto-allocate.
+                Must not be the same expansion as ``cotangent_expansion1``.
             adjoint: Must match the *adjoint* flag used in the forward
                 :meth:`product_trace` call.
             rehearse: If True, only the prepare phase runs.
@@ -2125,7 +2325,13 @@ class PauliExpansionView:
         Returns:
             If ``rehearse=True``: a :class:`ProductTraceBackwardRehearsalInfo`.
             If ``rehearse=False``: a tuple ``(cotangent_expansion1, cotangent_expansion2)``.
+
+        Raises:
+            ValueError: If ``cotangent_expansion1`` and ``cotangent_expansion2`` are the same expansion.
         """
+        if cotangent_expansion1 is not None and cotangent_expansion1 is cotangent_expansion2:
+            raise ValueError("cotangent_expansion1 and cotangent_expansion2 must be distinct expansions: each receives "
+                             "the cotangents of one operand.")
         if rehearse is None:
             rehearse = self.base._is_rehearsal or other.base._is_rehearsal
         if not rehearse:
@@ -2156,7 +2362,9 @@ class PauliExpansionView:
             raise ValueError(f"Views must have the same data type, got {self.base.dtype} and {other.base.dtype}")
         if self.base._library_handle != other.base._library_handle:
             raise ValueError("product_trace operands must share the same LibraryHandle/device; transfer one with .to(...) first.")
-        if self.base.storage_location != other.base.storage_location:
+        # A rehearsal expansion has placeholder host buffers and no storage location to compare.
+        if (not (self.base._is_rehearsal or other.base._is_rehearsal)
+                and self.base.storage_location != other.base.storage_location):
             raise ValueError(
                 f"product_trace operands must be on the same storage location, got "
                 f"{self.base.storage_location} and {other.base.storage_location}; transfer one with .to(...) first."
@@ -2192,7 +2400,7 @@ class PauliExpansionView:
             self._logger.debug(f"Allocating cotangent_expansion1 with capacity {alloc_capacity}")
             cotangent_expansion1 = self._allocate_expansion(alloc_capacity, stream=stream)
         else:
-            self._check_operand_compatible(cotangent_expansion1, "cotangent_expansion1")
+            self._check_output_compatible(cotangent_expansion1, "cotangent_expansion1")
             if cotangent_expansion1.capacity < required_terms1:
                 raise ValueError(
                     f"cotangent_expansion1 capacity is too small, required {required_terms1} terms, got {cotangent_expansion1.capacity} terms"
@@ -2202,16 +2410,13 @@ class PauliExpansionView:
             self._logger.debug(f"Allocating cotangent_expansion2 with capacity {alloc_capacity}")
             cotangent_expansion2 = other._allocate_expansion(alloc_capacity, stream=stream)
         else:
-            self._check_operand_compatible(cotangent_expansion2, "cotangent_expansion2")
+            self._check_output_compatible(cotangent_expansion2, "cotangent_expansion2")
             if cotangent_expansion2.capacity < required_terms2:
                 raise ValueError(
                     f"cotangent_expansion2 capacity is too small, required {required_terms2} terms, got {cotangent_expansion2.capacity} terms"
                 )
 
         # Compute
-        if host_ws > 0 and not self._blocking:
-            raise RuntimeError("Host workspace requires blocking execution.")
-
         cotangent_trace_significand_buf = np.array([cotangent_trace], dtype=self.base.dtype).ravel()
         cotangent_trace_exponent_buf = np.array([cotangent_trace_exponent], dtype=np.float64).ravel()
 
@@ -2235,6 +2440,8 @@ class PauliExpansionView:
         else:
             self._logger.info("product_trace_backward_diff completed")
 
+        cotangent_expansion1._update_stamp += 1
+        cotangent_expansion2._update_stamp += 1
         return cotangent_expansion1, cotangent_expansion2
 
     def apply_gate_backward_diff(
@@ -2255,16 +2462,20 @@ class PauliExpansionView:
         Computes the input cotangent (written to *cotangent_in*) and accumulates
         parameter gradients into *param_grads_out* (or an auto-allocated buffer).
 
+        .. warning::
+            This method does not presently support multi-process execution.
+
         Args:
             gate: The quantum operator (must match the forward :meth:`apply_gate` call).
             cotangent_out: Cotangent of the forward output, as a
                 :class:`PauliExpansionView`.
             truncation: Truncation strategy (must match the forward call).
             cotangent_in: Pre-allocated :class:`PauliExpansion` for the input
-                cotangent.  If ``None``, one is allocated automatically.
+                cotangent.  If ``None``, one is allocated automatically. It must
+                not be the expansion this view or *cotangent_out* is based on.
             param_grads_out: A numpy array to accumulate parameter gradients into.
                 Must have shape ``(gate.num_differentiable_params,)`` and dtype
-                matching the expansion coefficient type.  If ``None`` (default),
+                matching the expansion coefficient type, and be writeable.  If ``None`` (default),
                 a zeroed numpy array of the correct shape/dtype is allocated
                 automatically.
             adjoint: Must match the *adjoint* flag used in the forward call.
@@ -2280,6 +2491,12 @@ class PauliExpansionView:
             *param_grads* is a numpy array of parameter gradients (or ``None``
             for non-differentiable operators).
         """
+        # C uses cotangent_in as scratch while still reading both inputs, so an alias corrupts them.
+        cotangent_out_base = cotangent_out.base if isinstance(cotangent_out, PauliExpansionView) else cotangent_out
+        if cotangent_in is self.base:
+            raise ValueError("cotangent_in must not alias the input expansion (got cotangent_in is view.base)")
+        if cotangent_in is cotangent_out_base:
+            raise ValueError("cotangent_in must not alias the cotangent_out expansion (got cotangent_in is cotangent_out.base)")
         if rehearse is None:
             rehearse = self.base._is_rehearsal
         if self.base._is_rehearsal and not rehearse:
@@ -2306,6 +2523,11 @@ class PauliExpansionView:
         # only used in the compute phase and is validated there (after the rehearse
         # early-return).
         self._check_operand_compatible(cotangent_out, "cotangent_out")
+        if cotangent_out.base._is_rehearsal and not rehearse:
+            raise RuntimeError(
+                "Cannot perform computation with a rehearsal expansion. "
+                "Create a non-rehearsal expansion using rehearsal_expansion.from_empty(...) or use rehearse=True."
+            )
 
         # Infer gradient dtype from the expansion's coefficient type
         grad_dtype = str(self.base._coefs.dtype)
@@ -2345,15 +2567,12 @@ class PauliExpansionView:
                 self._logger.debug(f"Allocating cotangent_in with capacity {alloc_capacity} (num_terms={num_terms})")
                 cotangent_in = self._allocate_expansion(alloc_capacity, stream=stream)
             else:
-                self._check_operand_compatible(cotangent_in, "cotangent_in")
+                self._check_output_compatible(cotangent_in, "cotangent_in")
                 if cotangent_in.capacity < num_terms:
                     raise ValueError(
                         f"cotangent_in capacity too small: need {num_terms} terms, "
                         f"got {cotangent_in.capacity}"
                     )
-
-            if host_ws > 0 and not self._blocking:
-                raise RuntimeError("Host workspace requires blocking execution.")
 
             timing = bool(self._logger.handlers)
             with self._workspace.scratch_context(device_ws, host_ws, stream_holder) as (_, _dev_buf, _host_buf):
@@ -2377,5 +2596,6 @@ class PauliExpansionView:
             else:
                 self._logger.info("apply_gate_backward_diff completed")
 
+            cotangent_in._update_stamp += 1
             return cotangent_in, param_grads
 

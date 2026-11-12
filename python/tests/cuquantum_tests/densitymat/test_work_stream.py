@@ -8,6 +8,7 @@ import weakref
 import cupy as cp
 import pytest
 
+from cuquantum.bindings import cudensitymat as cudm
 from cuquantum.densitymat import WorkStream
 
 
@@ -41,3 +42,9 @@ class TestWorkStream:
         ref = weakref.ref(ctx._handle)
         ctx = None
         assert ref() is None
+
+    def test_host_workspace_info(self):
+        ctx = WorkStream()
+        assert ctx.host_workspace_info == (0, 0)
+        ctx.release_workspace()
+        assert ctx.host_workspace_info == (0, 0)

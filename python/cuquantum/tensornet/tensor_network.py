@@ -1,5 +1,4 @@
-# Copyright (c) 2021-2026, NVIDIA CORPORATION & AFFILIATES
-#
+# SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
@@ -28,14 +27,13 @@ from nvmath.internal import formatters, tensor_wrapper, typemaps
 
 from . import configuration
 from ._internal import einsum_parser
-from ._internal import grad_torch
 from ._internal import optimizer_ifc
 from ._internal.helpers import (
-    get_operands_data, 
-    get_operands_strides, 
-    check_tensor_qualifiers, 
-    check_autotune_params, 
-    check_attributes_match, 
+    get_operands_data,
+    get_operands_strides,
+    check_tensor_qualifiers,
+    check_autotune_params,
+    check_attributes_match,
     check_and_set_options,
     create_output_tensor,
 )
@@ -95,7 +93,7 @@ class Network:
             containing the parameters for the ``NetworkOptions`` constructor can also be provided. If not specified,
             the value will be set to the default-constructed ``NetworkOptions`` object.
         stream: Provide the CUDA stream to use for network construction, which is needed for stream-ordered operations such as allocating memory. Acceptable inputs include ``cudaStream_t`` (as
-            Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
+            Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands.
             If a stream is not provided, the current stream will be used.
 
     See Also:
@@ -280,7 +278,7 @@ class Network:
                     self.cpu_only = True
                     self.device_id = 'cpu'
                 else:
-                    raise  
+                    raise
 
         if not allow_cpu_pathfinder and self.cpu_only:
             raise RuntimeError(f"No GPU device detected, operation aborted")
@@ -327,7 +325,7 @@ class Network:
                         The data type '{self.data_type}' is currently not supported.
                         """
             raise ValueError(message)
-        
+
         # Prepare data for cutensornet.
         self.num_inputs = len(self.inputs)
         self.num_modes_out = len(self.output)
@@ -338,7 +336,7 @@ class Network:
         self.modes_in = tuple(tuple(m for m in _input) for _input in self.inputs)
         self.num_modes_in = tuple(len(m) for m in self.modes_in)
         self.qualifiers_in = check_tensor_qualifiers(qualifiers, cutn.tensor_qualifiers_dtype, self.num_inputs)
-        
+
         # For torch tensors, if qualifiers are explicitly passed, we ignore the tensor attrs.
         # Otherwise, we look up the tensor attrs and populate qualifiers.
         if self.package == 'torch' and isinstance(self.qualifiers_in, int):  # = 0
@@ -361,7 +359,7 @@ class Network:
                 self.output_class, self.output, self.size_dict, self.device_id, stream_holder, self.data_type)
         # Keep output extents for creating new tensors, if needed.
         self.logger.debug("The output tensor has been created.")
-        
+
         # Create/set handle.
         if options.handle is not None:
             self.own_handle = False
@@ -373,15 +371,15 @@ class Network:
             else:
                 with nvmath_utils.device_ctx(self.device_id):
                     self.handle = cutn.create()
- 
+
         # Network definition
         self.network = cutn.create_network(self.handle)
         self._construct_network_graph()
-    
+
         # Set compute type
         if options.compute_type is None:
             self.compute_type = typemaps.NAME_TO_COMPUTE_TYPE[self.data_type]
-        else: 
+        else:
             self.compute_type = options.compute_type
             compute_type_dtype = cutn.get_network_attribute_dtype(cutn.NetworkAttribute.COMPUTE_TYPE)
             compute_type_array = np.asarray([self.compute_type], dtype=compute_type_dtype)
@@ -391,7 +389,7 @@ class Network:
                                     compute_type_array.ctypes.data,
                                     compute_type_array.dtype.itemsize)
         self.logger.info(f"The compute type has been set to {self.compute_type}.")
-        
+
         self._set_tensor_memory('input')
         self._set_tensor_memory('output')
 
@@ -408,7 +406,7 @@ class Network:
         self.workspace_h_scratch_ptr, self.workspace_h_scratch_size = None, None
         self.workspace_h_cache_ptr, self.workspace_h_cache_size = None, None
         self.workspace_scratch_allocated_here, self.workspace_cache_allocated_here = False, False
-     
+
         # Autotuning attributes.
         self.autotune_pref_ptr = None
         self.autotuned = False
@@ -438,14 +436,14 @@ class Network:
                                                 self.qualifiers_in[t:t+1].ctypes.data if isinstance(self.qualifiers_in, np.ndarray) else 0,
                                                 typemaps.NAME_TO_DATA_TYPE[self.data_type])
             self.tensor_ids.append(tensor_id)
-    
+
         # Set output tensor
         cutn.network_set_output_tensor(self.handle,
                                     self.network,
                                     self.num_modes_out,
                                     self.modes_out,
                                     typemaps.NAME_TO_DATA_TYPE[self.data_type])
-        
+
     def _set_tensor_memory(self, target):
         """
         Set tensor memory for the specified target.
@@ -458,12 +456,12 @@ class Network:
                                                     self.network,
                                                     self.tensor_ids[t],
                                                     self.operands_data[t],
-                                                    self.strides_in[t]) 
+                                                    self.strides_in[t])
         elif target == 'output':
             cutn.network_set_output_tensor_memory(self.handle,
                                                 self.network,
                                                 self.contraction.data_ptr,
-                                                self.strides_out) 
+                                                self.strides_out)
         elif target == 'gradient':
             # Set gradient tensor memory for tensors that require gradients
             for i, requires_grad in enumerate(self.qualifiers_in['requires_gradient']):
@@ -670,9 +668,9 @@ class Network:
         self.workspace_cache_ptr = None
         self.workspace_h_scratch_ptr = None
         self.workspace_h_cache_ptr = None
-       
+
         cutn.workspace_compute_contraction_sizes(self.handle, self.network, self.optimizer_info_ptr, self.workspace_desc)
-        
+
         # Deal with device workspaces.
         min_scratch_size = cutn.workspace_get_memory_size(
             self.handle, self.workspace_desc, cutn.WorksizePref.MIN, cutn.Memspace.DEVICE, cutn.WorkspaceKind.SCRATCH)
@@ -898,7 +896,7 @@ class Network:
            self.logger.info(f"{opt_info}")
 
         self.optimized = True
-   
+
         if internal_options['prepare_contraction']:
             # Calculate workspace size required.
             self._calculate_workspace_size()
@@ -926,7 +924,7 @@ class Network:
             dtype = cutn.get_network_autotune_preference_attribute_dtype(enum)
             value = np.array((value,), dtype=dtype)
             cutn.network_autotune_preference_set_attribute(self.handle, self.autotune_pref_ptr, enum, value.ctypes.data, value.dtype.itemsize)
-            
+
             self.logger.info(f"The autotune preference '{name}' has been set to {value[0]}.")
 
     @nvmath_utils.precondition(_check_valid_network)
@@ -943,7 +941,7 @@ class Network:
         Args:
             iterations: The number of iterations for autotuning. See `CUTENSORNET_NETWORK_AUTOTUNE_MAX_ITERATIONS`.
             stream: Provide the CUDA stream to use for the autotuning operation. Acceptable inputs include ``cudaStream_t``
-                (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, 
+                (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands,
                 and :class:`torch.cuda.Stream` for PyTorch operands. If a stream is not provided, the current stream will be used.
             release_workspace: A value of `True` specifies that the :class:`Network` object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the :class:`Network` object
@@ -1005,8 +1003,8 @@ class Network:
     def reset_operands(self, *operands, stream=None):
         """Reset the operands held by this :class:`Network` instance.
 
-        This method has two use cases: (1) it can be used to provide new operands for execution when the 
-        original operands are on the CPU, or (2) it can be used to release the internal reference to the previous operands and make their memory available for 
+        This method has two use cases: (1) it can be used to provide new operands for execution when the
+        original operands are on the CPU, or (2) it can be used to release the internal reference to the previous operands and make their memory available for
         other use by passing ``None`` for the ``operands`` argument. In this case, this method must be called again to provide the desired operands before another
         call to execution APIs like :meth:`autotune`, :meth:`contract`, or :meth:`gradients`.
 
@@ -1021,7 +1019,7 @@ class Network:
         Args:
             operands: See :class:`Network`'s documentation.
             stream: Provide the CUDA stream to use for resetting operands (this is used to copy the operands to the GPU if they are provided on the CPU). Acceptable inputs include ``cudaStream_t``
-                (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
+                (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands.
                 If a stream is not provided, the current stream will be used.
         """
 
@@ -1078,7 +1076,7 @@ class Network:
             # Finally, replace the original data pointers by the new ones.
             self.operands_data = get_operands_data(operands)
             self.operands = operands
-            
+
         # Reset input tensor memory
         self._set_tensor_memory('input')
 
@@ -1105,7 +1103,7 @@ class Network:
             slices: Specify the slices to be contracted as Python :class:`range` for contiguous slice IDs or as a Python sequence
                 object for arbitrary slice IDs. If not specified, all slices will be contracted.
             stream: Provide the CUDA stream to use for the contraction operation. Acceptable inputs include ``cudaStream_t``
-                (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, 
+                (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands,
                 and :class:`torch.cuda.Stream` for PyTorch operands. If a stream is not provided, the current stream will be used.
             release_workspace: A value of `True` specifies that the :class:`Network` object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the :class:`Network` object
@@ -1201,7 +1199,7 @@ class Network:
                 as the contraction output (as returned by :meth:`contract`), which in turn shares the same properties with the
                 input operands. In a chain-rule setting, ``output_gradient`` is the gradient w.r.t. the output tensor.
             stream: Provide the CUDA stream to use for the gradient computation. Acceptable inputs include ``cudaStream_t``
-                (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, 
+                (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands,
                 and :class:`torch.cuda.Stream` for PyTorch operands. If a stream is not provided, the current stream will be used.
             release_workspace: A value of `True` specifies that the :class:`Network` object should release workspace memory back to
                 the package memory pool on function return, while a value of `False` specifies that the :class:`Network` object
@@ -1257,12 +1255,12 @@ class Network:
             else:
                 raise ValueError(f"output_gradient strides incorrect (given {output_grad.strides}, expected {self.strides_out})")
 
-        
+
         timing = bool(self.logger and self.logger.handlers)
         self.logger.info("Starting gradient computation...")
         self.logger.info(f"{self.call_prologue}")
 
-        
+
         # Allocate input gradient tensors, as needed. The buffers are left uninitialized: with
         # accumulate_output=False the library overwrites every gradient it computes, and zeroes
         # itself the ones it only writes partially (operands with repeated mode labels).
@@ -1285,7 +1283,7 @@ class Network:
         self.input_grads_strides = get_operands_strides(self.input_grads)
         # Set input gradient tensor memory for tensors that require gradients
         self._set_tensor_memory('gradient')
-        
+
         # Set adjoint tensor memory (output gradient)
         cutn.network_set_adjoint_tensor_memory(self.handle, self.network, output_grad.data_ptr, output_grad.strides)
 
@@ -1393,7 +1391,7 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
             dictionary containing the parameters for the ``OptimizerOptions`` constructor can also be provided. If not
             specified, the value will be set to the default-constructed ``OptimizerOptions`` object.
         stream: Provide the CUDA stream to use for the autotuning operation. Acceptable inputs include ``cudaStream_t``
-            (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands, 
+            (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, :class:`cupy.cuda.Stream` for CuPy operands,
             and :class:`torch.cuda.Stream` for PyTorch operands. If a stream is not provided, the current stream will be used.
         return_info : If true, information about the best contraction order will also be returned.
 
@@ -1532,7 +1530,18 @@ def contract(*operands, qualifiers=None, options=None, optimize=None, stream=Non
 
     # For PyTorch tensors, we ensure contract() is differentiable.
     if network.package == "torch":
-        return grad_torch._TorchContract.apply(network, optimize, stream, return_info, *operands)
+        try:
+            from ._internal import grad_torch
+
+            requires_grad = grad_torch._requires_grad(*operands)
+            return grad_torch._TorchContract.apply(
+                network, optimize, stream, return_info, requires_grad, *operands
+            )
+        except BaseException:
+            # The autograd forward path normally owns cleanup, but the import or apply()
+            # can fail before entering it.
+            network.free()
+            raise
 
     with network:
 
@@ -1596,11 +1605,11 @@ def contract_path(*operands, qualifiers=None, options=None, optimize=None):
             # ... the same handle can be reused for further calls ...
             # when it's done, remember to destroy the handle
             cutn.destroy(handle)
-    
+
     .. note::
-        Users may use this API to compute path without device memory allocation. 
-        One way to achieve this is via dummy :class:`cupy.ndarray` operands, e.g, 
-        `path finding with dummy arrays <https://github.com/NVIDIA/cuQuantum/blob/main/python/samples/tensornet/contraction/coarse/example24.py>`_. 
+        Users may use this API to compute path without device memory allocation.
+        One way to achieve this is via dummy :class:`cupy.ndarray` operands, e.g,
+        `path finding with dummy arrays <https://github.com/NVIDIA/cuQuantum/blob/main/python/samples/tensornet/contraction/coarse/example24.py>`_.
     """
 
     # Create network.

@@ -132,16 +132,19 @@ class MPSHelper
 
       /**
        * \brief Compute the maximal workspace needed for MPS gating algorithm.
-       * \param[out] workspaceSize The required workspace size on the device. 
+       * \param[out] workspaceSize The required workspace size on the device.
+       * \param[out] hostWorkspaceSize The required workspace size on the host.
        */
-      cutensornetStatus_t computeMaxWorkspaceSizes(int64_t* workspaceSize);
+      cutensornetStatus_t computeMaxWorkspaceSizes(int64_t* workspaceSize, int64_t* hostWorkspaceSize);
 
       /**
-       * \brief Compute the maximal workspace needed for MPS gating algorithm.
-       * \param[in] work Pointer to the allocated workspace.
-       * \param[in] workspaceSize The required workspace size on the device. 
+       * \brief Set the workspace buffers for the MPS gating algorithm.
+       * \param[in] work Pointer to the allocated device workspace.
+       * \param[in] workspaceSize The required workspace size on the device.
+       * \param[in] hostWork Pointer to the allocated host workspace (may be null if hostWorkspaceSize is zero).
+       * \param[in] hostWorkspaceSize The required workspace size on the host.
        */
-      cutensornetStatus_t setWorkspace(void* work, int64_t workspaceSize);
+      cutensornetStatus_t setWorkspace(void* work, int64_t workspaceSize, void* hostWork, int64_t hostWorkspaceSize);
 
       /**
        * \brief In-place execution of the apply gate algorithm on \p siteA and \p siteB.
@@ -325,7 +328,7 @@ cutensornetStatus_t MPSHelper::setSVDConfig(double absCutoff,
 /*****************************
 * Query maximal workspace size
 ******************************/
-cutensornetStatus_t MPSHelper::computeMaxWorkspaceSizes(int64_t* workspaceSize)
+cutensornetStatus_t MPSHelper::computeMaxWorkspaceSizes(int64_t* workspaceSize, int64_t* hostWorkspaceSize)
 {
    cutensornetTensorDescriptor_t descTensorInA;
    cutensornetTensorDescriptor_t descTensorInB;
@@ -400,6 +403,12 @@ cutensornetStatus_t MPSHelper::computeMaxWorkspaceSizes(int64_t* workspaceSize)
                                                    CUTENSORNET_MEMSPACE_DEVICE,
                                                    CUTENSORNET_WORKSPACE_SCRATCH,
                                                    workspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceGetMemorySize(handle_,
+                                                   workDesc_,
+                                                   CUTENSORNET_WORKSIZE_PREF_MIN,
+                                                   CUTENSORNET_MEMSPACE_HOST,
+                                                   CUTENSORNET_WORKSPACE_SCRATCH,
+                                                   hostWorkspaceSize) );
    // free the tensor descriptors
    HANDLE_ERROR( cutensornetDestroyTensorDescriptor(descTensorInA) );
    HANDLE_ERROR( cutensornetDestroyTensorDescriptor(descTensorInB) );
@@ -410,7 +419,7 @@ cutensornetStatus_t MPSHelper::computeMaxWorkspaceSizes(int64_t* workspaceSize)
 }
 
 // Sphinx: #8
-cutensornetStatus_t MPSHelper::setWorkspace(void* work, int64_t workspaceSize)
+cutensornetStatus_t MPSHelper::setWorkspace(void* work, int64_t workspaceSize, void* hostWork, int64_t hostWorkspaceSize)
 {
    HANDLE_ERROR( cutensornetWorkspaceSetMemory(handle_,
                                                workDesc_,
@@ -418,6 +427,12 @@ cutensornetStatus_t MPSHelper::setWorkspace(void* work, int64_t workspaceSize)
                                                CUTENSORNET_WORKSPACE_SCRATCH,
                                                work,
                                                workspaceSize) );
+   HANDLE_ERROR( cutensornetWorkspaceSetMemory(handle_,
+                                               workDesc_,
+                                               CUTENSORNET_MEMSPACE_HOST,
+                                               CUTENSORNET_WORKSPACE_SCRATCH,
+                                               hostWork,
+                                               hostWorkspaceSize) );
    return CUTENSORNET_STATUS_SUCCESS;
 }
 
@@ -639,14 +654,18 @@ int main()
    * Step 4: workspace size query and allocation
    *********************************************/
 
-   int64_t workspaceSize;
-   HANDLE_ERROR( mpsHelper.computeMaxWorkspaceSizes(&workspaceSize) );
+   int64_t workspaceSize, hostWorkspaceSize;
+   HANDLE_ERROR( mpsHelper.computeMaxWorkspaceSizes(&workspaceSize, &hostWorkspaceSize) );
 
-   void *work = nullptr;
-   std::cout << "Maximal workspace size required: " << workspaceSize << std::endl;
+   void *work = nullptr, *hostWork = nullptr;
+   std::cout << "Maximal device workspace size required: " << workspaceSize << std::endl;
+   std::cout << "Maximal host workspace size required: " << hostWorkspaceSize << std::endl;
    HANDLE_CUDA_ERROR( cudaMalloc(&work, workspaceSize) );
+   if (hostWorkspaceSize > 0) {
+      hostWork = malloc(hostWorkspaceSize);
+   }
 
-   HANDLE_ERROR( mpsHelper.setWorkspace(work, workspaceSize));
+   HANDLE_ERROR( mpsHelper.setWorkspace(work, workspaceSize, hostWork, hostWorkspaceSize));
    
    // Sphinx: #15
    /***********************************
@@ -694,6 +713,7 @@ int main()
    }
 
    HANDLE_CUDA_ERROR( cudaFree(work) );
+   if (hostWork) free(hostWork);
    // The MPSHelper destructor will free all internal resources when out of scope
    return 0;   
 }

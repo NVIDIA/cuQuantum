@@ -132,6 +132,14 @@ else:
     if rank == root:
         print("Free resource and exit.")
     exit()
+
+# Query the host scratch workspace size and attach a host scratch buffer if one is required
+workspace_size_h = cutn.workspace_get_memory_size(handle,
+    work_desc, cutn.WorksizePref.RECOMMENDED, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH)
+print(f"Scratch Host workspace size (bytes) = {workspace_size_h}")
+if workspace_size_h > 0:
+    scratch_space_h = np.empty(workspace_size_h, dtype=np.int8)  # must stay alive until the computation completes
+    cutn.workspace_set_memory(handle, work_desc, cutn.Memspace.HOST, cutn.WorkspaceKind.SCRATCH, scratch_space_h.ctypes.data, workspace_size_h)
 if rank == root:
     print("Set the workspace buffer")
 

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# This code was automatically generated with version 26.09.0. Do not modify it directly.
+# This code was automatically generated across versions from 26.09.0 to 26.11.0. Do not modify it directly.
 
 
 

@@ -1430,6 +1430,73 @@ class TestMixedStateUnitaryChannel(_BaseTester):
         np.testing.assert_allclose(rdm.reshape(rho_ref.shape), rho_ref, **tol)
 
 
+class TestMixedStateGeneralChannelQudits(_BaseTester):
+    """General (Kraus) channels on a (2, 3) qudit density matrix against NumPy.
+
+    rho' = sum_i K_i rho K_i^dagger with non-separable Kraus operators |out><in|. Qudits of
+    different dimension make the order in which the operator modes are passed observable.
+    """
+
+    DIMS = (2, 3)
+
+    @staticmethod
+    def _shift_matrix(dim):
+        """Cyclic shift |j> -> |j+1 mod dim>, used to prepare basis states."""
+        return np.roll(np.eye(dim, dtype=np.complex128), 1, axis=0)
+
+    @staticmethod
+    def _two_qudit_jump(dims, out_index, in_index):
+        """|out><in| on the (modes[0], modes[1]) product basis with its trace-preserving complement."""
+        volume = dims[0] * dims[1]
+        jump = np.zeros((volume, volume), dtype=np.complex128)
+        jump[out_index, in_index] = 1.0
+        stay = np.eye(volume, dtype=np.complex128)
+        stay[in_index, in_index] = 0.0
+        return jump, stay
+
+    @classmethod
+    def _reference(cls, ops, rho, modes):
+        """rho' = sum_i K_i rho K_i^dagger with K_i given on modes (a, b) of the two-qudit state."""
+        d0, d1 = cls.DIMS
+        rho_t = rho.reshape(d0, d1, d0, d1)  # (ket0, ket1, bra0, bra1)
+        out = np.zeros_like(rho_t)
+        da, db = (cls.DIMS[m] for m in modes)
+        for k in ops:
+            k4 = k.reshape(da, db, da, db)  # (out_a, out_b, in_a, in_b)
+            if modes == (0, 1):
+                k_rho = np.einsum("ABab,abcd->ABcd", k4, rho_t)
+                out += np.einsum("ABcd,CDcd->ABCD", k_rho, k4.conj())
+            else:
+                k_rho = np.einsum("BAba,abcd->ABcd", k4, rho_t)
+                out += np.einsum("ABcd,DCdc->ABCD", k_rho, k4.conj())
+        return out.reshape(d0 * d1, d0 * d1)
+
+    @pytest.mark.parametrize("dtype", ["complex64", "complex128"])
+    @pytest.mark.parametrize("modes", [(0, 1), (1, 0)])
+    @pytest.mark.parametrize("basis_state", [(0, 0), (1, 2), (0, 1), (1, 0)])
+    def test_nonseparable_kraus_channel(self, dtype, modes, basis_state):
+        dims_on_modes = tuple(self.DIMS[m] for m in modes)
+        # |out><in| between two product-basis states of the acted-on qudits (modes order).
+        jump, stay = self._two_qudit_jump(dims_on_modes, out_index=1,
+                                          in_index=dims_on_modes[0] * dims_on_modes[1] - 1)
+        ops = [jump.reshape(dims_on_modes + dims_on_modes), stay.reshape(dims_on_modes + dims_on_modes)]
+
+        psi = np.zeros(self.DIMS, dtype=np.complex128)
+        psi[basis_state] = 1.0
+        rho = np.outer(psi.reshape(-1), psi.reshape(-1).conj())
+        expected = self._reference([jump, stay], rho, modes)
+        np.testing.assert_allclose(np.trace(expected), 1.0, atol=1e-12)  # trace preserving by construction
+
+        with NetworkState(self.DIMS, dtype=dtype, config=TNConfig(), pure_state=False) as state:
+            for q, level in enumerate(basis_state):
+                for _ in range(level):
+                    state.apply_tensor_operator((q,), self._shift_matrix(self.DIMS[q]).astype(dtype), unitary=True)
+            state.apply_general_tensor_channel(modes, [np.ascontiguousarray(op.astype(dtype)) for op in ops])
+            rho_out = np.asarray(state.compute_density_matrix()).reshape(np.prod(self.DIMS), -1)
+        tol = get_contraction_tolerance(dtype)
+        np.testing.assert_allclose(rho_out, expected, **tol)
+
+
 class TestStateAccessorAPI(_BaseTester):
     """Tests for compute_state_vector (pure-only) and compute_density_matrix (pure and mixed)."""
 

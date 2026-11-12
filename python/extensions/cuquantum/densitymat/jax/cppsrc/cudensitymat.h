@@ -64,7 +64,7 @@
 
 #define CUDENSITYMAT_MAJOR 0 //!< cuDensityMat major version.
 #define CUDENSITYMAT_MINOR 7 //!< cuDensityMat minor version.
-#define CUDENSITYMAT_PATCH 0 //!< cuDensityMat patch version.
+#define CUDENSITYMAT_PATCH 1 //!< cuDensityMat patch version.
 #define CUDENSITYMAT_VERSION (CUDENSITYMAT_MAJOR * 10000 + CUDENSITYMAT_MINOR * 100 + CUDENSITYMAT_PATCH)
 
 
@@ -3774,11 +3774,7 @@ cudensitymatStatus_t cudensitymatEigenDecompositionConfigure(
  * (e) the representative `state` is a single-site (1-mode) MPS (an MPS
  * with at least two sites is required by the DMRG engine);
  * (f) the state data type is not `CUDA_R_64F` or `CUDA_C_64F`, or
- * `computeType` is not `CUDENSITYMAT_COMPUTE_64F`; or
- * (g) shift-invert DMRG is configured with `NUM_SITES == 2` for an MPS
- * containing exactly two tensors. This last restriction is a two-site
- * ProjectionMPS dependency limitation: `NUM_SITES == 1` remains supported
- * for a two-tensor MPS.
+ * `computeType` is not `CUDENSITYMAT_COMPUTE_64F`.
  */
 cudensitymatStatus_t cudensitymatEigenDecompositionPrepare(
                     const cudensitymatHandle_t handle,
@@ -3928,6 +3924,12 @@ cudensitymatStatus_t cudensitymatDestroyWorkspace(
 /**
  * \brief Queries the required workspace buffer size.
  * 
+ * \note Two-site MPS operations can execute without caller-provided host
+ * scratch even when a nonzero host workspace size is reported. If host
+ * scratch is provided, its size must be at least the reported value.
+ * Providing the reported host workspace is recommended for performance.
+ * Device scratch requirements remain mandatory.
+ *
  * \param[in] handle Library handle.
  * \param[in] workspaceDescr Workspace descriptor.
  * \param[in] memSpace Memory space.

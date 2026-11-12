@@ -101,38 +101,34 @@ def is_all_zeros(seq: Sequence[int]) -> bool:
     return all(x == 0 for x in seq)
 
 
-def is_contiguous(shape: Sequence[int], strides: Sequence[int]) -> bool:
-    """Check if a tensor with the given shape and strides is contiguous in any layout.
-    
-    A tensor is contiguous if it occupies a dense block of memory without gaps,
-    regardless of whether it's row-major (C) or column-major (F) or any other 
-    permutation. This is verified by checking that the memory span equals size - 1.
-    
+def is_c_contiguous(shape: Sequence[int], strides: Sequence[int] | None) -> bool:
+    """Check if a tensor with the given shape and strides is contiguous in row-major (C) order.
+
+    The C library is given only a pointer and a size, and reads the buffer in memory order.
+    That matches the tensor's logical order only for a row-major layout: a column-major
+    (or otherwise permuted) tensor is dense but would be read with its elements reordered.
+    Dimensions of extent 1 may have any stride.
+
     Args:
         shape: The shape of the tensor (extents of each dimension).
-        strides: The strides of the tensor (in number of elements, not bytes).
-        
+        strides: The strides of the tensor (in number of elements, not bytes), or ``None``
+            for a row-major tensor.
+
     Returns:
-        True if the tensor is contiguous in any layout, False otherwise.
+        True if the tensor is row-major contiguous, False otherwise.
     """
-    if len(shape) == 0:
+    if strides is None:
         return True
     if len(shape) != len(strides):
         return False
-    
-    # Total number of elements
-    size = 1
-    for d in shape:
-        size *= d
-    
-    if size == 0:
+    if any(extent == 0 for extent in shape):
         return True
-    
-    # Memory span: max offset from first to last element
-    span = sum((d - 1) * s for d, s in zip(shape, strides))
-    
-    # Contiguous if span equals size - 1 (no gaps)
-    return span == size - 1
+    expected = 1
+    for extent, stride in zip(reversed(shape), reversed(strides)):
+        if extent != 1 and stride != expected:
+            return False
+        expected *= extent
+    return True
 
 
 class _Truncation:

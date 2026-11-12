@@ -15,17 +15,21 @@ class Truncation:
     Truncation can be applied during gate application or as a standalone operation
     to reduce the number of terms in a Pauli expansion. Multiple truncation criteria
     can be specified together; terms are removed if they fail any criterion.
+
+    In multi-process execution, every process must use an equivalent truncation
+    strategy. Truncation is applied independently to each process's local
+    terms.
     
     Args:
         pauli_weight_cutoff: Maximum Pauli weight (number of non-identity Paulis) to keep.
             Terms with Pauli weight (non-identity Pauli operators) greater than this value are removed. If None, no weight-based
             truncation is applied.
-        pauli_coeff_cutoff: Minimum absolute coefficient value to keep. Terms with
-            ``|coefficient| < pauli_coeff_cutoff`` are removed. If None, no coefficient-based
+        pauli_coeff_cutoff: Coefficient magnitude at or below which terms are removed: terms with
+            ``|coefficient| <= pauli_coeff_cutoff`` are removed. If None, no coefficient-based
             truncation is applied.
     
     Example:
-        >>> # Keep only terms with weight <= 3 and |coef| >= 1e-10
+        >>> # Keep only terms with weight <= 3 and |coef| > 1e-10
         >>> truncation = Truncation(pauli_weight_cutoff=3, pauli_coeff_cutoff=1e-10)
         >>> result = expansion.apply_gate(gate, truncation=truncation)
         

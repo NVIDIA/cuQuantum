@@ -18,11 +18,11 @@ from nvmath.internal.typemaps import NAME_TO_DATA_TYPE
 from .configuration import MPSConfig, TNConfig
 from .network_operator import NetworkOperator
 from ._internal.network_state_utils import (
-    EXACT_MPS_EXTENT_LIMIT,
     STATE_DEFAULT_DTYPE,
     check_dtype_supported,
     check_expectation_with_gradients_norm_args,
     get_mps_key,
+    get_mps_output_extents,
     host_scalar_to_holder,
     unwrap_output_tensor,
     resolve_unitary_kwarg,
@@ -74,6 +74,7 @@ class NetworkState:
         - Currently :class:`NetworkState` only supports pure state representation.
         - The state is placed on CUDA device 0 by default. To use a different device, specify it explicitly via :attr:`NetworkOptions.device_id`, and ensure that all input operands reside on that same device.
         - For MPS simulation, currently only open boundary condition is supported.
+        - MPS simulation requires at least two state modes. A :class:`NetworkState` with a single state mode and an :class:`MPSConfig` raises a ``ValueError``; use :class:`TNConfig` instead.
     
     Examples:
 
@@ -234,15 +235,17 @@ class NetworkState:
             self.property_prepare_reusable = True
         self.state_configured = False
         self.target_state_set = False
+        self._output_holds_initial_state = False
         self.state_prepared = False
         self.state_computed = False
         self.initial_state = []
         self.valid_state = True
 
         self.cached_task_obj = {}
+        # key of the computed MPS the cached task object was created for (MPS simulation)
+        self._cached_task_state_key = None
         self.contains_stochastic_channels = False
         self.logger.info("The network state has been created.")
-        self.prev_state_key = None
 
         #: Pauli observable memo: :meth:`_pauli_expectation_observable_cache_key` -> :class:`NetworkOperator`
         self._pauli_network_operator_cache = {}
@@ -336,6 +339,7 @@ class NetworkState:
             destroy_func = getattr(cutn, f'destroy_{cutn_task}')
             destroy_func(task_obj)
             self.logger.info(f"The cached {task_type} object has been freed")
+        self._cached_task_state_key = None
         return True
 
     def free(self):
@@ -677,6 +681,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         Note:
             - This API simply sets the initial state to the provided MPS and does not alter the nature of the simulation method, 
               which is provided via the ``options`` parameter during initialization.
+            - Tensors on the GPU are used without a copy and the object keeps a reference to them. They must not be modified while
+              this object uses them; to change the initial state, call this method again.
         """
         extents_in = []
         strides_in = []
@@ -689,6 +695,12 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             extents_in, strides_in, state_tensors_in)
         # keep a reference
         self.initial_state = list(mps_tensors)
+        # output tensors of this object (or views into them) passed back as the initial state must not be overwritten by
+        # later computations: detect whether any given tensor lies inside one of the output tensors (allocated at the
+        # maximum extents)
+        output_ranges = [(o.data_ptr, o.data_ptr + int(np.prod(e)) * o.itemsize)
+                         for o, e in zip(getattr(self, 'mps_tensors', []), getattr(self, '_output_mps_max_extents', []))]
+        self._output_holds_initial_state = any(lo <= o.data_ptr < hi for o in mps_tensors for lo, hi in output_ranges)
         # reset norm / state vector
         self._mark_updated()
         self.logger.info("The initial state has been set to the provided MPS representation.")
@@ -730,6 +742,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 If ``None`` (default), for PyTorch operands the choice follows ``operand.tensor.requires_grad``;
                 for other backends, gradient registration is disabled unless ``gradient`` is explicitly ``True``.
                 Use ``True`` / ``False`` to force registration on or off regardless of ``requires_grad``.
+                Gradients are not supported for MPS simulation (see :meth:`compute_expectation_with_gradients`).
             stream : Provide the CUDA stream to use for applying the tensor operator (this is used to copy the operands to the GPU if they are provided on the CPU). 
                 Acceptable inputs include ``cudaStream_t`` (as Python :class:`int`), :class:`cuda.core.Stream` for NumPy operands, 
                 :class:`cupy.cuda.Stream` for CuPy operands, and :class:`torch.cuda.Stream` for PyTorch operands. 
@@ -1056,46 +1069,39 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
     def _maybe_set_target_state(self, stream):
         self._maybe_configure_state()
         if isinstance(self.config, MPSConfig) and (not self.target_state_set):
-            self.prev_state_key = None
             # specify the largest output MPS tensors' sizes
-            max_extent = self.config.max_extent
-            self.mps_tensors = []
-            output_mps_extents = []
-            output_mps_strides = []
-            combined_extents_left = np.cumprod(self.state_mode_extents[:-1])
-            combined_extents_right = np.cumprod(self.state_mode_extents[::-1])[::-1][1:]
-            max_extents = np.minimum(combined_extents_left, combined_extents_right)
-            if max_extent is not None:
-                for i in range(self.n-1):
-                    max_extents[i] = min(max_extents[i], max_extent)
-            if max_extents.max() > EXACT_MPS_EXTENT_LIMIT:
-                raise ValueError
-            stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
-            for i in range(self.n):
-                if i == 0:
-                    extents = (self.state_mode_extents[i], max_extents[i])
-                elif i == self.n - 1:
-                    extents = (max_extents[i-1], self.state_mode_extents[i])
-                else:
-                    extents = (max_extents[i-1], self.state_mode_extents[i], max_extents[i])
-
-                tensor = self.intermediate_class.empty(
-                    extents, device_id=self.device_id, dtype=self.dtype, stream_holder=stream_holder)
-                self.mps_tensors.append(tensor)
-                output_mps_extents.append(extents)
-                output_mps_strides.append(tensor.strides) 
-            cutn.state_finalize_mps(self.handle, self.state, 
-                cutn.BoundaryCondition.OPEN, output_mps_extents, output_mps_strides)
+            self._output_mps_max_extents = get_mps_output_extents(
+                self.state_mode_extents, self.config.max_extent, np.dtype(self.dtype).itemsize)
+            self._allocate_output_mps(stream, self._output_mps_max_extents)
+            output_mps_strides = [tensor.strides for tensor in self.mps_tensors]
+            cutn.state_finalize_mps(self.handle, self.state,
+                cutn.BoundaryCondition.OPEN, self._output_mps_max_extents, output_mps_strides)
             self.logger.info(f"The target MPS state has been set.")
         self.target_state_set = True
 
-    def _maybe_compute_state(self, stream, release_workspace):
+    def _allocate_output_mps(self, stream, extents):
+        stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
+        # keep the tensors only once all are allocated, so a failed allocation releases the earlier ones
+        self.mps_tensors = [self.intermediate_class.empty(
+            e, device_id=self.device_id, dtype=self.dtype, stream_holder=stream_holder) for e in extents]
+
+    def _maybe_compute_state(self, stream, release_workspace, *, capture_follows=False):
+        """
+        ``capture_follows`` indicates that the computed output state becomes the new initial state right after this computation.
+        """
         self._maybe_set_target_state(stream)
         if not self.state_computed and isinstance(self.config, MPSConfig):
+            if self._output_holds_initial_state and not capture_follows:
+                # The output tensors hold the captured initial state, which every later computation reads:
+                # compute into new output tensors (the captured ones are released at the next capture).
+                self._allocate_output_mps(stream, self._output_mps_max_extents)
+                self._output_holds_initial_state = False
+            # Otherwise, if this computation is captured right away (capture_follows), it is written in place into the
+            # tensors that hold its own initial state, so that capturing after every computation needs no additional
+            # memory. The C API does not guarantee that a computation may overwrite its own initial MPS;
+            # test_mps_capture_every_computation_in_place covers this.
             create_args = ()
             execute_args = (self.workspace_desc, [o.data_ptr for o in self.mps_tensors])
-            # record the key from last MPS computation
-            self.prev_state_key = self._get_current_key()
             # compute the final MPS tensors
             output = self._compute_target('state', create_args, execute_args, stream, release_workspace)
             if output is None:
@@ -1112,7 +1118,23 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         self.state_computed = True
         return self.state_computed
     
+    def _release_workspace_after_failure(self, exception=None):
+        """
+        Release the workspace memory allocated by a failed computation and reset the allocation tracking, so that the
+        object can be used for later computations.
+        """
+        try:
+            self._release_scratch_memory_perhaps(exception)
+            self._release_cache_memory_perhaps(exception)
+        except Exception as e:
+            # keep the original exception
+            self.logger.debug(f"Releasing the workspace after a failed computation failed: {e}")
+        finally:
+            self._reset_workspace_allocation_tracking()
+        return True
+
     @nvmath_utils.atomic(_free_task_object_resources, method=True)
+    @nvmath_utils.atomic(_release_workspace_after_failure, method=True)
     def _compute_target(self, task, create_args, execute_args, stream, release_workspace, *, config_args=None, caller_name=None, task_key=None):
         if caller_name is None:
             caller_name = task
@@ -1151,11 +1173,14 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
         else:
             if task_key is None:
                 task_key = (task, create_args)
-            if task_key in self.cached_task_obj and (self.property_prepare_reusable or self._get_current_key() == self.prev_state_key):
+            if task_key in self.cached_task_obj and (self.property_prepare_reusable or
+                                                     self._get_current_key() == self._cached_task_state_key):
                 # In the following cases, re-creation/preparation of property computation objects can be skipped:
                 # 1. Contraction based simulation  -> self.property_prepare_reusable
                 # 2. MPS without value based truncation -> self.property_prepare_reusable
-                # 3. MPS with value based truncation but at runtime yields the same extents as the previous compute call -> check key against last computation
+                # 3. MPS with value based truncation whose computed MPS has the extents it had when the cached object
+                #    was created (not only those of the previous computation, which may have changed them back and
+                #    forth, e.g. with stochastic channels) -> compare with the key recorded at creation
                 task_obj = self.cached_task_obj[task_key]
                 self.logger.info(f"Found the same {task} object from the cache")
                 prepare_needed = False
@@ -1166,6 +1191,7 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                     self.last_compute_event = None
                 self._free_task_object_resources()
                 self.cached_task_obj[task_key] = task_obj = create_func(self.handle, self.state, *create_args)
+                self._cached_task_state_key = self._get_current_key()
                 self.logger.info(f"A new {task} object has been created")
         
         if config_args is not None:
@@ -1634,21 +1660,30 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 :meth:`compute_reduced_density_matrix`, :meth:`compute_amplitude`, :meth:`compute_batched_amplitudes`, or :meth:`compute_expectation`, 
                 but incurs a small overhead due to obtaining and releasing workspace memory from and to the package memory pool on every call. 
                 The default is `False`.
-            release_operators : A value of `True` will release the reference of all underlying tensor operators and :class:`NetworkOperator` objects. 
+            release_operators : A value of `True` makes the computed output state the new initial state of the underlying :class:`NetworkState` object
+                and releases the reference of all underlying tensor operators and :class:`NetworkOperator` objects.
                 The previous ``tensor_id`` returned by :meth:`apply_tensor_operator`, :meth:`apply_network_operator` and :meth:`apply_mpo` will be invalid.
-                If the output state has already been computed, which is an intermediate step in other ``compute_xxx`` methods, the output state will be cached and returned directly. 
-                Thus passing ``release_operators=True`` can be used to reset the underlying :class:`NetworkState` object.
+                Operators applied afterwards act on this new initial state.
+                If the output state has already been computed, which is an intermediate step in other ``compute_xxx`` methods, the output state will be cached and returned directly
+                (unless the state contains stochastic channels, which are sampled again by every computation).
+                The default is `False`.
     
         Returns:
             For MPS simulation (``MPSConfig`` in ``options``), a sequence of ndarray-like MPS tensors on
             the state's backend (respecting ``output_location``). Each tensor uses mode order ``pkn``:
             ``p`` (left bond), ``k`` (ket), ``n`` (right bond); the first and last tensors omit ``p``
             and ``n`` respectively.
+
+        Note:
+            Unless ``output_location`` is ``'cpu'`` (the returned tensors are then copies owned by the caller), the returned tensors
+            are owned by this object: they must not be modified and are valid until the state is computed again (also inside other
+            ``compute_*`` methods after the state changed), which may overwrite them.
+            Copy them to keep them.
         """
         if isinstance(self.config, TNConfig):
             raise ValueError("For network contraction based state simulation, no explicit state representation is formed, use compute_state_vector for full state vector computation")
         elif isinstance(self.config, MPSConfig):
-            self._maybe_compute_state(stream, release_workspace)
+            self._maybe_compute_state(stream, release_workspace, capture_follows=release_operators)
             if self.output_location == 'cpu':
                 stream_holder = nvmath_utils.get_or_create_stream(self.device_id, stream, self.internal_package)
                 result = [o.to('cpu', stream_holder=stream_holder).tensor for o in self.mps_tensors]
@@ -1669,6 +1704,8 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
                 self.owned_network_operators = {}
                 self.non_owned_network_operators = {}
                 self.initial_state = list(self.mps_tensors)
+                # the output tensors now hold the initial state (see _maybe_compute_state)
+                self._output_holds_initial_state = True
                 # mark state as no longer computed & stochastic channels as resolved
                 self.contains_stochastic_channels = False
                 self._mark_updated()
@@ -1935,6 +1972,12 @@ The memory limit specified is {self.memory_limit}, while the minimum workspace s
             form. ``gradients`` maps each ``tensor_id`` from :meth:`gradient_tensor_ids` to a
             tensor with the same shape, dtype as the corresponding registered operand.
             If no operators were registered for gradients, ``gradients`` is empty.
+
+        Note:
+            Gradients are not supported for MPS simulation (``MPSConfig`` in ``options``): if operators were registered for
+            gradients, this method raises ``cuquantum.bindings.cutensornet.cuTensorNetError`` with status
+            ``CUTENSORNET_STATUS_NOT_SUPPORTED``. Expectation values can
+            still be computed with :meth:`compute_expectation`.
         """
         check_expectation_with_gradients_norm_args(return_norm, state_norm_adjoint)
         operators = self._ensure_network_operator(operators, stream)

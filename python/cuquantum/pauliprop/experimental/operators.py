@@ -12,6 +12,7 @@ import numpy as np
 import cuquantum.bindings.cupauliprop as cupp
 from nvmath.internal.tensor_wrapper import wrap_operand
 from ._internal import typemaps
+from ._internal.utils import is_c_contiguous
 
 if TYPE_CHECKING:
     from .handles import LibraryHandle
@@ -87,7 +88,12 @@ class _QuantumOperator(ABC):
 
         If the operator has no differentiable parameters, yields ``(ptr, None)``.
         Otherwise allocates (or uses the provided) gradient buffer, attaches it as
-        the cotangent buffer, and yields ``(ptr, grad_buf)``.
+        the cotangent buffer, and yields ``(ptr, grad_buf)``. A non-contiguous NumPy
+        buffer is attached via a contiguous copy, whose accumulated gradients are
+        copied back into it when the context exits without an exception.
+
+        Operator cotangent buffers and backward differentiation do not presently
+        support multi-process execution.
 
         Args:
             library_handle: The library handle.
@@ -106,6 +112,8 @@ class _QuantumOperator(ABC):
                 return
             grad_buf = param_grads_out if param_grads_out is not None else np.zeros(n, dtype=dtype)
             wrapped = wrap_operand(grad_buf)
+            # C accumulates the n gradients into consecutive elements from the attached pointer.
+            attached = grad_buf
             if param_grads_out is not None:
                 # Validate a user-provided gradient buffer against the required contract
                 # before attaching it to the C API.
@@ -119,13 +127,27 @@ class _QuantumOperator(ABC):
                         f"param_grads_out must have {n} element(s) (num_differentiable_params), "
                         f"got {wrapped.size}."
                     )
-            location = "DEVICE" if hasattr(grad_buf, '__cuda_array_interface__') else "HOST"
+                if isinstance(grad_buf, np.ndarray) and not grad_buf.flags.writeable:
+                    raise ValueError("param_grads_out must be writeable.")
+                # A strided NumPy buffer accumulates into a contiguous copy instead. A strided
+                # device buffer would need stream-ordered copies, so it is rejected.
+                if not is_c_contiguous(wrapped.shape, wrapped.strides):
+                    if not isinstance(grad_buf, np.ndarray):
+                        raise ValueError(
+                            "param_grads_out must be contiguous in row-major (C) order unless it is a NumPy array."
+                        )
+                    attached = np.ascontiguousarray(grad_buf)
+                    wrapped = wrap_operand(attached)
+            location = "DEVICE" if hasattr(attached, '__cuda_array_interface__') else "HOST"
             cupp.quantum_operator_attach_cotangent_buffer(
                 int(library_handle), ptr, wrapped.data_ptr,
                 wrapped.size * wrapped.itemsize,
                 typemaps.NAME_TO_DATA_TYPE[wrapped.dtype],
                 typemaps.MEM_SPACE_MAP[location])
             yield ptr, grad_buf
+            if attached is not grad_buf:
+                # C finishes accumulating into a host buffer before it returns, so the copy is final.
+                grad_buf[...] = attached
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +182,14 @@ def _normalize_qubit_indices(qubit_indices: Sequence[int]) -> list[int]:
     return normalized
 
 
+def _pauli_kinds(pauli_string: Sequence[str]) -> list[int]:
+    """The C Pauli kinds of the (case-insensitive) letters of a Pauli string."""
+    unknown = [p for p in pauli_string if p not in typemaps.PAULI_MAP]
+    if unknown:
+        raise ValueError(f"Unknown Pauli letter(s) {unknown} in pauli_string; valid letters are I, X, Y and Z.")
+    return [typemaps.PAULI_MAP[p] for p in pauli_string]
+
+
 # ---------------------------------------------------------------------------
 # Concrete operator dataclasses
 # ---------------------------------------------------------------------------
@@ -167,6 +197,9 @@ def _normalize_qubit_indices(qubit_indices: Sequence[int]) -> list[int]:
 @dataclass
 class PauliNoiseChannel(_QuantumOperator):
     """A Pauli noise channel acting on 1 or 2 qubits.
+
+    In multi-process execution, corresponding channels used by each process
+    must have equivalent qubit indices and probabilities.
 
     Attributes:
         qubit_indices (Sequence[int]): The qubit indices the channel acts on (1 or 2 qubits).
@@ -220,6 +253,19 @@ class PauliNoiseChannel(_QuantumOperator):
         )
 
     def _get_create_args(self) -> tuple[Callable[..., int], tuple[Any, ...]]:
+        # The C call reads as many qubit indices and probabilities as the qubit count fixed at
+        # construction implies, so reassigned fields must still match it.
+        if len(self.qubit_indices) != self._num_qubits:
+            raise ValueError(
+                f"This PauliNoiseChannel acts on {self._num_qubits} qubit(s) but qubit_indices now has "
+                f"{len(self.qubit_indices)}; create a new PauliNoiseChannel to change the number of qubits."
+            )
+        num_probabilities = 4 ** self._num_qubits
+        if isinstance(self.noise_probabilities, Mapping) or len(self.noise_probabilities) != num_probabilities:
+            raise ValueError(
+                f"noise_probabilities must hold {num_probabilities} probabilities in noise_paulis order; "
+                "a mapping is converted only at construction, so create a new PauliNoiseChannel to use one."
+            )
         return cupp.create_pauli_noise_channel_operator, (self._num_qubits, self.qubit_indices, self.noise_probabilities)
 
     @property
@@ -248,6 +294,9 @@ class PauliNoiseChannel(_QuantumOperator):
 class PauliRotationGate(_QuantumOperator):
     """A Pauli rotation gate ``exp(-i * angle/2 * P)`` where P is a Pauli string.
 
+    In multi-process execution, corresponding gates used by each process must
+    have equivalent angles, qubit indices, and Pauli strings.
+
     Attributes:
         angle (float): The rotation angle.
         pauli_string (str | Sequence[str]): The Pauli string defining the rotation axis, either as a
@@ -265,7 +314,7 @@ class PauliRotationGate(_QuantumOperator):
         self.pauli_string = list(self.pauli_string)
         if len(self.pauli_string) == 0:
             raise ValueError("pauli_string must be non-empty")
-        self._pauli_string_enums: list[int] = [typemaps.PAULI_MAP[p] for p in self.pauli_string]
+        _pauli_kinds(self.pauli_string)
         # qubit_indices is None -> use the C-API default [0, 1, ..., num_qubits-1].
         # Otherwise normalize to a list of plain ints (avoids ambiguous truth-tests
         # on array-like inputs) and validate length/range/uniqueness up front.
@@ -291,9 +340,10 @@ class PauliRotationGate(_QuantumOperator):
         return 1
 
     def _validate_against_num_qubits(self, num_qubits: int) -> None:
-        if self.qubit_indices is None:
-            return
-        for i in self.qubit_indices:
+        # ``None`` is the C default ``[0, ..., len(pauli_string) - 1]``. Check that
+        # range here; the C packer is not given the system size.
+        indices = self.qubit_indices if self.qubit_indices is not None else range(self.num_qubits)
+        for i in indices:
             if i >= num_qubits:
                 raise ValueError(
                     f"PauliRotationGate qubit index {i} is out of range for a "
@@ -301,11 +351,18 @@ class PauliRotationGate(_QuantumOperator):
                 )
 
     def _get_create_args(self) -> tuple[Callable[..., int], tuple[Any, ...]]:
+        # Built from the fields on every application, so reassigning them takes effect. The C call
+        # reads num_qubits entries of qubit_indices, so a reassigned string must keep their count.
+        if self.qubit_indices is not None and len(self.qubit_indices) != self.num_qubits:
+            raise ValueError(
+                f"len(qubit_indices)={len(self.qubit_indices)} != num_qubits={self.num_qubits} "
+                f"(num_qubits is derived from len(pauli_string))."
+            )
         return cupp.create_pauli_rotation_gate_operator, (
             self.angle,
             self.num_qubits,
             self.qubit_indices if self.qubit_indices is not None else 0,
-            self._pauli_string_enums,
+            _pauli_kinds(self.pauli_string),
         )
 
     def __str__(self) -> str:
@@ -316,6 +373,9 @@ class PauliRotationGate(_QuantumOperator):
 @dataclass
 class CliffordGate(_QuantumOperator):
     """A Clifford gate (I, X, Y, Z, H, S, CX, CY, CZ, SWAP, iSWAP, SqrtX, SqrtY, SqrtZ).
+
+    In multi-process execution, corresponding gates used by each process must
+    have equivalent names and qubit indices.
 
     Attributes:
         name (str): The name of the Clifford gate (case-insensitive, must match one of
@@ -334,25 +394,33 @@ class CliffordGate(_QuantumOperator):
     _TWO_QUBIT_GATES: ClassVar[frozenset[str]] = frozenset({"CX", "CY", "CZ", "SWAP", "ISWAP"})
 
     def __post_init__(self):
+        self._arity()  # validates the name
+        # Normalize to a list of plain ints (also avoids ambiguous truth-tests on
+        # array-like inputs) and validate arity/range/uniqueness up front.
+        self.qubit_indices = _normalize_qubit_indices(self.qubit_indices)
+        self._check_arity()
+        if any(i < 0 for i in self.qubit_indices):
+            raise ValueError(f"qubit_indices must be non-negative, got {list(self.qubit_indices)}.")
+        if len(set(self.qubit_indices)) != len(self.qubit_indices):
+            raise ValueError(f"qubit_indices must be unique, got {list(self.qubit_indices)}.")
+
+    def _arity(self) -> int:
+        """The number of qubits the named gate acts on. Raises for an unsupported name."""
         name_upper = self.name.upper()
         if name_upper not in self.SUPPORTED_GATES:
             raise ValueError(
                 f"Unsupported Clifford gate '{self.name}'. "
                 f"Supported gates: {sorted(self.SUPPORTED_GATES)}"
             )
-        # Normalize to a list of plain ints (also avoids ambiguous truth-tests on
-        # array-like inputs) and validate arity/range/uniqueness up front.
-        arity = 2 if name_upper in self._TWO_QUBIT_GATES else 1
-        self.qubit_indices = _normalize_qubit_indices(self.qubit_indices)
+        return 2 if name_upper in self._TWO_QUBIT_GATES else 1
+
+    def _check_arity(self) -> None:
+        arity = self._arity()
         if len(self.qubit_indices) != arity:
             raise ValueError(
                 f"Clifford gate '{self.name}' acts on {arity} qubit(s), but got "
                 f"{len(self.qubit_indices)} qubit index/indices: {list(self.qubit_indices)}."
             )
-        if any(i < 0 for i in self.qubit_indices):
-            raise ValueError(f"qubit_indices must be non-negative, got {list(self.qubit_indices)}.")
-        if len(set(self.qubit_indices)) != len(self.qubit_indices):
-            raise ValueError(f"qubit_indices must be unique, got {list(self.qubit_indices)}.")
 
     @property
     def num_differentiable_params(self) -> int:
@@ -367,6 +435,9 @@ class CliffordGate(_QuantumOperator):
                 )
 
     def _get_create_args(self) -> tuple[Callable[..., int], tuple[Any, ...]]:
+        # The C call reads one qubit index per qubit the named gate acts on, so a reassigned
+        # name or qubit_indices must still agree.
+        self._check_arity()
         return cupp.create_clifford_gate_operator, (typemaps.CLIFFORD_MAP[self.name], self.qubit_indices)
 
     def __str__(self) -> str:
@@ -376,6 +447,9 @@ class CliffordGate(_QuantumOperator):
 @dataclass
 class AmplitudeDampingChannel(_QuantumOperator):
     """An amplitude damping channel with damping and excitation probabilities.
+
+    In multi-process execution, corresponding channels used by each process
+    must have equivalent qubit indices and probabilities.
 
     Attributes:
         damping_probability (float): The damping probability.
